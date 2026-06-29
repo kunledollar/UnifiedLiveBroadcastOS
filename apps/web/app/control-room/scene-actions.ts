@@ -5,8 +5,8 @@ import { createSceneSchema, renameSceneSchema, SceneType, type Scene, type Scene
 import { revalidatePath } from 'next/cache';
 
 const prisma = new PrismaClient();
-export const DEMO_WORKSPACE_ID = 'demo-workspace';
-export const DEMO_BROADCAST_ID = 'demo-broadcast';
+const DEMO_WORKSPACE_ID = 'demo-workspace';
+const DEMO_BROADCAST_ID = 'demo-broadcast';
 
 const typeToDb = (type: SceneType) => type.toUpperCase() as never;
 const dbToType = (type: string) => type.toLowerCase() as SceneType;
