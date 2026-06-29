@@ -1,1 +1,27 @@
-{"name":"@ubos/db","version":"0.1.0","private":true,"type":"module","scripts":{"build":"prisma generate","lint":"eslint . --ext .ts","typecheck":"tsc -p tsconfig.json --noEmit","prisma:generate":"prisma generate","prisma:migrate":"prisma migrate dev"},"dependencies":{"@prisma/client":"^6.1.0"},"devDependencies":{"prisma":"^6.1.0"}}
+{
+  "name": "@ubos/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "prisma generate",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0"
+  },
+  "devDependencies": {
+    "prisma": "^6.1.0"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  }
+}
