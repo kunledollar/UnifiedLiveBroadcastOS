@@ -89,6 +89,17 @@ enum RecordingStatus {
   FAILED
 }
 
+enum SceneType {
+  INTRO
+  COUNTDOWN
+  CAMERA
+  INTERVIEW
+  SCREEN_SHARE
+  BREAK
+  OUTRO
+  CUSTOM
+}
+
 model User {
   id          String            @id @default(cuid())
   email       String            @unique
@@ -133,6 +144,7 @@ model BroadcastSession {
   followEvents    FollowEvent[]
   recordings      Recording[]
   analyticsEvents AnalyticsEvent[]
+  scenes          Scene[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
@@ -236,4 +248,26 @@ model AnalyticsEvent {
   @@index([sessionId])
   @@index([type])
   @@index([createdAt])
+}
+
+model Scene {
+  id           String           @id @default(cuid())
+  broadcastId  String
+  name         String
+  type         SceneType        @default(CUSTOM)
+  order        Int
+  isActive     Boolean          @default(false)
+  thumbnailUrl String?
+  background   Json?
+  layout       String?
+  sources      Json             @default("[]")
+  overlays     Json             @default("[]")
+  audioConfig  Json             @default("{}")
+  broadcast    BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([broadcastId])
+  @@index([broadcastId, order])
+  @@index([broadcastId, isActive])
 }

@@ -60,6 +60,16 @@ export enum RecordingStatus {
   Ready = 'ready',
   Failed = 'failed',
 }
+export enum SceneType {
+  Intro = 'intro',
+  Countdown = 'countdown',
+  Camera = 'camera',
+  Interview = 'interview',
+  ScreenShare = 'screen_share',
+  Break = 'break',
+  Outro = 'outro',
+  Custom = 'custom',
+}
 
 export type CanvasAspectRatio = '16:9' | '9:16' | '1:1';
 export type ProductionStatus = 'offline' | 'rehearsal' | 'live' | 'ending';
@@ -80,11 +90,20 @@ export interface SceneSource {
 }
 export interface Scene {
   id: string;
+  broadcastId: string;
   name: string;
-  layout: SceneLayout;
+  type: SceneType;
+  order: number;
+  isActive: boolean;
+  thumbnailUrl?: string | null;
+  background?: Record<string, unknown> | null;
+  layout?: SceneLayout | null;
   sources: SceneSource[];
+  overlays: Record<string, unknown>[];
+  audioConfig: Record<string, unknown>;
   canvases: BroadcastCanvas[];
-  isActive?: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 export interface StreamHealthMetric {
   id: string;
@@ -174,3 +193,7 @@ export const createGuestSchema = z.object({ displayName: z.string().min(1).max(8
 export const createDestinationSchema = z.object({ platform: z.nativeEnum(DestinationPlatform), label: z.string().min(1), enabled: z.boolean().default(false) });
 export const mockChatMessageSchema = z.object({ authorName: z.string().min(1), body: z.string().min(1).max(500), platform: z.nativeEnum(ChatPlatform).default(ChatPlatform.Mock) });
 export const SUPPORTED_DESTINATIONS = Object.values(DestinationPlatform);
+
+export const sceneTypeSchema = z.nativeEnum(SceneType);
+export const createSceneSchema = z.object({ name: z.string().trim().min(1).max(80), type: sceneTypeSchema.default(SceneType.Custom) });
+export const renameSceneSchema = z.object({ name: z.string().trim().min(1).max(80) });

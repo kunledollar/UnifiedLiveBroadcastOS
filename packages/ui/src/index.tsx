@@ -1,3 +1,4 @@
+import { SceneType } from '@ubos/shared';
 import type {
   AudioChannel,
   ChatMessage,
@@ -15,6 +16,17 @@ import type { ReactNode } from 'react';
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'live';
+
+const typeLabels: Record<SceneType, string> = {
+  intro: 'Intro',
+  countdown: 'Countdown',
+  camera: 'Camera',
+  interview: 'Interview',
+  screen_share: 'Screen Share',
+  break: 'Break',
+  outro: 'Outro',
+  custom: 'Custom',
+};
 
 const layoutLabels: Record<SceneLayout, string> = {
   solo: 'Solo Host',
@@ -85,31 +97,100 @@ export function BroadcastToolbar({ title, status, elapsed }: { title: string; st
   );
 }
 
-export function SceneCard({ scene }: { scene: Scene }) {
+export function SceneCard({
+  scene,
+  index,
+  total,
+  onRename,
+  onSwitch,
+  onDuplicate,
+  onDelete,
+  onMove,
+}: {
+  scene: Scene;
+  index: number;
+  total: number;
+  onRename?: (sceneId: string, name: string) => void;
+  onSwitch?: (sceneId: string) => void;
+  onDuplicate?: (sceneId: string) => void;
+  onDelete?: (sceneId: string) => void;
+  onMove?: (sceneId: string, direction: 'up' | 'down') => void;
+}) {
+  const sceneLayout = scene.layout ?? 'picture_in_picture';
+
   return (
-    <button className={`w-full rounded-2xl border p-3 text-left transition ${scene.isActive ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-slate-950/50 hover:bg-slate-800/80'}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="font-semibold text-white">{scene.name}</p>
-          <p className="mt-1 text-xs text-slate-400">{layoutLabels[scene.layout]}</p>
+    <div className={`rounded-2xl border p-3 transition ${scene.isActive ? 'border-cyan-300 bg-cyan-300/10 shadow-lg shadow-cyan-950/20' : 'border-white/10 bg-slate-950/50 hover:bg-slate-800/80'}`}>
+      <button className="w-full text-left" onClick={() => onSwitch?.(scene.id)} type="button">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="font-semibold text-white">{scene.name}</p>
+            <p className="mt-1 text-xs text-slate-400">{layoutLabels[sceneLayout]}</p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <Badge tone="neutral">{typeLabels[scene.type]}</Badge>
+            {scene.isActive ? <Badge tone="success">● Active</Badge> : null}
+          </div>
         </div>
-        {scene.isActive ? <Badge tone="success">Active</Badge> : null}
+        <div className="mt-3 flex gap-1.5">
+          {scene.canvases.map((canvas) => (
+            <span key={canvas.id} className="rounded-md bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-300">
+              {canvas.aspectRatio}
+            </span>
+          ))}
+        </div>
+      </button>
+      <div className="mt-3 grid grid-cols-3 gap-1.5 text-[11px] font-bold text-slate-200">
+        <button className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40" disabled={index === 0} onClick={() => onMove?.(scene.id, 'up')} type="button">↑ Up</button>
+        <button className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40" disabled={index === total - 1} onClick={() => onMove?.(scene.id, 'down')} type="button">↓ Down</button>
+        <button className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700" onClick={() => onDuplicate?.(scene.id)} type="button">Duplicate</button>
+        <button className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700" onClick={() => { const name = window.prompt('Rename scene', scene.name); if (name) onRename?.(scene.id, name); }} type="button">Rename</button>
+        <button className="col-span-2 rounded-lg bg-rose-500/80 px-2 py-1 text-white hover:bg-rose-500 disabled:opacity-40" disabled={total <= 1} onClick={() => { if (window.confirm(`Delete ${scene.name}?`)) onDelete?.(scene.id); }} type="button">Delete</button>
       </div>
-      <div className="mt-3 flex gap-1.5">
-        {scene.canvases.map((canvas) => (
-          <span key={canvas.id} className="rounded-md bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-300">
-            {canvas.aspectRatio}
-          </span>
-        ))}
-      </div>
-    </button>
+    </div>
   );
 }
 
-export function SceneList({ scenes }: { scenes: Scene[] }) {
+export function SceneList({
+  scenes,
+  sceneTypes = [],
+  isPending = false,
+  onAdd,
+  onRename,
+  onSwitch,
+  onDuplicate,
+  onDelete,
+  onMove,
+}: {
+  scenes: Scene[];
+  sceneTypes?: SceneType[];
+  isPending?: boolean;
+  onAdd?: (input: { name: string; type: SceneType }) => void;
+  onRename?: (sceneId: string, name: string) => void;
+  onSwitch?: (sceneId: string) => void;
+  onDuplicate?: (sceneId: string) => void;
+  onDelete?: (sceneId: string) => void;
+  onMove?: (sceneId: string, direction: 'up' | 'down') => void;
+}) {
   return (
-    <Panel title="Scenes">
-      <div className="space-y-3">{scenes.map((scene) => <SceneCard key={scene.id} scene={scene} />)}</div>
+    <Panel
+      title="Scenes"
+      action={
+        onAdd ? (
+          <button
+            className="rounded-xl bg-cyan-400 px-3 py-1.5 text-xs font-black text-slate-950 hover:bg-cyan-300 disabled:opacity-50"
+            disabled={isPending}
+            onClick={() => {
+              const name = window.prompt('New scene name', 'New Scene');
+              if (name) onAdd({ name, type: sceneTypes[0] ?? SceneType.Custom });
+            }}
+            type="button"
+          >
+            + Add
+          </button>
+        ) : null
+      }
+    >
+      <div className="space-y-3">{scenes.map((scene, index) => <SceneCard key={scene.id} scene={scene} index={index} total={scenes.length} onRename={onRename} onSwitch={onSwitch} onDuplicate={onDuplicate} onDelete={onDelete} onMove={onMove} />)}</div>
     </Panel>
   );
 }
@@ -144,6 +225,7 @@ export function ProgramPreview({ scene }: { scene: Scene }) {
         <div className="absolute inset-x-8 bottom-8 rounded-xl border border-white/10 bg-black/45 p-4 backdrop-blur">
           <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Current Scene</p>
           <p className="text-2xl font-black text-white">{scene.name}</p>
+          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-300">{typeLabels[scene.type]}</p>
         </div>
       </div>
     </Panel>
@@ -162,7 +244,7 @@ export function VerticalPreview({ scene }: { scene: Scene }) {
           <SafeZone label="Vertical Safe" />
           <div className="absolute inset-x-4 bottom-6 rounded-xl bg-black/55 p-3 text-center">
             <p className="text-sm font-bold text-white">{scene.name}</p>
-            <p className="text-[10px] uppercase tracking-widest text-cyan-200">Mobile output mock</p>
+            <p className="text-[10px] uppercase tracking-widest text-cyan-200">{typeLabels[scene.type]} · Mobile output mock</p>
           </div>
         </div>
       </div>

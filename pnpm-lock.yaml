@@ -54,6 +54,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ubos/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@ubos/shared':
         specifier: workspace:*
         version: link:../../packages/shared
