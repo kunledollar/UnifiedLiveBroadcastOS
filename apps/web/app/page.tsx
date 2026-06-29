@@ -1,0 +1,2 @@
+import Link from 'next/link';
+export default function Home() { return <main className="min-h-screen p-8"><h1 className="text-4xl font-bold">Unified Broadcast Operating System</h1><div className="mt-8 flex gap-4"><Link href="/control-room" className="rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950">Control Room</Link><Link href="/guest" className="rounded-xl bg-slate-800 px-4 py-2">Guest Join</Link><Link href="/destinations" className="rounded-xl bg-slate-800 px-4 py-2">Destinations</Link></div></main>; }

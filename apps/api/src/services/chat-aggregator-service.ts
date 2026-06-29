@@ -1,0 +1,3 @@
+import { ChatModerationStatus, type ChatMessage, type ChatPlatform } from '@ubos/shared';
+const messages = new Map<string, ChatMessage>();
+export class ChatAggregatorService { listMessages(sessionId: string) { return [...messages.values()].filter((m) => m.sessionId === sessionId); } createMock(sessionId: string, input: { authorName: string; body: string; platform: ChatPlatform }) { const message = { id: crypto.randomUUID(), sessionId, authorName: input.authorName, body: input.body, platform: input.platform, moderationStatus: ChatModerationStatus.Visible, createdAt: new Date().toISOString() }; messages.set(message.id, message); return message; } }
