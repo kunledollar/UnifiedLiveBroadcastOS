@@ -3,7 +3,13 @@ import tsParser from '@typescript-eslint/parser';
 
 export default [
   {
-    ignores: ['node_modules/**', 'dist/**', '.next/**', 'coverage/**'],
+     ignores: [
+        '**/node_modules/**',
+        '**/dist/**',
+        '**/.next/**',
+        '**/.turbo/**',
+      '**/coverage/**',
+      ],
   },
   {
     files: ['**/*.{ts,tsx}'],
