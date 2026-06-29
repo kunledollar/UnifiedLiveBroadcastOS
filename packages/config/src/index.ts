@@ -1,0 +1,5 @@
+export interface AppConfig { nodeEnv: string; apiPort: number; databaseUrl: string; webAppUrl: string; logLevel: 'debug' | 'info' | 'warn' | 'error'; }
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig { return { nodeEnv: env.NODE_ENV ?? 'development', apiPort: Number(env.API_PORT ?? 4000), databaseUrl: env.DATABASE_URL ?? '', webAppUrl: env.WEB_APP_URL ?? 'http://localhost:3000', logLevel: (env.LOG_LEVEL as AppConfig['logLevel']) ?? 'info' }; }
+export interface Logger { info(message: string, meta?: Record<string, unknown>): void; warn(message: string, meta?: Record<string, unknown>): void; error(message: string, meta?: Record<string, unknown>): void; }
+export const logger: Logger = { info: (message, meta) => console.info(message, meta ?? ''), warn: (message, meta) => console.warn(message, meta ?? ''), error: (message, meta) => console.error(message, meta ?? '') };
+export const PLATFORM_DISPLAY_NAMES = { youtube: 'YouTube', facebook: 'Facebook', tiktok: 'TikTok', instagram: 'Instagram', linkedin: 'LinkedIn', twitch: 'Twitch', custom_rtmp: 'Custom RTMP' } as const;
