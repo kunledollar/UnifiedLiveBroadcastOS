@@ -1,305 +1,646 @@
-diff --git a/packages/db/package.json b/packages/db/package.json
-index 14b3fc5855047829a45ea1234d5b19bdf5e89751..81b2703aaeacefe1a27978da771099960cf57305 100644
---- a/packages/db/package.json
-+++ b/packages/db/package.json
-@@ -1,27 +1,27 @@
- {
-   "name": "@ubos/db",
-   "version": "0.1.0",
-   "private": true,
-   "type": "module",
-   "scripts": {
--    "build": "prisma generate",
-+    "build": "prisma generate --schema prisma/schema.prisma",
-     "lint": "eslint .",
-     "typecheck": "tsc -p tsconfig.json --noEmit",
--    "prisma:generate": "prisma generate",
--    "prisma:migrate": "prisma migrate dev"
-+    "prisma:generate": "prisma generate --schema prisma/schema.prisma",
-+    "prisma:migrate": "prisma migrate dev --schema prisma/schema.prisma"
-   },
-   "dependencies": {
-     "@prisma/client": "^6.1.0"
-   },
-   "devDependencies": {
-     "prisma": "^6.1.0"
-   },
-   "main": "dist/index.js",
-   "types": "dist/index.d.ts",
-   "exports": {
-     ".": {
-       "types": "./dist/index.d.ts",
-       "import": "./dist/index.js"
-     }
-   }
- }
-diff --git a/packages/db/prisma/schema.prisma b/packages/db/prisma/schema.prisma
-index 561abae8db08443322e7025510e3fd9b5257375d..2748d26cddd40d27e9ccb24050048b7077d1fb11 100644
---- a/packages/db/prisma/schema.prisma
-+++ b/packages/db/prisma/schema.prisma
-@@ -1,26 +1,239 @@
--generator client { provider = "prisma-client-js" }
--datasource db { provider = "postgresql" url = env("DATABASE_URL") }
--
--enum UserRole { OWNER ADMIN MEMBER }
--enum WorkspaceRole { OWNER ADMIN PRODUCER GUEST }
--enum BroadcastSessionStatus { DRAFT LIVE ENDED }
--enum GuestStatus { INVITED WAITING ON_AIR REMOVED }
--enum GuestRole { HOST GUEST PRODUCER }
--enum DestinationPlatform { YOUTUBE FACEBOOK TIKTOK INSTAGRAM LINKEDIN TWITCH CUSTOM_RTMP }
--enum DestinationStatus { DISCONNECTED CONNECTED LIVE ERROR }
--enum ChatPlatform { YOUTUBE FACEBOOK TIKTOK INSTAGRAM LINKEDIN TWITCH MOCK }
--enum ChatModerationStatus { VISIBLE HELD HIDDEN }
--enum FollowPlatform { YOUTUBE INSTAGRAM TIKTOK TWITCH FACEBOOK LINKEDIN }
--enum RecordingStatus { PENDING RECORDING PROCESSING READY FAILED }
--
--model User { id String @id @default(cuid()) email String @unique name String? role UserRole @default(MEMBER) memberships WorkspaceMember[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
--model Workspace { id String @id @default(cuid()) name String members WorkspaceMember[] sessions BroadcastSession[] destinations Destination[] followProfiles FollowProfile[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
--model WorkspaceMember { id String @id @default(cuid()) userId String workspaceId String role WorkspaceRole @default(PRODUCER) user User @relation(fields:[userId], references:[id]) workspace Workspace @relation(fields:[workspaceId], references:[id]) @@unique([userId, workspaceId]) }
--model BroadcastSession { id String @id @default(cuid()) workspaceId String title String status BroadcastSessionStatus @default(DRAFT) workspace Workspace @relation(fields:[workspaceId], references:[id]) guests Guest[] chatMessages ChatMessage[] followEvents FollowEvent[] recordings Recording[] analyticsEvents AnalyticsEvent[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
--model Guest { id String @id @default(cuid()) sessionId String displayName String status GuestStatus @default(INVITED) role GuestRole @default(GUEST) session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
--model Destination { id String @id @default(cuid()) workspaceId String platform DestinationPlatform label String status DestinationStatus @default(DISCONNECTED) enabled Boolean @default(false) workspace Workspace @relation(fields:[workspaceId], references:[id]) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
--model ChatMessage { id String @id @default(cuid()) sessionId String authorName String body String platform ChatPlatform moderationStatus ChatModerationStatus @default(VISIBLE) session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) }
--model FollowProfile { id String @id @default(cuid()) workspaceId String platform FollowPlatform handle String enabled Boolean @default(true) workspace Workspace @relation(fields:[workspaceId], references:[id]) @@unique([workspaceId, platform]) }
--model FollowEvent { id String @id @default(cuid()) sessionId String platform FollowPlatform handle String session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) }
--model Recording { id String @id @default(cuid()) sessionId String status RecordingStatus @default(PENDING) assetUrl String? session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
--model AnalyticsEvent { id String @id @default(cuid()) sessionId String type String payload Json session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) }
-+generator client {
-+  provider = "prisma-client-js"
+diff --git a/apps/web/app/control-room/page.tsx b/apps/web/app/control-room/page.tsx
+index f373a55cc9ba2039fa78c8183327bab5a71507d0..53114b65f7807425c0709f90a9cba6087bf085fb 100644
+--- a/apps/web/app/control-room/page.tsx
++++ b/apps/web/app/control-room/page.tsx
+@@ -1,7 +1,151 @@
+-import { Badge, ChatMessageItem, DestinationToggle, GuestTile, Panel, StreamHealthCard } from '@ubos/ui';
+-import { BroadcastSessionStatus, ChatModerationStatus, ChatPlatform, DestinationPlatform, DestinationStatus, GuestRole, GuestStatus } from '@ubos/shared';
++import {
++  BroadcastToolbar,
++  CrossFollowPanel,
++  DestinationPanel,
++  GuestPanel,
++  LayoutSelector,
++  ProductionDock,
++  ProgramPreview,
++  SceneList,
++  StreamHealthPanel,
++  UnifiedChatPanel,
++  VerticalPreview,
++} from '@ubos/ui';
++import {
++  ChatModerationStatus,
++  ChatPlatform,
++  DestinationPlatform,
++  DestinationStatus,
++  GuestRole,
++  GuestStatus,
++  type AudioChannel,
++  type ChatMessage,
++  type Destination,
++  type Guest,
++  type ProductionAsset,
++  type Scene,
++  type SceneLayout,
++  type StreamHealthMetric,
++} from '@ubos/shared';
+ 
+-const guests = [{ id: 'g1', sessionId: 's1', displayName: 'Avery Guest', status: GuestStatus.OnAir, role: GuestRole.Guest }, { id: 'g2', sessionId: 's1', displayName: 'Producer Cam', status: GuestStatus.Waiting, role: GuestRole.Producer }];
+-const destinations = [DestinationPlatform.YouTube, DestinationPlatform.Facebook, DestinationPlatform.TikTok].map((platform) => ({ id: platform, workspaceId: 'w1', platform, label: platform, enabled: platform !== DestinationPlatform.TikTok, status: platform === DestinationPlatform.TikTok ? DestinationStatus.Disconnected : DestinationStatus.Connected }));
+-const messages = [{ id: 'm1', sessionId: 's1', authorName: 'Sam', body: 'Audio sounds clean from here.', platform: ChatPlatform.Mock, moderationStatus: ChatModerationStatus.Visible, createdAt: new Date().toISOString() }];
+-export default function ControlRoomPage() { return <main className="min-h-screen bg-[radial-gradient(circle_at_top,#164e63,transparent_35%),#020617] p-6"><div className="mb-6 flex items-center justify-between"><div><p className="text-sm text-cyan-300">Host Control Room</p><h1 className="text-3xl font-bold">Launch Day Broadcast</h1></div><Badge tone="warning">{BroadcastSessionStatus.Draft}</Badge></div><div className="grid gap-5 xl:grid-cols-[1.6fr_0.8fr]"><section className="space-y-5"><Panel><div className="flex aspect-video items-center justify-center rounded-2xl border border-cyan-300/20 bg-slate-950 text-slate-400">Program Preview Placeholder</div></Panel><Panel title="Guests"><div className="grid gap-4 md:grid-cols-2">{guests.map((guest) => <GuestTile key={guest.id} guest={guest} />)}</div></Panel><Panel title="Scene / Layout"><div className="grid gap-3 md:grid-cols-3">{['Solo', 'Interview', 'Grid'].map((layout) => <button className="rounded-xl border border-white/10 bg-slate-800 p-4 text-left" key={layout}>{layout}</button>)}</div></Panel></section><aside className="space-y-5"><Panel title="Destinations"><div className="space-y-3">{destinations.map((destination) => <DestinationToggle key={destination.id} destination={destination} />)}</div></Panel><Panel title="Unified Chat"><div className="space-y-3">{messages.map((message) => <ChatMessageItem key={message.id} message={message} />)}</div></Panel><Panel title="Cross-Follow"><p className="text-sm text-slate-300">Promote social follows across active platforms once integrations are connected.</p></Panel><Panel title="Stream Health"><StreamHealthCard health={{ bitrateKbps: 6200, resolution: '1080p', droppedFrames: 0, cpuPercent: 38 }} /></Panel></aside></div></main>; }
++const scenes: Scene[] = [
++  {
++    id: 'scene-opening',
++    name: 'Opening Countdown',
++    layout: 'screen_share',
++    isActive: false,
++    canvases: [
++      { id: 'program', label: 'Program', aspectRatio: '16:9', destinationHint: 'YouTube + Facebook' },
++      { id: 'vertical', label: 'Vertical', aspectRatio: '9:16', destinationHint: 'TikTok + Instagram' },
++    ],
++    sources: [
++      { id: 'source-countdown', type: 'media', label: 'Countdown Video', visible: true },
++      { id: 'source-music', type: 'audio', label: 'Pre-show Music', visible: true },
++    ],
++  },
++  {
++    id: 'scene-host-guest',
++    name: 'Host + Guest Interview',
++    layout: 'interview',
++    isActive: true,
++    canvases: [
++      { id: 'program', label: 'Program', aspectRatio: '16:9', destinationHint: 'Primary destinations' },
++      { id: 'vertical', label: 'Vertical', aspectRatio: '9:16', destinationHint: 'Short-form destinations' },
++      { id: 'square', label: 'Square', aspectRatio: '1:1', destinationHint: 'Future social crop' },
++    ],
++    sources: [
++      { id: 'source-host', type: 'camera', label: 'Host Camera', visible: true },
++      { id: 'source-guest', type: 'camera', label: 'Avery Guest', visible: true },
++      { id: 'source-lower-third', type: 'overlay', label: 'Guest Lower Third', visible: true },
++    ],
++  },
++  {
++    id: 'scene-demo',
++    name: 'Product Demo + PiP',
++    layout: 'picture_in_picture',
++    isActive: false,
++    canvases: [{ id: 'program', label: 'Program', aspectRatio: '16:9', destinationHint: 'Demo output' }],
++    sources: [
++      { id: 'source-screen', type: 'screen', label: 'Demo Screen', visible: true },
++      { id: 'source-host-pip', type: 'camera', label: 'Host PiP', visible: true },
++    ],
++  },
++];
++
++const layouts: SceneLayout[] = ['solo', 'interview', 'grid', 'screen_share', 'vertical_split', 'picture_in_picture'];
++
++const guests: Guest[] = [
++  { id: 'g1', sessionId: 's1', displayName: 'Maya Host', status: GuestStatus.OnAir, role: GuestRole.Host },
++  { id: 'g2', sessionId: 's1', displayName: 'Avery Guest', status: GuestStatus.OnAir, role: GuestRole.Guest },
++  { id: 'g3', sessionId: 's1', displayName: 'Producer Cam', status: GuestStatus.Waiting, role: GuestRole.Producer },
++];
++
++const destinations: Destination[] = [
++  { id: 'youtube', workspaceId: 'w1', platform: DestinationPlatform.YouTube, label: 'YouTube Main', enabled: true, status: DestinationStatus.Connected },
++  { id: 'facebook', workspaceId: 'w1', platform: DestinationPlatform.Facebook, label: 'Facebook Page', enabled: true, status: DestinationStatus.Connected },
++  { id: 'tiktok', workspaceId: 'w1', platform: DestinationPlatform.TikTok, label: 'TikTok Vertical', enabled: false, status: DestinationStatus.Disconnected },
++  { id: 'rtmp', workspaceId: 'w1', platform: DestinationPlatform.CustomRtmp, label: 'Custom RTMP', enabled: false, status: DestinationStatus.Disconnected },
++];
++
++const messages: ChatMessage[] = [
++  { id: 'm1', sessionId: 's1', authorName: 'Sam', body: 'Audio sounds clean from here.', platform: ChatPlatform.YouTube, moderationStatus: ChatModerationStatus.Visible, createdAt: '2026-06-29T12:00:00.000Z' },
++  { id: 'm2', sessionId: 's1', authorName: 'Nia', body: 'Vertical crop looks good on mobile.', platform: ChatPlatform.TikTok, moderationStatus: ChatModerationStatus.Visible, createdAt: '2026-06-29T12:01:00.000Z' },
++  { id: 'm3', sessionId: 's1', authorName: 'Leo', body: 'Can you show the dashboard next?', platform: ChatPlatform.Facebook, moderationStatus: ChatModerationStatus.Visible, createdAt: '2026-06-29T12:02:00.000Z' },
++];
++
++const healthMetrics: StreamHealthMetric[] = [
++  { id: 'bitrate', label: 'Bitrate', value: '6,200 kbps', status: 'good', helperText: 'Stable' },
++  { id: 'latency', label: 'Latency', value: '2.4s', status: 'good', helperText: 'Low latency' },
++  { id: 'frames', label: 'Dropped', value: '0', status: 'good', helperText: 'No drops' },
++  { id: 'cpu', label: 'CPU', value: '38%', status: 'warning', helperText: 'Monitor under load' },
++];
++
++const audioChannels: AudioChannel[] = [
++  { id: 'host-mic', label: 'Host Mic', level: 72, muted: false, kind: 'mic' },
++  { id: 'guest-mic', label: 'Guest Mic', level: 64, muted: false, kind: 'guest' },
++  { id: 'system', label: 'System Audio', level: 28, muted: false, kind: 'system' },
++  { id: 'music', label: 'Music Bed', level: 0, muted: true, kind: 'media' },
++];
++
++const assets: ProductionAsset[] = [
++  { id: 'asset-intro', name: 'Intro Sting', type: 'video', status: 'ready' },
++  { id: 'asset-lower-third', name: 'Guest Lower Third', type: 'lower_third', status: 'ready' },
++  { id: 'asset-bg', name: 'Gradient Background', type: 'background', status: 'ready' },
++  { id: 'asset-logo', name: 'Sponsor Bug', type: 'overlay', status: 'queued' },
++];
++
++export default function ControlRoomPage() {
++  const activeScene = scenes.find((scene) => scene.isActive) ?? scenes[0]!;
++
++  return (
++    <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-4 text-slate-100 md:p-6">
++      <div className="mx-auto max-w-[1800px] space-y-5">
++        <BroadcastToolbar title="Launch Day Broadcast" status="offline" elapsed="00:00:00" />
++        <div className="grid gap-5 2xl:grid-cols-[20rem_minmax(0,1fr)_24rem]">
++          <aside className="space-y-5">
++            <SceneList scenes={scenes} />
++            <LayoutSelector layouts={layouts} />
++            <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/75 p-4 text-sm text-slate-300">
++              <button className="rounded-xl bg-slate-950/70 p-3 text-left font-semibold hover:bg-slate-800">Assets Library</button>
++              <button className="rounded-xl bg-slate-950/70 p-3 text-left font-semibold hover:bg-slate-800">Overlay Controls</button>
++            </div>
++          </aside>
++          <section className="space-y-5">
++            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
++              <ProgramPreview scene={activeScene} />
++              <VerticalPreview scene={activeScene} />
++            </div>
++            <ProductionDock channels={audioChannels} assets={assets} />
++          </section>
++          <aside className="space-y-5">
++            <GuestPanel guests={guests} />
++            <DestinationPanel destinations={destinations} />
++            <UnifiedChatPanel messages={messages} />
++            <CrossFollowPanel platforms={['YouTube', 'TikTok', 'Instagram', 'Facebook']} />
++            <StreamHealthPanel metrics={healthMetrics} />
++          </aside>
++        </div>
++      </div>
++    </main>
++  );
++}
+diff --git a/apps/web/app/page.tsx b/apps/web/app/page.tsx
+index ffa8b9965274790543738ffea10fff430c11ee65..1a4ed75c48ed56dd62e79abe33e1a22400ea1ec3 100644
+--- a/apps/web/app/page.tsx
++++ b/apps/web/app/page.tsx
+@@ -1,2 +1,2 @@
+ import Link from 'next/link';
+-export default function Home() { return <main className="min-h-screen p-8"><h1 className="text-4xl font-bold">Unified Broadcast Operating System</h1><div className="mt-8 flex gap-4"><Link href="/control-room" className="rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950">Control Room</Link><Link href="/guest" className="rounded-xl bg-slate-800 px-4 py-2">Guest Join</Link><Link href="/destinations" className="rounded-xl bg-slate-800 px-4 py-2">Destinations</Link></div></main>; }
++export default function Home() { return <main className="min-h-screen p-8"><h1 className="text-4xl font-bold">Unified Broadcast Operating System</h1><div className="mt-8 flex gap-4"><Link href="/control-room" className="rounded-xl bg-cyan-400 px-4 py-2 font-bold text-slate-950">Broadcast Studio</Link><Link href="/guest" className="rounded-xl bg-slate-800 px-4 py-2">Guest Join</Link><Link href="/destinations" className="rounded-xl bg-slate-800 px-4 py-2">Destinations</Link></div></main>; }
+diff --git a/packages/shared/src/index.ts b/packages/shared/src/index.ts
+index d91a240f17d081bfda0feb5b6bcd7ee96a93fbe6..9a412962532551cc0d331e1ce32345e904c6a27a 100644
+--- a/packages/shared/src/index.ts
++++ b/packages/shared/src/index.ts
+@@ -1,31 +1,176 @@
+ import { z } from 'zod';
+ 
+-export enum BroadcastSessionStatus { Draft = 'draft', Live = 'live', Ended = 'ended' }
+-export enum GuestStatus { Invited = 'invited', Waiting = 'waiting', OnAir = 'on_air', Removed = 'removed' }
+-export enum GuestRole { Host = 'host', Guest = 'guest', Producer = 'producer' }
+-export enum DestinationPlatform { YouTube = 'youtube', Facebook = 'facebook', TikTok = 'tiktok', Instagram = 'instagram', LinkedIn = 'linkedin', Twitch = 'twitch', CustomRtmp = 'custom_rtmp' }
+-export enum DestinationStatus { Disconnected = 'disconnected', Connected = 'connected', Live = 'live', Error = 'error' }
+-export enum ChatPlatform { YouTube = 'youtube', Facebook = 'facebook', TikTok = 'tiktok', Instagram = 'instagram', Twitch = 'twitch', LinkedIn = 'linkedin', Mock = 'mock' }
+-export enum ChatModerationStatus { Visible = 'visible', Held = 'held', Hidden = 'hidden' }
+-export enum FollowPlatform { YouTube = 'youtube', Instagram = 'instagram', TikTok = 'tiktok', Twitch = 'twitch', Facebook = 'facebook', LinkedIn = 'linkedin' }
+-export enum RecordingStatus { Pending = 'pending', Recording = 'recording', Processing = 'processing', Ready = 'ready', Failed = 'failed' }
++export enum BroadcastSessionStatus {
++  Draft = 'draft',
++  Live = 'live',
++  Ended = 'ended',
++}
++export enum GuestStatus {
++  Invited = 'invited',
++  Waiting = 'waiting',
++  OnAir = 'on_air',
++  Removed = 'removed',
++}
++export enum GuestRole {
++  Host = 'host',
++  Guest = 'guest',
++  Producer = 'producer',
++}
++export enum DestinationPlatform {
++  YouTube = 'youtube',
++  Facebook = 'facebook',
++  TikTok = 'tiktok',
++  Instagram = 'instagram',
++  LinkedIn = 'linkedin',
++  Twitch = 'twitch',
++  CustomRtmp = 'custom_rtmp',
++}
++export enum DestinationStatus {
++  Disconnected = 'disconnected',
++  Connected = 'connected',
++  Live = 'live',
++  Error = 'error',
++}
++export enum ChatPlatform {
++  YouTube = 'youtube',
++  Facebook = 'facebook',
++  TikTok = 'tiktok',
++  Instagram = 'instagram',
++  Twitch = 'twitch',
++  LinkedIn = 'linkedin',
++  Mock = 'mock',
++}
++export enum ChatModerationStatus {
++  Visible = 'visible',
++  Held = 'held',
++  Hidden = 'hidden',
++}
++export enum FollowPlatform {
++  YouTube = 'youtube',
++  Instagram = 'instagram',
++  TikTok = 'tiktok',
++  Twitch = 'twitch',
++  Facebook = 'facebook',
++  LinkedIn = 'linkedin',
++}
++export enum RecordingStatus {
++  Pending = 'pending',
++  Recording = 'recording',
++  Processing = 'processing',
++  Ready = 'ready',
++  Failed = 'failed',
++}
+ 
+-export interface BroadcastSession { id: string; workspaceId: string; title: string; status: BroadcastSessionStatus; createdAt: string; }
+-export interface Guest { id: string; sessionId: string; displayName: string; status: GuestStatus; role: GuestRole; }
+-export interface Destination { id: string; workspaceId: string; platform: DestinationPlatform; label: string; status: DestinationStatus; enabled: boolean; }
+-export interface ChatMessage { id: string; sessionId: string; authorName: string; body: string; platform: ChatPlatform; moderationStatus: ChatModerationStatus; createdAt: string; }
+-export interface StreamHealth { bitrateKbps: number; resolution: string; droppedFrames: number; cpuPercent: number; }
++export type CanvasAspectRatio = '16:9' | '9:16' | '1:1';
++export type ProductionStatus = 'offline' | 'rehearsal' | 'live' | 'ending';
++export type SceneLayout = 'solo' | 'interview' | 'grid' | 'screen_share' | 'vertical_split' | 'picture_in_picture';
++export type SceneSourceType = 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio';
++export type BroadcastCanvas = {
++  id: string;
++  label: string;
++  aspectRatio: CanvasAspectRatio;
++  destinationHint?: string;
++};
++export interface SceneSource {
++  id: string;
++  type: SceneSourceType;
++  label: string;
++  visible: boolean;
++  muted?: boolean;
++}
++export interface Scene {
++  id: string;
++  name: string;
++  layout: SceneLayout;
++  sources: SceneSource[];
++  canvases: BroadcastCanvas[];
++  isActive?: boolean;
++}
++export interface StreamHealthMetric {
++  id: string;
++  label: string;
++  value: string;
++  status: 'good' | 'warning' | 'critical';
++  helperText?: string;
++}
++export interface AudioChannel {
++  id: string;
++  label: string;
++  level: number;
++  muted: boolean;
++  kind: 'mic' | 'system' | 'media' | 'guest';
++}
++export interface ProductionAsset {
++  id: string;
++  name: string;
++  type: 'video' | 'image' | 'lower_third' | 'background' | 'overlay';
++  status: 'ready' | 'queued' | 'disabled';
++}
+ 
+-export interface WebRtcService { createGuestToken(sessionId: string, guestName: string): Promise<string>; }
+-export interface MediaRouterService { reserveRoute(sessionId: string): Promise<{ routeId: string; ingestUrl: string }>; }
+-export interface ProductionAdapter { name: string; setLayout(sessionId: string, layoutId: string): Promise<void>; }
+-export interface EdgeAgentService { registerAgent(workspaceId: string, agentVersion: string): Promise<{ agentId: string }>; }
+-export interface ChatAggregatorService { listMessages(sessionId: string): Promise<ChatMessage[]>; }
+-export interface DestinationPublisherService { publish(sessionId: string, destinationId: string): Promise<void>; stop(destinationId: string): Promise<void>; }
+-export interface CrossFollowService { recordFollowEvent(sessionId: string, platform: FollowPlatform, handle: string): Promise<void>; }
++export interface BroadcastSession {
++  id: string;
++  workspaceId: string;
++  title: string;
++  status: BroadcastSessionStatus;
++  createdAt: string;
++}
++export interface Guest {
++  id: string;
++  sessionId: string;
++  displayName: string;
++  status: GuestStatus;
++  role: GuestRole;
++}
++export interface Destination {
++  id: string;
++  workspaceId: string;
++  platform: DestinationPlatform;
++  label: string;
++  status: DestinationStatus;
++  enabled: boolean;
++}
++export interface ChatMessage {
++  id: string;
++  sessionId: string;
++  authorName: string;
++  body: string;
++  platform: ChatPlatform;
++  moderationStatus: ChatModerationStatus;
++  createdAt: string;
++}
++export interface StreamHealth {
++  bitrateKbps: number;
++  resolution: string;
++  droppedFrames: number;
++  cpuPercent: number;
 +}
 +
-+datasource db {
-+  provider = "postgresql"
-+  url      = env("DATABASE_URL")
++export interface WebRtcService {
++  createGuestToken(sessionId: string, guestName: string): Promise<string>;
++}
++export interface MediaRouterService {
++  reserveRoute(sessionId: string): Promise<{ routeId: string; ingestUrl: string }>;
++}
++export interface ProductionAdapter {
++  name: string;
++  setLayout(sessionId: string, layoutId: string): Promise<void>;
++}
++export interface EdgeAgentService {
++  registerAgent(workspaceId: string, agentVersion: string): Promise<{ agentId: string }>;
++}
++export interface ChatAggregatorService {
++  listMessages(sessionId: string): Promise<ChatMessage[]>;
++}
++export interface DestinationPublisherService {
++  publish(sessionId: string, destinationId: string): Promise<void>;
++  stop(destinationId: string): Promise<void>;
++}
++export interface CrossFollowService {
++  recordFollowEvent(sessionId: string, platform: FollowPlatform, handle: string): Promise<void>;
++}
+ 
+ export const createBroadcastSessionSchema = z.object({ workspaceId: z.string().min(1), title: z.string().min(1).max(120) });
+ export const createGuestSchema = z.object({ displayName: z.string().min(1).max(80), role: z.nativeEnum(GuestRole).default(GuestRole.Guest) });
+ export const createDestinationSchema = z.object({ platform: z.nativeEnum(DestinationPlatform), label: z.string().min(1), enabled: z.boolean().default(false) });
+ export const mockChatMessageSchema = z.object({ authorName: z.string().min(1), body: z.string().min(1).max(500), platform: z.nativeEnum(ChatPlatform).default(ChatPlatform.Mock) });
+ export const SUPPORTED_DESTINATIONS = Object.values(DestinationPlatform);
+diff --git a/packages/ui/src/index.tsx b/packages/ui/src/index.tsx
+index 91a8ce055abcfbeeabf72fb312c0ded36c345ace..62bf49a5ad2088479fda8262ddfed12bbf720e84 100644
+--- a/packages/ui/src/index.tsx
++++ b/packages/ui/src/index.tsx
+@@ -1,12 +1,259 @@
+-import type { ChatMessage, Destination, Guest, StreamHealth } from '@ubos/shared';
++import type {
++  AudioChannel,
++  ChatMessage,
++  Destination,
++  Guest,
++  ProductionAsset,
++  ProductionStatus,
++  Scene,
++  SceneLayout,
++  StreamHealth,
++  StreamHealthMetric,
++} from '@ubos/shared';
+ import type { ReactNode } from 'react';
+ 
+-type ButtonVariant = 'primary' | 'secondary' | 'danger';
+-export function Button({ children, variant = 'primary' }: { children: ReactNode; variant?: ButtonVariant }) { const cls = variant === 'primary' ? 'bg-cyan-400 text-slate-950' : variant === 'danger' ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-100'; return <button className={`rounded-xl px-4 py-2 font-semibold ${cls}`}>{children}</button>; }
+-export function Panel({ title, children }: { title?: string; children: ReactNode }) { return <section className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 shadow-2xl shadow-black/20">{title ? <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-300">{title}</h2> : null}{children}</section>; }
+-export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'success' | 'warning' }) { const cls = tone === 'success' ? 'bg-emerald-400/15 text-emerald-300' : tone === 'warning' ? 'bg-amber-400/15 text-amber-300' : 'bg-slate-700 text-slate-200'; return <span className={`rounded-full px-3 py-1 text-xs ${cls}`}>{children}</span>; }
+-export function GuestTile({ guest }: { guest: Guest }) { return <div className="rounded-xl bg-slate-800 p-4"><div className="aspect-video rounded-lg bg-gradient-to-br from-slate-700 to-slate-950" /><p className="mt-3 font-medium">{guest.displayName}</p><p className="text-xs text-slate-400">{guest.status}</p></div>; }
+-export function DestinationToggle({ destination }: { destination: Destination }) { return <div className="flex items-center justify-between rounded-xl bg-slate-800 p-4"><div><p className="font-medium">{destination.label}</p><p className="text-xs text-slate-400">{destination.platform}</p></div><Badge tone={destination.enabled ? 'success' : 'neutral'}>{destination.status}</Badge></div>; }
+-export function ChatMessageItem({ message }: { message: ChatMessage }) { return <article className="rounded-xl bg-slate-800/80 p-3"><p className="text-xs text-cyan-300">{message.authorName} · {message.platform}</p><p className="text-sm text-slate-100">{message.body}</p></article>; }
+-export function StreamHealthCard({ health }: { health: StreamHealth }) { return <div className="grid grid-cols-2 gap-3 text-sm"><Metric label="Bitrate" value={`${health.bitrateKbps} kbps`} /><Metric label="Resolution" value={health.resolution} /><Metric label="Dropped" value={`${health.droppedFrames}`} /><Metric label="CPU" value={`${health.cpuPercent}%`} /></div>; }
+-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-slate-800 p-3"><p className="text-xs text-slate-400">{label}</p><p className="font-semibold text-slate-100">{value}</p></div>; }
++type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
++
++type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'live';
++
++const layoutLabels: Record<SceneLayout, string> = {
++  solo: 'Solo Host',
++  interview: 'Interview',
++  grid: 'Guest Grid',
++  screen_share: 'Screen Share',
++  vertical_split: 'Vertical Split',
++  picture_in_picture: 'Picture-in-Picture',
++};
++
++export function Button({ children, variant = 'primary' }: { children: ReactNode; variant?: ButtonVariant }) {
++  const cls = {
++    primary: 'bg-cyan-400 text-slate-950 hover:bg-cyan-300',
++    secondary: 'bg-slate-800 text-slate-100 hover:bg-slate-700',
++    danger: 'bg-rose-500 text-white hover:bg-rose-400',
++    ghost: 'border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10',
++  }[variant];
++
++  return <button className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${cls}`}>{children}</button>;
 +}
 +
-+enum UserRole {
-+  OWNER
-+  ADMIN
-+  MEMBER
++export function Panel({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
++  return (
++    <section className="rounded-2xl border border-white/10 bg-slate-900/75 p-5 shadow-2xl shadow-black/20 backdrop-blur">
++      {title ? (
++        <div className="mb-4 flex items-center justify-between gap-3">
++          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">{title}</h2>
++          {action}
++        </div>
++      ) : null}
++      {children}
++    </section>
++  );
 +}
 +
-+enum WorkspaceRole {
-+  OWNER
-+  ADMIN
-+  PRODUCER
-+  GUEST
++export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: Tone }) {
++  const cls = {
++    neutral: 'bg-slate-700 text-slate-200 ring-slate-500/20',
++    success: 'bg-emerald-400/15 text-emerald-300 ring-emerald-300/20',
++    warning: 'bg-amber-400/15 text-amber-300 ring-amber-300/20',
++    danger: 'bg-rose-500/15 text-rose-300 ring-rose-300/20',
++    live: 'bg-red-500 text-white ring-red-300/30 shadow-lg shadow-red-950/40',
++  }[tone];
++
++  return <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ring-1 ${cls}`}>{children}</span>;
 +}
 +
-+enum BroadcastSessionStatus {
-+  DRAFT
-+  LIVE
-+  ENDED
++export function BroadcastToolbar({ title, status, elapsed }: { title: string; status: ProductionStatus; elapsed: string }) {
++  const isLive = status === 'live';
++
++  return (
++    <header className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-slate-950/80 p-4 shadow-2xl shadow-black/30 lg:flex-row lg:items-center lg:justify-between">
++      <div>
++        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Broadcast Studio</p>
++        <div className="mt-1 flex flex-wrap items-center gap-3">
++          <h1 className="text-2xl font-bold text-white md:text-3xl">{title}</h1>
++          <Badge tone={isLive ? 'live' : 'warning'}>{isLive ? 'LIVE' : 'OFFLINE'}</Badge>
++          <span className="rounded-full border border-white/10 bg-slate-900 px-3 py-1 font-mono text-xs text-slate-300">{elapsed}</span>
++        </div>
++      </div>
++      <div className="flex flex-wrap gap-2">
++        <Button variant="ghost">Record</Button>
++        <Button>Go Live</Button>
++        <Button variant="danger">End Broadcast</Button>
++        <Button variant="secondary">Settings</Button>
++      </div>
++    </header>
++  );
 +}
 +
-+enum GuestStatus {
-+  INVITED
-+  WAITING
-+  ON_AIR
-+  REMOVED
++export function SceneCard({ scene }: { scene: Scene }) {
++  return (
++    <button className={`w-full rounded-2xl border p-3 text-left transition ${scene.isActive ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-slate-950/50 hover:bg-slate-800/80'}`}>
++      <div className="flex items-start justify-between gap-3">
++        <div>
++          <p className="font-semibold text-white">{scene.name}</p>
++          <p className="mt-1 text-xs text-slate-400">{layoutLabels[scene.layout]}</p>
++        </div>
++        {scene.isActive ? <Badge tone="success">Active</Badge> : null}
++      </div>
++      <div className="mt-3 flex gap-1.5">
++        {scene.canvases.map((canvas) => (
++          <span key={canvas.id} className="rounded-md bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-300">
++            {canvas.aspectRatio}
++          </span>
++        ))}
++      </div>
++    </button>
++  );
 +}
 +
-+enum GuestRole {
-+  HOST
-+  GUEST
-+  PRODUCER
++export function SceneList({ scenes }: { scenes: Scene[] }) {
++  return (
++    <Panel title="Scenes">
++      <div className="space-y-3">{scenes.map((scene) => <SceneCard key={scene.id} scene={scene} />)}</div>
++    </Panel>
++  );
 +}
 +
-+enum DestinationPlatform {
-+  YOUTUBE
-+  FACEBOOK
-+  TIKTOK
-+  INSTAGRAM
-+  LINKEDIN
-+  TWITCH
-+  CUSTOM_RTMP
++export function LayoutSelector({ layouts }: { layouts: SceneLayout[] }) {
++  return (
++    <Panel title="Layout Templates">
++      <div className="grid grid-cols-2 gap-2">
++        {layouts.map((layout) => (
++          <button key={layout} className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-left text-xs font-semibold text-slate-200 hover:border-cyan-300/50">
++            <div className="mb-2 h-10 rounded-lg bg-gradient-to-br from-slate-700 to-slate-950 ring-1 ring-white/10" />
++            {layoutLabels[layout]}
++          </button>
++        ))}
++      </div>
++    </Panel>
++  );
 +}
 +
-+enum DestinationStatus {
-+  DISCONNECTED
-+  CONNECTED
-+  LIVE
-+  ERROR
++export function ProgramPreview({ scene }: { scene: Scene }) {
++  return (
++    <Panel>
++      <div className="mb-3 flex items-center justify-between">
++        <div>
++          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Program 16:9</p>
++          <h2 className="text-xl font-bold text-white">{scene.name}</h2>
++        </div>
++        <Badge tone="live">LIVE</Badge>
++      </div>
++      <div className="relative aspect-video overflow-hidden rounded-2xl border border-cyan-300/20 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,.22),transparent_30%),linear-gradient(135deg,#0f172a,#020617)]">
++        <SafeZone label="Title Safe" />
++        <div className="absolute inset-x-8 bottom-8 rounded-xl border border-white/10 bg-black/45 p-4 backdrop-blur">
++          <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Current Scene</p>
++          <p className="text-2xl font-black text-white">{scene.name}</p>
++        </div>
++      </div>
++    </Panel>
++  );
 +}
 +
-+enum ChatPlatform {
-+  YOUTUBE
-+  FACEBOOK
-+  TIKTOK
-+  INSTAGRAM
-+  LINKEDIN
-+  TWITCH
-+  MOCK
++export function VerticalPreview({ scene }: { scene: Scene }) {
++  return (
++    <Panel>
++      <div className="mb-3 flex items-center justify-between">
++        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Vertical 9:16</p>
++        <Badge tone="neutral">TikTok / Reels</Badge>
++      </div>
++      <div className="mx-auto aspect-[9/16] max-h-[34rem] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-b from-slate-800 to-slate-950 p-3 shadow-inner shadow-black">
++        <div className="relative h-full rounded-[1.5rem] border border-cyan-300/20 bg-slate-950">
++          <SafeZone label="Vertical Safe" />
++          <div className="absolute inset-x-4 bottom-6 rounded-xl bg-black/55 p-3 text-center">
++            <p className="text-sm font-bold text-white">{scene.name}</p>
++            <p className="text-[10px] uppercase tracking-widest text-cyan-200">Mobile output mock</p>
++          </div>
++        </div>
++      </div>
++    </Panel>
++  );
 +}
 +
-+enum ChatModerationStatus {
-+  VISIBLE
-+  HELD
-+  HIDDEN
++function SafeZone({ label }: { label: string }) {
++  return <div className="absolute inset-6 flex items-start justify-center rounded-xl border border-dashed border-white/20 text-[10px] uppercase tracking-[0.25em] text-white/35">{label}</div>;
 +}
 +
-+enum FollowPlatform {
-+  YOUTUBE
-+  INSTAGRAM
-+  TIKTOK
-+  TWITCH
-+  FACEBOOK
-+  LINKEDIN
++export function GuestPanel({ guests }: { guests: Guest[] }) {
++  return <Panel title="Guests"><div className="grid gap-3">{guests.map((guest) => <GuestTile key={guest.id} guest={guest} />)}</div></Panel>;
 +}
 +
-+enum RecordingStatus {
-+  PENDING
-+  RECORDING
-+  PROCESSING
-+  READY
-+  FAILED
++export function DestinationPanel({ destinations }: { destinations: Destination[] }) {
++  return <Panel title="Destinations"><div className="space-y-3">{destinations.map((destination) => <DestinationToggle key={destination.id} destination={destination} />)}</div></Panel>;
 +}
 +
-+model User {
-+  id          String            @id @default(cuid())
-+  email       String            @unique
-+  name        String?
-+  role        UserRole          @default(MEMBER)
-+  memberships WorkspaceMember[]
-+  createdAt   DateTime          @default(now())
-+  updatedAt   DateTime          @updatedAt
++export function UnifiedChatPanel({ messages }: { messages: ChatMessage[] }) {
++  return <Panel title="Unified Chat"><div className="space-y-3">{messages.map((message) => <ChatMessageItem key={message.id} message={message} />)}</div></Panel>;
 +}
 +
-+model Workspace {
-+  id             String             @id @default(cuid())
-+  name           String
-+  members        WorkspaceMember[]
-+  sessions       BroadcastSession[]
-+  destinations   Destination[]
-+  followProfiles FollowProfile[]
-+  createdAt      DateTime           @default(now())
-+  updatedAt      DateTime           @updatedAt
++export function CrossFollowPanel({ platforms }: { platforms: string[] }) {
++  return (
++    <Panel title="Cross-Follow">
++      <p className="text-sm text-slate-300">Promote follows across active platforms after destination integrations are connected.</p>
++      <div className="mt-4 flex flex-wrap gap-2">{platforms.map((platform) => <Badge key={platform}>{platform}</Badge>)}</div>
++    </Panel>
++  );
 +}
 +
-+model WorkspaceMember {
-+  id          String        @id @default(cuid())
-+  userId      String
-+  workspaceId String
-+  role        WorkspaceRole @default(PRODUCER)
-+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-+
-+  @@unique([userId, workspaceId])
-+  @@index([workspaceId])
++export function StreamHealthPanel({ metrics }: { metrics: StreamHealthMetric[] }) {
++  return <Panel title="Stream Health"><div className="grid grid-cols-2 gap-3">{metrics.map((metric) => <Metric key={metric.id} label={metric.label} value={metric.value} tone={metric.status} />)}</div></Panel>;
 +}
 +
-+model BroadcastSession {
-+  id              String                 @id @default(cuid())
-+  workspaceId     String
-+  title           String
-+  status          BroadcastSessionStatus @default(DRAFT)
-+  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-+  guests          Guest[]
-+  chatMessages    ChatMessage[]
-+  followEvents    FollowEvent[]
-+  recordings      Recording[]
-+  analyticsEvents AnalyticsEvent[]
-+  createdAt       DateTime               @default(now())
-+  updatedAt       DateTime               @updatedAt
-+
-+  @@index([workspaceId])
-+  @@index([status])
-+  @@index([createdAt])
++export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
++  return (
++    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
++      {channels.map((channel) => (
++        <div key={channel.id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
++          <div className="flex items-center justify-between"><p className="text-sm font-semibold text-white">{channel.label}</p><Badge tone={channel.muted ? 'danger' : 'success'}>{channel.muted ? 'Muted' : channel.kind}</Badge></div>
++          <div className="mt-3 h-2 rounded-full bg-slate-800"><div className="h-2 rounded-full bg-cyan-300" style={{ width: `${channel.level}%` }} /></div>
++        </div>
++      ))}
++    </div>
++  );
 +}
 +
-+model Guest {
-+  id          String           @id @default(cuid())
-+  sessionId   String
-+  displayName String
-+  status      GuestStatus      @default(INVITED)
-+  role        GuestRole        @default(GUEST)
-+  session     BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-+  createdAt   DateTime         @default(now())
-+  updatedAt   DateTime         @updatedAt
++export function ProductionDock({ channels, assets }: { channels: AudioChannel[]; assets: ProductionAsset[] }) {
++  const assetGroups = ['media', 'lower_third', 'background', 'overlay'] as const;
 +
-+  @@index([sessionId])
-+  @@index([status])
++  return (
++    <Panel title="Production Dock">
++      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
++        <div><p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Audio Mixer</p><AudioMixer channels={channels} /></div>
++        <div className="grid gap-3 sm:grid-cols-2">
++          {assetGroups.map((group) => (
++            <div key={group} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
++              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{group.replace('_', ' ')}s</p>
++              <p className="mt-2 text-2xl font-black text-white">{assets.filter((asset) => getAssetDockGroup(asset) === group).length}</p>
++              <p className="text-xs text-slate-500">placeholder bin</p>
++            </div>
++          ))}
++        </div>
++      </div>
++    </Panel>
++  );
 +}
 +
-+model Destination {
-+  id          String              @id @default(cuid())
-+  workspaceId String
-+  platform    DestinationPlatform
-+  label       String
-+  status      DestinationStatus   @default(DISCONNECTED)
-+  enabled     Boolean             @default(false)
-+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-+  createdAt   DateTime            @default(now())
-+  updatedAt   DateTime            @updatedAt
-+
-+  @@index([workspaceId])
-+  @@index([platform])
-+  @@index([status])
++export function GuestTile({ guest }: { guest: Guest }) {
++  return <div className="rounded-xl bg-slate-800 p-4"><div className="aspect-video rounded-lg bg-gradient-to-br from-slate-700 to-slate-950" /><p className="mt-3 font-medium">{guest.displayName}</p><p className="text-xs text-slate-400">{guest.status}</p></div>;
 +}
 +
-+model ChatMessage {
-+  id               String               @id @default(cuid())
-+  sessionId        String
-+  authorName       String
-+  body             String
-+  platform         ChatPlatform
-+  moderationStatus ChatModerationStatus @default(VISIBLE)
-+  session          BroadcastSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-+  createdAt        DateTime             @default(now())
-+
-+  @@index([sessionId])
-+  @@index([platform])
-+  @@index([moderationStatus])
-+  @@index([createdAt])
++export function DestinationToggle({ destination }: { destination: Destination }) {
++  return <div className="flex items-center justify-between rounded-xl bg-slate-800 p-4"><div><p className="font-medium">{destination.label}</p><p className="text-xs text-slate-400">{destination.platform}</p></div><Badge tone={destination.enabled ? 'success' : 'neutral'}>{destination.status}</Badge></div>;
 +}
 +
-+model FollowProfile {
-+  id          String         @id @default(cuid())
-+  workspaceId String
-+  platform    FollowPlatform
-+  handle      String
-+  enabled     Boolean        @default(true)
-+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-+
-+  @@unique([workspaceId, platform])
-+  @@index([workspaceId])
++export function ChatMessageItem({ message }: { message: ChatMessage }) {
++  return <article className="rounded-xl bg-slate-800/80 p-3"><p className="text-xs text-cyan-300">{message.authorName} · {message.platform}</p><p className="text-sm text-slate-100">{message.body}</p></article>;
 +}
 +
-+model FollowEvent {
-+  id        String           @id @default(cuid())
-+  sessionId String
-+  platform  FollowPlatform
-+  handle    String
-+  session   BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-+  createdAt DateTime         @default(now())
-+
-+  @@index([sessionId])
-+  @@index([platform])
-+  @@index([createdAt])
++export function StreamHealthCard({ health }: { health: StreamHealth }) {
++  return <div className="grid grid-cols-2 gap-3 text-sm"><Metric label="Bitrate" value={`${health.bitrateKbps} kbps`} /><Metric label="Resolution" value={health.resolution} /><Metric label="Dropped" value={`${health.droppedFrames}`} /><Metric label="CPU" value={`${health.cpuPercent}%`} /></div>;
 +}
 +
-+model Recording {
-+  id        String           @id @default(cuid())
-+  sessionId String
-+  status    RecordingStatus  @default(PENDING)
-+  assetUrl  String?
-+  session   BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-+  createdAt DateTime         @default(now())
-+  updatedAt DateTime         @updatedAt
-+
-+  @@index([sessionId])
-+  @@index([status])
++function getAssetDockGroup(asset: ProductionAsset) {
++  return asset.type === 'video' || asset.type === 'image' ? 'media' : asset.type;
 +}
 +
-+model AnalyticsEvent {
-+  id        String           @id @default(cuid())
-+  sessionId String
-+  type      String
-+  payload   Json
-+  session   BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-+  createdAt DateTime         @default(now())
-+
-+  @@index([sessionId])
-+  @@index([type])
-+  @@index([createdAt])
++function Metric({ label, value, tone = 'good' }: { label: string; value: string; tone?: StreamHealthMetric['status'] }) {
++  const color = tone === 'critical' ? 'text-rose-300' : tone === 'warning' ? 'text-amber-300' : 'text-emerald-300';
++  return <div className="rounded-xl bg-slate-800 p-3"><p className="text-xs text-slate-400">{label}</p><p className={`font-semibold ${color}`}>{value}</p></div>;
 +}
