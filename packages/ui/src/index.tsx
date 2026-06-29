@@ -1,12 +1,259 @@
-import type { ChatMessage, Destination, Guest, StreamHealth } from '@ubos/shared';
+import type {
+  AudioChannel,
+  ChatMessage,
+  Destination,
+  Guest,
+  ProductionAsset,
+  ProductionStatus,
+  Scene,
+  SceneLayout,
+  StreamHealth,
+  StreamHealthMetric,
+} from '@ubos/shared';
 import type { ReactNode } from 'react';
 
-type ButtonVariant = 'primary' | 'secondary' | 'danger';
-export function Button({ children, variant = 'primary' }: { children: ReactNode; variant?: ButtonVariant }) { const cls = variant === 'primary' ? 'bg-cyan-400 text-slate-950' : variant === 'danger' ? 'bg-rose-500 text-white' : 'bg-slate-800 text-slate-100'; return <button className={`rounded-xl px-4 py-2 font-semibold ${cls}`}>{children}</button>; }
-export function Panel({ title, children }: { title?: string; children: ReactNode }) { return <section className="rounded-2xl border border-white/10 bg-slate-900/70 p-5 shadow-2xl shadow-black/20">{title ? <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-300">{title}</h2> : null}{children}</section>; }
-export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: 'neutral' | 'success' | 'warning' }) { const cls = tone === 'success' ? 'bg-emerald-400/15 text-emerald-300' : tone === 'warning' ? 'bg-amber-400/15 text-amber-300' : 'bg-slate-700 text-slate-200'; return <span className={`rounded-full px-3 py-1 text-xs ${cls}`}>{children}</span>; }
-export function GuestTile({ guest }: { guest: Guest }) { return <div className="rounded-xl bg-slate-800 p-4"><div className="aspect-video rounded-lg bg-gradient-to-br from-slate-700 to-slate-950" /><p className="mt-3 font-medium">{guest.displayName}</p><p className="text-xs text-slate-400">{guest.status}</p></div>; }
-export function DestinationToggle({ destination }: { destination: Destination }) { return <div className="flex items-center justify-between rounded-xl bg-slate-800 p-4"><div><p className="font-medium">{destination.label}</p><p className="text-xs text-slate-400">{destination.platform}</p></div><Badge tone={destination.enabled ? 'success' : 'neutral'}>{destination.status}</Badge></div>; }
-export function ChatMessageItem({ message }: { message: ChatMessage }) { return <article className="rounded-xl bg-slate-800/80 p-3"><p className="text-xs text-cyan-300">{message.authorName} · {message.platform}</p><p className="text-sm text-slate-100">{message.body}</p></article>; }
-export function StreamHealthCard({ health }: { health: StreamHealth }) { return <div className="grid grid-cols-2 gap-3 text-sm"><Metric label="Bitrate" value={`${health.bitrateKbps} kbps`} /><Metric label="Resolution" value={health.resolution} /><Metric label="Dropped" value={`${health.droppedFrames}`} /><Metric label="CPU" value={`${health.cpuPercent}%`} /></div>; }
-function Metric({ label, value }: { label: string; value: string }) { return <div className="rounded-xl bg-slate-800 p-3"><p className="text-xs text-slate-400">{label}</p><p className="font-semibold text-slate-100">{value}</p></div>; }
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
+
+type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'live';
+
+const layoutLabels: Record<SceneLayout, string> = {
+  solo: 'Solo Host',
+  interview: 'Interview',
+  grid: 'Guest Grid',
+  screen_share: 'Screen Share',
+  vertical_split: 'Vertical Split',
+  picture_in_picture: 'Picture-in-Picture',
+};
+
+export function Button({ children, variant = 'primary' }: { children: ReactNode; variant?: ButtonVariant }) {
+  const cls = {
+    primary: 'bg-cyan-400 text-slate-950 hover:bg-cyan-300',
+    secondary: 'bg-slate-800 text-slate-100 hover:bg-slate-700',
+    danger: 'bg-rose-500 text-white hover:bg-rose-400',
+    ghost: 'border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10',
+  }[variant];
+
+  return <button className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${cls}`}>{children}</button>;
+}
+
+export function Panel({ title, children, action }: { title?: string; children: ReactNode; action?: ReactNode }) {
+  return (
+    <section className="rounded-2xl border border-white/10 bg-slate-900/75 p-5 shadow-2xl shadow-black/20 backdrop-blur">
+      {title ? (
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">{title}</h2>
+          {action}
+        </div>
+      ) : null}
+      {children}
+    </section>
+  );
+}
+
+export function Badge({ children, tone = 'neutral' }: { children: ReactNode; tone?: Tone }) {
+  const cls = {
+    neutral: 'bg-slate-700 text-slate-200 ring-slate-500/20',
+    success: 'bg-emerald-400/15 text-emerald-300 ring-emerald-300/20',
+    warning: 'bg-amber-400/15 text-amber-300 ring-amber-300/20',
+    danger: 'bg-rose-500/15 text-rose-300 ring-rose-300/20',
+    live: 'bg-red-500 text-white ring-red-300/30 shadow-lg shadow-red-950/40',
+  }[tone];
+
+  return <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ring-1 ${cls}`}>{children}</span>;
+}
+
+export function BroadcastToolbar({ title, status, elapsed }: { title: string; status: ProductionStatus; elapsed: string }) {
+  const isLive = status === 'live';
+
+  return (
+    <header className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-slate-950/80 p-4 shadow-2xl shadow-black/30 lg:flex-row lg:items-center lg:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">Broadcast Studio</p>
+        <div className="mt-1 flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-bold text-white md:text-3xl">{title}</h1>
+          <Badge tone={isLive ? 'live' : 'warning'}>{isLive ? 'LIVE' : 'OFFLINE'}</Badge>
+          <span className="rounded-full border border-white/10 bg-slate-900 px-3 py-1 font-mono text-xs text-slate-300">{elapsed}</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <Button variant="ghost">Record</Button>
+        <Button>Go Live</Button>
+        <Button variant="danger">End Broadcast</Button>
+        <Button variant="secondary">Settings</Button>
+      </div>
+    </header>
+  );
+}
+
+export function SceneCard({ scene }: { scene: Scene }) {
+  return (
+    <button className={`w-full rounded-2xl border p-3 text-left transition ${scene.isActive ? 'border-cyan-300 bg-cyan-300/10' : 'border-white/10 bg-slate-950/50 hover:bg-slate-800/80'}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-white">{scene.name}</p>
+          <p className="mt-1 text-xs text-slate-400">{layoutLabels[scene.layout]}</p>
+        </div>
+        {scene.isActive ? <Badge tone="success">Active</Badge> : null}
+      </div>
+      <div className="mt-3 flex gap-1.5">
+        {scene.canvases.map((canvas) => (
+          <span key={canvas.id} className="rounded-md bg-slate-800 px-2 py-1 text-[10px] font-semibold text-slate-300">
+            {canvas.aspectRatio}
+          </span>
+        ))}
+      </div>
+    </button>
+  );
+}
+
+export function SceneList({ scenes }: { scenes: Scene[] }) {
+  return (
+    <Panel title="Scenes">
+      <div className="space-y-3">{scenes.map((scene) => <SceneCard key={scene.id} scene={scene} />)}</div>
+    </Panel>
+  );
+}
+
+export function LayoutSelector({ layouts }: { layouts: SceneLayout[] }) {
+  return (
+    <Panel title="Layout Templates">
+      <div className="grid grid-cols-2 gap-2">
+        {layouts.map((layout) => (
+          <button key={layout} className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-left text-xs font-semibold text-slate-200 hover:border-cyan-300/50">
+            <div className="mb-2 h-10 rounded-lg bg-gradient-to-br from-slate-700 to-slate-950 ring-1 ring-white/10" />
+            {layoutLabels[layout]}
+          </button>
+        ))}
+      </div>
+    </Panel>
+  );
+}
+
+export function ProgramPreview({ scene }: { scene: Scene }) {
+  return (
+    <Panel>
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Program 16:9</p>
+          <h2 className="text-xl font-bold text-white">{scene.name}</h2>
+        </div>
+        <Badge tone="live">LIVE</Badge>
+      </div>
+      <div className="relative aspect-video overflow-hidden rounded-2xl border border-cyan-300/20 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,.22),transparent_30%),linear-gradient(135deg,#0f172a,#020617)]">
+        <SafeZone label="Title Safe" />
+        <div className="absolute inset-x-8 bottom-8 rounded-xl border border-white/10 bg-black/45 p-4 backdrop-blur">
+          <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Current Scene</p>
+          <p className="text-2xl font-black text-white">{scene.name}</p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+export function VerticalPreview({ scene }: { scene: Scene }) {
+  return (
+    <Panel>
+      <div className="mb-3 flex items-center justify-between">
+        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Vertical 9:16</p>
+        <Badge tone="neutral">TikTok / Reels</Badge>
+      </div>
+      <div className="mx-auto aspect-[9/16] max-h-[34rem] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-b from-slate-800 to-slate-950 p-3 shadow-inner shadow-black">
+        <div className="relative h-full rounded-[1.5rem] border border-cyan-300/20 bg-slate-950">
+          <SafeZone label="Vertical Safe" />
+          <div className="absolute inset-x-4 bottom-6 rounded-xl bg-black/55 p-3 text-center">
+            <p className="text-sm font-bold text-white">{scene.name}</p>
+            <p className="text-[10px] uppercase tracking-widest text-cyan-200">Mobile output mock</p>
+          </div>
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+function SafeZone({ label }: { label: string }) {
+  return <div className="absolute inset-6 flex items-start justify-center rounded-xl border border-dashed border-white/20 text-[10px] uppercase tracking-[0.25em] text-white/35">{label}</div>;
+}
+
+export function GuestPanel({ guests }: { guests: Guest[] }) {
+  return <Panel title="Guests"><div className="grid gap-3">{guests.map((guest) => <GuestTile key={guest.id} guest={guest} />)}</div></Panel>;
+}
+
+export function DestinationPanel({ destinations }: { destinations: Destination[] }) {
+  return <Panel title="Destinations"><div className="space-y-3">{destinations.map((destination) => <DestinationToggle key={destination.id} destination={destination} />)}</div></Panel>;
+}
+
+export function UnifiedChatPanel({ messages }: { messages: ChatMessage[] }) {
+  return <Panel title="Unified Chat"><div className="space-y-3">{messages.map((message) => <ChatMessageItem key={message.id} message={message} />)}</div></Panel>;
+}
+
+export function CrossFollowPanel({ platforms }: { platforms: string[] }) {
+  return (
+    <Panel title="Cross-Follow">
+      <p className="text-sm text-slate-300">Promote follows across active platforms after destination integrations are connected.</p>
+      <div className="mt-4 flex flex-wrap gap-2">{platforms.map((platform) => <Badge key={platform}>{platform}</Badge>)}</div>
+    </Panel>
+  );
+}
+
+export function StreamHealthPanel({ metrics }: { metrics: StreamHealthMetric[] }) {
+  return <Panel title="Stream Health"><div className="grid grid-cols-2 gap-3">{metrics.map((metric) => <Metric key={metric.id} label={metric.label} value={metric.value} tone={metric.status} />)}</div></Panel>;
+}
+
+export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
+  return (
+    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {channels.map((channel) => (
+        <div key={channel.id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+          <div className="flex items-center justify-between"><p className="text-sm font-semibold text-white">{channel.label}</p><Badge tone={channel.muted ? 'danger' : 'success'}>{channel.muted ? 'Muted' : channel.kind}</Badge></div>
+          <div className="mt-3 h-2 rounded-full bg-slate-800"><div className="h-2 rounded-full bg-cyan-300" style={{ width: `${channel.level}%` }} /></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ProductionDock({ channels, assets }: { channels: AudioChannel[]; assets: ProductionAsset[] }) {
+  const assetGroups = ['media', 'lower_third', 'background', 'overlay'] as const;
+
+  return (
+    <Panel title="Production Dock">
+      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+        <div><p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">Audio Mixer</p><AudioMixer channels={channels} /></div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {assetGroups.map((group) => (
+            <div key={group} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">{group.replace('_', ' ')}s</p>
+              <p className="mt-2 text-2xl font-black text-white">{assets.filter((asset) => getAssetDockGroup(asset) === group).length}</p>
+              <p className="text-xs text-slate-500">placeholder bin</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </Panel>
+  );
+}
+
+export function GuestTile({ guest }: { guest: Guest }) {
+  return <div className="rounded-xl bg-slate-800 p-4"><div className="aspect-video rounded-lg bg-gradient-to-br from-slate-700 to-slate-950" /><p className="mt-3 font-medium">{guest.displayName}</p><p className="text-xs text-slate-400">{guest.status}</p></div>;
+}
+
+export function DestinationToggle({ destination }: { destination: Destination }) {
+  return <div className="flex items-center justify-between rounded-xl bg-slate-800 p-4"><div><p className="font-medium">{destination.label}</p><p className="text-xs text-slate-400">{destination.platform}</p></div><Badge tone={destination.enabled ? 'success' : 'neutral'}>{destination.status}</Badge></div>;
+}
+
+export function ChatMessageItem({ message }: { message: ChatMessage }) {
+  return <article className="rounded-xl bg-slate-800/80 p-3"><p className="text-xs text-cyan-300">{message.authorName} · {message.platform}</p><p className="text-sm text-slate-100">{message.body}</p></article>;
+}
+
+export function StreamHealthCard({ health }: { health: StreamHealth }) {
+  return <div className="grid grid-cols-2 gap-3 text-sm"><Metric label="Bitrate" value={`${health.bitrateKbps} kbps`} /><Metric label="Resolution" value={health.resolution} /><Metric label="Dropped" value={`${health.droppedFrames}`} /><Metric label="CPU" value={`${health.cpuPercent}%`} /></div>;
+}
+
+function getAssetDockGroup(asset: ProductionAsset) {
+  return asset.type === 'video' || asset.type === 'image' ? 'media' : asset.type;
+}
+
+function Metric({ label, value, tone = 'good' }: { label: string; value: string; tone?: StreamHealthMetric['status'] }) {
+  const color = tone === 'critical' ? 'text-rose-300' : tone === 'warning' ? 'text-amber-300' : 'text-emerald-300';
+  return <div className="rounded-xl bg-slate-800 p-3"><p className="text-xs text-slate-400">{label}</p><p className={`font-semibold ${color}`}>{value}</p></div>;
+}
