@@ -1,26 +1,239 @@
-generator client { provider = "prisma-client-js" }
-datasource db { provider = "postgresql" url = env("DATABASE_URL") }
+generator client {
+  provider = "prisma-client-js"
+}
 
-enum UserRole { OWNER ADMIN MEMBER }
-enum WorkspaceRole { OWNER ADMIN PRODUCER GUEST }
-enum BroadcastSessionStatus { DRAFT LIVE ENDED }
-enum GuestStatus { INVITED WAITING ON_AIR REMOVED }
-enum GuestRole { HOST GUEST PRODUCER }
-enum DestinationPlatform { YOUTUBE FACEBOOK TIKTOK INSTAGRAM LINKEDIN TWITCH CUSTOM_RTMP }
-enum DestinationStatus { DISCONNECTED CONNECTED LIVE ERROR }
-enum ChatPlatform { YOUTUBE FACEBOOK TIKTOK INSTAGRAM LINKEDIN TWITCH MOCK }
-enum ChatModerationStatus { VISIBLE HELD HIDDEN }
-enum FollowPlatform { YOUTUBE INSTAGRAM TIKTOK TWITCH FACEBOOK LINKEDIN }
-enum RecordingStatus { PENDING RECORDING PROCESSING READY FAILED }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-model User { id String @id @default(cuid()) email String @unique name String? role UserRole @default(MEMBER) memberships WorkspaceMember[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model Workspace { id String @id @default(cuid()) name String members WorkspaceMember[] sessions BroadcastSession[] destinations Destination[] followProfiles FollowProfile[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model WorkspaceMember { id String @id @default(cuid()) userId String workspaceId String role WorkspaceRole @default(PRODUCER) user User @relation(fields:[userId], references:[id]) workspace Workspace @relation(fields:[workspaceId], references:[id]) @@unique([userId, workspaceId]) }
-model BroadcastSession { id String @id @default(cuid()) workspaceId String title String status BroadcastSessionStatus @default(DRAFT) workspace Workspace @relation(fields:[workspaceId], references:[id]) guests Guest[] chatMessages ChatMessage[] followEvents FollowEvent[] recordings Recording[] analyticsEvents AnalyticsEvent[] createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model Guest { id String @id @default(cuid()) sessionId String displayName String status GuestStatus @default(INVITED) role GuestRole @default(GUEST) session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model Destination { id String @id @default(cuid()) workspaceId String platform DestinationPlatform label String status DestinationStatus @default(DISCONNECTED) enabled Boolean @default(false) workspace Workspace @relation(fields:[workspaceId], references:[id]) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model ChatMessage { id String @id @default(cuid()) sessionId String authorName String body String platform ChatPlatform moderationStatus ChatModerationStatus @default(VISIBLE) session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) }
-model FollowProfile { id String @id @default(cuid()) workspaceId String platform FollowPlatform handle String enabled Boolean @default(true) workspace Workspace @relation(fields:[workspaceId], references:[id]) @@unique([workspaceId, platform]) }
-model FollowEvent { id String @id @default(cuid()) sessionId String platform FollowPlatform handle String session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) }
-model Recording { id String @id @default(cuid()) sessionId String status RecordingStatus @default(PENDING) assetUrl String? session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) updatedAt DateTime @updatedAt }
-model AnalyticsEvent { id String @id @default(cuid()) sessionId String type String payload Json session BroadcastSession @relation(fields:[sessionId], references:[id]) createdAt DateTime @default(now()) }
+enum UserRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  PRODUCER
+  GUEST
+}
+
+enum BroadcastSessionStatus {
+  DRAFT
+  LIVE
+  ENDED
+}
+
+enum GuestStatus {
+  INVITED
+  WAITING
+  ON_AIR
+  REMOVED
+}
+
+enum GuestRole {
+  HOST
+  GUEST
+  PRODUCER
+}
+
+enum DestinationPlatform {
+  YOUTUBE
+  FACEBOOK
+  TIKTOK
+  INSTAGRAM
+  LINKEDIN
+  TWITCH
+  CUSTOM_RTMP
+}
+
+enum DestinationStatus {
+  DISCONNECTED
+  CONNECTED
+  LIVE
+  ERROR
+}
+
+enum ChatPlatform {
+  YOUTUBE
+  FACEBOOK
+  TIKTOK
+  INSTAGRAM
+  LINKEDIN
+  TWITCH
+  MOCK
+}
+
+enum ChatModerationStatus {
+  VISIBLE
+  HELD
+  HIDDEN
+}
+
+enum FollowPlatform {
+  YOUTUBE
+  INSTAGRAM
+  TIKTOK
+  TWITCH
+  FACEBOOK
+  LINKEDIN
+}
+
+enum RecordingStatus {
+  PENDING
+  RECORDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id          String            @id @default(cuid())
+  email       String            @unique
+  name        String?
+  role        UserRole          @default(MEMBER)
+  memberships WorkspaceMember[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model Workspace {
+  id             String             @id @default(cuid())
+  name           String
+  members        WorkspaceMember[]
+  sessions       BroadcastSession[]
+  destinations   Destination[]
+  followProfiles FollowProfile[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  userId      String
+  workspaceId String
+  role        WorkspaceRole @default(PRODUCER)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, workspaceId])
+  @@index([workspaceId])
+}
+
+model BroadcastSession {
+  id              String                 @id @default(cuid())
+  workspaceId     String
+  title           String
+  status          BroadcastSessionStatus @default(DRAFT)
+  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  guests          Guest[]
+  chatMessages    ChatMessage[]
+  followEvents    FollowEvent[]
+  recordings      Recording[]
+  analyticsEvents AnalyticsEvent[]
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  @@index([workspaceId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Guest {
+  id          String           @id @default(cuid())
+  sessionId   String
+  displayName String
+  status      GuestStatus      @default(INVITED)
+  role        GuestRole        @default(GUEST)
+  session     BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([sessionId])
+  @@index([status])
+}
+
+model Destination {
+  id          String              @id @default(cuid())
+  workspaceId String
+  platform    DestinationPlatform
+  label       String
+  status      DestinationStatus   @default(DISCONNECTED)
+  enabled     Boolean             @default(false)
+  workspace   Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([workspaceId])
+  @@index([platform])
+  @@index([status])
+}
+
+model ChatMessage {
+  id               String               @id @default(cuid())
+  sessionId        String
+  authorName       String
+  body             String
+  platform         ChatPlatform
+  moderationStatus ChatModerationStatus @default(VISIBLE)
+  session          BroadcastSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt        DateTime             @default(now())
+
+  @@index([sessionId])
+  @@index([platform])
+  @@index([moderationStatus])
+  @@index([createdAt])
+}
+
+model FollowProfile {
+  id          String         @id @default(cuid())
+  workspaceId String
+  platform    FollowPlatform
+  handle      String
+  enabled     Boolean        @default(true)
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, platform])
+  @@index([workspaceId])
+}
+
+model FollowEvent {
+  id        String           @id @default(cuid())
+  sessionId String
+  platform  FollowPlatform
+  handle    String
+  session   BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@index([sessionId])
+  @@index([platform])
+  @@index([createdAt])
+}
+
+model Recording {
+  id        String           @id @default(cuid())
+  sessionId String
+  status    RecordingStatus  @default(PENDING)
+  assetUrl  String?
+  session   BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  @@index([sessionId])
+  @@index([status])
+}
+
+model AnalyticsEvent {
+  id        String           @id @default(cuid())
+  sessionId String
+  type      String
+  payload   Json
+  session   BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  createdAt DateTime         @default(now())
+
+  @@index([sessionId])
+  @@index([type])
+  @@index([createdAt])
+}
