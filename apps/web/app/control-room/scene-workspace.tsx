@@ -16,6 +16,8 @@ import {
   type SceneLayout,
   type SceneSource,
   type SceneSourceType,
+  type MediaRoute,
+  type MediaLayoutPreset,
 } from '@ubos/shared';
 import { useOptimistic, useTransition } from 'react';
 import {
@@ -42,11 +44,13 @@ export function SceneWorkspace({
   layouts,
   channels,
   assets,
+  mediaRoutes = [],
 }: {
   initialScenes: Scene[];
   layouts: SceneLayout[];
   channels: AudioChannel[];
   assets: ProductionAsset[];
+  mediaRoutes?: MediaRoute[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [scenes, setScenes] = useOptimistic(initialScenes, (_current, next: Scene[]) => next);
@@ -54,6 +58,9 @@ export function SceneWorkspace({
   const refresh = (next: Scene[]) => startTransition(() => setScenes(next));
   const sorted = [...scenes].sort((a, b) => a.order - b.order);
   const activeScene = sorted.find((scene) => scene.isActive) ?? sorted[0]!;
+  const programRoute = mediaRoutes.find((route) => route.isOnProgram);
+  const layoutPreset =
+    (programRoute?.metadata.layoutPreset as MediaLayoutPreset | undefined) ?? 'full_screen';
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -272,8 +279,8 @@ export function SceneWorkspace({
       </aside>
       <section className="space-y-5">
         <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <ProgramPreview scene={activeScene} />
-          <VerticalPreview scene={activeScene} />
+          <ProgramPreview scene={activeScene} routes={mediaRoutes} layoutPreset={layoutPreset} />
+          <VerticalPreview scene={activeScene} routes={mediaRoutes} />
         </div>
         <ProductionDock channels={channels} assets={assets} />
       </section>

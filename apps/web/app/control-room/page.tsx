@@ -2,6 +2,8 @@ import { getScenes } from './scene-actions';
 import { SceneWorkspace } from './scene-workspace';
 import { GuestManagement } from './guest-management';
 import { listGuests, listInvites } from './guest-actions';
+import { loadMediaRoutes } from './media-route-actions';
+import { MediaRoutingPanel } from './media-routing-panel';
 import { ControlRoomRealtime } from './_components/control-room-realtime';
 import { HostDeviceControls } from './_components/host-device-controls';
 
@@ -123,7 +125,12 @@ const assets: ProductionAsset[] = [
 export const dynamic = 'force-dynamic';
 
 export default async function ControlRoomPage() {
-  const [scenes, guests, invites] = await Promise.all([getScenes(), listGuests(), listInvites()]);
+  const [scenes, guests, invites, mediaRoutes] = await Promise.all([
+    getScenes(),
+    listGuests(),
+    listInvites(),
+    loadMediaRoutes(),
+  ]);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-4 text-slate-100 md:p-6">
@@ -135,10 +142,17 @@ export default async function ControlRoomPage() {
             layouts={layouts}
             channels={audioChannels}
             assets={assets}
+            mediaRoutes={mediaRoutes}
           />
           <aside className="space-y-5">
             <HostDeviceControls />
             <GuestManagement guests={guests} invites={invites} broadcastId="demo-broadcast" />
+            <MediaRoutingPanel
+              guests={guests}
+              routes={mediaRoutes}
+              scenes={scenes}
+              broadcastId="demo-broadcast"
+            />
             <DestinationPanel destinations={destinations} />
             <UnifiedChatPanel messages={messages} />
             <CrossFollowPanel platforms={['YouTube', 'TikTok', 'Instagram', 'Facebook']} />
