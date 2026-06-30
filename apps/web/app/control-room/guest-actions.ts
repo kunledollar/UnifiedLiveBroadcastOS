@@ -1,6 +1,6 @@
 'use server';
 
-import { PrismaClient } from '@ubos/db';
+import { prisma } from '@ubos/db';
 import {
   GuestStatus,
   guestInviteSchema,
@@ -14,7 +14,6 @@ import { revalidatePath } from 'next/cache';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { ensureDemoBroadcast } from './scene-actions';
 
-const prisma = new PrismaClient();
 const DEMO_WORKSPACE_ID = 'demo-workspace';
 const DEMO_BROADCAST_ID = 'demo-broadcast';
 
