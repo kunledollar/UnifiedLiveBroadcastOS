@@ -16,6 +16,8 @@ import {
   type SceneLayout,
   type SceneSource,
   type SceneSourceType,
+  type MediaRoute,
+  type MediaLayoutPreset,
 } from '@ubos/shared';
 import { useEffect, useOptimistic, useState, useTransition } from 'react';
 import {
@@ -140,11 +142,13 @@ export function SceneWorkspace({
   layouts,
   channels,
   assets,
+  mediaRoutes = [],
 }: {
   initialScenes: Scene[];
   layouts: SceneLayout[];
   channels: AudioChannel[];
   assets: ProductionAsset[];
+  mediaRoutes?: MediaRoute[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [viewMode, setViewMode] = useState<ControlRoomViewMode>('dual');
@@ -163,6 +167,9 @@ export function SceneWorkspace({
   const refresh = (next: Scene[]) => startTransition(() => setScenes(next));
   const sorted = [...scenes].sort((a, b) => a.order - b.order);
   const activeScene = sorted.find((scene) => scene.isActive) ?? sorted[0]!;
+  const programRoute = mediaRoutes.find((route) => route.isOnProgram);
+  const layoutPreset =
+    (programRoute?.metadata.layoutPreset as MediaLayoutPreset | undefined) ?? 'full_screen';
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -384,7 +391,7 @@ export function SceneWorkspace({
         <div className={previewGridClasses[viewMode]}>
           {viewMode !== 'vertical' ? (
             <div className={viewMode === 'compact' ? 'min-w-0 text-sm' : 'min-w-0'}>
-              <ProgramPreview scene={activeScene} />
+              <ProgramPreview scene={activeScene} routes={mediaRoutes} layoutPreset={layoutPreset} />
             </div>
           ) : null}
           {viewMode !== 'program' ? (
@@ -397,7 +404,7 @@ export function SceneWorkspace({
                     : 'min-w-0'
               }
             >
-              <VerticalPreview scene={activeScene} />
+              <VerticalPreview scene={activeScene} routes={mediaRoutes} />
             </div>
           ) : null}
         </div>
