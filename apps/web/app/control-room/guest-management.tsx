@@ -2,9 +2,10 @@
 
 import { Badge, Panel } from '@ubos/ui';
 import { GuestStatus, type Guest, type GuestInvite } from '@ubos/shared';
-import { useCallback, useState, useTransition } from 'react';
+import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useBroadcastRealtime } from '../../lib/realtime';
 import type { BroadcastRealtimeEvent } from '@ubos/shared';
+import { emitWebRtcSignal, webRtcIceServers } from '../../lib/webrtc-signaling';
 import {
   admitGuest,
   inviteGuest,
@@ -30,6 +31,8 @@ const labels: Record<GuestStatus, string> = {
   removed: 'Removed',
 };
 type GuestMediaIndicators = {
+  connectionState?: RTCPeerConnectionState | undefined;
+  remoteStream?: MediaStream | undefined;
   cameraReady?: boolean;
   microphoneReady?: boolean;
   screenShareEnabled?: boolean;
@@ -49,6 +52,22 @@ const tones: Record<GuestStatus, 'neutral' | 'success' | 'warning' | 'danger' | 
   rejected: 'danger',
   removed: 'danger',
 };
+
+
+function GuestRemotePreview({ stream }: { stream?: MediaStream | undefined }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = stream ?? null;
+    if (stream) void video.play().catch(() => undefined);
+  }, [stream]);
+  return stream ? (
+    <video ref={videoRef} autoPlay playsInline className="aspect-video w-full rounded-xl border border-emerald-300/20 bg-slate-900 object-cover" />
+  ) : (
+    <div className="flex aspect-video w-full items-center justify-center rounded-xl border border-dashed border-white/10 bg-slate-900 text-xs text-slate-500">No media connected</div>
+  );
+}
 
 function actionButton(label: string, action: () => void, danger = false) {
   return (
@@ -73,9 +92,57 @@ export function GuestManagement({
 }) {
   const [isPending, startTransition] = useTransition();
   const [mediaIndicators, setMediaIndicators] = useState<Record<string, GuestMediaIndicators>>({});
+  const peerConnections = useRef<Record<string, RTCPeerConnection>>({});
+  const closeGuestPeer = useCallback((guestId: string) => {
+    peerConnections.current[guestId]?.close();
+    delete peerConnections.current[guestId];
+    setMediaIndicators((current) => ({
+      ...current,
+      [guestId]: { ...(current[guestId] ?? {}), connectionState: 'closed', remoteStream: undefined },
+    }));
+  }, []);
+
   const handleRealtimeEvent = useCallback((event: BroadcastRealtimeEvent) => {
+    if (event.entityType === 'webrtc') {
+      const guestId = event.entityId;
+      if (!guestId) return;
+      const payload = event.payload as { senderRole?: string; targetRole?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit; connectionState?: RTCPeerConnectionState };
+      if (payload.targetRole !== 'host' || payload.senderRole !== 'guest') return;
+      if (event.eventType === 'webrtc:offer' && payload.description) {
+        const existing = peerConnections.current[guestId];
+        existing?.close();
+        const peer = new RTCPeerConnection({ iceServers: webRtcIceServers });
+        peerConnections.current[guestId] = peer;
+        const remoteStream = new MediaStream();
+        setMediaIndicators((current) => ({ ...current, [guestId]: { ...(current[guestId] ?? {}), remoteStream, connectionState: peer.connectionState } }));
+        peer.ontrack = (trackEvent) => {
+          trackEvent.streams[0]?.getTracks().forEach((track) => remoteStream.addTrack(track));
+          setMediaIndicators((current) => ({ ...current, [guestId]: { ...(current[guestId] ?? {}), remoteStream } }));
+        };
+        peer.onicecandidate = (candidateEvent) => {
+          if (candidateEvent.candidate) void emitWebRtcSignal({ workspaceId: event.workspaceId, broadcastId: event.broadcastId, guestId, senderRole: 'host', targetRole: 'guest', eventType: 'webrtc:iceCandidate', payload: { candidate: candidateEvent.candidate.toJSON() } });
+        };
+        peer.onconnectionstatechange = () => {
+          setMediaIndicators((current) => ({ ...current, [guestId]: { ...(current[guestId] ?? {}), connectionState: peer.connectionState } }));
+          void emitWebRtcSignal({ workspaceId: event.workspaceId, broadcastId: event.broadcastId, guestId, senderRole: 'host', targetRole: 'guest', eventType: 'webrtc:connectionStateChanged', payload: { connectionState: peer.connectionState } });
+        };
+        void peer.setRemoteDescription(payload.description)
+          .then(() => peer.createAnswer())
+          .then((answer) => peer.setLocalDescription(answer).then(() => answer))
+          .then((answer) => emitWebRtcSignal({ workspaceId: event.workspaceId, broadcastId: event.broadcastId, guestId, senderRole: 'host', targetRole: 'guest', eventType: 'webrtc:answer', payload: { description: answer } }))
+          .catch((error: unknown) => emitWebRtcSignal({ workspaceId: event.workspaceId, broadcastId: event.broadcastId, guestId, senderRole: 'host', targetRole: 'guest', eventType: 'webrtc:error', payload: { message: error instanceof Error ? error.message : 'Failed to answer offer' } }));
+      }
+      if (event.eventType === 'webrtc:iceCandidate' && payload.candidate) {
+        void peerConnections.current[guestId]?.addIceCandidate(payload.candidate).catch(() => undefined);
+      }
+      if (event.eventType === 'webrtc:connectionStateChanged' && payload.connectionState) {
+        setMediaIndicators((current) => ({ ...current, [guestId]: { ...(current[guestId] ?? {}), connectionState: payload.connectionState } }));
+      }
+      return;
+    }
     if (!event.eventType.startsWith('guest:')) return;
     const guestKey = event.entityId ?? 'green-room-device';
+    if (event.eventType === 'guest:removed' || event.eventType === 'guest:rejected' || event.eventType === 'guest:left') closeGuestPeer(guestKey);
     setMediaIndicators((current) => {
       const previous = current[guestKey] ?? {};
       if (event.eventType === 'guest:mediaReady')
@@ -103,7 +170,8 @@ export function GuestManagement({
         return { ...current, [guestKey]: { ...previous, screenShareEnabled: false } };
       return current;
     });
-  }, []);
+  }, [closeGuestPeer]);
+  useEffect(() => () => { Object.values(peerConnections.current).forEach((peer) => peer.close()); peerConnections.current = {}; }, []);
   useBroadcastRealtime({ workspaceId: 'demo-workspace', broadcastId }, handleRealtimeEvent);
   return (
     <Panel
@@ -172,6 +240,7 @@ export function GuestManagement({
                 </div>
                 <Badge tone={tones[guest.status]}>{labels[guest.status]}</Badge>
               </div>
+              <div className="mt-3"><GuestRemotePreview stream={indicators.remoteStream} /></div>
               <div className="mt-3 flex flex-wrap gap-1.5 text-[11px]">
                 <Badge
                   tone={
@@ -203,6 +272,9 @@ export function GuestManagement({
                 </Badge>
                 <Badge tone={indicators.screenShareEnabled ? 'success' : 'neutral'}>
                   Screen {indicators.screenShareEnabled ? 'Ready' : '—'}
+                </Badge>
+                <Badge tone={indicators.connectionState === 'connected' ? 'success' : indicators.connectionState === 'failed' || indicators.connectionState === 'closed' ? 'danger' : indicators.connectionState ? 'warning' : 'neutral'}>
+                  WebRTC {indicators.connectionState ?? 'no media'}
                 </Badge>
               </div>
               <div className="mt-3 grid grid-cols-4 gap-1.5">

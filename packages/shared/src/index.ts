@@ -328,10 +328,36 @@ export const broadcastRealtimeEventTypes = [
   'broadcast:statusChanged',
   'system:connected',
   'system:disconnected',
+  'webrtc:offer',
+  'webrtc:answer',
+  'webrtc:iceCandidate',
+  'webrtc:connectionStateChanged',
+  'webrtc:trackStarted',
+  'webrtc:trackStopped',
+  'webrtc:error',
 ] as const;
 
 export type BroadcastRealtimeEventType = (typeof broadcastRealtimeEventTypes)[number];
-export type BroadcastRealtimeEntityType = 'guest' | 'scene' | 'source' | 'broadcast' | 'system';
+export type BroadcastRealtimeEntityType = 'guest' | 'scene' | 'source' | 'broadcast' | 'system' | 'webrtc';
+export type WebRtcSignalRole = 'host' | 'guest';
+export type WebRtcConnectionState = RTCPeerConnectionState;
+export interface WebRtcSignalPayload {
+  description?: RTCSessionDescriptionInit;
+  candidate?: RTCIceCandidateInit;
+  connectionState?: WebRtcConnectionState;
+  trackKind?: 'audio' | 'video';
+  message?: string;
+  [key: string]: unknown;
+}
+export interface WebRtcSignalEvent<TPayload = WebRtcSignalPayload> {
+  workspaceId: string;
+  broadcastId: string;
+  guestId: string;
+  senderRole: WebRtcSignalRole;
+  targetRole: WebRtcSignalRole;
+  timestamp: string;
+  payload: TPayload;
+}
 
 export interface BroadcastRealtimeEvent<TPayload = Record<string, unknown>> {
   workspaceId: string;

@@ -29,7 +29,7 @@ export default async function GuestJoinPage({
             Network ready
           </label>
           <input name="userAgent" className="hidden" defaultValue="green-room-browser-check" />
-          <GuestDeviceGreenRoom />
+          <GuestDeviceGreenRoom token={params.token ?? ''} />
           <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm text-cyan-100">
             Guests enter Waiting until all readiness checks are selected, then move to Green Room
             for host admission.

@@ -272,3 +272,20 @@ export async function joinGreenRoom(formData: FormData) {
   revalidatePath('/control-room');
   revalidatePath('/guest');
 }
+
+export async function getGuestContextByToken(token: string) {
+  const invite = await prisma.guestInvite.findFirst({
+    where: { token, revokedAt: null, session: { workspaceId: DEMO_WORKSPACE_ID } },
+  });
+  if (!invite) return null;
+  const guest = await prisma.guest.findFirst({
+    where: { inviteId: invite.id, workspaceId: invite.workspaceId },
+  });
+  if (!guest) return null;
+  return {
+    workspaceId: invite.workspaceId,
+    broadcastId: invite.sessionId,
+    guestId: guest.id,
+    status: dbToStatus(guest.status),
+  };
+}

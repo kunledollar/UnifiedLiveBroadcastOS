@@ -4,6 +4,9 @@ import { Badge } from '@ubos/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useBroadcastRealtime } from '../../../lib/realtime';
 import { useMediaCapture } from '../../../lib/media/use-media-capture';
+import { emitWebRtcSignal, isBrowserWebRtcAvailable, webRtcIceServers } from '../../../lib/webrtc-signaling';
+import { getGuestContextByToken } from '../../control-room/guest-actions';
+import { GuestStatus, type BroadcastRealtimeEvent } from '@ubos/shared';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'live';
 
@@ -54,14 +57,81 @@ function useMicLevel(stream: MediaStream | null) {
   return level;
 }
 
-export function GuestDeviceGreenRoom() {
+export function GuestDeviceGreenRoom({ token }: { token: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const { status } = useBroadcastRealtime({
-    workspaceId: 'demo-workspace',
-    broadcastId: 'demo-broadcast',
-  });
+  const peerRef = useRef<RTCPeerConnection | null>(null);
+  const [guestContext, setGuestContext] = useState<{ workspaceId: string; broadcastId: string; guestId: string; status: GuestStatus } | null>(null);
+  const [webrtcState, setWebrtcState] = useState<RTCPeerConnectionState>('new');
+  const [hostConnected, setHostConnected] = useState(false);
+  const handleRealtimeEvent = useCallback((event: BroadcastRealtimeEvent) => {
+    if (!guestContext || event.entityId !== guestContext.guestId) return;
+    if (event.entityType === 'guest') {
+      if (event.eventType === 'guest:admitted') setGuestContext((current) => current ? { ...current, status: GuestStatus.Connected } : current);
+      if (event.eventType === 'guest:removed' || event.eventType === 'guest:rejected' || event.eventType === 'guest:left') {
+        peerRef.current?.close();
+        peerRef.current = null;
+        setWebrtcState('closed');
+        setHostConnected(false);
+      }
+      return;
+    }
+    if (event.entityType !== 'webrtc') return;
+    const payload = event.payload as { senderRole?: string; targetRole?: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit; connectionState?: RTCPeerConnectionState };
+    if (payload.targetRole !== 'guest' || payload.senderRole !== 'host') return;
+    if (event.eventType === 'webrtc:answer' && payload.description) {
+      void peerRef.current?.setRemoteDescription(payload.description);
+      setHostConnected(true);
+    }
+    if (event.eventType === 'webrtc:iceCandidate' && payload.candidate) {
+      void peerRef.current?.addIceCandidate(payload.candidate).catch(() => undefined);
+    }
+    if (event.eventType === 'webrtc:connectionStateChanged' && payload.connectionState) {
+      setHostConnected(payload.connectionState === 'connected' || payload.connectionState === 'connecting');
+    }
+  }, [guestContext]);
+  const { status } = useBroadcastRealtime(guestContext ?? { workspaceId: 'demo-workspace', broadcastId: 'demo-broadcast' }, handleRealtimeEvent);
   const media = useMediaCapture();
   const micLevel = useMicLevel(media.stream);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    void getGuestContextByToken(token).then((context) => {
+      if (!cancelled) setGuestContext(context);
+    });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  useEffect(() => {
+    if (!guestContext || guestContext.status !== GuestStatus.Connected || !media.stream || !isBrowserWebRtcAvailable()) return;
+    if (peerRef.current) return;
+    const peer = new RTCPeerConnection({ iceServers: webRtcIceServers });
+    peerRef.current = peer;
+    media.stream.getTracks().forEach((track) => {
+      peer.addTrack(track, media.stream as MediaStream);
+      void emitWebRtcSignal({ ...guestContext, guestId: guestContext.guestId, senderRole: 'guest', targetRole: 'host', eventType: 'webrtc:trackStarted', payload: { trackKind: track.kind as 'audio' | 'video' } });
+    });
+    peer.onicecandidate = (event) => {
+      if (event.candidate) void emitWebRtcSignal({ ...guestContext, senderRole: 'guest', targetRole: 'host', eventType: 'webrtc:iceCandidate', payload: { candidate: event.candidate.toJSON() } });
+    };
+    peer.onconnectionstatechange = () => {
+      setWebrtcState(peer.connectionState);
+      setHostConnected(peer.connectionState === 'connected');
+      void emitWebRtcSignal({ ...guestContext, senderRole: 'guest', targetRole: 'host', eventType: 'webrtc:connectionStateChanged', payload: { connectionState: peer.connectionState } });
+    };
+    void peer.createOffer()
+      .then((offer) => peer.setLocalDescription(offer).then(() => offer))
+      .then((offer) => emitWebRtcSignal({ ...guestContext, senderRole: 'guest', targetRole: 'host', eventType: 'webrtc:offer', payload: { description: offer } }))
+      .catch((error: unknown) => emitWebRtcSignal({ ...guestContext, senderRole: 'guest', targetRole: 'host', eventType: 'webrtc:error', payload: { message: error instanceof Error ? error.message : 'Failed to create offer' } }));
+    const cleanup = () => {
+      media.stream?.getTracks().forEach((track) => void emitWebRtcSignal({ ...guestContext, senderRole: 'guest', targetRole: 'host', eventType: 'webrtc:trackStopped', payload: { trackKind: track.kind as 'audio' | 'video' } }));
+      peer.close();
+      peerRef.current = null;
+      setWebrtcState('closed');
+    };
+    window.addEventListener('beforeunload', cleanup, { once: true });
+    return () => { window.removeEventListener('beforeunload', cleanup); cleanup(); };
+  }, [guestContext, media.stream]);
 
   const emit = useCallback(async (eventType: string, payload: Record<string, unknown> = {}) => {
     await fetch('/api/realtime-proxy', {
@@ -229,7 +299,7 @@ export function GuestDeviceGreenRoom() {
       <input name="cameraReady" type="hidden" value={media.cameraReady ? 'on' : ''} />
       <input name="microphoneReady" type="hidden" value={media.microphoneReady ? 'on' : ''} />
       <p className="text-xs text-slate-400">
-        Realtime media status: {status}. Media streams stay local in your browser.
+        Realtime media status: {status}. WebRTC: {webrtcState}. Host {hostConnected ? 'connected' : 'not connected'}. Media streams stay peer-to-peer and are never sent through WebSocket.
       </p>
     </section>
   );

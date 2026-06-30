@@ -12,7 +12,7 @@ import type { Duplex } from 'node:stream';
 const roomSchema = z.object({ workspaceId: z.string().trim().min(1), broadcastId: z.string().trim().min(1) });
 const eventSchema = roomSchema.extend({
   actorId: z.string().trim().min(1).optional(), entityId: z.string().trim().min(1).optional(),
-  entityType: z.enum(['guest', 'scene', 'source', 'broadcast', 'system']), eventType: z.enum(broadcastRealtimeEventTypes),
+  entityType: z.enum(['guest', 'scene', 'source', 'broadcast', 'system', 'webrtc']), eventType: z.enum(broadcastRealtimeEventTypes),
   timestamp: z.string().datetime().optional(), payload: z.record(z.string(), z.unknown()).default({}),
 });
 
