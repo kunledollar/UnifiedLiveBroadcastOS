@@ -9,6 +9,7 @@ export const prisma: PrismaClient = globalForPrisma.prisma ?? new PrismaClient()
 
 // Cache on globalThis in development so hot reloading reuses one client
 // instead of opening a new connection pool on every change.
-if (process.env.NODE_ENV !== 'production') {
+const nodeEnv = (globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV;
+if (nodeEnv !== 'production') {
   globalForPrisma.prisma = prisma;
 }

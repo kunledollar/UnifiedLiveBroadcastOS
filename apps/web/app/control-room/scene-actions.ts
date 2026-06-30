@@ -15,6 +15,7 @@ import {
   type SceneSourceType,
 } from '@ubos/shared';
 import { revalidatePath } from 'next/cache';
+import { emitRealtimeEvent } from './realtime-actions';
 
 const DEMO_WORKSPACE_ID = 'demo-workspace';
 const DEMO_BROADCAST_ID = 'demo-broadcast';
@@ -235,7 +236,7 @@ export async function addScene(formData: FormData) {
     type: formData.get('type') || SceneType.Custom,
   });
   const nextOrder = await prisma.scene.count({ where: { broadcastId } });
-  await prisma.scene.create({
+  const created = await prisma.scene.create({
     data: {
       broadcastId,
       name: input.name,
@@ -244,6 +245,7 @@ export async function addScene(formData: FormData) {
       order: nextOrder,
     },
   });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId, eventType: 'scene:created', entityType: 'scene', entityId: created.id, payload: { name: created.name } });
   revalidatePath('/control-room');
 }
 
@@ -254,6 +256,7 @@ export async function renameScene(formData: FormData) {
   if (!scene) throw new Error('Scene not found.');
   await assertWorkspaceAccess(scene.broadcastId);
   await prisma.scene.update({ where: { id: sceneId }, data: { name: input.name } });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:renamed', entityType: 'scene', entityId: sceneId, payload: { name: input.name } });
   revalidatePath('/control-room');
 }
 
@@ -268,6 +271,7 @@ export async function switchScene(sceneId: string) {
     }),
     prisma.scene.update({ where: { id: sceneId }, data: { isActive: true } }),
   ]);
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:switched', entityType: 'scene', entityId: sceneId, payload: { activeSceneId: sceneId } });
   revalidatePath('/control-room');
 }
 
@@ -308,6 +312,7 @@ export async function duplicateScene(sceneId: string) {
         transform: jsonObject(source.transform),
       })),
     });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:created', entityType: 'scene', entityId: copy.id, payload: { name: copy.name, duplicatedFrom: scene.id } });
   revalidatePath('/control-room');
 }
 
@@ -326,6 +331,7 @@ export async function deleteScene(sceneId: string) {
     if (next) await prisma.scene.update({ where: { id: next.id }, data: { isActive: true } });
   }
   await normalizeOrder(scene.broadcastId);
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:deleted', entityType: 'scene', entityId: sceneId, payload: { name: scene.name } });
   revalidatePath('/control-room');
 }
 
@@ -405,7 +411,7 @@ export async function addSource(formData: FormData) {
   const nextOrder = await prisma.sceneSource.count({
     where: { workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, sceneId: scene.id },
   });
-  await prisma.sceneSource.create({
+  const created = await prisma.sceneSource.create({
     data: {
       workspaceId: DEMO_WORKSPACE_ID,
       broadcastId: scene.broadcastId,
@@ -415,6 +421,7 @@ export async function addSource(formData: FormData) {
       order: nextOrder,
     },
   });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'source:created', entityType: 'source', entityId: created.id, payload: { sceneId: scene.id, name: created.name } });
   revalidatePath('/control-room');
 }
 
@@ -423,8 +430,9 @@ export async function renameSource(formData: FormData) {
     sourceId: formData.get('sourceId'),
     name: formData.get('name'),
   });
-  await getScopedSource(input.sourceId);
+  const source = await getScopedSource(input.sourceId);
   await prisma.sceneSource.update({ where: { id: input.sourceId }, data: { name: input.name } });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:renamed', entityType: 'source', entityId: input.sourceId, payload: { sceneId: source.sceneId, name: input.name } });
   revalidatePath('/control-room');
 }
 
@@ -458,6 +466,7 @@ export async function deleteSource(sourceId: string) {
   const source = await getScopedSource(sourceId);
   await prisma.sceneSource.delete({ where: { id: sourceId } });
   await normalizeSourceOrder(source.sceneId);
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:deleted', entityType: 'source', entityId: sourceId, payload: { sceneId: source.sceneId, name: source.name } });
   revalidatePath('/control-room');
 }
 
@@ -485,6 +494,7 @@ export async function toggleSourceVisibility(sourceId: string) {
     where: { id: sourceId },
     data: { isVisible: !source.isVisible },
   });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:visibilityChanged', entityType: 'source', entityId: sourceId, payload: { sceneId: source.sceneId, isVisible: !source.isVisible } });
   revalidatePath('/control-room');
 }
 
@@ -494,6 +504,7 @@ export async function toggleSourceLock(sourceId: string) {
     where: { id: sourceId },
     data: { isLocked: !source.isLocked },
   });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:lockChanged', entityType: 'source', entityId: sourceId, payload: { sceneId: source.sceneId, isLocked: !source.isLocked } });
   revalidatePath('/control-room');
 }
 

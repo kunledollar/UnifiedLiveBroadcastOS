@@ -299,3 +299,51 @@ export const guestJoinSchema = z.object({
   networkReady: z.boolean().default(false),
   userAgent: z.string().max(500).optional(),
 });
+
+export const broadcastRealtimeEventTypes = [
+  'guest:joined',
+  'guest:left',
+  'guest:invited',
+  'guest:admitted',
+  'guest:rejected',
+  'guest:muted',
+  'guest:unmuted',
+  'guest:removed',
+  'guest:spotlighted',
+  'guest:renamed',
+  'scene:switched',
+  'scene:created',
+  'scene:renamed',
+  'scene:deleted',
+  'source:created',
+  'source:renamed',
+  'source:deleted',
+  'source:visibilityChanged',
+  'source:lockChanged',
+  'broadcast:statusChanged',
+  'system:connected',
+  'system:disconnected',
+] as const;
+
+export type BroadcastRealtimeEventType = (typeof broadcastRealtimeEventTypes)[number];
+export type BroadcastRealtimeEntityType = 'guest' | 'scene' | 'source' | 'broadcast' | 'system';
+
+export interface BroadcastRealtimeEvent<TPayload = Record<string, unknown>> {
+  workspaceId: string;
+  broadcastId: string;
+  actorId?: string;
+  entityId?: string;
+  entityType: BroadcastRealtimeEntityType;
+  eventType: BroadcastRealtimeEventType;
+  timestamp: string;
+  payload: TPayload;
+}
+
+export interface BroadcastRealtimeRoom {
+  workspaceId: string;
+  broadcastId: string;
+}
+
+export function broadcastRealtimeRoom({ workspaceId, broadcastId }: BroadcastRealtimeRoom) {
+  return `workspace:${workspaceId}:broadcast:${broadcastId}`;
+}

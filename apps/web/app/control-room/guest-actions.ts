@@ -13,6 +13,7 @@ import {
 import { revalidatePath } from 'next/cache';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { ensureDemoBroadcast } from './scene-actions';
+import { emitRealtimeEvent } from './realtime-actions';
 
 const DEMO_WORKSPACE_ID = 'demo-workspace';
 const DEMO_BROADCAST_ID = 'demo-broadcast';
@@ -121,7 +122,7 @@ export async function inviteGuest(formData: FormData) {
       displayName: input.displayName ?? null,
     },
   });
-  await prisma.guest.create({
+  const guest = await prisma.guest.create({
     data: {
       workspaceId: DEMO_WORKSPACE_ID,
       sessionId: broadcast.id,
@@ -131,6 +132,7 @@ export async function inviteGuest(formData: FormData) {
       role: 'GUEST',
     },
   });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: broadcast.id, eventType: 'guest:invited', entityType: 'guest', entityId: guest.id, payload: { inviteId: invite.id, displayName: guest.displayName } });
   revalidatePath('/control-room');
   return toInvite(invite);
 }
@@ -155,12 +157,15 @@ async function setGuestStatus(
   guestId: string,
   status: GuestStatus,
   extra: Record<string, unknown> = {},
+  eventOverride?: 'guest:unmuted',
 ) {
-  await getScopedGuest(guestId);
-  await prisma.guest.update({
+  const guest = await getScopedGuest(guestId);
+  const updated = await prisma.guest.update({
     where: { id: guestId },
     data: { status: statusToDb(status), ...extra },
   });
+  const eventType = eventOverride ?? (status === GuestStatus.Connected ? 'guest:admitted' : status === GuestStatus.Rejected ? 'guest:rejected' : status === GuestStatus.Removed ? 'guest:removed' : status === GuestStatus.OnAir ? 'guest:spotlighted' : status === GuestStatus.Muted ? 'guest:muted' : 'guest:joined');
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: guest.sessionId, eventType, entityType: 'guest', entityId: guestId, payload: { status: updated.status, ...extra } });
   revalidatePath('/control-room');
 }
 export async function admitGuest(id: string) {
@@ -171,9 +176,12 @@ export async function rejectGuest(id: string) {
 }
 export async function muteGuest(id: string) {
   const guest = await getScopedGuest(id);
-  await setGuestStatus(id, guest.isMuted ? GuestStatus.Connected : GuestStatus.Muted, {
-    isMuted: !guest.isMuted,
-  });
+  await setGuestStatus(
+    id,
+    guest.isMuted ? GuestStatus.Connected : GuestStatus.Muted,
+    { isMuted: !guest.isMuted },
+    guest.isMuted ? 'guest:unmuted' : undefined,
+  );
 }
 export async function removeGuest(id: string) {
   await setGuestStatus(id, GuestStatus.Removed);
@@ -195,10 +203,11 @@ export async function renameGuest(formData: FormData) {
     displayName: formData.get('displayName'),
   });
   await getScopedGuest(input.guestId);
-  await prisma.guest.update({
+  const updated = await prisma.guest.update({
     where: { id: input.guestId },
     data: { displayName: input.displayName },
   });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: updated.sessionId, eventType: 'guest:renamed', entityType: 'guest', entityId: input.guestId, payload: { displayName: input.displayName } });
   revalidatePath('/control-room');
 }
 
@@ -259,6 +268,7 @@ export async function joinGreenRoom(formData: FormData) {
       status: 'GREEN_ROOM',
     },
   });
+  await emitRealtimeEvent({ workspaceId: invite.workspaceId, broadcastId: invite.sessionId, eventType: 'guest:joined', entityType: 'guest', entityId: guest.id, payload: { displayName: input.displayName } });
   revalidatePath('/control-room');
   revalidatePath('/guest');
 }

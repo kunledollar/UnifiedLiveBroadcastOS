@@ -2,6 +2,7 @@ import { getScenes } from './scene-actions';
 import { SceneWorkspace } from './scene-workspace';
 import { GuestManagement } from './guest-management';
 import { listGuests, listInvites } from './guest-actions';
+import { ControlRoomRealtime } from './_components/control-room-realtime';
 
 import {
   BroadcastToolbar,
@@ -139,6 +140,7 @@ export default async function ControlRoomPage() {
             <DestinationPanel destinations={destinations} />
             <UnifiedChatPanel messages={messages} />
             <CrossFollowPanel platforms={['YouTube', 'TikTok', 'Instagram', 'Facebook']} />
+            <ControlRoomRealtime workspaceId="demo-workspace" broadcastId="demo-broadcast" />
             <StreamHealthPanel metrics={healthMetrics} />
           </aside>
         </div>

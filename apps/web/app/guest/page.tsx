@@ -1,5 +1,6 @@
 import { Button, Panel, Badge } from '@ubos/ui';
 import { joinGreenRoom } from '../control-room/guest-actions';
+import { GuestRealtimeStatus } from './_components/guest-realtime-status';
 
 export default async function GuestJoinPage({
   searchParams,
@@ -46,6 +47,7 @@ export default async function GuestJoinPage({
             Guests enter Waiting until all readiness checks are selected, then move to Green Room
             for host admission.
           </div>
+          <GuestRealtimeStatus />
           <Button>Join Green Room</Button>
         </form>
       </Panel>
