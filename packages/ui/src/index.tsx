@@ -10,6 +10,8 @@ import type {
   SceneLayout,
   SceneSource,
   SceneSourceType,
+  MediaRoute,
+  MediaLayoutPreset,
   StreamHealth,
   StreamHealthMetric,
 } from '@ubos/shared';
@@ -496,24 +498,56 @@ export function LayoutSelector({ layouts }: { layouts: SceneLayout[] }) {
   );
 }
 
-export function ProgramPreview({ scene }: { scene: Scene }) {
+export function ProgramPreview({
+  scene,
+  routes = [],
+  layoutPreset = 'full_screen',
+}: {
+  scene: Scene;
+  routes?: MediaRoute[];
+  layoutPreset?: MediaLayoutPreset;
+}) {
+  const programRoute = routes.find((route) => route.isOnProgram);
+  const routedNames = routes
+    .filter((route) => route.isActive)
+    .map((route) => `${route.displayName}${route.layoutSlot ? ` (${route.layoutSlot})` : ''}`)
+    .join(' · ');
   return (
     <Panel>
       <div className="mb-3 flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Program 16:9</p>
-          <h2 className="text-xl font-bold text-white">{scene.name}</h2>
+          <h2 className="text-xl font-bold text-white">
+            {programRoute?.displayName ?? scene.name}
+          </h2>
+          <p className="text-xs text-slate-400">
+            Layout preset: {layoutPreset.replaceAll('_', ' ')}
+          </p>
         </div>
         <Badge tone="live">LIVE</Badge>
       </div>
       <div className="relative aspect-video overflow-hidden rounded-2xl border border-cyan-300/20 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,.22),transparent_30%),linear-gradient(135deg,#0f172a,#020617)]">
         <SafeZone label="Title Safe" />
         <SourceLayers sources={scene.sources} />
+        {programRoute ? (
+          <div className="absolute inset-10 grid place-items-center rounded-2xl border border-cyan-300/30 bg-cyan-950/30 text-center backdrop-blur-sm">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">
+                Routed Program Placeholder
+              </p>
+              <p className="mt-2 text-3xl font-black text-white">{programRoute.displayName}</p>
+              <p className="mt-1 text-sm text-slate-300">
+                {programRoute.isMuted ? 'Muted' : 'Audio active'} · Slot{' '}
+                {programRoute.layoutSlot ?? 'auto'}
+              </p>
+            </div>
+          </div>
+        ) : null}
         <div className="absolute inset-x-8 bottom-8 rounded-xl border border-white/10 bg-black/45 p-4 backdrop-blur">
           <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Current Scene</p>
           <p className="text-2xl font-black text-white">{scene.name}</p>
           <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-300">
-            {typeLabels[scene.type]}
+            {routedNames || typeLabels[scene.type]}
           </p>
         </div>
       </div>
@@ -521,7 +555,10 @@ export function ProgramPreview({ scene }: { scene: Scene }) {
   );
 }
 
-export function VerticalPreview({ scene }: { scene: Scene }) {
+export function VerticalPreview({ scene, routes = [] }: { scene: Scene; routes?: MediaRoute[] }) {
+  const programRoute =
+    routes.find((route) => route.metadata?.onVertical === true) ??
+    routes.find((route) => route.isOnProgram);
   return (
     <Panel>
       <div className="mb-3 flex items-center justify-between">
@@ -532,6 +569,11 @@ export function VerticalPreview({ scene }: { scene: Scene }) {
         <div className="relative h-full rounded-[1.5rem] border border-cyan-300/20 bg-slate-950">
           <SafeZone label="Vertical Safe" />
           <SourceLayers sources={scene.sources} compact />
+          {programRoute ? (
+            <div className="absolute inset-x-5 top-16 rounded-2xl border border-cyan-300/20 bg-cyan-950/40 p-3 text-center text-white">
+              Vertical route: {programRoute.displayName}
+            </div>
+          ) : null}
           <div className="absolute inset-x-4 bottom-6 rounded-xl bg-black/55 p-3 text-center">
             <p className="text-sm font-bold text-white">{scene.name}</p>
             <p className="text-[10px] uppercase tracking-widest text-cyan-200">

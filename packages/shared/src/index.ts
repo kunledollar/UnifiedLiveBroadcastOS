@@ -81,6 +81,16 @@ export type CanvasAspectRatio = '16:9' | '9:16' | '1:1';
 export type ProductionStatus = 'offline' | 'rehearsal' | 'live' | 'ending';
 export type SceneLayout =
   'solo' | 'interview' | 'grid' | 'screen_share' | 'vertical_split' | 'picture_in_picture';
+export enum MediaRouteType {
+  GuestCamera = 'guest_camera',
+  GuestScreenShare = 'guest_screen_share',
+  HostCamera = 'host_camera',
+  MediaSource = 'media_source',
+  ScreenShare = 'screen_share',
+  Placeholder = 'placeholder',
+}
+export type MediaLayoutPreset =
+  'full_screen' | 'side_by_side' | 'picture_in_picture' | '2x2_grid' | 'speaker_focus';
 export type SceneSourceType = 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio';
 export type BroadcastCanvas = {
   id: string;
@@ -164,6 +174,37 @@ export interface Guest {
   lastSeenAt?: string | null;
   privateChatNote?: string | null;
 }
+export interface MediaRoute {
+  id: string;
+  workspaceId: string;
+  broadcastId: string;
+  guestId?: string | null;
+  sourceId?: string | null;
+  sceneId?: string | null;
+  routeType: MediaRouteType;
+  displayName: string;
+  isActive: boolean;
+  isOnProgram: boolean;
+  isPinned: boolean;
+  isMuted: boolean;
+  layoutSlot?: string | null;
+  order: number;
+  metadata: Record<string, unknown>;
+  guest?: Guest | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface MediaRoutingState {
+  routes: MediaRoute[];
+  layoutPreset: MediaLayoutPreset;
+}
+export const mediaLayoutPresets: { id: MediaLayoutPreset; label: string }[] = [
+  { id: 'full_screen', label: 'Full Screen' },
+  { id: 'side_by_side', label: 'Side by Side' },
+  { id: 'picture_in_picture', label: 'Picture in Picture' },
+  { id: '2x2_grid', label: '2x2 Grid' },
+  { id: 'speaker_focus', label: 'Speaker Focus' },
+];
 export interface GuestInvite {
   id: string;
   workspaceId: string;
@@ -335,10 +376,18 @@ export const broadcastRealtimeEventTypes = [
   'webrtc:trackStarted',
   'webrtc:trackStopped',
   'webrtc:error',
+  'route:created',
+  'route:removed',
+  'route:pinned',
+  'route:muted',
+  'route:programChanged',
+  'route:sceneAssigned',
+  'route:layoutChanged',
 ] as const;
 
 export type BroadcastRealtimeEventType = (typeof broadcastRealtimeEventTypes)[number];
-export type BroadcastRealtimeEntityType = 'guest' | 'scene' | 'source' | 'broadcast' | 'system' | 'webrtc';
+export type BroadcastRealtimeEntityType =
+  'guest' | 'scene' | 'source' | 'broadcast' | 'system' | 'webrtc' | 'route';
 export type WebRtcSignalRole = 'host' | 'guest';
 export type WebRtcConnectionState = RTCPeerConnectionState;
 export interface WebRtcSignalPayload {

@@ -115,6 +115,15 @@ enum SceneSourceType {
   AUDIO
 }
 
+enum MediaRouteType {
+  GUEST_CAMERA
+  GUEST_SCREEN_SHARE
+  HOST_CAMERA
+  MEDIA_SOURCE
+  SCREEN_SHARE
+  PLACEHOLDER
+}
+
 model User {
   id          String            @id @default(cuid())
   email       String            @unique
@@ -135,6 +144,7 @@ model Workspace {
   guestSessions  GuestSession[]
   deviceInfos    DeviceInfo[]
   sceneSources   SceneSource[]
+  mediaRoutes    MediaRoute[]
   destinations   Destination[]
   followProfiles FollowProfile[]
   createdAt      DateTime           @default(now())
@@ -169,6 +179,7 @@ model BroadcastSession {
   analyticsEvents AnalyticsEvent[]
   scenes          Scene[]
   sceneSources    SceneSource[]
+  mediaRoutes     MediaRoute[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
@@ -194,6 +205,7 @@ model Guest {
   invite          GuestInvite?     @relation(fields: [inviteId], references: [id], onDelete: SetNull)
   guestSessions   GuestSession[]
   deviceInfos     DeviceInfo[]
+  mediaRoutes     MediaRoute[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -362,6 +374,7 @@ model Scene {
   audioConfig  Json             @default("{}")
   broadcast    BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
   sceneSources SceneSource[]
+  mediaRoutes  MediaRoute[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
@@ -392,4 +405,36 @@ model SceneSource {
   @@index([broadcastId])
   @@index([sceneId])
   @@index([workspaceId, broadcastId, sceneId, order])
+}
+
+
+model MediaRoute {
+  id          String         @id @default(cuid())
+  workspaceId String
+  broadcastId String
+  guestId     String?
+  sourceId    String?
+  sceneId     String?
+  routeType   MediaRouteType
+  displayName String
+  isActive    Boolean        @default(true)
+  isOnProgram Boolean        @default(false)
+  isPinned    Boolean        @default(false)
+  isMuted     Boolean        @default(false)
+  layoutSlot  String?
+  order       Int            @default(0)
+  metadata    Json           @default("{}")
+  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  broadcast   BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  guest       Guest?         @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  scene       Scene?         @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  @@index([workspaceId])
+  @@index([broadcastId])
+  @@index([guestId])
+  @@index([sceneId])
+  @@index([workspaceId, broadcastId])
+  @@index([workspaceId, broadcastId, order])
 }
