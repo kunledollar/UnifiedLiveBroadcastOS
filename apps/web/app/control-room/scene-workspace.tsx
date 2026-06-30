@@ -17,7 +17,7 @@ import {
   type SceneSource,
   type SceneSourceType,
 } from '@ubos/shared';
-import { useOptimistic, useTransition } from 'react';
+import { useEffect, useOptimistic, useState, useTransition } from 'react';
 import {
   addScene,
   addSource,
@@ -37,6 +37,104 @@ import {
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
 
+type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact';
+
+const controlRoomViewStorageKey = 'ubos.controlRoom.viewMode';
+
+const viewModeOptions: Array<{
+  value: ControlRoomViewMode | 'quad';
+  label: string;
+  description: string;
+  disabled?: boolean;
+}> = [
+  {
+    value: 'dual',
+    label: 'Dual View',
+    description: 'Program + vertical',
+  },
+  {
+    value: 'program',
+    label: 'Program Focus',
+    description: 'Large 16:9 preview',
+  },
+  {
+    value: 'vertical',
+    label: 'Vertical Focus',
+    description: 'Large 9:16 preview',
+  },
+  {
+    value: 'compact',
+    label: 'Compact View',
+    description: 'More workspace room',
+  },
+  {
+    value: 'quad',
+    label: 'Quad View',
+    description: 'Coming soon',
+    disabled: true,
+  },
+];
+
+const isControlRoomViewMode = (value: string | null): value is ControlRoomViewMode =>
+  value === 'dual' || value === 'program' || value === 'vertical' || value === 'compact';
+
+const previewGridClasses: Record<ControlRoomViewMode, string> = {
+  dual: 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]',
+  program: 'grid gap-5',
+  vertical: 'grid gap-5 justify-items-center xl:grid-cols-1',
+  compact: 'grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,0.72fr)_14rem]',
+};
+
+function ViewModeSelector({
+  selected,
+  onSelect,
+}: {
+  selected: ControlRoomViewMode;
+  onSelect: (mode: ControlRoomViewMode) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-4 shadow-2xl shadow-black/20 backdrop-blur">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
+            View Mode
+          </p>
+          <h2 className="text-lg font-bold text-white">Control Room Previews</h2>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+          {viewModeOptions.map((option) => {
+            const isSelected = option.value === selected;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                disabled={option.disabled}
+                aria-pressed={!option.disabled && isSelected}
+                onClick={() => {
+                  if (!option.disabled && isControlRoomViewMode(option.value))
+                    onSelect(option.value);
+                }}
+                className={`rounded-xl border px-3 py-2 text-left transition ${
+                  option.disabled
+                    ? 'cursor-not-allowed border-white/5 bg-slate-950/30 text-slate-600'
+                    : isSelected
+                      ? 'border-cyan-300/70 bg-cyan-400/15 text-cyan-100 shadow-lg shadow-cyan-950/30'
+                      : 'border-white/10 bg-slate-950/60 text-slate-300 hover:border-cyan-300/45 hover:bg-slate-800/80'
+                }`}
+              >
+                <span className="block text-xs font-black uppercase tracking-[0.12em]">
+                  {option.label}
+                </span>
+                <span className="mt-1 block text-[11px] text-slate-400">{option.description}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SceneWorkspace({
   initialScenes,
   layouts,
@@ -49,7 +147,18 @@ export function SceneWorkspace({
   assets: ProductionAsset[];
 }) {
   const [isPending, startTransition] = useTransition();
+  const [viewMode, setViewMode] = useState<ControlRoomViewMode>('dual');
   const [scenes, setScenes] = useOptimistic(initialScenes, (_current, next: Scene[]) => next);
+
+  useEffect(() => {
+    const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
+    if (isControlRoomViewMode(storedViewMode)) setViewMode(storedViewMode);
+  }, []);
+
+  const selectViewMode = (mode: ControlRoomViewMode) => {
+    setViewMode(mode);
+    window.localStorage.setItem(controlRoomViewStorageKey, mode);
+  };
 
   const refresh = (next: Scene[]) => startTransition(() => setScenes(next));
   const sorted = [...scenes].sort((a, b) => a.order - b.order);
@@ -271,9 +380,26 @@ export function SceneWorkspace({
         </div>
       </aside>
       <section className="space-y-5">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <ProgramPreview scene={activeScene} />
-          <VerticalPreview scene={activeScene} />
+        <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+        <div className={previewGridClasses[viewMode]}>
+          {viewMode !== 'vertical' ? (
+            <div className={viewMode === 'compact' ? 'min-w-0 text-sm' : 'min-w-0'}>
+              <ProgramPreview scene={activeScene} />
+            </div>
+          ) : null}
+          {viewMode !== 'program' ? (
+            <div
+              className={
+                viewMode === 'vertical'
+                  ? 'w-full max-w-md min-w-0 xl:max-w-xl'
+                  : viewMode === 'compact'
+                    ? 'min-w-0 text-sm'
+                    : 'min-w-0'
+              }
+            >
+              <VerticalPreview scene={activeScene} />
+            </div>
+          ) : null}
         </div>
         <ProductionDock channels={channels} assets={assets} />
       </section>
