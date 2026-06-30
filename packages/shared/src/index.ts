@@ -73,7 +73,8 @@ export enum SceneType {
 
 export type CanvasAspectRatio = '16:9' | '9:16' | '1:1';
 export type ProductionStatus = 'offline' | 'rehearsal' | 'live' | 'ending';
-export type SceneLayout = 'solo' | 'interview' | 'grid' | 'screen_share' | 'vertical_split' | 'picture_in_picture';
+export type SceneLayout =
+  'solo' | 'interview' | 'grid' | 'screen_share' | 'vertical_split' | 'picture_in_picture';
 export type SceneSourceType = 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio';
 export type BroadcastCanvas = {
   id: string;
@@ -83,10 +84,21 @@ export type BroadcastCanvas = {
 };
 export interface SceneSource {
   id: string;
+  workspaceId?: string;
+  broadcastId?: string;
+  sceneId?: string;
   type: SceneSourceType;
+  name: string;
   label: string;
+  order: number;
   visible: boolean;
+  isVisible: boolean;
+  isLocked: boolean;
+  settings: Record<string, unknown>;
+  transform: Record<string, unknown>;
   muted?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 export interface Scene {
   id: string;
@@ -188,12 +200,57 @@ export interface CrossFollowService {
   recordFollowEvent(sessionId: string, platform: FollowPlatform, handle: string): Promise<void>;
 }
 
-export const createBroadcastSessionSchema = z.object({ workspaceId: z.string().min(1), title: z.string().min(1).max(120) });
-export const createGuestSchema = z.object({ displayName: z.string().min(1).max(80), role: z.nativeEnum(GuestRole).default(GuestRole.Guest) });
-export const createDestinationSchema = z.object({ platform: z.nativeEnum(DestinationPlatform), label: z.string().min(1), enabled: z.boolean().default(false) });
-export const mockChatMessageSchema = z.object({ authorName: z.string().min(1), body: z.string().min(1).max(500), platform: z.nativeEnum(ChatPlatform).default(ChatPlatform.Mock) });
+export const createBroadcastSessionSchema = z.object({
+  workspaceId: z.string().min(1),
+  title: z.string().min(1).max(120),
+});
+export const createGuestSchema = z.object({
+  displayName: z.string().min(1).max(80),
+  role: z.nativeEnum(GuestRole).default(GuestRole.Guest),
+});
+export const createDestinationSchema = z.object({
+  platform: z.nativeEnum(DestinationPlatform),
+  label: z.string().min(1),
+  enabled: z.boolean().default(false),
+});
+export const mockChatMessageSchema = z.object({
+  authorName: z.string().min(1),
+  body: z.string().min(1).max(500),
+  platform: z.nativeEnum(ChatPlatform).default(ChatPlatform.Mock),
+});
 export const SUPPORTED_DESTINATIONS = Object.values(DestinationPlatform);
 
 export const sceneTypeSchema = z.nativeEnum(SceneType);
-export const createSceneSchema = z.object({ name: z.string().trim().min(1).max(80), type: sceneTypeSchema.default(SceneType.Custom) });
+export const createSceneSchema = z.object({
+  name: z.string().trim().min(1).max(80),
+  type: sceneTypeSchema.default(SceneType.Custom),
+});
 export const renameSceneSchema = z.object({ name: z.string().trim().min(1).max(80) });
+
+export const sourceTypeSchema = z.enum([
+  'camera',
+  'screen',
+  'media',
+  'overlay',
+  'browser',
+  'audio',
+] as const);
+export const sourceSettingsSchema = z.record(z.string(), z.unknown()).default({});
+export const sourceTransformSchema = z.record(z.string(), z.unknown()).default({});
+export const addSceneSourceSchema = z.object({
+  sceneId: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+  type: sourceTypeSchema,
+});
+export const renameSceneSourceSchema = z.object({
+  sourceId: z.string().min(1),
+  name: z.string().trim().min(1).max(80),
+});
+export const updateSceneSourceSettingsSchema = z.object({
+  sourceId: z.string().min(1),
+  settings: sourceSettingsSchema,
+});
+export const updateSceneSourceTransformSchema = z.object({
+  sourceId: z.string().min(1),
+  transform: sourceTransformSchema,
+});

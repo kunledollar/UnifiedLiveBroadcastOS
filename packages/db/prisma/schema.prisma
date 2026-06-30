@@ -100,6 +100,15 @@ enum SceneType {
   CUSTOM
 }
 
+enum SceneSourceType {
+  CAMERA
+  SCREEN
+  MEDIA
+  OVERLAY
+  BROWSER
+  AUDIO
+}
+
 model User {
   id          String            @id @default(cuid())
   email       String            @unique
@@ -115,6 +124,7 @@ model Workspace {
   name           String
   members        WorkspaceMember[]
   sessions       BroadcastSession[]
+  sceneSources   SceneSource[]
   destinations   Destination[]
   followProfiles FollowProfile[]
   createdAt      DateTime           @default(now())
@@ -145,6 +155,7 @@ model BroadcastSession {
   recordings      Recording[]
   analyticsEvents AnalyticsEvent[]
   scenes          Scene[]
+  sceneSources    SceneSource[]
   createdAt       DateTime               @default(now())
   updatedAt       DateTime               @updatedAt
 
@@ -264,10 +275,35 @@ model Scene {
   overlays     Json             @default("[]")
   audioConfig  Json             @default("{}")
   broadcast    BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  sceneSources SceneSource[]
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
   @@index([broadcastId])
   @@index([broadcastId, order])
   @@index([broadcastId, isActive])
+}
+
+model SceneSource {
+  id          String           @id @default(cuid())
+  workspaceId String
+  broadcastId String
+  sceneId     String
+  name        String
+  type        SceneSourceType
+  order       Int
+  isVisible   Boolean          @default(true)
+  isLocked    Boolean          @default(false)
+  settings    Json             @default("{}")
+  transform   Json             @default("{}")
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  broadcast   BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  scene       Scene            @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([workspaceId])
+  @@index([broadcastId])
+  @@index([sceneId])
+  @@index([workspaceId, broadcastId, sceneId, order])
 }
