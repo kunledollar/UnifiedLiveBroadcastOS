@@ -556,7 +556,9 @@ export function ProgramPreview({
 }
 
 export function VerticalPreview({ scene, routes = [] }: { scene: Scene; routes?: MediaRoute[] }) {
-  const programRoute = routes.find((route) => route.isOnProgram);
+  const programRoute =
+    routes.find((route) => route.metadata?.onVertical === true) ??
+    routes.find((route) => route.isOnProgram);
   return (
     <Panel>
       <div className="mb-3 flex items-center justify-between">

@@ -194,6 +194,23 @@ export async function setOnProgramRoute(routeId: string | null) {
   ]);
   await emit('route:programChanged', routeId ?? 'program', { routeId });
 }
+export async function setOnVerticalRoute(routeId: string | null) {
+  if (routeId) await getRoute(routeId);
+  const routes = await prisma.mediaRoute.findMany({
+    where: { workspaceId: DEMO_WORKSPACE_ID, broadcastId: DEMO_BROADCAST_ID },
+  });
+  await prisma.$transaction(
+    routes.map((route) => {
+      const onVertical = routeId === route.id;
+      const metadata = { ...objectOrEmpty(route.metadata), onVertical };
+      return prisma.mediaRoute.update({
+        where: { id: route.id },
+        data: onVertical ? { metadata, isActive: true } : { metadata },
+      });
+    }),
+  );
+  await emit('route:layoutChanged', routeId ?? 'vertical', { onVertical: routeId });
+}
 export async function assignRouteToScene(routeId: string, sceneId: string | null) {
   const route = await getRoute(routeId);
   if (sceneId) {
