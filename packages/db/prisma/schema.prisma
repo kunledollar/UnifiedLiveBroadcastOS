@@ -29,7 +29,13 @@ enum BroadcastSessionStatus {
 enum GuestStatus {
   INVITED
   WAITING
+  GREEN_ROOM
+  CONNECTED
   ON_AIR
+  MUTED
+  DISCONNECTED
+  RECONNECTING
+  REJECTED
   REMOVED
 }
 
@@ -124,6 +130,10 @@ model Workspace {
   name           String
   members        WorkspaceMember[]
   sessions       BroadcastSession[]
+  guestInvites   GuestInvite[]
+  guests         Guest[]
+  guestSessions  GuestSession[]
+  deviceInfos    DeviceInfo[]
   sceneSources   SceneSource[]
   destinations   Destination[]
   followProfiles FollowProfile[]
@@ -150,6 +160,9 @@ model BroadcastSession {
   status          BroadcastSessionStatus @default(DRAFT)
   workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   guests          Guest[]
+  guestInvites    GuestInvite[]
+  guestSessions   GuestSession[]
+  deviceInfos     DeviceInfo[]
   chatMessages    ChatMessage[]
   followEvents    FollowEvent[]
   recordings      Recording[]
@@ -165,17 +178,90 @@ model BroadcastSession {
 }
 
 model Guest {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  sessionId       String
+  inviteId        String?
+  displayName     String
+  status          GuestStatus      @default(INVITED)
+  role            GuestRole        @default(GUEST)
+  isMuted         Boolean          @default(false)
+  isSpotlighted   Boolean          @default(false)
+  privateChatNote String?
+  lastSeenAt      DateTime?
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  session         BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  invite          GuestInvite?     @relation(fields: [inviteId], references: [id], onDelete: SetNull)
+  guestSessions   GuestSession[]
+  deviceInfos     DeviceInfo[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([workspaceId])
+  @@index([sessionId])
+  @@index([workspaceId, sessionId])
+  @@index([status])
+}
+
+model GuestInvite {
   id          String           @id @default(cuid())
+  workspaceId String
   sessionId   String
-  displayName String
-  status      GuestStatus      @default(INVITED)
-  role        GuestRole        @default(GUEST)
+  token       String           @unique
+  displayName String?
+  revokedAt   DateTime?
+  acceptedAt  DateTime?
+  expiresAt   DateTime?
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   session     BroadcastSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  guests      Guest[]
   createdAt   DateTime         @default(now())
   updatedAt   DateTime         @updatedAt
 
+  @@index([workspaceId])
   @@index([sessionId])
-  @@index([status])
+  @@index([workspaceId, sessionId])
+  @@index([revokedAt])
+}
+
+model GuestSession {
+  id             String           @id @default(cuid())
+  workspaceId    String
+  broadcastId    String
+  guestId        String
+  connectionId   String           @unique
+  status         GuestStatus      @default(GREEN_ROOM)
+  joinedAt       DateTime         @default(now())
+  disconnectedAt DateTime?
+  guest          Guest            @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  workspace      Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  broadcast      BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([broadcastId])
+  @@index([guestId])
+  @@index([workspaceId, broadcastId])
+}
+
+model DeviceInfo {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  broadcastId     String
+  guestId         String
+  cameraReady     Boolean          @default(false)
+  microphoneReady Boolean          @default(false)
+  networkReady    Boolean          @default(false)
+  userAgent       String?
+  guest           Guest            @relation(fields: [guestId], references: [id], onDelete: Cascade)
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  broadcast       BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([workspaceId])
+  @@index([broadcastId])
+  @@index([guestId])
+  @@index([workspaceId, broadcastId])
 }
 
 model Destination {

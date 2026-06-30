@@ -8,7 +8,13 @@ export enum BroadcastSessionStatus {
 export enum GuestStatus {
   Invited = 'invited',
   Waiting = 'waiting',
+  GreenRoom = 'green_room',
+  Connected = 'connected',
   OnAir = 'on_air',
+  Muted = 'muted',
+  Disconnected = 'disconnected',
+  Reconnecting = 'reconnecting',
+  Rejected = 'rejected',
   Removed = 'removed',
 }
 export enum GuestRole {
@@ -147,10 +153,35 @@ export interface BroadcastSession {
 }
 export interface Guest {
   id: string;
+  workspaceId?: string;
   sessionId: string;
+  inviteId?: string | null;
   displayName: string;
   status: GuestStatus;
   role: GuestRole;
+  isMuted?: boolean;
+  isSpotlighted?: boolean;
+  lastSeenAt?: string | null;
+  privateChatNote?: string | null;
+}
+export interface GuestInvite {
+  id: string;
+  workspaceId: string;
+  sessionId: string;
+  token: string;
+  displayName?: string | null;
+  revokedAt?: string | null;
+  acceptedAt?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+}
+export interface DeviceInfo {
+  id: string;
+  guestId: string;
+  cameraReady: boolean;
+  microphoneReady: boolean;
+  networkReady: boolean;
+  userAgent?: string | null;
 }
 export interface Destination {
   id: string;
@@ -253,4 +284,18 @@ export const updateSceneSourceSettingsSchema = z.object({
 export const updateSceneSourceTransformSchema = z.object({
   sourceId: z.string().min(1),
   transform: sourceTransformSchema,
+});
+
+export const guestInviteSchema = z.object({ displayName: z.string().trim().max(80).optional() });
+export const renameGuestSchema = z.object({
+  guestId: z.string().min(1),
+  displayName: z.string().trim().min(1).max(80),
+});
+export const guestJoinSchema = z.object({
+  token: z.string().trim().min(12),
+  displayName: z.string().trim().min(1).max(80),
+  cameraReady: z.boolean().default(false),
+  microphoneReady: z.boolean().default(false),
+  networkReady: z.boolean().default(false),
+  userAgent: z.string().max(500).optional(),
 });
