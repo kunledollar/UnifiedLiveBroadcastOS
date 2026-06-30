@@ -1,6 +1,6 @@
 'use server';
 
-import { PrismaClient } from '@ubos/db';
+import { Prisma, PrismaClient } from '@ubos/db';
 import { createSceneSchema, renameSceneSchema, SceneType, type Scene, type SceneLayout, type SceneSource } from '@ubos/shared';
 import { revalidatePath } from 'next/cache';
 
@@ -132,7 +132,20 @@ export async function duplicateScene(sceneId: string) {
   if (!scene) throw new Error('Scene not found.');
   await assertWorkspaceAccess(scene.broadcastId);
   const nextOrder = await prisma.scene.count({ where: { broadcastId: scene.broadcastId } });
-  await prisma.scene.create({ data: { broadcastId: scene.broadcastId, name: `${scene.name} Copy`, type: scene.type, order: nextOrder, layout: scene.layout, sources: scene.sources, overlays: scene.overlays, audioConfig: scene.audioConfig, background: scene.background, thumbnailUrl: scene.thumbnailUrl } });
+  await prisma.scene.create({
+    data: {
+      broadcastId: scene.broadcastId,
+      name: `${scene.name} Copy`,
+      type: scene.type,
+      order: nextOrder,
+      layout: scene.layout,
+      sources: scene.sources === null ? Prisma.JsonNull : (scene.sources as Prisma.InputJsonValue),
+      overlays: scene.overlays === null ? Prisma.JsonNull : (scene.overlays as Prisma.InputJsonValue),
+      audioConfig: scene.audioConfig === null ? Prisma.JsonNull : (scene.audioConfig as Prisma.InputJsonValue),
+      background: scene.background === null ? Prisma.JsonNull : (scene.background as Prisma.InputJsonValue),
+      thumbnailUrl: scene.thumbnailUrl,
+    },
+  });
   revalidatePath('/control-room');
 }
 

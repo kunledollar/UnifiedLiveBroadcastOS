@@ -190,7 +190,19 @@ export function SceneList({
         ) : null
       }
     >
-      <div className="space-y-3">{scenes.map((scene, index) => <SceneCard key={scene.id} scene={scene} index={index} total={scenes.length} onRename={onRename} onSwitch={onSwitch} onDuplicate={onDuplicate} onDelete={onDelete} onMove={onMove} />)}</div>
+      <div className="space-y-3">
+        {scenes.map((scene, index) => {
+          const sceneCardProps = {
+            ...(onRename ? { onRename } : {}),
+            ...(onSwitch ? { onSwitch } : {}),
+            ...(onDuplicate ? { onDuplicate } : {}),
+            ...(onDelete ? { onDelete } : {}),
+            ...(onMove ? { onMove } : {}),
+          };
+
+          return <SceneCard key={scene.id} scene={scene} index={index} total={scenes.length} {...sceneCardProps} />;
+        })}
+      </div>
     </Panel>
   );
 }
