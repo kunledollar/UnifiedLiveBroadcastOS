@@ -11,7 +11,7 @@ import {
   type MediaRoute,
   type Scene,
 } from '@ubos/shared';
-import { useCallback, useMemo, useTransition } from 'react';
+import { useCallback, useMemo, useTransition, type TransitionStartFunction } from 'react';
 import { useRouter } from 'next/navigation';
 import { useBroadcastRealtime } from '../../lib/realtime';
 import {
@@ -20,6 +20,7 @@ import {
   createRoute,
   removeRoute,
   setOnProgramRoute,
+  setOnVerticalRoute,
   setRouteMuted,
   setRoutePinned,
   updateLayoutSlot,
@@ -42,6 +43,199 @@ const connectedStatuses = new Set<GuestStatus>([
 ]);
 const actionClass =
   'rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-100 hover:bg-slate-700 disabled:opacity-40';
+
+const isVerticalRoute = (route?: MediaRoute | null) => route?.metadata?.onVertical === true;
+
+function RouteCard({
+  guest,
+  route,
+  scenes,
+  broadcastId,
+  startTransition,
+}: {
+  guest?: Guest | undefined;
+  route?: MediaRoute | undefined;
+  scenes: Scene[];
+  broadcastId: string;
+  startTransition: TransitionStartFunction;
+}) {
+  const connected = guest ? connectedStatuses.has(guest.status) : (route?.isActive ?? false);
+  const title = guest?.displayName ?? route?.displayName ?? 'Unnamed route';
+  const onVertical = isVerticalRoute(route);
+
+  const ensureRoute = () => {
+    if (route || !guest) return;
+    const formData = new FormData();
+    formData.set('broadcastId', broadcastId);
+    formData.set('guestId', guest.id);
+    formData.set('displayName', guest.displayName);
+    formData.set('routeType', MediaRouteType.GuestCamera);
+    startTransition(async () => {
+      await createRoute(formData);
+    });
+  };
+
+  const setSlot = () => {
+    if (!route) return;
+    const slot = window.prompt(
+      'Layout slot (for example A, B, PiP, Grid-1)',
+      route.layoutSlot ?? 'A',
+    );
+    if (slot === null) return;
+    startTransition(async () => {
+      await updateLayoutSlot(route.id, slot || null);
+    });
+  };
+
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/50 p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-white">{title}</p>
+          <p className="text-xs text-slate-400">
+            {guest
+              ? `Camera ${connected ? 'ready/connected' : 'not connected'} · WebRTC stays connected off-program`
+              : `${route ? routeLabels[route.routeType] : 'Route'} · not linked to a listed guest`}
+          </p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-1">
+          <Badge tone={connected ? 'success' : 'neutral'}>
+            {guest ? guest.status : route ? routeLabels[route.routeType] : 'route'}
+          </Badge>
+          {route?.isOnProgram ? <Badge tone="live">On Program</Badge> : null}
+          {onVertical ? <Badge tone="warning">Vertical</Badge> : null}
+          {route?.isPinned ? <Badge tone="warning">Pinned</Badge> : null}
+          <Badge tone={route?.isMuted ? 'danger' : 'success'}>
+            {route?.isMuted ? 'Muted' : 'Audio On'}
+          </Badge>
+        </div>
+      </div>
+      <div className="mt-2 text-xs text-slate-400">
+        Route:{' '}
+        {route
+          ? `${routeLabels[route.routeType]} · ${route.sceneId ? (scenes.find((s) => s.id === route.sceneId)?.name ?? 'Scene assigned') : 'No scene'} · Slot ${route.layoutSlot ?? '—'}`
+          : 'No route yet'}
+      </div>
+      <div className="mt-3 grid grid-cols-3 gap-1.5">
+        <button
+          className={actionClass}
+          onClick={() =>
+            route
+              ? startTransition(async () => {
+                  await setOnProgramRoute(route.id);
+                })
+              : ensureRoute()
+          }
+          type="button"
+        >
+          Send to Program
+        </button>
+        <button
+          className={actionClass}
+          disabled={!route?.isOnProgram}
+          onClick={() =>
+            startTransition(async () => {
+              await setOnProgramRoute(null);
+            })
+          }
+          type="button"
+        >
+          Remove from Program
+        </button>
+        <button
+          className={actionClass}
+          onClick={() =>
+            route
+              ? startTransition(async () => {
+                  await setOnVerticalRoute(route.id);
+                })
+              : ensureRoute()
+          }
+          type="button"
+        >
+          Send to Vertical
+        </button>
+        <button
+          className={actionClass}
+          disabled={!onVertical}
+          onClick={() =>
+            startTransition(async () => {
+              await setOnVerticalRoute(null);
+            })
+          }
+          type="button"
+        >
+          Remove from Vertical
+        </button>
+        <button
+          className={actionClass}
+          onClick={() =>
+            route
+              ? startTransition(async () => {
+                  await setRoutePinned(route.id);
+                })
+              : ensureRoute()
+          }
+          type="button"
+        >
+          {route?.isPinned ? 'Unpin' : 'Pin'}
+        </button>
+        <button
+          className={actionClass}
+          onClick={() =>
+            route
+              ? startTransition(async () => {
+                  await setRouteMuted(route.id);
+                })
+              : ensureRoute()
+          }
+          type="button"
+        >
+          {route?.isMuted ? 'Unmute' : 'Mute'}
+        </button>
+        <select
+          className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-100"
+          value={route?.sceneId ?? ''}
+          disabled={!route}
+          onChange={(e) =>
+            route &&
+            startTransition(async () => {
+              await assignRouteToScene(route.id, e.target.value || null);
+            })
+          }
+        >
+          <option value="">Assign Scene</option>
+          {scenes.map((scene) => (
+            <option key={scene.id} value={scene.id}>
+              {scene.name}
+            </option>
+          ))}
+        </select>
+        <button
+          className={actionClass}
+          disabled={!route}
+          onClick={() => route && setSlot()}
+          type="button"
+        >
+          Assign Slot
+        </button>
+        <button
+          className={`${actionClass} bg-rose-500/80 hover:bg-rose-500`}
+          disabled={!route}
+          onClick={() =>
+            route &&
+            startTransition(async () => {
+              await removeRoute(route.id);
+            })
+          }
+          type="button"
+        >
+          Remove Route
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export function MediaRoutingPanel({
   guests,
@@ -68,30 +262,16 @@ export function MediaRoutingPanel({
   const activeProgram = routes.find((route) => route.isOnProgram);
   const selectedPreset =
     (activeProgram?.metadata.layoutPreset as MediaLayoutPreset | undefined) ?? 'full_screen';
+  const verticalRoute = routes.find(isVerticalRoute);
   const routesByGuest = useMemo(
     () => new Map(routes.filter((route) => route.guestId).map((route) => [route.guestId, route])),
     [routes],
   );
-  const ensureRoute = (guest: Guest) =>
-    startTransition(async () => {
-      const existing = routesByGuest.get(guest.id);
-      if (existing) {
-        await assignGuestToRoute(existing.id, guest.id);
-        return;
-      }
-      const formData = new FormData();
-      formData.set('broadcastId', broadcastId);
-      formData.set('guestId', guest.id);
-      formData.set('displayName', guest.displayName);
-      formData.set('routeType', MediaRouteType.GuestCamera);
-      await createRoute(formData);
-    });
-  const setSlot = (routeId: string) => {
-    const slot = window.prompt('Layout slot (for example A, B, PiP, Grid-1)', 'A');
-    startTransition(async () => {
-      await updateLayoutSlot(routeId, slot || null);
-    });
-  };
+  const orphanRoutes = useMemo(() => {
+    const guestIds = new Set(guests.map((guest) => guest.id));
+    return routes.filter((route) => !route.guestId || !guestIds.has(route.guestId));
+  }, [guests, routes]);
+  const hasContent = guests.length > 0 || routes.length > 0;
   return (
     <Panel
       title="Media Routing"
@@ -110,6 +290,9 @@ export function MediaRoutingPanel({
             </p>
             <p className="text-xs text-slate-400">
               Layout: {mediaLayoutPresets.find((p) => p.id === selectedPreset)?.label}
+            </p>
+            <p className="text-xs text-slate-400">
+              Vertical: {verticalRoute?.displayName ?? 'Mirrors program'}
             </p>
           </div>
           {activeProgram ? <Badge tone="live">On Program</Badge> : <Badge>Standby</Badge>}
@@ -134,129 +317,38 @@ export function MediaRoutingPanel({
         </div>
       </div>
       <div className="space-y-3">
-        {guests.map((guest) => {
-          const route = routesByGuest.get(guest.id);
-          const connected = connectedStatuses.has(guest.status);
-          return (
-            <div key={guest.id} className="rounded-2xl border border-white/10 bg-slate-950/50 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-semibold text-white">{guest.displayName}</p>
-                  <p className="text-xs text-slate-400">
-                    Camera {connected ? 'ready/connected' : 'not connected'} · WebRTC stays
-                    connected off-program
-                  </p>
-                </div>
-                <div className="flex flex-wrap justify-end gap-1">
-                  <Badge tone={connected ? 'success' : 'neutral'}>{guest.status}</Badge>
-                  {route?.isOnProgram ? <Badge tone="live">On Program</Badge> : null}
-                  {route?.isPinned ? <Badge tone="warning">Pinned</Badge> : null}
-                  <Badge tone={route?.isMuted ? 'danger' : 'success'}>
-                    {route?.isMuted ? 'Muted' : 'Audio On'}
-                  </Badge>
-                </div>
-              </div>
-              <div className="mt-2 text-xs text-slate-400">
-                Route:{' '}
-                {route
-                  ? `${routeLabels[route.routeType]} · ${route.sceneId ? (scenes.find((s) => s.id === route.sceneId)?.name ?? 'Scene assigned') : 'No scene'} · Slot ${route.layoutSlot ?? '—'}`
-                  : 'No route yet'}
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-1.5">
-                <button
-                  className={actionClass}
-                  onClick={() =>
-                    route
-                      ? startTransition(async () => {
-                          await setOnProgramRoute(route.id);
-                        })
-                      : ensureRoute(guest)
-                  }
-                  type="button"
-                >
-                  Send to Program
-                </button>
-                <button
-                  className={actionClass}
-                  disabled={!route?.isOnProgram}
-                  onClick={() =>
-                    startTransition(async () => {
-                      await setOnProgramRoute(null);
-                    })
-                  }
-                  type="button"
-                >
-                  Remove from Program
-                </button>
-                <button
-                  className={actionClass}
-                  onClick={() =>
-                    route
-                      ? startTransition(async () => {
-                          await setRoutePinned(route.id);
-                        })
-                      : ensureRoute(guest)
-                  }
-                  type="button"
-                >
-                  {route?.isPinned ? 'Unpin' : 'Pin'}
-                </button>
-                <button
-                  className={actionClass}
-                  onClick={() =>
-                    route
-                      ? startTransition(async () => {
-                          await setRouteMuted(route.id);
-                        })
-                      : ensureRoute(guest)
-                  }
-                  type="button"
-                >
-                  {route?.isMuted ? 'Unmute' : 'Mute'}
-                </button>
-                <select
-                  className="rounded-lg bg-slate-800 px-2 py-1 text-[11px] font-bold text-slate-100"
-                  value={route?.sceneId ?? ''}
-                  disabled={!route}
-                  onChange={(e) =>
-                    route &&
-                    startTransition(async () => {
-                      await assignRouteToScene(route.id, e.target.value || null);
-                    })
-                  }
-                >
-                  <option value="">Assign Scene</option>
-                  {scenes.map((scene) => (
-                    <option key={scene.id} value={scene.id}>
-                      {scene.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  className={actionClass}
-                  disabled={!route}
-                  onClick={() => route && setSlot(route.id)}
-                  type="button"
-                >
-                  Assign Slot
-                </button>
-                <button
-                  className={`${actionClass} bg-rose-500/80 hover:bg-rose-500`}
-                  disabled={!route}
-                  onClick={() =>
-                    route &&
-                    startTransition(async () => {
-                      await removeRoute(route.id);
-                    })
-                  }
-                  type="button"
-                >
-                  Remove Route
-                </button>
-              </div>
-            </div>
-          );
-        })}
+        {!hasContent ? (
+          <p className="rounded-2xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+            No guests or routes yet. Invite guests to start routing their cameras to the program and
+            vertical outputs.
+          </p>
+        ) : null}
+        {guests.map((guest) => (
+          <RouteCard
+            key={guest.id}
+            guest={guest}
+            route={routesByGuest.get(guest.id)}
+            scenes={scenes}
+            broadcastId={broadcastId}
+            startTransition={startTransition}
+          />
+        ))}
+        {orphanRoutes.length > 0 ? (
+          <div className="space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
+              Other routes
+            </p>
+            {orphanRoutes.map((route) => (
+              <RouteCard
+                key={route.id}
+                route={route}
+                scenes={scenes}
+                broadcastId={broadcastId}
+                startTransition={startTransition}
+              />
+            ))}
+          </div>
+        ) : null}
       </div>
     </Panel>
   );
