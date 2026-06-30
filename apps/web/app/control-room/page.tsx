@@ -3,6 +3,7 @@ import { SceneWorkspace } from './scene-workspace';
 import { GuestManagement } from './guest-management';
 import { listGuests, listInvites } from './guest-actions';
 import { ControlRoomRealtime } from './_components/control-room-realtime';
+import { HostDeviceControls } from './_components/host-device-controls';
 
 import {
   BroadcastToolbar,
@@ -136,6 +137,7 @@ export default async function ControlRoomPage() {
             assets={assets}
           />
           <aside className="space-y-5">
+            <HostDeviceControls />
             <GuestManagement guests={guests} invites={invites} broadcastId="demo-broadcast" />
             <DestinationPanel destinations={destinations} />
             <UnifiedChatPanel messages={messages} />

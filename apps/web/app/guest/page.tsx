@@ -1,6 +1,7 @@
 import { Button, Panel, Badge } from '@ubos/ui';
 import { joinGreenRoom } from '../control-room/guest-actions';
 import { GuestRealtimeStatus } from './_components/guest-realtime-status';
+import { GuestDeviceGreenRoom } from './_components/guest-device-green-room';
 
 export default async function GuestJoinPage({
   searchParams,
@@ -23,26 +24,12 @@ export default async function GuestJoinPage({
             className="w-full rounded-xl border border-white/10 bg-slate-800 p-3"
             placeholder="Your display name"
           />
-          <div className="grid gap-3 md:grid-cols-3">
-            <label className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
-              <input name="cameraReady" type="checkbox" className="mr-2 accent-cyan-300" />
-              Camera ready
-            </label>
-            <label className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
-              <input name="microphoneReady" type="checkbox" className="mr-2 accent-cyan-300" />
-              Mic ready
-            </label>
-            <label className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
-              <input name="networkReady" type="checkbox" className="mr-2 accent-cyan-300" />
-              Network ready
-            </label>
-          </div>
+          <label className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-sm">
+            <input name="networkReady" type="checkbox" className="mr-2 accent-cyan-300" />
+            Network ready
+          </label>
           <input name="userAgent" className="hidden" defaultValue="green-room-browser-check" />
-          <div className="flex aspect-video items-center justify-center rounded-2xl border border-white/10 bg-slate-800 text-center text-slate-400">
-            Camera preview placeholder
-            <br />
-            WebRTC device probing will attach here.
-          </div>
+          <GuestDeviceGreenRoom />
           <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/10 p-3 text-sm text-cyan-100">
             Guests enter Waiting until all readiness checks are selected, then move to Green Room
             for host admission.
