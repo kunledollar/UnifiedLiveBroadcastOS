@@ -87,12 +87,43 @@ export async function requestMicrophoneStream(deviceId = '') {
   return navigator.mediaDevices.getUserMedia({ video: false, audio: deviceConstraint(deviceId) });
 }
 
-export async function requestCameraMicrophoneStream(cameraId = '', microphoneId = '') {
-  if (!hasMediaDevices()) throw new Error('This browser does not support media capture.');
-  return navigator.mediaDevices.getUserMedia({
-    video: deviceConstraint(cameraId),
-    audio: deviceConstraint(microphoneId),
-  });
+export type PreviewStreamResult = { stream: MediaStream; audioMissing: boolean };
+
+/**
+ * Starts a camera preview, optionally with audio. A single
+ * `getUserMedia({ video, audio })` call fails entirely when there is no usable
+ * microphone, which would block a camera-only preview. To avoid that, when
+ * audio is requested but the combined call fails, we retry with camera-only so
+ * the camera preview still starts. If the camera-only retry also fails, the
+ * original error is surfaced (genuine camera/permission problem).
+ */
+export async function requestPreviewStream(options: {
+  cameraId?: string;
+  microphoneId?: string;
+  withAudio: boolean;
+}): Promise<PreviewStreamResult> {
+  if (!hasMediaDevices()) throw new Error('This browser does not support camera capture.');
+  const video = deviceConstraint(options.cameraId ?? '');
+
+  if (options.withAudio) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video,
+        audio: deviceConstraint(options.microphoneId ?? ''),
+      });
+      return { stream, audioMissing: false };
+    } catch (combinedError) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+        return { stream, audioMissing: true };
+      } catch {
+        throw combinedError;
+      }
+    }
+  }
+
+  const stream = await navigator.mediaDevices.getUserMedia({ video, audio: false });
+  return { stream, audioMissing: false };
 }
 
 export async function requestScreenShareStream() {

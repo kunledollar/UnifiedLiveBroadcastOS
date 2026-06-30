@@ -7,9 +7,9 @@ import {
   hasMediaDevices,
   loadDevicePreferences,
   mediaErrorMessage,
-  requestCameraMicrophoneStream,
   requestCameraStream,
   requestMicrophoneStream,
+  requestPreviewStream,
   requestScreenShareStream,
   saveDevicePreferences,
   stopMediaStream,
@@ -19,6 +19,14 @@ import {
   type MediaPermissionState,
 } from './device-capture';
 
+function permissionFromError(error: unknown): MediaPermissionState {
+  if (error instanceof DOMException) {
+    if (error.name === 'NotAllowedError' || error.name === 'SecurityError') return 'denied';
+    if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') return 'not-found';
+  }
+  return 'error';
+}
+
 export function useMediaCapture() {
   const [preferences, setPreferences] = useState<DevicePreferenceState>(defaultDevicePreferences);
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([]);
@@ -27,6 +35,7 @@ export function useMediaCapture() {
   const [permissionState, setPermissionState] = useState<MediaPermissionState>('idle');
   const [activeStreamStatus, setActiveStreamStatus] = useState<ActiveStreamStatus>('inactive');
   const [errorMessage, setErrorMessage] = useState('');
+  const [notice, setNotice] = useState('');
   const [stream, setStream] = useState<MediaStream | null>(null);
   const [screenStream, setScreenStream] = useState<MediaStream | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -102,31 +111,51 @@ export function useMediaCapture() {
     }
   }, [preferences.selectedMicrophoneId, refreshDevices, replaceStream]);
 
-  const startCameraMicrophone = useCallback(async () => {
-    setPermissionState('prompt');
-    try {
-      const next = await requestCameraMicrophoneStream(
-        preferences.selectedCameraId,
-        preferences.selectedMicrophoneId,
-      );
-      replaceStream(next, 'camera-microphone');
-      setPermissionState('granted');
+  const startPreview = useCallback(
+    async (options: { withAudio?: boolean } = {}) => {
+      if (!hasMediaDevices()) {
+        setPermissionState('unsupported');
+        setErrorMessage('This browser does not support camera or microphone capture.');
+        return null;
+      }
+      const withAudio = options.withAudio ?? preferences.microphoneEnabled;
+      setPermissionState('prompt');
       setErrorMessage('');
-      await refreshDevices();
-      return next;
-    } catch (error) {
-      setPermissionState(
-        error instanceof DOMException && error.name === 'NotAllowedError' ? 'denied' : 'error',
-      );
-      setErrorMessage(mediaErrorMessage(error));
-      return null;
-    }
-  }, [
-    preferences.selectedCameraId,
-    preferences.selectedMicrophoneId,
-    refreshDevices,
-    replaceStream,
-  ]);
+      setNotice('');
+      try {
+        const { stream: next, audioMissing } = await requestPreviewStream({
+          cameraId: preferences.selectedCameraId,
+          microphoneId: preferences.selectedMicrophoneId,
+          withAudio,
+        });
+        const hasVideo = next.getVideoTracks().length > 0;
+        const hasAudio = next.getAudioTracks().length > 0;
+        replaceStream(
+          next,
+          hasVideo && hasAudio ? 'camera-microphone' : hasVideo ? 'camera' : 'microphone',
+        );
+        setPermissionState('granted');
+        setNotice(
+          audioMissing
+            ? 'No microphone detected. Started camera-only preview — connect a mic to add audio.'
+            : '',
+        );
+        await refreshDevices();
+        return next;
+      } catch (error) {
+        setPermissionState(permissionFromError(error));
+        setErrorMessage(mediaErrorMessage(error));
+        return null;
+      }
+    },
+    [
+      preferences.microphoneEnabled,
+      preferences.selectedCameraId,
+      preferences.selectedMicrophoneId,
+      refreshDevices,
+      replaceStream,
+    ],
+  );
 
   const startScreenShare = useCallback(async () => {
     try {
@@ -147,7 +176,10 @@ export function useMediaCapture() {
     }
   }, [updatePreferences]);
 
-  const stopPreview = useCallback(() => replaceStream(null, 'inactive'), [replaceStream]);
+  const stopPreview = useCallback(() => {
+    replaceStream(null, 'inactive');
+    setNotice('');
+  }, [replaceStream]);
   const stopScreenShare = useCallback(() => {
     stopMediaStream(screenRef.current);
     screenRef.current = null;
@@ -180,6 +212,7 @@ export function useMediaCapture() {
     permissionState,
     activeStreamStatus,
     errorMessage,
+    notice,
     stream,
     screenStream,
     cameraReady: Boolean(stream?.getVideoTracks().some((track) => track.readyState === 'live')),
@@ -188,7 +221,7 @@ export function useMediaCapture() {
     refreshDevices,
     startCamera,
     startMicrophone,
-    startCameraMicrophone,
+    startPreview,
     startScreenShare,
     stopPreview,
     stopScreenShare,

@@ -78,7 +78,10 @@ export function GuestDeviceGreenRoom() {
   }, []);
 
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = media.stream;
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = media.stream;
+    if (media.stream) void video.play().catch(() => undefined);
   }, [media.stream]);
   useEffect(() => {
     if (media.cameraReady || media.microphoneReady)
@@ -94,7 +97,7 @@ export function GuestDeviceGreenRoom() {
     media.stream?.getVideoTracks().forEach((track) => {
       track.enabled = enabled;
     });
-    if (enabled && !media.cameraReady) await media.startCameraMicrophone();
+    if (enabled && !media.cameraReady) await media.startPreview();
     await emit('guest:cameraToggled', { enabled });
   };
   const toggleMic = async () => {
@@ -103,7 +106,7 @@ export function GuestDeviceGreenRoom() {
     media.stream?.getAudioTracks().forEach((track) => {
       track.enabled = enabled;
     });
-    if (enabled && !media.microphoneReady) await media.startCameraMicrophone();
+    if (enabled && !media.microphoneReady) await media.startPreview({ withAudio: true });
     await emit('guest:microphoneToggled', { enabled });
   };
   const testScreen = async () => {
@@ -140,6 +143,11 @@ export function GuestDeviceGreenRoom() {
       {media.errorMessage ? (
         <p className="rounded-xl border border-rose-300/30 bg-rose-500/10 p-2 text-sm text-rose-100">
           {media.errorMessage}
+        </p>
+      ) : null}
+      {media.notice ? (
+        <p className="rounded-xl border border-amber-300/30 bg-amber-500/10 p-2 text-sm text-amber-100">
+          {media.notice}
         </p>
       ) : null}
       <div className="grid gap-2 md:grid-cols-3">
@@ -192,7 +200,7 @@ export function GuestDeviceGreenRoom() {
         <button
           className="rounded-xl bg-cyan-400 px-3 py-2 text-sm font-black text-slate-950 hover:bg-cyan-300"
           type="button"
-          onClick={() => void media.startCameraMicrophone()}
+          onClick={() => void media.startPreview()}
         >
           Start preview
         </button>

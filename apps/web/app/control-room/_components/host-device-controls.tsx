@@ -8,7 +8,10 @@ export function HostDeviceControls() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const media = useMediaCapture();
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = media.stream;
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = media.stream;
+    if (media.stream) void video.play().catch(() => undefined);
   }, [media.stream]);
   const muted = !media.preferences.microphoneEnabled;
   return (
@@ -45,6 +48,11 @@ export function HostDeviceControls() {
             {media.errorMessage}
           </p>
         ) : null}
+        {media.notice ? (
+          <p className="rounded-xl border border-amber-300/30 bg-amber-500/10 p-2 text-sm text-amber-100">
+            {media.notice}
+          </p>
+        ) : null}
         <select
           value={media.preferences.selectedCameraId}
           onChange={(event) => media.updatePreferences({ selectedCameraId: event.target.value })}
@@ -75,7 +83,7 @@ export function HostDeviceControls() {
           <button
             className="rounded-xl bg-cyan-400 px-3 py-2 text-sm font-black text-slate-950 hover:bg-cyan-300"
             type="button"
-            onClick={() => void media.startCameraMicrophone()}
+            onClick={() => void media.startPreview()}
           >
             Start preview
           </button>
@@ -92,7 +100,12 @@ export function HostDeviceControls() {
             onClick={() => {
               const enabled = !media.preferences.microphoneEnabled;
               media.updatePreferences({ microphoneEnabled: enabled });
-              media.stream?.getAudioTracks().forEach((track) => {
+              const audioTracks = media.stream?.getAudioTracks() ?? [];
+              if (enabled && audioTracks.length === 0) {
+                void media.startPreview({ withAudio: true });
+                return;
+              }
+              audioTracks.forEach((track) => {
                 track.enabled = enabled;
               });
             }}
