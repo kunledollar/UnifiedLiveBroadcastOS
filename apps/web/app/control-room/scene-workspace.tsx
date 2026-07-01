@@ -29,6 +29,9 @@ import {
   selectHealthSummary,
   selectRecordingState,
   type ProductionCommandType,
+  createMockSyncScenario,
+  createSyncSession,
+  getStaleClients,
 } from '@ubos/shared';
 import {
   type ReactNode,
@@ -539,6 +542,27 @@ export function SceneWorkspace({
     [programScene.broadcastId],
   );
   const productionGraphSession = productionGraphDispatcher.getSession();
+  const syncDiagnosticsEnabled = process.env.NEXT_PUBLIC_ENABLE_SYNC_DIAGNOSTICS === 'true';
+  const syncDiagnostics = useMemo(() => {
+    const syncSession = createMockSyncScenario(
+      createSyncSession({
+        id: `sync:${productionGraphSession.id}`,
+        broadcastSessionId: productionGraphSession.id,
+        productionGraphId: productionGraphSession.graph.id,
+        currentGraphRevision: productionGraphSession.graph.metadata.revision,
+      }),
+    );
+    const clients = Object.values(syncSession.clients);
+    return {
+      session: syncSession,
+      clients,
+      staleClientIds: new Set(getStaleClients(syncSession).map((client) => client.clientId)),
+      acceptedCommands: productionGraphSession.commandLog.length,
+      rejectedCommands: productionGraphSession.eventLog.filter((event) => event.type === 'COMMAND_REJECTED').length,
+      catchUpRequiredCount: clients.filter((client) => client.recoveryState === 'catching_up').length,
+      lastSyncMessage: clients.find((client) => client.lastSyncMessage)?.lastSyncMessage ?? 'CLIENT_HEARTBEAT',
+    };
+  }, [productionGraphSession]);
   const dispatchProductionGraphCommand = useCallback(
     (type: ProductionCommandType, payload: Record<string, unknown> = {}) => {
       productionGraphDispatcher.dispatch({
@@ -1054,6 +1078,23 @@ export function SceneWorkspace({
                 >
                   Reset
                 </button>
+                {syncDiagnosticsEnabled ? (
+                  <details className="rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
+                    <summary className="cursor-pointer font-bold text-cyan-100">Sync diagnostics</summary>
+                    <div className="mt-2 space-y-2 font-mono text-[9px] text-slate-400">
+                      <div>session {syncDiagnostics.session.id}</div>
+                      <div>revision {syncDiagnostics.session.currentGraphRevision} · last {syncDiagnostics.lastSyncMessage}</div>
+                      <div>accepted {syncDiagnostics.acceptedCommands} · rejected {syncDiagnostics.rejectedCommands} · catch-up {syncDiagnostics.catchUpRequiredCount}</div>
+                      <div className="space-y-1">
+                        {syncDiagnostics.clients.map((client) => (
+                          <div key={client.clientId} className="rounded bg-slate-900 p-1">
+                            <span className="text-slate-200">{client.displayName}</span> rev {client.observedGraphRevision} lag {client.revisionLag} · {syncDiagnostics.staleClientIds.has(client.clientId) ? 'stale' : client.connectionState}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </details>
+                ) : null}
                 <div className="border-t border-white/10 pt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-slate-500">
                   Space Take · C Cut · A Auto/F Fade · 1-9 PVW · M Mute selected route
                 </div>
