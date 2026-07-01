@@ -1201,6 +1201,40 @@ export function LayoutSelector({ layouts }: { layouts: SceneLayout[] }) {
   );
 }
 
+function BroadcastMonitorFrame({
+  label,
+  scene,
+  meta,
+  status,
+  statusTone = 'neutral',
+  children,
+  className = '',
+}: {
+  label: string;
+  scene: Scene;
+  meta: ReactNode;
+  status: ReactNode;
+  statusTone?: Tone;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section
+      className={`min-w-0 rounded-lg border border-slate-700/70 bg-slate-950/95 shadow-xl shadow-black/25 ${className}`}
+    >
+      <div className="flex min-h-8 items-center justify-between gap-2 border-b border-slate-800/90 px-2.5 py-1.5 text-[11px] uppercase tracking-[0.16em] text-slate-400">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="font-black text-slate-100">{label}</span>
+          <span className="hidden text-slate-500 sm:inline">{meta}</span>
+          <span className="truncate normal-case tracking-normal text-slate-400">{scene.name}</span>
+        </div>
+        <Badge tone={statusTone}>{status}</Badge>
+      </div>
+      <div className="bg-black p-1">{children}</div>
+    </section>
+  );
+}
+
 export function ProgramPreview({
   scene,
   routes = [],
@@ -1216,20 +1250,13 @@ export function ProgramPreview({
 }) {
   const onProgramCount = routes.filter((route) => route.isActive && route.isOnProgram).length;
   return (
-    <Panel>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Program 16:9</p>
-          <h2 className="text-xl font-bold text-white">{scene.name}</h2>
-          <p className="text-xs text-slate-400">Layout: {mediaLayoutLabels[layoutPreset]}</p>
-        </div>
-        <div className="flex flex-col items-end gap-1">
-          <Badge tone="live">PROGRAM</Badge>
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
-            {onProgramCount > 0 ? `${onProgramCount} on program` : 'No routes on program'}
-          </span>
-        </div>
-      </div>
+    <BroadcastMonitorFrame
+      label="PROGRAM"
+      scene={scene}
+      meta="1920×1080 · 60 FPS"
+      status={onProgramCount > 0 ? 'LIVE' : 'PROGRAM'}
+      statusTone="live"
+    >
       <ProgramCompositor
         scene={scene}
         routes={routes}
@@ -1237,7 +1264,39 @@ export function ProgramPreview({
         streams={streams}
         guests={guests}
       />
-    </Panel>
+    </BroadcastMonitorFrame>
+  );
+}
+
+export function PreviewMonitor({
+  scene,
+  routes = [],
+  layoutPreset = 'full_screen',
+  streams,
+  guests = [],
+}: {
+  scene: Scene;
+  routes?: MediaRoute[];
+  layoutPreset?: MediaLayoutPreset;
+  streams?: RoutedStreamMap | undefined;
+  guests?: Guest[];
+}) {
+  return (
+    <BroadcastMonitorFrame
+      label="PREVIEW"
+      scene={scene}
+      meta={mediaLayoutLabels[layoutPreset]}
+      status="READY"
+      statusTone="success"
+    >
+      <ProgramCompositor
+        scene={scene}
+        routes={routes}
+        layoutPreset={layoutPreset}
+        streams={streams}
+        guests={guests}
+      />
+    </BroadcastMonitorFrame>
   );
 }
 
