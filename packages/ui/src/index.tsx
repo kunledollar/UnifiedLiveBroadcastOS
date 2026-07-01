@@ -243,6 +243,107 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
   );
 }
 
+type MonitorHudPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+type SafeAreaGuide = 'action-safe' | 'title-safe' | 'center-cross' | 'grid';
+
+const monitorHudPositionClasses: Record<MonitorHudPosition, string> = {
+  'top-left': 'left-2 top-2 items-start',
+  'top-right': 'right-2 top-2 items-end',
+  'bottom-left': 'bottom-2 left-2 items-start',
+  'bottom-right': 'bottom-2 right-2 items-end',
+};
+
+const outputBadgeToneClasses: Record<Tone, string> = {
+  neutral: 'border-white/10 bg-black/45 text-slate-300',
+  success: 'border-emerald-300/25 bg-emerald-400/10 text-emerald-200',
+  warning: 'border-amber-300/25 bg-amber-400/10 text-amber-200',
+  danger: 'border-rose-300/25 bg-rose-500/10 text-rose-200',
+  live: 'border-red-300/35 bg-red-500/20 text-red-100 shadow-[0_0_14px_rgba(239,68,68,0.18)]',
+};
+
+export function MonitorBadge({
+  children,
+  tone = 'neutral',
+  pulse = false,
+}: {
+  children: ReactNode;
+  tone?: Tone;
+  pulse?: boolean;
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 rounded-[4px] border px-1.5 py-0.5 text-[9px] font-black uppercase leading-none tracking-[0.13em] backdrop-blur ${outputBadgeToneClasses[tone]}`}
+    >
+      {pulse ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" /> : null}
+      {children}
+    </span>
+  );
+}
+
+export function OutputBadge({ label, tone = 'neutral' }: { label: string; tone?: Tone }) {
+  return (
+    <MonitorBadge tone={tone} pulse={tone === 'live'}>
+      {label}
+    </MonitorBadge>
+  );
+}
+
+export function MonitorMetric({ label, value }: { label?: string; value: ReactNode }) {
+  return (
+    <div className="leading-none">
+      {label ? (
+        <p className="mb-0.5 text-[8px] font-bold uppercase tracking-[0.14em] text-white/35">
+          {label}
+        </p>
+      ) : null}
+      <p className="text-[10px] font-black uppercase tracking-[0.12em] text-white/80">{value}</p>
+    </div>
+  );
+}
+
+export function MonitorHUD({
+  title,
+  status,
+  metrics = [],
+  badges = [],
+  position = 'top-left',
+  subdued = false,
+}: {
+  title: ReactNode;
+  status?: ReactNode;
+  metrics?: { label?: string; value: ReactNode }[];
+  badges?: ReactNode[];
+  position?: MonitorHudPosition;
+  subdued?: boolean;
+}) {
+  return (
+    <div
+      className={`pointer-events-none absolute z-50 flex max-w-[72%] flex-col gap-1 rounded-md border border-white/10 bg-black/45 px-2 py-1.5 shadow-lg shadow-black/25 backdrop-blur-sm ${monitorHudPositionClasses[position]} ${subdued ? 'opacity-70' : 'opacity-90'}`}
+    >
+      <div className="flex w-full items-center gap-2">
+        <p className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/85">
+          {title}
+        </p>
+        {status ? <div className="shrink-0">{status}</div> : null}
+      </div>
+      {metrics.length ? (
+        <div className="flex flex-wrap gap-x-3 gap-y-1">
+          {metrics.map((metric, index) => (
+            <MonitorMetric key={`${metric.label ?? 'metric'}-${index}`} {...metric} />
+          ))}
+        </div>
+      ) : null}
+      {badges.length ? (
+        <div className="flex flex-wrap gap-1">
+          {badges.map((badge, index) => (
+            <span key={index}>{badge}</span>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 type MonitorStateTone = 'neutral' | 'success' | 'warning' | 'danger' | 'live';
 
 const monitorStateToneClasses: Record<MonitorStateTone, string> = {
@@ -602,7 +703,9 @@ function SourceMonitorPreview({ source }: { source: SceneSource }) {
   const theme = sourceThemes[source.type];
   const state = sourceMonitorState(source);
   return (
-    <div className={`mt-3 aspect-video overflow-hidden rounded-lg border ${theme.ring} bg-black`}>
+    <div
+      className={`relative mt-3 aspect-video overflow-hidden rounded-lg border ${theme.ring} bg-black`}
+    >
       <MonitorStateScreen
         title={state.title}
         subtitle={state.subtitle}
@@ -610,6 +713,21 @@ function SourceMonitorPreview({ source }: { source: SceneSource }) {
         badge={state.badge}
         tone={state.tone}
         compact
+      />
+      <MonitorHUD
+        title={sourceTypeLabels[source.type]}
+        position="bottom-left"
+        subdued
+        metrics={[{ value: state.title, label: source.name }]}
+        badges={[
+          <OutputBadge
+            key="source-state"
+            label={state.badge}
+            tone={
+              state.tone === 'danger' ? 'danger' : state.tone === 'warning' ? 'warning' : 'success'
+            }
+          />,
+        ]}
       />
     </div>
   );
@@ -1027,11 +1145,38 @@ export function BroadcastCanvas({
   );
 }
 
-export function SafeAreaOverlay({ output }: { label?: string; output: OutputKind }) {
+export function SafeAreaOverlay({
+  output,
+  guides = [],
+}: {
+  label?: string;
+  output: OutputKind;
+  guides?: SafeAreaGuide[];
+}) {
+  if (!guides.length) return null;
+  const isVertical = output === 'vertical';
   return (
-    <div
-      className={`pointer-events-none absolute ${output === 'vertical' ? 'inset-x-5 inset-y-8' : 'inset-4'} z-30 border border-white/5`}
-    />
+    <div className="pointer-events-none absolute inset-0 z-30">
+      {guides.includes('action-safe') ? (
+        <div
+          className={`absolute ${isVertical ? 'inset-x-5 inset-y-8' : 'inset-4'} border border-white/10`}
+        />
+      ) : null}
+      {guides.includes('title-safe') ? (
+        <div
+          className={`absolute ${isVertical ? 'inset-x-9 inset-y-16' : 'inset-x-12 inset-y-8'} border border-white/10`}
+        />
+      ) : null}
+      {guides.includes('center-cross') ? (
+        <>
+          <div className="absolute left-1/2 top-[42%] h-[16%] w-px bg-white/10" />
+          <div className="absolute left-[43%] top-1/2 h-px w-[14%] bg-white/10" />
+        </>
+      ) : null}
+      {guides.includes('grid') ? (
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(255,255,255,.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,.055)_1px,transparent_1px)] bg-[size:33.333%_33.333%]" />
+      ) : null}
+    </div>
   );
 }
 
@@ -1175,16 +1320,50 @@ function EmptySlot({
 function CanvasHud({
   output,
   layoutPreset,
+  monitorRole,
+  scene,
+  activeRouteCount,
 }: {
   output: OutputKind;
   layoutPreset: MediaLayoutPreset;
+  monitorRole: MonitorRole;
+  scene: Scene;
+  activeRouteCount: number;
 }) {
+  const isProgram = monitorRole === 'program' && output === 'program';
+  const isPreview = monitorRole === 'preview';
+  const title = isProgram ? 'PROGRAM' : isPreview ? 'PREVIEW' : 'VERTICAL';
   return (
-    <div className="pointer-events-none absolute inset-x-2 top-2 z-40 flex items-center justify-end gap-1.5">
-      <span className="bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-        {output === 'program' ? '16:9' : '9:16'} · {mediaLayoutLabels[layoutPreset]}
-      </span>
-    </div>
+    <MonitorHUD
+      title={title}
+      position="top-right"
+      subdued={!isProgram}
+      status={
+        isProgram ? (
+          <OutputBadge label="LIVE" tone={activeRouteCount > 0 ? 'live' : 'neutral'} />
+        ) : isPreview ? (
+          <OutputBadge label="READY" tone="success" />
+        ) : undefined
+      }
+      metrics={[
+        ...(isPreview ? [{ value: scene.name, label: 'Scene' }] : []),
+        {
+          value: output === 'program' ? '1920×1080' : '1080×1920',
+          label: isPreview ? 'Raster' : 'Format',
+        },
+        { value: output === 'program' ? '16:9' : '9:16', label: 'Aspect' },
+        { value: '60 FPS', label: 'FPS' },
+      ]}
+      badges={
+        isProgram
+          ? [
+              <OutputBadge key="rec" label="REC · UI" tone="neutral" />,
+              <OutputBadge key="rtmp" label="RTMP · UI" tone="neutral" />,
+              <OutputBadge key="youtube" label="YouTube · UI" tone="neutral" />,
+            ]
+          : [<OutputBadge key="layout" label={mediaLayoutLabels[layoutPreset]} tone="neutral" />]
+      }
+    />
   );
 }
 
@@ -1400,6 +1579,7 @@ function BaseCompositor({
   streams = {},
   guests = [],
   monitorRole = 'program',
+  safeAreaGuides = [],
 }: {
   scene: Scene;
   routes: MediaRoute[];
@@ -1408,6 +1588,7 @@ function BaseCompositor({
   streams?: RoutedStreamMap | undefined;
   guests?: Guest[];
   monitorRole?: MonitorRole;
+  safeAreaGuides?: SafeAreaGuide[];
 }) {
   const capacity = routeCapacity(layoutPreset);
   const selectedRoutes =
@@ -1417,7 +1598,13 @@ function BaseCompositor({
   const activeRouteCount = selectedRoutes.filter(Boolean).length;
   return (
     <BroadcastCanvas aspect={output === 'vertical' ? 'vertical' : 'video'}>
-      <CanvasHud output={output} layoutPreset={layoutPreset} />
+      <CanvasHud
+        output={output}
+        layoutPreset={layoutPreset}
+        monitorRole={monitorRole}
+        scene={scene}
+        activeRouteCount={activeRouteCount}
+      />
       {slots.map((route, index) => (
         <CompositorLayer
           key={route?.id ?? `empty-${index}`}
@@ -1432,7 +1619,7 @@ function BaseCompositor({
         />
       ))}
       <SourceLayers sources={scene.sources} output={output} />
-      <SafeAreaOverlay output={output} />
+      <SafeAreaOverlay output={output} guides={safeAreaGuides} />
       <SceneFooter
         scene={scene}
         layoutPreset={layoutPreset}
@@ -1845,7 +2032,7 @@ export function GuestTile({ guest }: { guest: Guest }) {
   const conn = connectionMeta(guest.status);
   return (
     <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 transition-colors duration-300">
-      <div className="aspect-video overflow-hidden rounded-lg border border-slate-700/70 bg-black">
+      <div className="relative aspect-video overflow-hidden rounded-lg border border-slate-700/70 bg-black">
         <MonitorStateScreen
           title={state.title}
           subtitle={state.subtitle}
@@ -1853,6 +2040,25 @@ export function GuestTile({ guest }: { guest: Guest }) {
           badge={state.badge}
           tone={state.tone}
           compact
+        />
+        <MonitorHUD
+          title={guest.displayName}
+          position="bottom-left"
+          subdued
+          metrics={[{ value: conn.label, label: 'Connection' }]}
+          badges={[
+            <OutputBadge
+              key="cam"
+              label={guest.isMuted ? 'CAM OFF' : 'CAM'}
+              tone={guest.isMuted ? 'warning' : 'success'}
+            />,
+            <OutputBadge
+              key="mic"
+              label={guest.isMuted ? 'MIC OFF' : 'MIC'}
+              tone={guest.isMuted ? 'warning' : 'success'}
+            />,
+            <OutputBadge key="screen" label="SCREEN · UI" tone="neutral" />,
+          ]}
         />
       </div>
       <div className="mt-3 flex items-start justify-between gap-2">
