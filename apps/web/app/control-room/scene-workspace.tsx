@@ -22,6 +22,7 @@ import {
   type MediaLayoutPreset,
   type ProductionSwitchingState,
   type TransitionType,
+  type StreamHealthMetric,
 } from '@ubos/shared';
 import { useEffect, useMemo, useOptimistic, useState, useTransition } from 'react';
 import {
@@ -190,6 +191,7 @@ export function SceneWorkspace({
   assets,
   mediaRoutes = [],
   guests = [],
+  healthMetrics = [],
   initialProductionState,
 }: {
   initialScenes: Scene[];
@@ -199,6 +201,7 @@ export function SceneWorkspace({
   assets: ProductionAsset[];
   mediaRoutes?: MediaRoute[];
   guests?: Guest[];
+  healthMetrics?: StreamHealthMetric[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [viewMode, setViewMode] = useState<ControlRoomViewMode>('dual');
@@ -301,14 +304,15 @@ export function SceneWorkspace({
   }, [productionState, selectedRouteId, sorted]);
 
   const safeHealthMetrics = useMemo(() => {
+    const metricValue = (id: string) => healthMetrics.find((metric) => metric.id === id)?.value;
     const visibleRoutes = mediaRoutes.filter((route) => route.isOnProgram || route.isActive).length;
     return {
-      fps: '60',
-      cpu: `${Math.min(72, 18 + visibleRoutes * 4)}%`,
-      dropped: '0',
-      upload: `${(6.2 + visibleRoutes * 0.4).toFixed(1)} Mbps`,
+      fps: metricValue('encoder-fps') ?? '60',
+      cpu: metricValue('cpu') ?? `${Math.min(72, 18 + visibleRoutes * 4)}%`,
+      dropped: metricValue('dropped-frames') ?? '0',
+      upload: metricValue('upload') ?? `${(6.2 + visibleRoutes * 0.4).toFixed(1)} Mbps`,
     };
-  }, [mediaRoutes]);
+  }, [healthMetrics, mediaRoutes]);
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -680,7 +684,7 @@ export function SceneWorkspace({
           </div>
         </div>
         <div className="max-h-44 shrink-0 overflow-y-auto">
-          <ProductionDock channels={channels} assets={assets} />
+          <ProductionDock channels={channels} assets={assets} healthMetrics={healthMetrics} />
         </div>
       </section>
     </>

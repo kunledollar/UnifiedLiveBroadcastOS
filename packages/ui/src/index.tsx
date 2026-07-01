@@ -1908,16 +1908,157 @@ export function CrossFollowPanel({ platforms }: { platforms: string[] }) {
   );
 }
 
-export function StreamHealthPanel({ metrics }: { metrics: StreamHealthMetric[] }) {
+export type HealthStatus = 'healthy' | 'warning' | 'critical' | 'unknown';
+
+export interface HealthMetric {
+  id: string;
+  label: string;
+  value: string;
+  status?: HealthStatus | StreamHealthMetric['status'];
+  helperText?: string;
+  icon?: string;
+  alert?: string;
+  compact?: boolean;
+}
+
+const healthStatusMeta: Record<
+  HealthStatus,
+  { label: string; icon: string; row: string; badge: string; dot: string }
+> = {
+  healthy: {
+    label: 'Healthy',
+    icon: '✓',
+    row: 'border-emerald-400/10 bg-emerald-400/[0.035]',
+    badge: 'border-emerald-400/25 bg-emerald-400/10 text-emerald-200',
+    dot: 'bg-emerald-300',
+  },
+  warning: {
+    label: 'Warning',
+    icon: '!',
+    row: 'border-amber-400/15 bg-amber-400/[0.045]',
+    badge: 'border-amber-400/30 bg-amber-400/10 text-amber-200',
+    dot: 'bg-amber-300',
+  },
+  critical: {
+    label: 'Critical',
+    icon: '×',
+    row: 'border-rose-400/20 bg-rose-500/[0.055]',
+    badge: 'border-rose-400/30 bg-rose-500/10 text-rose-200',
+    dot: 'bg-rose-300',
+  },
+  unknown: {
+    label: 'Unknown',
+    icon: '?',
+    row: 'border-slate-500/10 bg-slate-500/[0.035]',
+    badge: 'border-slate-500/25 bg-slate-500/10 text-slate-300',
+    dot: 'bg-slate-400',
+  },
+};
+
+export function getHealthState(status?: HealthMetric['status']): HealthStatus {
+  if (status === 'good' || status === 'healthy') return 'healthy';
+  if (status === 'warning' || status === 'critical' || status === 'unknown') return status;
+  return 'unknown';
+}
+
+export function HealthBadge({ status }: { status?: HealthMetric['status'] }) {
+  const health = getHealthState(status);
+  const meta = healthStatusMeta[health];
   return (
-    <Panel title="Stream Health">
-      <div className="grid grid-cols-2 gap-3">
-        {metrics.map((metric) => (
-          <Metric key={metric.id} label={metric.label} value={metric.value} tone={metric.status} />
-        ))}
+    <span
+      className={`inline-flex shrink-0 items-center gap-1 rounded-md border px-1.5 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${meta.badge}`}
+    >
+      <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
+      {meta.label}
+    </span>
+  );
+}
+
+export function HealthCard({ metric }: { metric: HealthMetric }) {
+  const health = getHealthState(metric.status);
+  const meta = healthStatusMeta[health];
+  return (
+    <div className={`rounded-xl border p-3 ${meta.row}`}>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+          {metric.label}
+        </p>
+        <HealthBadge status={metric.status} />
+      </div>
+      <p className="mt-2 font-mono text-lg font-black text-white">{metric.value}</p>
+      {metric.helperText ? (
+        <p className="mt-1 truncate text-[10px] text-slate-500">{metric.helperText}</p>
+      ) : null}
+    </div>
+  );
+}
+
+export function HealthMetricRow({ metric }: { metric: HealthMetric }) {
+  const health = getHealthState(metric.status);
+  const meta = healthStatusMeta[health];
+  return (
+    <div
+      className={`grid grid-cols-[1.4rem_minmax(5.5rem,1fr)_auto_auto] items-center gap-2 rounded-lg border px-2.5 py-2 ${meta.row}`}
+    >
+      <span
+        className={`flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-black ${meta.badge}`}
+        aria-label={meta.label}
+      >
+        {metric.icon ?? meta.icon}
+      </span>
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-300">
+          {metric.label}
+        </p>
+        {(metric.alert ?? metric.helperText) ? (
+          <p className="truncate text-[10px] text-slate-500">{metric.alert ?? metric.helperText}</p>
+        ) : null}
+      </div>
+      <span className="font-mono text-xs font-bold text-white">{metric.value}</span>
+      <HealthBadge status={metric.status} />
+    </div>
+  );
+}
+
+export function BroadcastHealthPanel({ metrics }: { metrics: HealthMetric[] }) {
+  const summary = metrics.slice(0, 3);
+  const warnings = metrics.filter((metric) =>
+    ['warning', 'critical'].includes(getHealthState(metric.status)),
+  );
+  return (
+    <Panel title="Broadcast Health">
+      <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-2">
+          {summary.map((metric) => (
+            <HealthCard key={metric.id} metric={metric} />
+          ))}
+        </div>
+        <div className="grid gap-1.5">
+          {metrics.map((metric) => (
+            <HealthMetricRow key={metric.id} metric={metric} />
+          ))}
+        </div>
+        <div className="rounded-lg border border-white/10 bg-slate-950/60 px-3 py-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+            Alerts
+          </p>
+          {warnings.length ? (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {warnings.map((metric) => (
+                <HealthBadge key={metric.id} status={metric.status} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-emerald-200">No active broadcast health alerts.</p>
+          )}
+        </div>
       </div>
     </Panel>
   );
+}
+
+export function StreamHealthPanel({ metrics }: { metrics: StreamHealthMetric[] }) {
+  return <BroadcastHealthPanel metrics={metrics} />;
 }
 
 export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
@@ -1949,9 +2090,11 @@ export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
 export function ProductionDock({
   channels,
   assets,
+  healthMetrics = [],
 }: {
   channels: AudioChannel[];
   assets: ProductionAsset[];
+  healthMetrics?: HealthMetric[];
 }) {
   const assetGroups = ['media', 'lower_third', 'background', 'overlay'] as const;
 
@@ -1965,6 +2108,18 @@ export function ProductionDock({
           <AudioMixer channels={channels} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
+          {healthMetrics.length ? (
+            <div className="sm:col-span-2">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-400">
+                Broadcast Health Center
+              </p>
+              <div className="grid gap-1.5">
+                {healthMetrics.map((metric) => (
+                  <HealthMetricRow key={metric.id} metric={metric} />
+                ))}
+              </div>
+            </div>
+          ) : null}
           {assetGroups.map((group) => (
             <div key={group} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
