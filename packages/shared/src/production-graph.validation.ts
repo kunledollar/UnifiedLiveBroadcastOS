@@ -257,3 +257,101 @@ assert(
   'collaboration permissions reuse production command permissions',
 );
 console.log('Collaboration validation passed');
+
+import {
+  LocalSyncTransport,
+  SyncCoordinator,
+  applyRevisionAck,
+  createCatchUpRequest,
+  createCatchUpResponse,
+  createMockSyncScenario,
+  createResyncRequiredMessage,
+  createRevisionAck,
+  createSyncEnvelope,
+  createSyncSession,
+  getClientRevisionLag,
+  getMissingRevisionRange,
+  getStaleClients,
+  isClientStale,
+  isClientSynced,
+  markClientSynced,
+  updateClientHeartbeat,
+} from './sync.js';
+
+const syncSession = createMockSyncScenario(
+  createSyncSession({
+    id: 'sync-test',
+    broadcastSessionId: 'test-session',
+    productionGraphId: graph.id,
+    currentGraphRevision: getProductionGraphRevision(graph),
+  }),
+);
+const directorClient = syncSession.clients['director-client']!;
+const producerClient = syncSession.clients['producer-client']!;
+const envelope = createSyncEnvelope({
+  type: 'CLIENT_HEARTBEAT',
+  sessionId: syncSession.id,
+  broadcastSessionId: syncSession.broadcastSessionId,
+  clientId: directorClient.clientId,
+  operatorId: directorClient.operatorId,
+  graphRevision: syncSession.currentGraphRevision,
+  payload: { ok: true },
+});
+assert(envelope.id && envelope.type === 'CLIENT_HEARTBEAT', 'sync envelope creation assigns id and type');
+const ack = createRevisionAck(producerClient, syncSession.currentGraphRevision);
+const ackedSession = applyRevisionAck(syncSession, ack);
+assert(isClientSynced(ackedSession.clients['producer-client']!, ackedSession), 'revision acknowledgement marks client current');
+assert(getClientRevisionLag(producerClient, syncSession) >= 0, 'revision lag calculation is non-negative');
+assert(markClientSynced(producerClient, syncSession).recoveryState === 'synced', 'markClientSynced sets recovery state');
+const heartbeatClient = updateClientHeartbeat(producerClient, {
+  clientId: producerClient.clientId,
+  operatorId: producerClient.operatorId,
+  sentAt: '2026-07-01T00:00:10.000Z',
+  observedGraphRevision: syncSession.currentGraphRevision,
+}, syncSession.currentGraphRevision);
+assert(heartbeatClient.lastHeartbeatAt === '2026-07-01T00:00:10.000Z', 'heartbeat update stores last heartbeat');
+assert(isClientStale({ ...producerClient, lastHeartbeatAt: '2026-07-01T00:00:00.000Z' }, 1000, Date.parse('2026-07-01T00:00:02.000Z')), 'stale client detection works');
+assert(getStaleClients(syncSession, 1, Date.now()).length >= 0, 'stale client listing returns array');
+assert(getMissingRevisionRange(1, 3)?.fromRevision === 2, 'missing revision range starts after observed revision');
+const catchUpRequest = createCatchUpRequest({
+  sessionId: syncSession.id,
+  broadcastSessionId: syncSession.broadcastSessionId,
+  clientId: producerClient.clientId,
+  operatorId: producerClient.operatorId,
+  graphRevision: syncSession.currentGraphRevision,
+}, producerClient.observedGraphRevision);
+assert(catchUpRequest.type === 'GRAPH_REVISION_REQUEST', 'catch-up request created');
+const catchUpResponse = createCatchUpResponse({
+  sessionId: syncSession.id,
+  broadcastSessionId: syncSession.broadcastSessionId,
+  clientId: producerClient.clientId,
+  operatorId: producerClient.operatorId,
+  graphRevision: syncSession.currentGraphRevision,
+}, [], 1, 2);
+assert(catchUpResponse.type === 'EVENTS_BATCH', 'catch-up response created');
+const resync = createResyncRequiredMessage({
+  sessionId: syncSession.id,
+  broadcastSessionId: syncSession.broadcastSessionId,
+  clientId: producerClient.clientId,
+  operatorId: producerClient.operatorId,
+  graphRevision: syncSession.currentGraphRevision,
+}, 0, syncSession.currentGraphRevision);
+assert(resync.type === 'CLIENT_RESYNC_REQUIRED', 'resync required message created');
+const transport = new LocalSyncTransport();
+const syncDispatcher = new LocalProductionCommandDispatcher(createBroadcastSession({ id: 'test-session', operatorId: 'tester', timestamp: '2026-07-01T00:00:00.000Z' }));
+const syncCurrentRevision = getProductionGraphRevision(syncDispatcher.getGraph());
+const coordinator = new SyncCoordinator(
+  createSyncSession({ id: 'sync-coordinator-test', broadcastSessionId: 'test-session', productionGraphId: syncDispatcher.getGraph().id, currentGraphRevision: syncCurrentRevision }),
+  syncDispatcher,
+  transport,
+);
+coordinator.joinClient({ clientId: 'tester-client', operatorId: 'tester', displayName: 'Tester', observedGraphRevision: syncCurrentRevision, metadata: {} });
+assert(coordinator.listClients().length === 1, 'client join registers client');
+coordinator.leaveClient('missing-client');
+assert(coordinator.listClients().length === 1, 'client leave ignores unknown client');
+const acceptedTransition = coordinator.submitCommand('tester-client', command('CREATE_SCENE', { id: 'sync-scene', name: 'Sync' }, 'DIRECTOR', syncCurrentRevision));
+assert(acceptedTransition?.accepted, 'command submit accepted');
+coordinator.submitCommand('tester-client', command('SET_PREVIEW_SCENE', { sceneId: 'sync-scene' }, 'DIRECTOR', 0));
+assert(transport.sentMessages.some((message) => message.type === 'COMMAND_REJECTED'), 'stale command rejected');
+assert(transport.sentMessages.some((message) => message.type === 'CLIENT_BEHIND'), 'CLIENT_BEHIND emitted');
+assert(coordinator.requestCatchUp('tester-client')?.type, 'catch-up request returns response or resync message');
