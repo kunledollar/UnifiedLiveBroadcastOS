@@ -32,6 +32,7 @@ import {
   createMockSyncScenario,
   createSyncSession,
   getStaleClients,
+  isRealtimeSyncEnabled,
 } from '@ubos/shared';
 import {
   type ReactNode,
@@ -543,6 +544,8 @@ export function SceneWorkspace({
   );
   const productionGraphSession = productionGraphDispatcher.getSession();
   const syncDiagnosticsEnabled = process.env.NEXT_PUBLIC_ENABLE_SYNC_DIAGNOSTICS === 'true';
+  const realtimeSyncEnabled = isRealtimeSyncEnabled(process.env);
+  const realtimeSyncUrl = process.env.NEXT_PUBLIC_UBOS_SYNC_URL;
   const syncDiagnostics = useMemo(() => {
     const syncSession = createMockSyncScenario(
       createSyncSession({
@@ -561,8 +564,16 @@ export function SceneWorkspace({
       rejectedCommands: productionGraphSession.eventLog.filter((event) => event.type === 'COMMAND_REJECTED').length,
       catchUpRequiredCount: clients.filter((client) => client.recoveryState === 'catching_up').length,
       lastSyncMessage: clients.find((client) => client.lastSyncMessage)?.lastSyncMessage ?? 'CLIENT_HEARTBEAT',
+      transport: realtimeSyncEnabled ? 'websocket' : 'local',
+      connectionState: realtimeSyncEnabled ? 'configured' : 'local-simulation',
+      syncUrl: realtimeSyncUrl ?? 'not configured',
+      connectedClientsCount: clients.filter((client) => client.connectionState === 'connected').length,
+      lastReceivedMessage: clients.find((client) => client.lastSyncMessage)?.lastSyncMessage ?? 'CLIENT_HEARTBEAT',
+      lastSentMessage: 'CLIENT_HEARTBEAT',
+      lastHeartbeatAt: clients.find((client) => client.lastHeartbeatAt)?.lastHeartbeatAt ?? '—',
+      reconnectAttempts: 0,
     };
-  }, [productionGraphSession]);
+  }, [productionGraphSession, realtimeSyncEnabled, realtimeSyncUrl]);
   const dispatchProductionGraphCommand = useCallback(
     (type: ProductionCommandType, payload: Record<string, unknown> = {}) => {
       productionGraphDispatcher.dispatch({
@@ -1082,6 +1093,11 @@ export function SceneWorkspace({
                   <details className="rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
                     <summary className="cursor-pointer font-bold text-cyan-100">Sync diagnostics</summary>
                     <div className="mt-2 space-y-2 font-mono text-[9px] text-slate-400">
+                      <div>transport {syncDiagnostics.transport} · state {syncDiagnostics.connectionState}</div>
+                      <div>sync URL {syncDiagnostics.syncUrl}</div>
+                      <div>clients {syncDiagnostics.connectedClientsCount} · reconnects {syncDiagnostics.reconnectAttempts}</div>
+                      <div>last rx {syncDiagnostics.lastReceivedMessage} · last tx {syncDiagnostics.lastSentMessage}</div>
+                      <div>heartbeat {syncDiagnostics.lastHeartbeatAt}</div>
                       <div>session {syncDiagnostics.session.id}</div>
                       <div>revision {syncDiagnostics.session.currentGraphRevision} · last {syncDiagnostics.lastSyncMessage}</div>
                       <div>accepted {syncDiagnostics.acceptedCommands} · rejected {syncDiagnostics.rejectedCommands} · catch-up {syncDiagnostics.catchUpRequiredCount}</div>

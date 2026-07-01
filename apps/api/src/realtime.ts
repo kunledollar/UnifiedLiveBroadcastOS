@@ -2,8 +2,14 @@ import type { FastifyInstance } from 'fastify';
 import {
   broadcastRealtimeEventTypes,
   broadcastRealtimeRoom,
+  createSyncEnvelope,
+  deserializeSyncEnvelope,
+  serializeSyncEnvelope,
+  validateSyncEnvelope,
   type BroadcastRealtimeEvent,
   type BroadcastRealtimeRoom,
+  type SyncEnvelope,
+  type SyncMessage,
 } from '@ubos/shared';
 import { z } from 'zod';
 import { createHash, randomUUID } from 'node:crypto';
@@ -40,10 +46,11 @@ export function emitBroadcastRealtime(event: BroadcastRealtimeEvent) {
 }
 
 export async function registerRealtime(app: FastifyInstance) {
+  registerSyncHubUpgrade(app);
   app.server.on('upgrade', (request, socket) => {
     try {
       const url = new URL(request.url ?? '/', 'http://localhost');
-      if (url.pathname !== '/realtime/broadcast') return socket.destroy();
+      if (url.pathname !== '/realtime/broadcast') return;
       const roomInput = roomSchema.parse({ workspaceId: url.searchParams.get('workspaceId'), broadcastId: url.searchParams.get('broadcastId') });
       const key = request.headers['sec-websocket-key'];
       if (typeof key !== 'string') return socket.destroy();
@@ -69,5 +76,85 @@ export async function registerRealtime(app: FastifyInstance) {
     };
     emitBroadcastRealtime(event);
     return { ok: true, room: broadcastRealtimeRoom(event), deliveredTo: clients.size };
+  });
+}
+
+type SyncHubClient = { id: string; socket: Duplex; sessionId: string; clientId: string; operatorId: string; lastSeenAt: string };
+const syncHubClients = new Map<string, SyncHubClient>();
+
+function decodeTextFrames(buffer: Buffer) {
+  const messages: string[] = [];
+  let offset = 0;
+  while (offset + 2 <= buffer.length) {
+    const first = buffer[offset++]!;
+    const second = buffer[offset++]!;
+    const opcode = first & 0x0f;
+    let length = second & 0x7f;
+    if (length === 126) { if (offset + 2 > buffer.length) break; length = buffer.readUInt16BE(offset); offset += 2; }
+    else if (length === 127) { if (offset + 8 > buffer.length) break; const big = buffer.readBigUInt64BE(offset); offset += 8; if (big > BigInt(Number.MAX_SAFE_INTEGER)) break; length = Number(big); }
+    const masked = Boolean(second & 0x80);
+    let mask: Buffer | undefined;
+    if (masked) { if (offset + 4 > buffer.length) break; mask = buffer.subarray(offset, offset + 4); offset += 4; }
+    if (offset + length > buffer.length) break;
+    const payload = Buffer.from(buffer.subarray(offset, offset + length));
+    offset += length;
+    if (mask) for (let i = 0; i < payload.length; i++) payload[i] = payload[i]! ^ mask[i % 4]!;
+    if (opcode === 0x1) messages.push(payload.toString('utf8'));
+  }
+  return messages;
+}
+
+function sendSync(client: SyncHubClient, message: SyncMessage) {
+  if (!client.socket.destroyed) client.socket.write(frame(serializeSyncEnvelope(message)));
+}
+
+function broadcastSync(message: SyncMessage, exceptConnectionId?: string) {
+  let deliveredTo = 0;
+  for (const client of syncHubClients.values()) {
+    if (client.sessionId === message.sessionId && client.id !== exceptConnectionId) { sendSync(client, message); deliveredTo++; }
+  }
+  return deliveredTo;
+}
+
+export function getSyncHubDiagnostics(sessionId?: string) {
+  const clients = [...syncHubClients.values()].filter((client) => !sessionId || client.sessionId === sessionId);
+  return { connectedClients: clients.length, clients: clients.map(({ id, sessionId: sid, clientId, operatorId, lastSeenAt }) => ({ id, sessionId: sid, clientId, operatorId, lastSeenAt })) };
+}
+
+export function registerSyncHubUpgrade(app: FastifyInstance) {
+  app.server.on('upgrade', (request, socket) => {
+    try {
+      const url = new URL(request.url ?? '/', 'http://localhost');
+      if (url.pathname !== '/realtime/sync') return;
+      const sessionId = url.searchParams.get('sessionId');
+      const clientId = url.searchParams.get('clientId');
+      const operatorId = url.searchParams.get('operatorId');
+      if (!sessionId || !clientId || !operatorId) return socket.destroy();
+      const key = request.headers['sec-websocket-key'];
+      if (typeof key !== 'string') return socket.destroy();
+      const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
+      socket.write(['HTTP/1.1 101 Switching Protocols', 'Upgrade: websocket', 'Connection: Upgrade', `Sec-WebSocket-Accept: ${accept}`, '', ''].join('\r\n'));
+      const id = randomUUID();
+      const client: SyncHubClient = { id, socket, sessionId, clientId, operatorId, lastSeenAt: new Date().toISOString() };
+      syncHubClients.set(id, client);
+      socket.on('data', (chunk: Buffer) => {
+        for (const text of decodeTextFrames(chunk)) {
+          try {
+            const message = deserializeSyncEnvelope(text);
+            if (!validateSyncEnvelope(message) || message.sessionId !== sessionId) throw new Error('Invalid sync envelope.');
+            client.lastSeenAt = new Date().toISOString();
+            if (message.type === 'CLIENT_HEARTBEAT') {
+              sendSync(client, createSyncEnvelope({ sessionId: message.sessionId, broadcastSessionId: message.broadcastSessionId, clientId: message.clientId, operatorId: message.operatorId, graphRevision: message.graphRevision, correlationId: message.id, type: 'CLIENT_HEARTBEAT', payload: { ...(message.payload as object), acknowledgedAt: client.lastSeenAt } }));
+            }
+            broadcastSync(message, id);
+          } catch (error) {
+            const envelope: SyncEnvelope<'SYNC_ERROR', { message: string }> = createSyncEnvelope({ id: `sync-error:${randomUUID()}`, type: 'SYNC_ERROR', sessionId, broadcastSessionId: sessionId, clientId, operatorId, graphRevision: 0, payload: { message: error instanceof Error ? error.message : 'Invalid sync message.' } });
+            sendSync(client, envelope);
+          }
+        }
+      });
+      socket.on('close', () => syncHubClients.delete(id));
+      socket.on('error', () => syncHubClients.delete(id));
+    } catch { socket.destroy(); }
   });
 }

@@ -260,6 +260,13 @@ console.log('Collaboration validation passed');
 
 import {
   LocalSyncTransport,
+  WebSocketSyncClient,
+  WebSocketSyncTransport,
+  createHeartbeatEnvelope,
+  deserializeSyncEnvelope,
+  isRealtimeSyncEnabled,
+  serializeSyncEnvelope,
+  validateSyncEnvelope,
   SyncCoordinator,
   applyRevisionAck,
   createCatchUpRequest,
@@ -298,6 +305,18 @@ const envelope = createSyncEnvelope({
   payload: { ok: true },
 });
 assert(envelope.id && envelope.type === 'CLIENT_HEARTBEAT', 'sync envelope creation assigns id and type');
+
+const serializedEnvelope = serializeSyncEnvelope(envelope);
+assert(deserializeSyncEnvelope(serializedEnvelope).id === envelope.id, 'sync envelope serialization round-trips');
+assert(validateSyncEnvelope(envelope), 'sync envelope validation accepts valid messages');
+assert(!validateSyncEnvelope({ type: 'CLIENT_HEARTBEAT' }), 'sync envelope validation rejects invalid messages');
+const heartbeatEnvelope = createHeartbeatEnvelope({ sessionId: syncSession.id, broadcastSessionId: syncSession.broadcastSessionId, clientId: directorClient.clientId, operatorId: directorClient.operatorId, graphRevision: syncSession.currentGraphRevision });
+assert(heartbeatEnvelope.type === 'CLIENT_HEARTBEAT', 'heartbeat envelope helper creates heartbeat messages');
+const websocketClient = new WebSocketSyncClient({ url: 'ws://localhost:4000/realtime/sync', maxReconnectAttempts: 1 });
+const websocketTransport = new WebSocketSyncTransport(websocketClient);
+assert(websocketTransport.getState() === 'idle', 'websocket sync transport constructs in idle state');
+assert(isRealtimeSyncEnabled({ NEXT_PUBLIC_UBOS_REALTIME_SYNC: 'true', NEXT_PUBLIC_UBOS_SYNC_URL: 'ws://localhost:4000/realtime/sync' }), 'realtime sync feature flag enables websocket transport');
+
 const ack = createRevisionAck(producerClient, syncSession.currentGraphRevision);
 const ackedSession = applyRevisionAck(syncSession, ack);
 assert(isClientSynced(ackedSession.clients['producer-client']!, ackedSession), 'revision acknowledgement marks client current');

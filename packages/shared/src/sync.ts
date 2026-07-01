@@ -117,3 +117,41 @@ export const createMockSyncScenario = (session: Omit<SyncSession, 'clients'>): S
   ['audio-client', { clientId: 'audio-client', operatorId: 'audio', displayName: 'Audio', connectionState: 'connected', observedGraphRevision: session.currentGraphRevision, revisionLag: 0, lastHeartbeatAt: now(), recoveryState: 'synced', metadata: {} }],
   ['graphics-client', { clientId: 'graphics-client', operatorId: 'graphics', displayName: 'Graphics', connectionState: 'reconnecting', observedGraphRevision: Math.max(0, session.currentGraphRevision - 2), revisionLag: Math.min(2, session.currentGraphRevision), lastHeartbeatAt: new Date(Date.now() - 45_000).toISOString(), recoveryState: 'catching_up', metadata: {} }],
 ]) });
+
+export type WebSocketConnectionState = SyncTransportState | 'reconnecting';
+export interface SyncTransportStatus { transport: 'local' | 'websocket'; state: WebSocketConnectionState; url?: string; connectedClients?: number; lastReceivedMessage?: SyncMessageType; lastSentMessage?: SyncMessageType; lastHeartbeatAt?: string; reconnectAttempts: number; lastError?: string; }
+const syncMessageTypes = new Set<SyncMessageType>(['CLIENT_JOIN','CLIENT_LEAVE','CLIENT_HEARTBEAT','SESSION_STATE_REQUEST','SESSION_STATE_RESPONSE','GRAPH_REVISION_REQUEST','GRAPH_REVISION_RESPONSE','COMMAND_SUBMIT','COMMAND_ACCEPTED','COMMAND_REJECTED','EVENTS_BATCH','REVISION_ACK','CLIENT_BEHIND','CLIENT_RESYNC_REQUIRED','PRESENCE_UPDATE','ACTIVITY_UPDATE','LOCK_REQUEST','LOCK_GRANTED','LOCK_DENIED','LOCK_RELEASED','SYNC_ERROR']);
+export const validateSyncEnvelope = (value: unknown): value is SyncMessage => {
+  if (!value || typeof value !== 'object') return false;
+  const msg = value as Partial<SyncMessage>;
+  return typeof msg.id === 'string' && typeof msg.type === 'string' && syncMessageTypes.has(msg.type as SyncMessageType) && typeof msg.sessionId === 'string' && typeof msg.broadcastSessionId === 'string' && typeof msg.clientId === 'string' && typeof msg.operatorId === 'string' && typeof msg.timestamp === 'string' && !Number.isNaN(Date.parse(msg.timestamp)) && typeof msg.graphRevision === 'number' && Number.isFinite(msg.graphRevision) && 'payload' in msg;
+};
+export const serializeSyncEnvelope = (message: SyncMessage) => JSON.stringify(message);
+export const deserializeSyncEnvelope = (data: string | ArrayBuffer | Uint8Array): SyncMessage => {
+  const text = typeof data === 'string' ? data : new TextDecoder().decode(data);
+  const parsed = JSON.parse(text) as unknown;
+  if (!validateSyncEnvelope(parsed)) throw new Error('Invalid SyncEnvelope payload.');
+  return parsed;
+};
+export const createSyncErrorEnvelope = (base: Pick<SyncEnvelope, 'sessionId' | 'broadcastSessionId' | 'clientId' | 'operatorId' | 'graphRevision'>, error: SyncError, correlationId?: StableId) => createSyncEnvelope({ ...base, ...(correlationId ? { correlationId } : {}), type: 'SYNC_ERROR', payload: error });
+export const createHeartbeatEnvelope = (base: Pick<SyncEnvelope, 'sessionId' | 'broadcastSessionId' | 'clientId' | 'operatorId' | 'graphRevision'>) => createSyncEnvelope({ ...base, type: 'CLIENT_HEARTBEAT', payload: { clientId: base.clientId, operatorId: base.operatorId, sentAt: now(), observedGraphRevision: base.graphRevision } satisfies SyncHeartbeat });
+
+export interface WebSocketSyncClientOptions { url: string; heartbeatMs?: number; maxReconnectAttempts?: number; reconnectBaseMs?: number; WebSocketImpl?: typeof WebSocket; }
+export class WebSocketSyncClient {
+  private socket?: WebSocket; private state: WebSocketConnectionState = 'idle'; private handlers = new Set<(message: SyncMessage) => void>(); private stateHandlers = new Set<(status: SyncTransportStatus) => void>(); private reconnectTimer?: ReturnType<typeof setTimeout>; private heartbeatTimer?: ReturnType<typeof setInterval>; private reconnectAttempts = 0; private lastReceivedMessage: SyncMessageType | undefined; private lastSentMessage: SyncMessageType | undefined; private lastHeartbeatAt: string | undefined; private lastError: string | undefined;
+  constructor(private options: WebSocketSyncClientOptions) {}
+  connect() { if (this.state === 'connected' || this.state === 'connecting') return; this.setState(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting'); const WS = this.options.WebSocketImpl ?? WebSocket; this.socket = new WS(this.options.url); this.socket.addEventListener('open', () => { this.reconnectAttempts = 0; this.lastError = undefined; this.setState('connected'); }); this.socket.addEventListener('message', (event) => this.receive(event.data)); this.socket.addEventListener('close', () => this.scheduleReconnect()); this.socket.addEventListener('error', () => { this.lastError = 'WebSocket transport error'; this.setState('error'); }); }
+  disconnect() { if (this.reconnectTimer) clearTimeout(this.reconnectTimer); if (this.heartbeatTimer) clearInterval(this.heartbeatTimer); this.setState('disconnecting'); this.socket?.close(); this.setState('disconnected'); }
+  send(message: SyncMessage) { if (this.state !== 'connected' || !this.socket) return; this.socket.send(serializeSyncEnvelope(message)); this.lastSentMessage = message.type; if (message.type === 'CLIENT_HEARTBEAT') this.lastHeartbeatAt = message.timestamp; this.emitState(); }
+  subscribe(handler: (message: SyncMessage) => void) { this.handlers.add(handler); return () => this.handlers.delete(handler); }
+  subscribeState(handler: (status: SyncTransportStatus) => void) { this.stateHandlers.add(handler); handler(this.getStatus()); return () => this.stateHandlers.delete(handler); }
+  getState() { return this.state; }
+  getStatus(): SyncTransportStatus { return { transport: 'websocket', state: this.state, url: this.options.url, reconnectAttempts: this.reconnectAttempts, ...(this.lastReceivedMessage ? { lastReceivedMessage: this.lastReceivedMessage } : {}), ...(this.lastSentMessage ? { lastSentMessage: this.lastSentMessage } : {}), ...(this.lastHeartbeatAt ? { lastHeartbeatAt: this.lastHeartbeatAt } : {}), ...(this.lastError ? { lastError: this.lastError } : {}) }; }
+  startHeartbeat(factory: () => SyncMessage, intervalMs = this.options.heartbeatMs ?? 15_000) { if (this.heartbeatTimer) clearInterval(this.heartbeatTimer); this.heartbeatTimer = setInterval(() => this.send(factory()), intervalMs); }
+  private receive(data: unknown) { try { const msg = deserializeSyncEnvelope(typeof data === 'string' ? data : data instanceof ArrayBuffer ? data : String(data)); this.lastReceivedMessage = msg.type; if (msg.type === 'CLIENT_HEARTBEAT') this.lastHeartbeatAt = msg.timestamp; this.handlers.forEach((h) => h(msg)); this.emitState(); } catch (error) { this.lastError = error instanceof Error ? error.message : 'Invalid SyncEnvelope payload.'; this.emitState(); } }
+  private scheduleReconnect() { if (this.state === 'disconnecting' || this.state === 'disconnected') return; const max = this.options.maxReconnectAttempts ?? 5; if (this.reconnectAttempts >= max) { this.setState('disconnected'); return; } this.reconnectAttempts++; this.setState('reconnecting'); const delay = Math.min((this.options.reconnectBaseMs ?? 500) * 2 ** (this.reconnectAttempts - 1), 8_000); this.reconnectTimer = setTimeout(() => this.connect(), delay); }
+  private setState(state: WebSocketConnectionState) { this.state = state; this.emitState(); }
+  private emitState() { const status = this.getStatus(); this.stateHandlers.forEach((h) => h(status)); }
+}
+export class WebSocketSyncTransport implements SyncTransport { constructor(private client: WebSocketSyncClient) {} connect() { this.client.connect(); } disconnect() { this.client.disconnect(); } send(message: SyncMessage) { this.client.send(message); } subscribe(handler: (message: SyncMessage) => void) { return this.client.subscribe(handler); } getState(): SyncTransportState { const state = this.client.getState(); return state === 'reconnecting' ? 'connecting' : state; } getStatus() { return this.client.getStatus(); } }
+export const isRealtimeSyncEnabled = (env: Record<string, string | undefined>) => env.NEXT_PUBLIC_UBOS_REALTIME_SYNC === 'true' && Boolean(env.NEXT_PUBLIC_UBOS_SYNC_URL);
