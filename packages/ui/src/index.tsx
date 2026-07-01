@@ -21,6 +21,145 @@ type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'live';
 
+export type TallyState = 'program' | 'preview' | 'idle' | 'offline' | 'muted' | 'unknown';
+
+export function getTallyState({
+  id,
+  programId,
+  previewId,
+  fallback = 'idle',
+}: {
+  id?: string | null | undefined;
+  programId?: string | null | undefined;
+  previewId?: string | null | undefined;
+  fallback?: TallyState;
+}): TallyState {
+  if (!id) return fallback;
+  if (programId && id === programId) return 'program';
+  if (previewId && id === previewId) return 'preview';
+  return fallback;
+}
+
+const tallyMeta: Record<
+  TallyState,
+  {
+    label: string;
+    badge: string;
+    dot: string;
+    text: string;
+    border: string;
+    bg: string;
+    glow: string;
+  }
+> = {
+  program: {
+    label: 'Program',
+    badge: 'LIVE',
+    dot: 'bg-red-500',
+    text: 'text-red-200',
+    border: 'border-red-400/65',
+    bg: 'bg-red-500/10',
+    glow: 'shadow-[0_0_18px_rgba(220,38,38,0.18)]',
+  },
+  preview: {
+    label: 'Preview',
+    badge: 'PREVIEW',
+    dot: 'bg-emerald-400',
+    text: 'text-emerald-200',
+    border: 'border-emerald-300/60',
+    bg: 'bg-emerald-400/10',
+    glow: 'shadow-[0_0_18px_rgba(16,185,129,0.14)]',
+  },
+  idle: {
+    label: 'Idle',
+    badge: 'IDLE',
+    dot: 'bg-slate-500',
+    text: 'text-slate-300',
+    border: 'border-white/10',
+    bg: 'bg-slate-950/50',
+    glow: '',
+  },
+  offline: {
+    label: 'Offline',
+    badge: 'OFFLINE',
+    dot: 'bg-slate-600',
+    text: 'text-slate-400',
+    border: 'border-slate-700/70',
+    bg: 'bg-slate-950/40',
+    glow: '',
+  },
+  muted: {
+    label: 'Muted',
+    badge: 'MUTED',
+    dot: 'bg-amber-300',
+    text: 'text-amber-200',
+    border: 'border-amber-300/45',
+    bg: 'bg-amber-400/10',
+    glow: '',
+  },
+  unknown: {
+    label: 'Unknown',
+    badge: 'UNKNOWN',
+    dot: 'bg-slate-500',
+    text: 'text-slate-400',
+    border: 'border-slate-700/70',
+    bg: 'bg-slate-950/45',
+    glow: '',
+  },
+};
+
+export function TallyIndicator({ state, label }: { state: TallyState; label?: string }) {
+  const meta = tallyMeta[state];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.14em] ${meta.text}`}
+      title={label ?? meta.label}
+      aria-label={label ?? meta.label}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${meta.dot} ${state === 'program' ? 'animate-pulse' : ''}`}
+      />
+      {label ?? meta.badge}
+    </span>
+  );
+}
+
+export function TallyBadge({ state, label }: { state: TallyState; label?: string }) {
+  const meta = tallyMeta[state];
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.14em] ${meta.border} ${meta.bg} ${meta.text}`}
+    >
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${meta.dot} ${state === 'program' ? 'animate-pulse' : ''}`}
+      />
+      {label ?? meta.badge}
+    </span>
+  );
+}
+
+export function TallyBorder({
+  state,
+  children,
+  className = '',
+}: {
+  state: TallyState;
+  children: ReactNode;
+  className?: string;
+}) {
+  const meta = tallyMeta[state];
+  return (
+    <div className={`border-l-2 ${meta.border} ${meta.bg} ${meta.glow} ${className}`}>
+      {children}
+    </div>
+  );
+}
+
+function tallyCardClasses(state: TallyState) {
+  const meta = tallyMeta[state];
+  return `${meta.border} ${meta.bg} ${meta.glow}`;
+}
+
 const typeLabels: Record<SceneType, string> = {
   intro: 'Intro',
   countdown: 'Countdown',
@@ -231,10 +370,11 @@ export function SceneCard({
   const sceneLayout = scene.layout ?? 'picture_in_picture';
   const isProgram = scene.id === programSceneId || scene.isActive;
   const isPreview = scene.id === previewSceneId;
+  const tallyState = isProgram ? 'program' : isPreview ? 'preview' : 'idle';
 
   return (
     <div
-      className={`rounded-2xl border p-3 transition ${isProgram ? 'border-red-400 bg-red-500/10 shadow-lg shadow-red-950/20' : isPreview ? 'border-emerald-300 bg-emerald-300/10 shadow-lg shadow-emerald-950/20' : 'border-white/10 bg-slate-950/50 hover:bg-slate-800/80'}`}
+      className={`rounded-2xl border p-3 transition ${tallyCardClasses(tallyState)} ${tallyState === 'idle' ? 'hover:bg-slate-800/80' : ''}`}
     >
       <button className="w-full text-left" onClick={() => onSwitch?.(scene.id)} type="button">
         <div className="flex items-start justify-between gap-3">
@@ -244,9 +384,10 @@ export function SceneCard({
           </div>
           <div className="flex flex-col items-end gap-2">
             <Badge tone="neutral">{typeLabels[scene.type]}</Badge>
-            {isProgram ? <Badge tone="live">● Program</Badge> : null}
-            {isPreview ? <Badge tone="success">● Preview</Badge> : null}
-            {!isProgram && !isPreview ? <Badge tone="neutral">Standby</Badge> : null}
+            <TallyBadge
+              state={tallyState}
+              label={isProgram ? 'PROGRAM / LIVE' : isPreview ? 'PREVIEW / READY' : 'IDLE'}
+            />
           </div>
         </div>
         <div className="mt-3 flex gap-1.5">
@@ -485,6 +626,7 @@ export function SourceManager({
   onMove,
   onToggleVisibility,
   onToggleLock,
+  tallyState = 'idle',
 }: {
   scene: Scene;
   sourceTypes: SceneSourceType[];
@@ -496,6 +638,7 @@ export function SourceManager({
   onMove: (sourceId: string, direction: 'up' | 'down') => void;
   onToggleVisibility: ((sourceId: string) => void) | undefined;
   onToggleLock: ((sourceId: string) => void) | undefined;
+  tallyState?: TallyState;
 }) {
   const sources = [...scene.sources].sort((a, b) => a.order - b.order);
 
@@ -539,7 +682,7 @@ export function SourceManager({
         {sources.map((source, index) => (
           <div
             key={source.id}
-            className={`rounded-xl border p-3 ${source.isVisible ? 'border-white/10 bg-slate-950/60' : 'border-white/5 bg-slate-950/30 opacity-60'}`}
+            className={`rounded-xl border p-3 ${source.isVisible ? tallyCardClasses(tallyState) : 'border-white/5 bg-slate-950/30 opacity-60'}`}
           >
             <div className="flex items-start justify-between gap-3">
               <div>
@@ -549,6 +692,7 @@ export function SourceManager({
                 </p>
               </div>
               <div className="flex gap-1">
+                <TallyBadge state={source.isVisible ? tallyState : 'offline'} />
                 <Badge tone={source.isVisible ? 'success' : 'neutral'}>
                   {source.isVisible ? 'Shown' : 'Hidden'}
                 </Badge>
@@ -1375,7 +1519,6 @@ function BroadcastMonitorFrame({
   meta,
   status,
   headerVariant = 'program',
-  isLive = false,
   children,
   className = '',
 }: {
@@ -1387,42 +1530,26 @@ function BroadcastMonitorFrame({
   children: ReactNode;
   className?: string;
 }) {
-  if (headerVariant === 'preview') {
-    return (
-      <section className={`min-w-0 border border-slate-700/60 bg-black ${className}`}>
-        <div className="border-b border-slate-800/80 px-2 py-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
-            {label}
-          </p>
-          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
-            {status}
-          </p>
-          {meta ? <p className="mt-0.5 text-[10px] text-slate-500">{meta}</p> : null}
-        </div>
-        <div className="bg-black">{children}</div>
-      </section>
-    );
-  }
+  const tallyState: TallyState = headerVariant === 'preview' ? 'preview' : 'program';
+  const tallyLabel = headerVariant === 'preview' ? 'PREVIEW / READY' : 'PROGRAM / LIVE';
 
   return (
-    <section className={`min-w-0 border border-slate-700/60 bg-black ${className}`}>
-      <div className="border-b border-slate-800/80 px-2 py-1">
+    <section className={`min-w-0 border bg-black ${tallyCardClasses(tallyState)} ${className}`}>
+      <div
+        className={`border-b px-2 py-1 ${tallyState === 'program' ? 'border-red-400/25' : 'border-emerald-300/25'}`}
+      >
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
             {label}
           </p>
-          {isLive ? (
-            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-red-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
-              {status}
-            </span>
-          ) : (
-            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-              {status}
-            </span>
-          )}
+          <TallyIndicator state={tallyState} label={tallyLabel} />
         </div>
-        {meta ? <p className="mt-0.5 text-[10px] text-slate-500">{meta}</p> : null}
+        <div className="mt-0.5 flex items-center justify-between gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+            {status}
+          </p>
+          {meta ? <p className="truncate text-[10px] text-slate-500">{meta}</p> : null}
+        </div>
       </div>
       <div className="bg-black">{children}</div>
     </section>
@@ -1448,7 +1575,7 @@ export function ProgramPreview({
     <BroadcastMonitorFrame
       label="PROGRAM"
       meta="1920×1080 • 60 FPS"
-      status={isLive ? 'LIVE' : 'PROGRAM'}
+      status={isLive ? 'LIVE' : 'PROGRAM READY'}
       headerVariant="program"
       isLive={isLive}
     >
@@ -1478,7 +1605,7 @@ export function PreviewMonitor({
   guests?: Guest[];
 }) {
   return (
-    <BroadcastMonitorFrame label="PREVIEW" meta={scene.name} status="Ready" headerVariant="preview">
+    <BroadcastMonitorFrame label="PREVIEW" meta={scene.name} status="READY" headerVariant="preview">
       <ProgramCompositor
         scene={scene}
         routes={routes}
@@ -1613,9 +1740,15 @@ export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
         <div key={channel.id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
           <div className="flex items-center justify-between">
             <p className="text-sm font-semibold text-white">{channel.label}</p>
-            <Badge tone={channel.muted ? 'danger' : 'success'}>
-              {channel.muted ? 'Muted' : channel.kind}
-            </Badge>
+            <div className="flex items-center gap-1">
+              <TallyBadge
+                state={channel.muted ? 'muted' : 'idle'}
+                label={channel.muted ? 'MUTED' : 'IDLE'}
+              />
+              <Badge tone={channel.muted ? 'danger' : 'success'}>
+                {channel.muted ? 'Muted' : channel.kind}
+              </Badge>
+            </div>
           </div>
           <div className="mt-3 h-2 rounded-full bg-slate-800">
             <div className="h-2 rounded-full bg-cyan-300" style={{ width: `${channel.level}%` }} />
@@ -1653,7 +1786,10 @@ export function ProductionDock({
               <p className="mt-2 text-2xl font-black text-white">
                 {assets.filter((asset) => getAssetDockGroup(asset) === group).length}
               </p>
-              <p className="text-xs text-slate-500">placeholder bin</p>
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="text-xs text-slate-500">placeholder bin</p>
+                <TallyBadge state="idle" />
+              </div>
             </div>
           ))}
         </div>

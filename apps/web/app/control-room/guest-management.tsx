@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Panel } from '@ubos/ui';
+import { Badge, Panel, TallyBadge, TallyBorder, type TallyState } from '@ubos/ui';
 import { GuestStatus, type Guest, type GuestInvite } from '@ubos/shared';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useBroadcastRealtime } from '../../lib/realtime';
@@ -373,16 +373,17 @@ export function GuestManagement({
           );
           const screenActive = Boolean(indicators.screenShareEnabled);
           const speaking = guest.status === GuestStatus.OnAir || micLive;
-          const tallyAccent =
+          const tallyState: TallyState =
             guest.status === GuestStatus.OnAir
-              ? 'border-l-rose-500'
+              ? 'program'
               : guest.isSpotlighted
-                ? 'border-l-emerald-400'
-                : 'border-l-slate-700';
+                ? 'preview'
+                : 'idle';
           return (
-            <div
+            <TallyBorder
               key={guest.id}
-              className={`border-l-2 ${tallyAccent} rounded-lg border border-white/10 bg-slate-950/70 p-2 transition ${speaking ? 'shadow-[0_0_0_1px_rgba(16,185,129,0.28),0_0_18px_rgba(16,185,129,0.08)]' : ''}`}
+              state={tallyState}
+              className={`rounded-lg border border-white/10 p-2 transition ${speaking ? 'shadow-[0_0_0_1px_rgba(16,185,129,0.28),0_0_18px_rgba(16,185,129,0.08)]' : ''}`}
             >
               <div className="grid grid-cols-[104px_minmax(0,1fr)] gap-2 sm:grid-cols-[120px_minmax(0,1fr)]">
                 <GuestRemotePreview stream={indicators.remoteStream} />
@@ -397,7 +398,10 @@ export function GuestManagement({
                         {guest.displayName}
                       </p>
                     </div>
-                    <Badge tone={tones[guest.status]}>{labels[guest.status]}</Badge>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <TallyBadge state={tallyState} />
+                      <Badge tone={tones[guest.status]}>{labels[guest.status]}</Badge>
+                    </div>
                   </div>
                   <div className="mt-1 flex flex-wrap items-center gap-1">
                     {statusPill('CAM', cameraOn, cameraOn ? 'Camera on' : 'Camera off')}
@@ -476,7 +480,7 @@ export function GuestManagement({
                   </div>
                 </div>
               </div>
-            </div>
+            </TallyBorder>
           );
         })}
         {guests.length === 0 ? (

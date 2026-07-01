@@ -4,6 +4,7 @@ import {
   LayoutSelector,
   ProductionDock,
   ProgramPreview,
+  getTallyState,
   PreviewMonitor,
   SceneList,
   SourceManager,
@@ -239,6 +240,11 @@ export function SceneWorkspace({
   const previewScene =
     sorted.find((scene) => scene.id === productionState.previewSceneId) ?? programScene;
   const activeScene = previewScene;
+  const activeSceneTallyState = getTallyState({
+    id: activeScene.id,
+    programId: productionState.programSceneId,
+    previewId: productionState.previewSceneId,
+  });
   const programRoute = mediaRoutes.find((route) => route.isOnProgram);
   const layoutPreset =
     (programRoute?.metadata.layoutPreset as MediaLayoutPreset | undefined) ?? 'full_screen';
@@ -415,6 +421,7 @@ export function SceneWorkspace({
             scene={activeScene}
             sourceTypes={sourceTypes}
             isPending={isPending}
+            tallyState={activeSceneTallyState}
             onAdd={(input) => {
               const tempSource: SceneSource = {
                 id: `temp-${Date.now()}`,
