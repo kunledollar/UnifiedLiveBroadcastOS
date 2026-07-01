@@ -24,7 +24,15 @@ import {
   type ProductionSwitchingState,
   type TransitionType,
 } from '@ubos/shared';
-import { type ReactNode, useEffect, useMemo, useOptimistic, useState, useTransition } from 'react';
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useOptimistic,
+  useState,
+  useTransition,
+} from 'react';
 import {
   addScene,
   addSource,
@@ -150,6 +158,29 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
   },
 };
 const factoryWorkspace = workspacePresets.default;
+
+function normalizeWorkspaceLayout(
+  value: Partial<WorkspaceLayout> | null | undefined,
+): WorkspaceLayout {
+  const selectedPreset = value?.selectedPreset;
+  const preset: WorkspacePresetId =
+    selectedPreset && selectedPreset in workspacePresets
+      ? (selectedPreset as WorkspacePresetId)
+      : factoryWorkspace.selectedPreset;
+  const storedViewMode = value?.viewMode ?? null;
+  const viewMode: ControlRoomViewMode = isControlRoomViewMode(storedViewMode)
+    ? storedViewMode
+    : workspacePresets[preset].viewMode;
+
+  return {
+    ...workspacePresets[preset],
+    ...value,
+    selectedPreset: preset,
+    viewMode,
+    panelState: { ...factoryWorkspace.panelState, ...value?.panelState },
+    sizes: { ...factoryWorkspace.sizes, ...value?.sizes },
+  };
+}
 
 const viewModeOptions: Array<{
   value: ControlRoomViewMode | 'quad';
@@ -329,15 +360,12 @@ export function SceneWorkspace({
       try {
         const parsed = JSON.parse(storedWorkspace) as WorkspaceLayout;
         if (parsed?.selectedPreset && parsed?.panelState && parsed?.sizes) {
-          setWorkspace({
-            ...factoryWorkspace,
-            ...parsed,
-            panelState: { ...factoryWorkspace.panelState, ...parsed.panelState },
-            sizes: { ...factoryWorkspace.sizes, ...parsed.sizes },
-          });
+          setWorkspace(normalizeWorkspaceLayout(parsed));
           return;
         }
-      } catch {}
+      } catch {
+        window.localStorage.removeItem(workspaceStorageKey);
+      }
     }
     if (isControlRoomViewMode(storedViewMode))
       setWorkspace((current) => ({ ...current, viewMode: storedViewMode }));
@@ -373,7 +401,9 @@ export function SceneWorkspace({
     const storedWorkspace = window.localStorage.getItem(workspaceStorageKey);
     if (!storedWorkspace) return applyWorkspace(factoryWorkspace);
     try {
-      applyWorkspace(JSON.parse(storedWorkspace) as WorkspaceLayout);
+      applyWorkspace(
+        normalizeWorkspaceLayout(JSON.parse(storedWorkspace) as Partial<WorkspaceLayout>),
+      );
     } catch {
       applyWorkspace(factoryWorkspace);
     }
@@ -393,8 +423,11 @@ export function SceneWorkspace({
   const isPanelVisible = (panel: PanelId) => workspace.panelState[panel] !== 'hidden';
   const isPanelExpanded = (panel: PanelId) => workspace.panelState[panel] === 'expanded';
 
-  const refresh = (next: Scene[]) => startTransition(() => setScenes(next));
-  const sorted = [...scenes].sort((a, b) => a.order - b.order);
+  const refresh = useCallback(
+    (next: Scene[]) => startTransition(() => setScenes(next)),
+    [startTransition, setScenes],
+  );
+  const sorted = useMemo(() => [...scenes].sort((a, b) => a.order - b.order), [scenes]);
   const programScene =
     sorted.find((scene) => scene.id === productionState.programSceneId) ??
     sorted.find((scene) => scene.isActive) ??
@@ -481,15 +514,25 @@ export function SceneWorkspace({
     return () => window.removeEventListener('keydown', handler);
   }, [productionState, selectedRouteId, sorted]);
 
+  const activeRouteCount = useMemo(
+    () => mediaRoutes.filter((route) => route.isOnProgram || route.isActive).length,
+    [mediaRoutes],
+  );
+
+  const multiviewActiveRouteCount = useMemo(
+    () => mediaRoutes.filter((route) => route.isActive).length,
+    [mediaRoutes],
+  );
+
   const safeHealthMetrics = useMemo(() => {
-    const visibleRoutes = mediaRoutes.filter((route) => route.isOnProgram || route.isActive).length;
+    const visibleRoutes = activeRouteCount;
     return {
       fps: '60',
       cpu: `${Math.min(72, 18 + visibleRoutes * 4)}%`,
       dropped: '0',
       upload: `${(6.2 + visibleRoutes * 0.4).toFixed(1)} Mbps`,
     };
-  }, [mediaRoutes]);
+  }, [activeRouteCount]);
 
   const multiviewHealthMetrics = useMemo(
     () => [
@@ -506,11 +549,11 @@ export function SceneWorkspace({
       {
         id: 'webrtc',
         label: 'WebRTC',
-        value: `${mediaRoutes.filter((route) => route.isActive).length} routes`,
+        value: `${multiviewActiveRouteCount} routes`,
         status: 'good' as const,
       },
     ],
-    [mediaRoutes, safeHealthMetrics],
+    [multiviewActiveRouteCount, safeHealthMetrics],
   );
 
   const rightSidebarVisible =
@@ -896,7 +939,7 @@ export function SceneWorkspace({
                   Reset
                 </button>
                 <div className="border-t border-white/10 pt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-slate-500">
-                  Space Take · A Auto · 1-9 PVW · C Cut · F Fade · M Mute
+                  Space Take · C Cut · A Auto/F Fade · 1-9 PVW · M Mute selected route
                 </div>
               </div>
             </details>
@@ -939,24 +982,37 @@ export function SceneWorkspace({
           }
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <ProgramPreview
-                scene={programScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-              />
+          {viewMode === 'multiview' ? (
+            <ProductionMultiview
+              programScene={programScene}
+              previewScene={previewScene}
+              routes={mediaRoutes}
+              layoutPreset={layoutPreset}
+              channels={channels}
+              healthMetrics={multiviewHealthMetrics}
+              guests={guests}
+              preset="broadcast"
+            />
+          ) : (
+            <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
+              <div className="flex min-h-0 min-w-0 flex-col">
+                <ProgramPreview
+                  scene={programScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                />
+              </div>
+              <div className="flex min-h-0 min-w-0 flex-col">
+                <PreviewMonitor
+                  scene={previewScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                />
+              </div>
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <PreviewMonitor
-                scene={previewScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-              />
-            </div>
-          </div>
+          )}
         </div>
         {isPanelVisible('productionDock') ? (
           <div className="shrink-0 overflow-y-auto" style={{ maxHeight: workspace.sizes.dock }}>
