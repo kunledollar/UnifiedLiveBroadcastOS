@@ -104,6 +104,72 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
   );
 }
 
+type MonitorStateTone = 'neutral' | 'success' | 'warning' | 'danger' | 'live';
+
+const monitorStateToneClasses: Record<MonitorStateTone, string> = {
+  neutral: 'text-slate-300 ring-slate-500/25',
+  success: 'text-emerald-300 ring-emerald-300/25',
+  warning: 'text-amber-300 ring-amber-300/25',
+  danger: 'text-rose-300 ring-rose-300/25',
+  live: 'text-red-300 ring-red-300/30',
+};
+
+export function MonitorStateScreen({
+  label,
+  title,
+  subtitle,
+  icon = '▣',
+  badge,
+  tone = 'neutral',
+  compact = false,
+}: {
+  label?: string | undefined;
+  title: string;
+  subtitle?: string | undefined;
+  icon?: ReactNode;
+  badge?: string | undefined;
+  tone?: MonitorStateTone;
+  compact?: boolean;
+}) {
+  return (
+    <div className="grid h-full min-h-0 w-full place-items-center border border-slate-800/80 bg-[radial-gradient(circle_at_50%_35%,rgba(30,41,59,.75),transparent_55%),#020617] p-3 text-center transition-opacity duration-300">
+      <div
+        className={`w-full ${compact ? 'max-w-[12rem] py-3' : 'max-w-sm py-7'} border-y border-slate-700/55 px-3`}
+      >
+        <div className="mb-3 flex items-center justify-center gap-2">
+          <span
+            className={`grid ${compact ? 'h-7 w-7 text-xs' : 'h-10 w-10 text-base'} place-items-center rounded-full bg-black/55 ring-1 ${monitorStateToneClasses[tone]}`}
+          >
+            {icon}
+          </span>
+          {badge ? (
+            <span
+              className={`rounded-md bg-black/60 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.16em] ring-1 ${monitorStateToneClasses[tone]}`}
+            >
+              {badge}
+            </span>
+          ) : null}
+        </div>
+        {label ? (
+          <p className="text-[10px] font-black uppercase tracking-[0.24em] text-slate-500">
+            {label}
+          </p>
+        ) : null}
+        <p
+          className={`${compact ? 'mt-1 text-xs' : 'mt-3 text-sm'} font-semibold ${monitorStateToneClasses[tone].split(' ')[0]}`}
+        >
+          {title}
+        </p>
+        {subtitle ? (
+          <p className={`${compact ? 'mt-1 text-[10px]' : 'mt-1.5 text-[11px]'} text-slate-500`}>
+            {subtitle}
+          </p>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 export function BroadcastToolbar({
   title,
   status,
@@ -326,6 +392,88 @@ const sourceTypeLabels: Record<SceneSourceType, string> = {
   audio: 'Audio',
 };
 
+function sourceMonitorState(source: SceneSource) {
+  if (!source.isVisible || source.visible === false) {
+    return {
+      title: 'Offline',
+      subtitle: 'Source is hidden from the scene.',
+      badge: 'OFFLINE',
+      tone: 'danger' as const,
+    };
+  }
+  if (source.isLocked) {
+    return {
+      title: 'Ready',
+      subtitle: 'Locked in the current layer order.',
+      badge: 'READY',
+      tone: 'success' as const,
+    };
+  }
+  switch (source.type) {
+    case 'camera':
+      return {
+        title: 'Waiting for Camera',
+        subtitle: 'Select or connect a camera input.',
+        badge: 'CAMERA',
+        tone: 'warning' as const,
+      };
+    case 'screen':
+      return {
+        title: 'No Screen Share',
+        subtitle: 'Screen share will appear when available.',
+        badge: 'SCREEN',
+        tone: 'neutral' as const,
+      };
+    case 'media':
+      return {
+        title: 'Waiting for Media',
+        subtitle: 'Choose a clip, image or media asset.',
+        badge: 'MEDIA',
+        tone: 'warning' as const,
+      };
+    case 'browser':
+      return {
+        title: 'Waiting for Browser',
+        subtitle: 'Configure a browser source URL.',
+        badge: 'BROWSER',
+        tone: 'warning' as const,
+      };
+    case 'audio':
+      return {
+        title: source.muted ? 'Audio Disabled' : 'Audio Only',
+        subtitle: source.muted
+          ? 'Unmute to include this audio source.'
+          : 'No video preview for this source.',
+        badge: 'AUDIO ONLY',
+        tone: source.muted ? ('danger' as const) : ('success' as const),
+      };
+    case 'overlay':
+      return {
+        title: 'Overlay Ready',
+        subtitle: 'Graphic overlay available in this scene.',
+        badge: 'READY',
+        tone: 'success' as const,
+      };
+  }
+}
+
+function SourceMonitorPreview({ source }: { source: SceneSource }) {
+  const theme = sourceThemes[source.type];
+  const state = sourceMonitorState(source);
+  return (
+    <div className={`mt-3 aspect-video overflow-hidden rounded-lg border ${theme.ring} bg-black`}>
+      <MonitorStateScreen
+        title={state.title}
+        subtitle={state.subtitle}
+        icon={theme.glyph}
+        badge={state.badge}
+        tone={state.tone}
+        compact
+      />
+    </div>
+  );
+}
+
 export function SourceManager({
   scene,
   sourceTypes,
@@ -407,6 +555,7 @@ export function SourceManager({
                 {source.isLocked ? <Badge tone="warning">Locked</Badge> : null}
               </div>
             </div>
+            <SourceMonitorPreview source={source} />
             <div className="mt-3 grid grid-cols-4 gap-1.5 text-[11px] font-bold text-slate-200">
               <button
                 className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
@@ -575,17 +724,6 @@ function humanizeState(state: string): string {
       .filter(Boolean)
       .map((word) => `${word[0]?.toUpperCase() ?? ''}${word.slice(1)}`)
       .join(' ') || 'Unknown'
-  );
-}
-
-function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '?';
-  return (
-    parts
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? '')
-      .join('') || '?'
   );
 }
 
@@ -784,56 +922,67 @@ function RoutedVideo({ stream }: { stream?: MediaStream | undefined }) {
   );
 }
 
-function SimulatedFeed({
-  route,
-  theme,
-  size,
-}: {
-  route: MediaRoute;
-  theme: RouteTheme;
-  size: TileSize;
-}) {
-  const big = size === 'lg';
-  const small = size === 'sm';
-  // The centered content clears the top badge row and the bottom identity
-  // footer so nothing overlaps. Name/type live in the footer to avoid duplication.
-  const contentInset = big ? 'top-9 bottom-14' : small ? 'top-5 bottom-8' : 'top-8 bottom-11';
-  return (
-    <div className="absolute inset-0">
-      <div
-        className="absolute inset-0 opacity-[0.14]"
-        style={{
-          backgroundImage:
-            'repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 2px, transparent 2px 10px)',
-        }}
-      />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(255,255,255,.12),transparent_60%)]" />
-      <div
-        className={`absolute inset-x-0 ${contentInset} flex flex-col items-center justify-center gap-1.5 px-3 text-center`}
-      >
-        <div
-          className={`grid shrink-0 place-items-center rounded-full border ${theme.ring} bg-slate-950/60 font-black ${theme.accent} ${
-            big ? 'h-16 w-16 text-2xl' : small ? 'h-7 w-7 text-[9px]' : 'h-9 w-9 text-xs'
-          }`}
-        >
-          {initials(route.displayName)}
-        </div>
-        {big ? (
-          <>
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ${theme.chip}`}
-            >
-              <span>{theme.glyph}</span>
-              {routeTypeLabels[route.routeType]}
-            </span>
-            <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/40">
-              Simulated Feed
-            </span>
-          </>
-        ) : null}
-      </div>
-    </div>
-  );
+function routeMonitorState(route: MediaRoute) {
+  const state = routeConnectionState(route);
+  if (state === 'reconnecting' || state === 'waiting' || state === 'invited') {
+    return {
+      title: state === 'reconnecting' ? 'Connecting...' : 'Waiting for Camera',
+      subtitle: 'Media preview will appear when connected.',
+      badge: 'CONNECTING',
+      tone: 'warning' as const,
+    };
+  }
+  if (
+    state === 'disconnected' ||
+    state === 'rejected' ||
+    state === 'removed' ||
+    state === 'inactive'
+  ) {
+    return {
+      title: state === 'inactive' ? 'Offline' : 'Disconnected',
+      subtitle: 'Source is not currently available.',
+      badge: 'OFFLINE',
+      tone: 'danger' as const,
+    };
+  }
+  if (route.isMuted) {
+    return {
+      title: 'Audio Only',
+      subtitle: 'Video is unavailable for this source.',
+      badge: 'AUDIO ONLY',
+      tone: 'warning' as const,
+    };
+  }
+  if (route.routeType === 'screen_share' || route.routeType === 'guest_screen_share') {
+    return {
+      title: 'Screen Share Available',
+      subtitle: 'Screen share route is staged.',
+      badge: 'SCREEN',
+      tone: 'success' as const,
+    };
+  }
+  if (route.routeType === 'media_source') {
+    return {
+      title: 'Waiting for Media',
+      subtitle: 'Media source is ready to render.',
+      badge: 'READY',
+      tone: 'success' as const,
+    };
+  }
+  if (route.routeType === 'placeholder') {
+    return {
+      title: 'Waiting for Source',
+      subtitle: 'Assign live media to this slot.',
+      badge: 'READY',
+      tone: 'neutral' as const,
+    };
+  }
+  return {
+    title: 'Waiting for Camera',
+    subtitle: 'Camera preview will appear when media arrives.',
+    badge: 'READY',
+    tone: 'success' as const,
+  };
 }
 
 type MonitorRole = 'program' | 'preview';
@@ -850,41 +999,32 @@ function EmptySlot({
   monitorRole?: MonitorRole;
 }) {
   const big = size === 'lg';
-  if (big && monitorRole === 'program') {
+  const compact = !big;
+  if (monitorRole === 'preview') {
     return (
-      <div className="grid h-full w-full place-items-center bg-black">
-        <div className="w-full max-w-sm border-y border-slate-700/50 px-4 py-8 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Program</p>
-          <p className="mt-4 text-sm font-semibold text-slate-200">Waiting for Source</p>
-          <p className="mt-1.5 text-[11px] text-slate-500">
-            {hasGuests ? 'Assign a guest or scene to Program.' : 'Route a source to Program.'}
-          </p>
-        </div>
-      </div>
+      <MonitorStateScreen
+        label={big ? 'PREVIEW' : undefined}
+        title="Ready"
+        subtitle={hasGuests ? 'Stage a scene or guest.' : 'Stage a scene or source.'}
+        icon="◇"
+        badge="READY"
+        tone="success"
+        compact={compact}
+      />
     );
   }
-  if (big && monitorRole === 'preview') {
-    return (
-      <div className="grid h-full w-full place-items-center bg-black">
-        <div className="w-full max-w-sm border-y border-slate-700/50 px-4 py-8 text-center">
-          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Preview</p>
-          <p className="mt-4 text-sm font-semibold text-emerald-300/90">Ready</p>
-          <p className="mt-1.5 text-[11px] text-slate-500">
-            {hasGuests ? 'Stage a scene or assign a guest.' : 'Select a scene to preview.'}
-          </p>
-        </div>
-      </div>
-    );
-  }
-  const label = hasGuests ? 'Assign guest' : 'Empty';
   return (
-    <div className="grid h-full w-full place-items-center border border-slate-800/80 bg-slate-950/60">
-      <div className="px-2 text-center">
-        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">
-          {output === 'vertical' ? 'Vertical' : label}
-        </p>
-      </div>
-    </div>
+    <MonitorStateScreen
+      label={big ? (output === 'vertical' ? 'VERTICAL' : 'PROGRAM') : undefined}
+      title={output === 'vertical' ? 'Waiting for Source' : 'Waiting for Source'}
+      subtitle={
+        hasGuests ? 'Assign a guest, scene or media source.' : 'Route a source to this monitor.'
+      }
+      icon={output === 'vertical' ? '▯' : '▣'}
+      badge={output === 'vertical' ? 'OFFLINE' : 'READY'}
+      tone="neutral"
+      compact={compact}
+    />
   );
 }
 
@@ -921,12 +1061,7 @@ export function RoutedMediaTile({
 }) {
   if (!route) {
     return (
-      <EmptySlot
-        output={output}
-        size={size}
-        hasGuests={hasGuests}
-        monitorRole={monitorRole}
-      />
+      <EmptySlot output={output} size={size} hasGuests={hasGuests} monitorRole={monitorRole} />
     );
   }
   const theme = routeThemes[route.routeType];
@@ -939,7 +1074,16 @@ export function RoutedMediaTile({
       className={`group relative h-full w-full overflow-hidden border ${theme.ring} bg-gradient-to-br ${theme.gradient}`}
     >
       <RoutedVideo stream={stream} />
-      {!stream ? <SimulatedFeed route={route} theme={theme} size={size} /> : null}
+      {!stream ? (
+        <MonitorStateScreen
+          title={routeMonitorState(route).title}
+          subtitle={routeMonitorState(route).subtitle}
+          icon={theme.glyph}
+          badge={routeMonitorState(route).badge}
+          tone={routeMonitorState(route).tone}
+          compact={!big}
+        />
+      ) : null}
 
       <div
         className={`absolute left-2 top-2 z-20 flex flex-wrap items-center gap-1 ${small ? 'origin-top-left scale-90' : ''}`}
@@ -1245,11 +1389,11 @@ function BroadcastMonitorFrame({
 }) {
   if (headerVariant === 'preview') {
     return (
-      <section
-        className={`min-w-0 border border-slate-700/60 bg-black ${className}`}
-      >
+      <section className={`min-w-0 border border-slate-700/60 bg-black ${className}`}>
         <div className="border-b border-slate-800/80 px-2 py-1">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">{label}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+            {label}
+          </p>
           <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
             {status}
           </p>
@@ -1264,7 +1408,9 @@ function BroadcastMonitorFrame({
     <section className={`min-w-0 border border-slate-700/60 bg-black ${className}`}>
       <div className="border-b border-slate-800/80 px-2 py-1">
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">{label}</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+            {label}
+          </p>
           {isLive ? (
             <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-red-400">
               <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
@@ -1332,12 +1478,7 @@ export function PreviewMonitor({
   guests?: Guest[];
 }) {
   return (
-    <BroadcastMonitorFrame
-      label="PREVIEW"
-      meta={scene.name}
-      status="Ready"
-      headerVariant="preview"
-    >
+    <BroadcastMonitorFrame label="PREVIEW" meta={scene.name} status="Ready" headerVariant="preview">
       <ProgramCompositor
         scene={scene}
         routes={routes}
@@ -1521,12 +1662,75 @@ export function ProductionDock({
   );
 }
 
+function guestMonitorState(guest: Guest) {
+  if (guest.status === 'connected' || guest.status === 'on_air' || guest.status === 'green_room') {
+    return {
+      title: guest.isMuted ? 'Audio Only' : 'Waiting for Camera',
+      subtitle: guest.isMuted
+        ? 'Guest camera is disabled or muted.'
+        : 'Camera preview will appear when media arrives.',
+      badge: guest.status === 'on_air' ? 'LIVE' : 'READY',
+      tone: guest.status === 'on_air' ? ('live' as const) : ('success' as const),
+      icon: guest.isMuted ? '🎧' : '🎥',
+    };
+  }
+  if (guest.status === 'reconnecting' || guest.status === 'waiting' || guest.status === 'invited') {
+    return {
+      title: guest.status === 'reconnecting' ? 'Connecting...' : 'Waiting for Camera',
+      subtitle:
+        guest.status === 'invited'
+          ? 'Guest has not joined yet.'
+          : 'Awaiting guest media connection.',
+      badge: 'CONNECTING',
+      tone: 'warning' as const,
+      icon: '◌',
+    };
+  }
+  if (guest.status === 'muted') {
+    return {
+      title: 'Camera Disabled',
+      subtitle: 'Guest media is muted.',
+      badge: 'AUDIO ONLY',
+      tone: 'warning' as const,
+      icon: '🎧',
+    };
+  }
+  return {
+    title: 'Disconnected',
+    subtitle: 'Guest is offline.',
+    badge: 'OFFLINE',
+    tone: 'danger' as const,
+    icon: '⏻',
+  };
+}
+
 export function GuestTile({ guest }: { guest: Guest }) {
+  const state = guestMonitorState(guest);
+  const conn = connectionMeta(guest.status);
   return (
-    <div className="rounded-xl bg-slate-800 p-4">
-      <div className="aspect-video rounded-lg bg-gradient-to-br from-slate-700 to-slate-950" />
-      <p className="mt-3 font-medium">{guest.displayName}</p>
-      <p className="text-xs text-slate-400">{guest.status}</p>
+    <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 transition-colors duration-300">
+      <div className="aspect-video overflow-hidden rounded-lg border border-slate-700/70 bg-black">
+        <MonitorStateScreen
+          title={state.title}
+          subtitle={state.subtitle}
+          icon={state.icon}
+          badge={state.badge}
+          tone={state.tone}
+          compact
+        />
+      </div>
+      <div className="mt-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="truncate font-medium text-white">{guest.displayName}</p>
+          <p className="text-xs text-slate-400">{connectionMeta(guest.status).label}</p>
+        </div>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-[10px] font-bold uppercase text-slate-200 ring-1 ring-white/10">
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${conn.dot} ${conn.pulse ? 'animate-pulse' : ''}`}
+          />
+          {state.badge}
+        </span>
+      </div>
     </div>
   );
 }
