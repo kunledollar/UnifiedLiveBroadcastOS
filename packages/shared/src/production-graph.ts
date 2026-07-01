@@ -1,103 +1,1074 @@
 export type StableId = string;
 export type BroadcastSessionState = 'idle' | 'rehearsal' | 'live' | 'ended';
 export type OperatorRole =
-  | 'OWNER' | 'ADMIN' | 'DIRECTOR' | 'PRODUCER' | 'TECHNICAL_DIRECTOR' | 'AUDIO_ENGINEER'
-  | 'GRAPHICS_OPERATOR' | 'GUEST_MANAGER' | 'MODERATOR' | 'VIEWER' | 'AI_AGENT';
+  | 'OWNER'
+  | 'ADMIN'
+  | 'DIRECTOR'
+  | 'PRODUCER'
+  | 'TECHNICAL_DIRECTOR'
+  | 'AUDIO_ENGINEER'
+  | 'GRAPHICS_OPERATOR'
+  | 'GUEST_MANAGER'
+  | 'MODERATOR'
+  | 'VIEWER'
+  | 'AI_AGENT';
 export type GraphTransitionType = 'cut' | 'fade' | 'dip' | 'wipe';
 export const PRODUCTION_GRAPH_SCHEMA_VERSION = '1.0.0';
 
-export interface BroadcastSessionNode { id: StableId; name: string; status: BroadcastSessionState; activeOperatorId?: StableId | undefined; metadata: Record<string, unknown>; }
-export interface ProgramState { sceneId?: StableId; sourceId?: StableId | undefined; transitionType: GraphTransitionType; transitionDurationMs: number; }
-export interface PreviewState { sceneId?: StableId; sourceId?: StableId | undefined; }
-export interface SceneNode { id: StableId; name: string; order: number; sourceIds: StableId[]; canvasIds: StableId[]; overlayIds: StableId[]; metadata: Record<string, unknown>; createdAt: string; updatedAt: string; }
-export interface SourceNode { id: StableId; name: string; type: 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio' | 'guest' | 'placeholder'; enabled: boolean; muted?: boolean; metadata: Record<string, unknown>; }
-export interface GuestNode { id: StableId; displayName: string; status: 'invited' | 'waiting' | 'connected' | 'on_air' | 'muted' | 'disconnected' | 'removed'; muted: boolean; pinned: boolean; sourceId?: StableId | undefined; metadata: Record<string, unknown>; }
-export interface DestinationNode { id: StableId; name: string; platform: string; enabled: boolean; status: 'disabled' | 'ready' | 'live' | 'error'; metadata: Record<string, unknown>; }
-export interface AudioNode { id: StableId; label: string; gain: number; muted: boolean; sourceId?: StableId | undefined; guestId?: StableId; metadata: Record<string, unknown>; }
-export interface RecordingNode { status: 'idle' | 'recording' | 'stopped' | 'error'; startedAt?: string; stoppedAt?: string; activeRecordingId?: StableId; metadata: Record<string, unknown>; }
-export interface HealthNode { status: 'good' | 'warning' | 'critical'; metrics: Record<string, { value: string | number | boolean; status: 'good' | 'warning' | 'critical'; updatedAt: string }>; }
-export interface AutomationNode { enabled: boolean; activeMacroIds: StableId[]; metadata: Record<string, unknown>; }
-export interface AgentSuggestionNode { id: StableId; agentId: StableId; title: string; description: string; status: 'pending' | 'accepted' | 'rejected'; command?: ProductionCommand | undefined; createdAt: string; updatedAt: string; }
-export interface AgentNode { id: StableId; name: string; enabled: boolean; suggestionIds: StableId[]; metadata: Record<string, unknown>; }
-export interface WorkspaceNode { selectedPreset: string; panelVisibility: Record<string, boolean>; metadata: Record<string, unknown>; }
-export interface OperatorNode { id: StableId; displayName: string; role: OperatorRole; online: boolean; metadata: Record<string, unknown>; }
-export interface CanvasNode { id: StableId; label: string; aspectRatio: '16:9' | '9:16' | '1:1'; sceneId?: StableId; metadata: Record<string, unknown>; }
-export interface OverlayNode { id: StableId; name: string; enabled: boolean; sceneId?: StableId; sourceId?: StableId | undefined; metadata: Record<string, unknown>; }
-
-export interface ProductionGraph {
-  id: StableId; broadcastSessionId: StableId; graphVersion: number; schemaVersion: string; createdAt: string; updatedAt: string; status: BroadcastSessionState;
-  session: BroadcastSessionNode; program: ProgramState; preview: PreviewState;
-  scenes: Record<StableId, SceneNode>; sources: Record<StableId, SourceNode>; guests: Record<StableId, GuestNode>; destinations: Record<StableId, DestinationNode>;
-  audioChannels: Record<StableId, AudioNode>; canvases: Record<StableId, CanvasNode>; overlays: Record<StableId, OverlayNode>; recording: RecordingNode; health: HealthNode;
-  operators: Record<StableId, OperatorNode>; agents: Record<StableId, AgentNode>; agentSuggestions: Record<StableId, AgentSuggestionNode>; automation: AutomationNode; workspace: WorkspaceNode; plugins: Record<string, unknown>;
+export interface BroadcastSessionNode {
+  id: StableId;
+  name: string;
+  status: BroadcastSessionState;
+  activeOperatorId?: StableId | undefined;
+  metadata: Record<string, unknown>;
+}
+export interface ProgramState {
+  sceneId?: StableId;
+  sourceId?: StableId | undefined;
+  transitionType: GraphTransitionType;
+  transitionDurationMs: number;
+}
+export interface PreviewState {
+  sceneId?: StableId;
+  sourceId?: StableId | undefined;
+}
+export interface SceneNode {
+  id: StableId;
+  name: string;
+  order: number;
+  sourceIds: StableId[];
+  canvasIds: StableId[];
+  overlayIds: StableId[];
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface SourceNode {
+  id: StableId;
+  name: string;
+  type: 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio' | 'guest' | 'placeholder';
+  enabled: boolean;
+  muted?: boolean;
+  metadata: Record<string, unknown>;
+}
+export interface GuestNode {
+  id: StableId;
+  displayName: string;
+  status: 'invited' | 'waiting' | 'connected' | 'on_air' | 'muted' | 'disconnected' | 'removed';
+  muted: boolean;
+  pinned: boolean;
+  sourceId?: StableId | undefined;
+  metadata: Record<string, unknown>;
+}
+export interface DestinationNode {
+  id: StableId;
+  name: string;
+  platform: string;
+  enabled: boolean;
+  status: 'disabled' | 'ready' | 'live' | 'error';
+  metadata: Record<string, unknown>;
+}
+export interface AudioNode {
+  id: StableId;
+  label: string;
+  gain: number;
+  muted: boolean;
+  sourceId?: StableId | undefined;
+  guestId?: StableId;
+  metadata: Record<string, unknown>;
+}
+export interface RecordingNode {
+  status: 'idle' | 'recording' | 'stopped' | 'error';
+  startedAt?: string;
+  stoppedAt?: string;
+  activeRecordingId?: StableId;
+  metadata: Record<string, unknown>;
+}
+export interface HealthNode {
+  status: 'good' | 'warning' | 'critical';
+  metrics: Record<
+    string,
+    { value: string | number | boolean; status: 'good' | 'warning' | 'critical'; updatedAt: string }
+  >;
+}
+export interface AutomationNode {
+  enabled: boolean;
+  activeMacroIds: StableId[];
+  metadata: Record<string, unknown>;
+}
+export interface AgentSuggestionNode {
+  id: StableId;
+  agentId: StableId;
+  title: string;
+  description: string;
+  status: 'pending' | 'accepted' | 'rejected';
+  command?: ProductionCommand | undefined;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface AgentNode {
+  id: StableId;
+  name: string;
+  enabled: boolean;
+  suggestionIds: StableId[];
+  metadata: Record<string, unknown>;
+}
+export interface WorkspaceNode {
+  selectedPreset: string;
+  panelVisibility: Record<string, boolean>;
+  metadata: Record<string, unknown>;
+}
+export interface OperatorNode {
+  id: StableId;
+  displayName: string;
+  role: OperatorRole;
+  online: boolean;
+  metadata: Record<string, unknown>;
+}
+export interface CanvasNode {
+  id: StableId;
+  label: string;
+  aspectRatio: '16:9' | '9:16' | '1:1';
+  sceneId?: StableId;
+  metadata: Record<string, unknown>;
+}
+export interface OverlayNode {
+  id: StableId;
+  name: string;
+  enabled: boolean;
+  sceneId?: StableId;
+  sourceId?: StableId | undefined;
+  metadata: Record<string, unknown>;
 }
 
-export interface ProductionBroadcastSession { id: StableId; name: string; status: BroadcastSessionState; createdAt: string; startedAt?: string; endedAt?: string; runtimeMs: number; activeOperatorId?: StableId | undefined; graph: ProductionGraph; commandLog: ProductionCommand[]; eventLog: ProductionEvent[]; metadata: Record<string, unknown>; }
+export interface ProductionGraphMetadata {
+  graphId: StableId;
+  revision: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface ProductionGraph {
+  id: StableId;
+  broadcastSessionId: StableId;
+  graphVersion: number;
+  schemaVersion: string;
+  createdAt: string;
+  updatedAt: string;
+  metadata: ProductionGraphMetadata;
+  status: BroadcastSessionState;
+  session: BroadcastSessionNode;
+  program: ProgramState;
+  preview: PreviewState;
+  scenes: Record<StableId, SceneNode>;
+  sources: Record<StableId, SourceNode>;
+  guests: Record<StableId, GuestNode>;
+  destinations: Record<StableId, DestinationNode>;
+  audioChannels: Record<StableId, AudioNode>;
+  canvases: Record<StableId, CanvasNode>;
+  overlays: Record<StableId, OverlayNode>;
+  recording: RecordingNode;
+  health: HealthNode;
+  operators: Record<StableId, OperatorNode>;
+  agents: Record<StableId, AgentNode>;
+  agentSuggestions: Record<StableId, AgentSuggestionNode>;
+  automation: AutomationNode;
+  workspace: WorkspaceNode;
+  plugins: Record<string, unknown>;
+}
+
+export interface ProductionBroadcastSession {
+  id: StableId;
+  name: string;
+  status: BroadcastSessionState;
+  createdAt: string;
+  startedAt?: string;
+  endedAt?: string;
+  runtimeMs: number;
+  activeOperatorId?: StableId | undefined;
+  graph: ProductionGraph;
+  commandLog: ProductionCommand[];
+  eventLog: ProductionEvent[];
+  metadata: Record<string, unknown>;
+}
 
 export type ProductionCommandType =
-  | 'CREATE_SCENE' | 'UPDATE_SCENE' | 'DELETE_SCENE' | 'SET_PREVIEW_SCENE' | 'CUT_TO_PROGRAM' | 'TAKE_PREVIEW' | 'AUTO_TRANSITION' | 'SET_TRANSITION' | 'SET_TRANSITION_DURATION'
-  | 'ADD_SOURCE' | 'REMOVE_SOURCE' | 'UPDATE_SOURCE' | 'ASSIGN_SOURCE_TO_SCENE' | 'ADD_GUEST' | 'UPDATE_GUEST' | 'REMOVE_GUEST' | 'MUTE_GUEST' | 'UNMUTE_GUEST' | 'PIN_GUEST'
-  | 'SET_AUDIO_GAIN' | 'MUTE_AUDIO_CHANNEL' | 'UNMUTE_AUDIO_CHANNEL' | 'ENABLE_DESTINATION' | 'DISABLE_DESTINATION' | 'UPDATE_DESTINATION_STATUS' | 'START_RECORDING' | 'STOP_RECORDING'
-  | 'START_BROADCAST' | 'STOP_BROADCAST' | 'UPDATE_HEALTH_METRIC' | 'SET_WORKSPACE_PRESET' | 'SET_PANEL_VISIBILITY' | 'ADD_AGENT_SUGGESTION' | 'ACCEPT_AGENT_SUGGESTION' | 'REJECT_AGENT_SUGGESTION';
-export interface ProductionCommand<TType extends ProductionCommandType = ProductionCommandType, TPayload = Record<string, unknown>> { readonly id: StableId; readonly type: TType; readonly broadcastSessionId: StableId; readonly actorId: StableId; readonly actorRole: OperatorRole; readonly timestamp: string; readonly payload: Readonly<TPayload>; readonly correlationId?: StableId; readonly metadata?: Readonly<Record<string, unknown>>; }
-export type ProductionEventType = 'GRAPH_INITIALIZED' | 'SESSION_CREATED' | 'SCENE_CREATED' | 'SCENE_UPDATED' | 'SCENE_DELETED' | 'PREVIEW_SCENE_CHANGED' | 'PROGRAM_SCENE_CHANGED' | 'TRANSITION_COMPLETED' | 'SOURCE_ADDED' | 'SOURCE_REMOVED' | 'SOURCE_UPDATED' | 'GUEST_ADDED' | 'GUEST_UPDATED' | 'GUEST_REMOVED' | 'GUEST_MUTED' | 'GUEST_UNMUTED' | 'AUDIO_CHANNEL_UPDATED' | 'AUDIO_MUTED' | 'AUDIO_UNMUTED' | 'DESTINATION_ENABLED' | 'DESTINATION_DISABLED' | 'RECORDING_STARTED' | 'RECORDING_STOPPED' | 'BROADCAST_STARTED' | 'BROADCAST_STOPPED' | 'HEALTH_UPDATED' | 'WORKSPACE_CHANGED' | 'AGENT_SUGGESTION_CREATED' | 'AGENT_SUGGESTION_ACCEPTED' | 'AGENT_SUGGESTION_REJECTED' | 'COMMAND_REJECTED';
-export interface ProductionEvent<TType extends ProductionEventType = ProductionEventType, TPayload = Record<string, unknown>> { readonly id: StableId; readonly type: TType; readonly broadcastSessionId: StableId; readonly actorId: StableId; readonly timestamp: string; readonly commandId: StableId; readonly payload: Readonly<TPayload>; readonly previousStateRef?: string; readonly nextStateRef?: string; readonly metadata?: Readonly<Record<string, unknown>>; }
-export interface ProductionGraphTransition { previousGraph: ProductionGraph; nextGraph: ProductionGraph; accepted: boolean; events: ProductionEvent[]; errors: string[]; command: ProductionCommand; }
+  | 'CREATE_SCENE'
+  | 'UPDATE_SCENE'
+  | 'DELETE_SCENE'
+  | 'SET_PREVIEW_SCENE'
+  | 'CUT_TO_PROGRAM'
+  | 'TAKE_PREVIEW'
+  | 'AUTO_TRANSITION'
+  | 'SET_TRANSITION'
+  | 'SET_TRANSITION_DURATION'
+  | 'ADD_SOURCE'
+  | 'REMOVE_SOURCE'
+  | 'UPDATE_SOURCE'
+  | 'ASSIGN_SOURCE_TO_SCENE'
+  | 'ADD_GUEST'
+  | 'UPDATE_GUEST'
+  | 'REMOVE_GUEST'
+  | 'MUTE_GUEST'
+  | 'UNMUTE_GUEST'
+  | 'PIN_GUEST'
+  | 'SET_AUDIO_GAIN'
+  | 'MUTE_AUDIO_CHANNEL'
+  | 'UNMUTE_AUDIO_CHANNEL'
+  | 'ENABLE_DESTINATION'
+  | 'DISABLE_DESTINATION'
+  | 'UPDATE_DESTINATION_STATUS'
+  | 'START_RECORDING'
+  | 'STOP_RECORDING'
+  | 'START_BROADCAST'
+  | 'STOP_BROADCAST'
+  | 'UPDATE_HEALTH_METRIC'
+  | 'SET_WORKSPACE_PRESET'
+  | 'SET_PANEL_VISIBILITY'
+  | 'ADD_AGENT_SUGGESTION'
+  | 'ACCEPT_AGENT_SUGGESTION'
+  | 'REJECT_AGENT_SUGGESTION';
+export interface ProductionCommand<
+  TType extends ProductionCommandType = ProductionCommandType,
+  TPayload = Record<string, unknown>,
+> {
+  readonly id: StableId;
+  readonly type: TType;
+  readonly broadcastSessionId: StableId;
+  readonly actorId: StableId;
+  readonly actorRole: OperatorRole;
+  readonly timestamp: string;
+  readonly payload: Readonly<TPayload>;
+  readonly correlationId?: StableId;
+  readonly expectedRevision?: number;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+export type ProductionEventType =
+  | 'GRAPH_INITIALIZED'
+  | 'SESSION_CREATED'
+  | 'SCENE_CREATED'
+  | 'SCENE_UPDATED'
+  | 'SCENE_DELETED'
+  | 'PREVIEW_SCENE_CHANGED'
+  | 'PROGRAM_SCENE_CHANGED'
+  | 'TRANSITION_COMPLETED'
+  | 'SOURCE_ADDED'
+  | 'SOURCE_REMOVED'
+  | 'SOURCE_UPDATED'
+  | 'GUEST_ADDED'
+  | 'GUEST_UPDATED'
+  | 'GUEST_REMOVED'
+  | 'GUEST_MUTED'
+  | 'GUEST_UNMUTED'
+  | 'AUDIO_CHANNEL_UPDATED'
+  | 'AUDIO_MUTED'
+  | 'AUDIO_UNMUTED'
+  | 'DESTINATION_ENABLED'
+  | 'DESTINATION_DISABLED'
+  | 'RECORDING_STARTED'
+  | 'RECORDING_STOPPED'
+  | 'BROADCAST_STARTED'
+  | 'BROADCAST_STOPPED'
+  | 'HEALTH_UPDATED'
+  | 'WORKSPACE_CHANGED'
+  | 'AGENT_SUGGESTION_CREATED'
+  | 'AGENT_SUGGESTION_ACCEPTED'
+  | 'AGENT_SUGGESTION_REJECTED'
+  | 'COMMAND_REJECTED';
+export interface ProductionEvent<
+  TType extends ProductionEventType = ProductionEventType,
+  TPayload = Record<string, unknown>,
+> {
+  readonly id: StableId;
+  readonly type: TType;
+  readonly broadcastSessionId: StableId;
+  readonly actorId: StableId;
+  readonly timestamp: string;
+  readonly commandId: StableId;
+  readonly payload: Readonly<TPayload>;
+  readonly graphRevision: number;
+  readonly previousRevision: number;
+  readonly nextRevision: number;
+  readonly previousStateRef?: string;
+  readonly nextStateRef?: string;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+export interface ProductionCommandValidationError {
+  code: 'REVISION_MISMATCH' | 'INVALID_COMMAND' | 'PERMISSION_DENIED' | 'VALIDATION_ERROR';
+  commandId: StableId;
+  message: string;
+  expectedRevision?: number;
+  currentRevision?: number;
+}
+export interface ProductionGraphTransition {
+  previousGraph: ProductionGraph;
+  nextGraph: ProductionGraph;
+  previousRevision: number;
+  nextRevision: number;
+  accepted: boolean;
+  events: ProductionEvent[];
+  errors: string[];
+  validationErrors: ProductionCommandValidationError[];
+  command: ProductionCommand;
+  commandSequence?: number;
+}
 
-const eventTypeByCommand: Partial<Record<ProductionCommandType, ProductionEventType>> = { CREATE_SCENE: 'SCENE_CREATED', UPDATE_SCENE: 'SCENE_UPDATED', DELETE_SCENE: 'SCENE_DELETED', SET_PREVIEW_SCENE: 'PREVIEW_SCENE_CHANGED', CUT_TO_PROGRAM: 'PROGRAM_SCENE_CHANGED', TAKE_PREVIEW: 'PROGRAM_SCENE_CHANGED', AUTO_TRANSITION: 'TRANSITION_COMPLETED', ADD_SOURCE: 'SOURCE_ADDED', REMOVE_SOURCE: 'SOURCE_REMOVED', UPDATE_SOURCE: 'SOURCE_UPDATED', ADD_GUEST: 'GUEST_ADDED', UPDATE_GUEST: 'GUEST_UPDATED', REMOVE_GUEST: 'GUEST_REMOVED', MUTE_GUEST: 'GUEST_MUTED', UNMUTE_GUEST: 'GUEST_UNMUTED', SET_AUDIO_GAIN: 'AUDIO_CHANNEL_UPDATED', MUTE_AUDIO_CHANNEL: 'AUDIO_MUTED', UNMUTE_AUDIO_CHANNEL: 'AUDIO_UNMUTED', ENABLE_DESTINATION: 'DESTINATION_ENABLED', DISABLE_DESTINATION: 'DESTINATION_DISABLED', START_RECORDING: 'RECORDING_STARTED', STOP_RECORDING: 'RECORDING_STOPPED', START_BROADCAST: 'BROADCAST_STARTED', STOP_BROADCAST: 'BROADCAST_STOPPED', UPDATE_HEALTH_METRIC: 'HEALTH_UPDATED', SET_WORKSPACE_PRESET: 'WORKSPACE_CHANGED', SET_PANEL_VISIBILITY: 'WORKSPACE_CHANGED', ADD_AGENT_SUGGESTION: 'AGENT_SUGGESTION_CREATED', ACCEPT_AGENT_SUGGESTION: 'AGENT_SUGGESTION_ACCEPTED', REJECT_AGENT_SUGGESTION: 'AGENT_SUGGESTION_REJECTED' };
-const allCommandTypes = Object.keys(eventTypeByCommand).concat(['SET_TRANSITION', 'SET_TRANSITION_DURATION', 'UPDATE_DESTINATION_STATUS', 'ASSIGN_SOURCE_TO_SCENE', 'PIN_GUEST']) as ProductionCommandType[];
+const eventTypeByCommand: Partial<Record<ProductionCommandType, ProductionEventType>> = {
+  CREATE_SCENE: 'SCENE_CREATED',
+  UPDATE_SCENE: 'SCENE_UPDATED',
+  DELETE_SCENE: 'SCENE_DELETED',
+  SET_PREVIEW_SCENE: 'PREVIEW_SCENE_CHANGED',
+  CUT_TO_PROGRAM: 'PROGRAM_SCENE_CHANGED',
+  TAKE_PREVIEW: 'PROGRAM_SCENE_CHANGED',
+  AUTO_TRANSITION: 'TRANSITION_COMPLETED',
+  ADD_SOURCE: 'SOURCE_ADDED',
+  REMOVE_SOURCE: 'SOURCE_REMOVED',
+  UPDATE_SOURCE: 'SOURCE_UPDATED',
+  ADD_GUEST: 'GUEST_ADDED',
+  UPDATE_GUEST: 'GUEST_UPDATED',
+  REMOVE_GUEST: 'GUEST_REMOVED',
+  MUTE_GUEST: 'GUEST_MUTED',
+  UNMUTE_GUEST: 'GUEST_UNMUTED',
+  SET_AUDIO_GAIN: 'AUDIO_CHANNEL_UPDATED',
+  MUTE_AUDIO_CHANNEL: 'AUDIO_MUTED',
+  UNMUTE_AUDIO_CHANNEL: 'AUDIO_UNMUTED',
+  ENABLE_DESTINATION: 'DESTINATION_ENABLED',
+  DISABLE_DESTINATION: 'DESTINATION_DISABLED',
+  START_RECORDING: 'RECORDING_STARTED',
+  STOP_RECORDING: 'RECORDING_STOPPED',
+  START_BROADCAST: 'BROADCAST_STARTED',
+  STOP_BROADCAST: 'BROADCAST_STOPPED',
+  UPDATE_HEALTH_METRIC: 'HEALTH_UPDATED',
+  SET_WORKSPACE_PRESET: 'WORKSPACE_CHANGED',
+  SET_PANEL_VISIBILITY: 'WORKSPACE_CHANGED',
+  ADD_AGENT_SUGGESTION: 'AGENT_SUGGESTION_CREATED',
+  ACCEPT_AGENT_SUGGESTION: 'AGENT_SUGGESTION_ACCEPTED',
+  REJECT_AGENT_SUGGESTION: 'AGENT_SUGGESTION_REJECTED',
+};
+const allCommandTypes = Object.keys(eventTypeByCommand).concat([
+  'SET_TRANSITION',
+  'SET_TRANSITION_DURATION',
+  'UPDATE_DESTINATION_STATUS',
+  'ASSIGN_SOURCE_TO_SCENE',
+  'PIN_GUEST',
+]) as ProductionCommandType[];
 const mutationCommands = allCommandTypes.filter((type) => type !== 'ADD_AGENT_SUGGESTION');
-const roleCommands: Record<OperatorRole, ProductionCommandType[]> = { OWNER: allCommandTypes, ADMIN: allCommandTypes, DIRECTOR: allCommandTypes.filter((type) => type !== 'ADD_AGENT_SUGGESTION'), PRODUCER: mutationCommands.filter((type) => !['STOP_BROADCAST'].includes(type)), TECHNICAL_DIRECTOR: ['SET_PREVIEW_SCENE','CUT_TO_PROGRAM','TAKE_PREVIEW','AUTO_TRANSITION','SET_TRANSITION','SET_TRANSITION_DURATION','CREATE_SCENE','UPDATE_SCENE','ADD_SOURCE','UPDATE_SOURCE','ASSIGN_SOURCE_TO_SCENE'], AUDIO_ENGINEER: ['SET_AUDIO_GAIN','MUTE_AUDIO_CHANNEL','UNMUTE_AUDIO_CHANNEL'], GRAPHICS_OPERATOR: ['ADD_SOURCE','UPDATE_SOURCE','ASSIGN_SOURCE_TO_SCENE','SET_PANEL_VISIBILITY'], GUEST_MANAGER: ['ADD_GUEST','UPDATE_GUEST','REMOVE_GUEST','MUTE_GUEST','UNMUTE_GUEST','PIN_GUEST'], MODERATOR: ['ADD_GUEST','UPDATE_GUEST','MUTE_GUEST','UNMUTE_GUEST','SET_PANEL_VISIBILITY'], VIEWER: [], AI_AGENT: ['ADD_AGENT_SUGGESTION'] };
-export function canExecuteProductionCommand(actorRole: OperatorRole, commandType: ProductionCommandType) { return roleCommands[actorRole].includes(commandType); }
-export function getAllowedCommandsForRole(actorRole: OperatorRole) { return [...roleCommands[actorRole]]; }
-export function validateCommandPermission(command: ProductionCommand) { return canExecuteProductionCommand(command.actorRole, command.type) ? { allowed: true as const } : { allowed: false as const, reason: `${command.actorRole} cannot execute ${command.type}` }; }
-export function validateProductionCommand(command: ProductionCommand) { const errors = ['id','type','broadcastSessionId','actorId','actorRole','timestamp'].filter((key) => !(key in command)).map((key) => `Missing command.${key}`); if (!allCommandTypes.includes(command.type)) errors.push(`Unsupported command type ${command.type}`); return { valid: errors.length === 0, errors }; }
-export function getProductionGraphVersion(graph: ProductionGraph) { return graph.graphVersion; }
+const roleCommands: Record<OperatorRole, ProductionCommandType[]> = {
+  OWNER: allCommandTypes,
+  ADMIN: allCommandTypes,
+  DIRECTOR: allCommandTypes.filter((type) => type !== 'ADD_AGENT_SUGGESTION'),
+  PRODUCER: mutationCommands.filter((type) => !['STOP_BROADCAST'].includes(type)),
+  TECHNICAL_DIRECTOR: [
+    'SET_PREVIEW_SCENE',
+    'CUT_TO_PROGRAM',
+    'TAKE_PREVIEW',
+    'AUTO_TRANSITION',
+    'SET_TRANSITION',
+    'SET_TRANSITION_DURATION',
+    'CREATE_SCENE',
+    'UPDATE_SCENE',
+    'ADD_SOURCE',
+    'UPDATE_SOURCE',
+    'ASSIGN_SOURCE_TO_SCENE',
+  ],
+  AUDIO_ENGINEER: ['SET_AUDIO_GAIN', 'MUTE_AUDIO_CHANNEL', 'UNMUTE_AUDIO_CHANNEL'],
+  GRAPHICS_OPERATOR: [
+    'ADD_SOURCE',
+    'UPDATE_SOURCE',
+    'ASSIGN_SOURCE_TO_SCENE',
+    'SET_PANEL_VISIBILITY',
+  ],
+  GUEST_MANAGER: [
+    'ADD_GUEST',
+    'UPDATE_GUEST',
+    'REMOVE_GUEST',
+    'MUTE_GUEST',
+    'UNMUTE_GUEST',
+    'PIN_GUEST',
+  ],
+  MODERATOR: ['ADD_GUEST', 'UPDATE_GUEST', 'MUTE_GUEST', 'UNMUTE_GUEST', 'SET_PANEL_VISIBILITY'],
+  VIEWER: [],
+  AI_AGENT: ['ADD_AGENT_SUGGESTION'],
+};
+export function canExecuteProductionCommand(
+  actorRole: OperatorRole,
+  commandType: ProductionCommandType,
+) {
+  return roleCommands[actorRole].includes(commandType);
+}
+export function getAllowedCommandsForRole(actorRole: OperatorRole) {
+  return [...roleCommands[actorRole]];
+}
+export function validateCommandPermission(command: ProductionCommand) {
+  return canExecuteProductionCommand(command.actorRole, command.type)
+    ? { allowed: true as const }
+    : { allowed: false as const, reason: `${command.actorRole} cannot execute ${command.type}` };
+}
+export function validateProductionCommand(command: ProductionCommand) {
+  const errors = ['id', 'type', 'broadcastSessionId', 'actorId', 'actorRole', 'timestamp']
+    .filter((key) => !(key in command))
+    .map((key) => `Missing command.${key}`);
+  if (!allCommandTypes.includes(command.type))
+    errors.push(`Unsupported command type ${command.type}`);
+  return { valid: errors.length === 0, errors };
+}
+export function getProductionGraphVersion(graph: ProductionGraph) {
+  return graph.graphVersion;
+}
+export function getProductionGraphRevision(graph: ProductionGraph) {
+  return graph.metadata.revision;
+}
+export function getProductionGraphMetadata(graph: ProductionGraph) {
+  return graph.metadata;
+}
+export function isGraphRevisionCurrent(graph: ProductionGraph, expectedRevision?: number) {
+  return expectedRevision === undefined || expectedRevision === graph.metadata.revision;
+}
+export function createRevisionMismatchError(
+  command: ProductionCommand,
+  graph: ProductionGraph,
+): ProductionCommandValidationError {
+  return {
+    code: 'REVISION_MISMATCH',
+    commandId: command.id,
+    ...(command.expectedRevision === undefined
+      ? {}
+      : { expectedRevision: command.expectedRevision }),
+    currentRevision: graph.metadata.revision,
+    message: `Revision mismatch for command ${command.id}: expected ${command.expectedRevision}, current ${graph.metadata.revision}`,
+  };
+}
 const now = () => new Date().toISOString();
-const makeEvent = (command: ProductionCommand, type: ProductionEventType, payload: Record<string, unknown>): ProductionEvent => ({ id: `${command.id}:${type}`, type, broadcastSessionId: command.broadcastSessionId, actorId: command.actorId, timestamp: command.timestamp, commandId: command.id, payload });
-const bump = (graph: ProductionGraph): ProductionGraph => ({ ...graph, graphVersion: graph.graphVersion + 1, updatedAt: now() });
-export function createInitialProductionGraph(input: { broadcastSessionId?: string | undefined; name?: string | undefined; operatorId?: string | undefined; timestamp?: string | undefined } = {}): ProductionGraph { const timestamp = input.timestamp ?? now(); const id = input.broadcastSessionId ?? 'session-local'; return { id: `graph-${id}`, broadcastSessionId: id, graphVersion: 1, schemaVersion: PRODUCTION_GRAPH_SCHEMA_VERSION, createdAt: timestamp, updatedAt: timestamp, status: 'idle', session: { id, name: input.name ?? 'Untitled Broadcast', status: 'idle', activeOperatorId: input.operatorId, metadata: {} }, program: { transitionType: 'cut', transitionDurationMs: 0 }, preview: {}, scenes: {}, sources: {}, guests: {}, destinations: {}, audioChannels: {}, canvases: {}, overlays: {}, recording: { status: 'idle', metadata: {} }, health: { status: 'good', metrics: {} }, operators: input.operatorId ? { [input.operatorId]: { id: input.operatorId, displayName: 'Local Operator', role: 'DIRECTOR', online: true, metadata: {} } } : {}, agents: {}, agentSuggestions: {}, automation: { enabled: false, activeMacroIds: [], metadata: {} }, workspace: { selectedPreset: 'default', panelVisibility: {}, metadata: {} }, plugins: {} }; }
-function rejected(graph: ProductionGraph, command: ProductionCommand, errors: string[]): ProductionGraphTransition { return { previousGraph: graph, nextGraph: graph, accepted: false, errors, command, events: [makeEvent(command, 'COMMAND_REJECTED', { errors, commandType: command.type })] }; }
-export function applyProductionCommand(graph: ProductionGraph, command: ProductionCommand): ProductionGraphTransition { const shape = validateProductionCommand(command); if (!shape.valid) return rejected(graph, command, shape.errors); const permission = validateCommandPermission(command); if (!permission.allowed) return rejected(graph, command, [permission.reason]); let next = graph; const p = command.payload as Record<string, unknown>; switch (command.type) { case 'CREATE_SCENE': { const id = String(p.id ?? `${command.id}:scene`); next = bump({ ...graph, scenes: { ...graph.scenes, [id]: { id, name: String(p.name ?? 'New Scene'), order: Number(p.order ?? Object.keys(graph.scenes).length), sourceIds: [], canvasIds: [], overlayIds: [], metadata: {}, createdAt: command.timestamp, updatedAt: command.timestamp } } }); break; } case 'SET_PREVIEW_SCENE': next = bump({ ...graph, preview: { ...graph.preview, sceneId: String(p.sceneId) } }); break; case 'CUT_TO_PROGRAM': case 'TAKE_PREVIEW': next = bump({ ...graph, program: { ...graph.program, sceneId: String(p.sceneId ?? graph.preview.sceneId), sourceId: (p.sourceId as string | undefined) ?? graph.preview.sourceId, transitionType: command.type === 'CUT_TO_PROGRAM' ? 'cut' : graph.program.transitionType } }); break; case 'SET_TRANSITION': next = bump({ ...graph, program: { ...graph.program, transitionType: String(p.transitionType) as GraphTransitionType } }); break; case 'SET_TRANSITION_DURATION': next = bump({ ...graph, program: { ...graph.program, transitionDurationMs: Number(p.durationMs ?? p.transitionDuration ?? 0) } }); break; case 'START_BROADCAST': next = bump({ ...graph, status: 'live', session: { ...graph.session, status: 'live' } }); break; case 'STOP_BROADCAST': next = bump({ ...graph, status: 'ended', session: { ...graph.session, status: 'ended' } }); break; case 'START_RECORDING': next = bump({ ...graph, recording: { ...graph.recording, status: 'recording', startedAt: command.timestamp } }); break; case 'STOP_RECORDING': next = bump({ ...graph, recording: { ...graph.recording, status: 'stopped', stoppedAt: command.timestamp } }); break; case 'MUTE_AUDIO_CHANNEL': case 'UNMUTE_AUDIO_CHANNEL': { const id = String(p.audioChannelId ?? p.id); const current = graph.audioChannels[id]; if (!current) return rejected(graph, command, [`Unknown audio channel ${id}`]); next = bump({ ...graph, audioChannels: { ...graph.audioChannels, [id]: { ...current, muted: command.type === 'MUTE_AUDIO_CHANNEL' } } }); break; } case 'SET_AUDIO_GAIN': { const id = String(p.audioChannelId ?? p.id); const current = graph.audioChannels[id]; if (!current) return rejected(graph, command, [`Unknown audio channel ${id}`]); next = bump({ ...graph, audioChannels: { ...graph.audioChannels, [id]: { ...current, gain: Number(p.gain ?? current.gain) } } }); break; } case 'ENABLE_DESTINATION': case 'DISABLE_DESTINATION': { const id = String(p.destinationId ?? p.id); const current = graph.destinations[id]; if (!current) return rejected(graph, command, [`Unknown destination ${id}`]); next = bump({ ...graph, destinations: { ...graph.destinations, [id]: { ...current, enabled: command.type === 'ENABLE_DESTINATION' } } }); break; } case 'UPDATE_HEALTH_METRIC': { const key = String(p.key ?? p.metric ?? 'unknown'); next = bump({ ...graph, health: { status: (p.status as HealthNode['status']) ?? graph.health.status, metrics: { ...graph.health.metrics, [key]: { value: (p.value as string | number | boolean) ?? '', status: (p.status as 'good' | 'warning' | 'critical') ?? 'good', updatedAt: command.timestamp } } } }); break; } case 'SET_WORKSPACE_PRESET': next = bump({ ...graph, workspace: { ...graph.workspace, selectedPreset: String(p.preset ?? p.presetId ?? 'default') } }); break; case 'SET_PANEL_VISIBILITY': next = bump({ ...graph, workspace: { ...graph.workspace, panelVisibility: { ...graph.workspace.panelVisibility, [String(p.panelId)]: Boolean(p.visible) } } }); break; case 'ADD_AGENT_SUGGESTION': { const id = String(p.id ?? `${command.id}:suggestion`); next = bump({ ...graph, agentSuggestions: { ...graph.agentSuggestions, [id]: { id, agentId: command.actorId, title: String(p.title ?? 'Suggestion'), description: String(p.description ?? ''), status: 'pending', command: p.command as ProductionCommand | undefined, createdAt: command.timestamp, updatedAt: command.timestamp } } }); break; } default: next = bump(graph); }
- const type = eventTypeByCommand[command.type] ?? (command.type === 'SET_TRANSITION' || command.type === 'SET_TRANSITION_DURATION' ? 'TRANSITION_COMPLETED' : 'SOURCE_UPDATED'); return { previousGraph: graph, nextGraph: next, accepted: true, errors: [], command, events: [makeEvent(command, type, { ...p })] }; }
-export function applyProductionCommands(graph: ProductionGraph, commands: ProductionCommand[]) { return commands.reduce((current, command) => applyProductionCommand(current.nextGraph, command), { previousGraph: graph, nextGraph: graph, accepted: true, events: [], errors: [], command: commands[0] } as ProductionGraphTransition); }
+const makeEvent = (
+  command: ProductionCommand,
+  type: ProductionEventType,
+  payload: Record<string, unknown>,
+  previousRevision: number,
+  nextRevision: number,
+): ProductionEvent => ({
+  id: `${command.id}:${type}`,
+  type,
+  broadcastSessionId: command.broadcastSessionId,
+  actorId: command.actorId,
+  timestamp: command.timestamp,
+  commandId: command.id,
+  payload,
+  graphRevision: nextRevision,
+  previousRevision,
+  nextRevision,
+});
+const bump = (graph: ProductionGraph, timestamp: string): ProductionGraph => {
+  const previousRevision = graph.metadata.revision;
+  const nextRevision = previousRevision + 1;
+  return {
+    ...graph,
+    graphVersion: nextRevision,
+    updatedAt: timestamp,
+    metadata: { ...graph.metadata, revision: nextRevision, updatedAt: timestamp },
+  };
+};
+export function createInitialProductionGraph(
+  input: {
+    broadcastSessionId?: string | undefined;
+    name?: string | undefined;
+    operatorId?: string | undefined;
+    timestamp?: string | undefined;
+  } = {},
+): ProductionGraph {
+  const timestamp = input.timestamp ?? now();
+  const id = input.broadcastSessionId ?? 'session-local';
+  const graphId = `graph-${id}`;
+  return {
+    id: graphId,
+    broadcastSessionId: id,
+    graphVersion: 0,
+    schemaVersion: PRODUCTION_GRAPH_SCHEMA_VERSION,
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    metadata: { graphId, revision: 0, createdAt: timestamp, updatedAt: timestamp },
+    status: 'idle',
+    session: {
+      id,
+      name: input.name ?? 'Untitled Broadcast',
+      status: 'idle',
+      activeOperatorId: input.operatorId,
+      metadata: {},
+    },
+    program: { transitionType: 'cut', transitionDurationMs: 0 },
+    preview: {},
+    scenes: {},
+    sources: {},
+    guests: {},
+    destinations: {},
+    audioChannels: {},
+    canvases: {},
+    overlays: {},
+    recording: { status: 'idle', metadata: {} },
+    health: { status: 'good', metrics: {} },
+    operators: input.operatorId
+      ? {
+          [input.operatorId]: {
+            id: input.operatorId,
+            displayName: 'Local Operator',
+            role: 'DIRECTOR',
+            online: true,
+            metadata: {},
+          },
+        }
+      : {},
+    agents: {},
+    agentSuggestions: {},
+    automation: { enabled: false, activeMacroIds: [], metadata: {} },
+    workspace: { selectedPreset: 'default', panelVisibility: {}, metadata: {} },
+    plugins: {},
+  };
+}
+function rejected(
+  graph: ProductionGraph,
+  command: ProductionCommand,
+  errors: string[],
+  validationErrors: ProductionCommandValidationError[] = errors.map((message) => ({
+    code: 'VALIDATION_ERROR' as const,
+    commandId: command.id,
+    message,
+  })),
+): ProductionGraphTransition {
+  const revision = graph.metadata.revision;
+  return {
+    previousGraph: graph,
+    nextGraph: graph,
+    previousRevision: revision,
+    nextRevision: revision,
+    accepted: false,
+    errors,
+    validationErrors,
+    command,
+    events: [
+      makeEvent(
+        command,
+        'COMMAND_REJECTED',
+        { errors, validationErrors, commandType: command.type },
+        revision,
+        revision,
+      ),
+    ],
+  };
+}
+export function applyProductionCommand(
+  graph: ProductionGraph,
+  command: ProductionCommand,
+): ProductionGraphTransition {
+  const shape = validateProductionCommand(command);
+  if (!shape.valid)
+    return rejected(
+      graph,
+      command,
+      shape.errors,
+      shape.errors.map((message) => ({
+        code: 'INVALID_COMMAND' as const,
+        commandId: command.id,
+        message,
+      })),
+    );
+  if (!isGraphRevisionCurrent(graph, command.expectedRevision)) {
+    const error = createRevisionMismatchError(command, graph);
+    return rejected(graph, command, [error.code], [error]);
+  }
+  const permission = validateCommandPermission(command);
+  if (!permission.allowed)
+    return rejected(
+      graph,
+      command,
+      [permission.reason],
+      [{ code: 'PERMISSION_DENIED', commandId: command.id, message: permission.reason }],
+    );
+  let next = graph;
+  const p = command.payload as Record<string, unknown>;
+  switch (command.type) {
+    case 'CREATE_SCENE': {
+      const id = String(p.id ?? `${command.id}:scene`);
+      next = bump(
+        {
+          ...graph,
+          scenes: {
+            ...graph.scenes,
+            [id]: {
+              id,
+              name: String(p.name ?? 'New Scene'),
+              order: Number(p.order ?? Object.keys(graph.scenes).length),
+              sourceIds: [],
+              canvasIds: [],
+              overlayIds: [],
+              metadata: {},
+              createdAt: command.timestamp,
+              updatedAt: command.timestamp,
+            },
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    }
+    case 'SET_PREVIEW_SCENE':
+      next = bump(
+        { ...graph, preview: { ...graph.preview, sceneId: String(p.sceneId) } },
+        command.timestamp,
+      );
+      break;
+    case 'CUT_TO_PROGRAM':
+    case 'TAKE_PREVIEW':
+      next = bump(
+        {
+          ...graph,
+          program: {
+            ...graph.program,
+            sceneId: String(p.sceneId ?? graph.preview.sceneId),
+            sourceId: (p.sourceId as string | undefined) ?? graph.preview.sourceId,
+            transitionType:
+              command.type === 'CUT_TO_PROGRAM' ? 'cut' : graph.program.transitionType,
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    case 'SET_TRANSITION':
+      next = bump(
+        {
+          ...graph,
+          program: {
+            ...graph.program,
+            transitionType: String(p.transitionType) as GraphTransitionType,
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    case 'SET_TRANSITION_DURATION':
+      next = bump(
+        {
+          ...graph,
+          program: {
+            ...graph.program,
+            transitionDurationMs: Number(p.durationMs ?? p.transitionDuration ?? 0),
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    case 'START_BROADCAST':
+      next = bump(
+        { ...graph, status: 'live', session: { ...graph.session, status: 'live' } },
+        command.timestamp,
+      );
+      break;
+    case 'STOP_BROADCAST':
+      next = bump(
+        { ...graph, status: 'ended', session: { ...graph.session, status: 'ended' } },
+        command.timestamp,
+      );
+      break;
+    case 'START_RECORDING':
+      next = bump(
+        {
+          ...graph,
+          recording: { ...graph.recording, status: 'recording', startedAt: command.timestamp },
+        },
+        command.timestamp,
+      );
+      break;
+    case 'STOP_RECORDING':
+      next = bump(
+        {
+          ...graph,
+          recording: { ...graph.recording, status: 'stopped', stoppedAt: command.timestamp },
+        },
+        command.timestamp,
+      );
+      break;
+    case 'MUTE_AUDIO_CHANNEL':
+    case 'UNMUTE_AUDIO_CHANNEL': {
+      const id = String(p.audioChannelId ?? p.id);
+      const current = graph.audioChannels[id];
+      if (!current) return rejected(graph, command, [`Unknown audio channel ${id}`]);
+      next = bump(
+        {
+          ...graph,
+          audioChannels: {
+            ...graph.audioChannels,
+            [id]: { ...current, muted: command.type === 'MUTE_AUDIO_CHANNEL' },
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    }
+    case 'SET_AUDIO_GAIN': {
+      const id = String(p.audioChannelId ?? p.id);
+      const current = graph.audioChannels[id];
+      if (!current) return rejected(graph, command, [`Unknown audio channel ${id}`]);
+      next = bump(
+        {
+          ...graph,
+          audioChannels: {
+            ...graph.audioChannels,
+            [id]: { ...current, gain: Number(p.gain ?? current.gain) },
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    }
+    case 'ENABLE_DESTINATION':
+    case 'DISABLE_DESTINATION': {
+      const id = String(p.destinationId ?? p.id);
+      const current = graph.destinations[id];
+      if (!current) return rejected(graph, command, [`Unknown destination ${id}`]);
+      next = bump(
+        {
+          ...graph,
+          destinations: {
+            ...graph.destinations,
+            [id]: { ...current, enabled: command.type === 'ENABLE_DESTINATION' },
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    }
+    case 'UPDATE_HEALTH_METRIC': {
+      const key = String(p.key ?? p.metric ?? 'unknown');
+      next = bump(
+        {
+          ...graph,
+          health: {
+            status: (p.status as HealthNode['status']) ?? graph.health.status,
+            metrics: {
+              ...graph.health.metrics,
+              [key]: {
+                value: (p.value as string | number | boolean) ?? '',
+                status: (p.status as 'good' | 'warning' | 'critical') ?? 'good',
+                updatedAt: command.timestamp,
+              },
+            },
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    }
+    case 'SET_WORKSPACE_PRESET':
+      next = bump(
+        {
+          ...graph,
+          workspace: {
+            ...graph.workspace,
+            selectedPreset: String(p.preset ?? p.presetId ?? 'default'),
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    case 'SET_PANEL_VISIBILITY':
+      next = bump(
+        {
+          ...graph,
+          workspace: {
+            ...graph.workspace,
+            panelVisibility: {
+              ...graph.workspace.panelVisibility,
+              [String(p.panelId)]: Boolean(p.visible),
+            },
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    case 'ADD_AGENT_SUGGESTION': {
+      const id = String(p.id ?? `${command.id}:suggestion`);
+      next = bump(
+        {
+          ...graph,
+          agentSuggestions: {
+            ...graph.agentSuggestions,
+            [id]: {
+              id,
+              agentId: command.actorId,
+              title: String(p.title ?? 'Suggestion'),
+              description: String(p.description ?? ''),
+              status: 'pending',
+              command: p.command as ProductionCommand | undefined,
+              createdAt: command.timestamp,
+              updatedAt: command.timestamp,
+            },
+          },
+        },
+        command.timestamp,
+      );
+      break;
+    }
+    default:
+      next = bump(graph, command.timestamp);
+  }
+  const type =
+    eventTypeByCommand[command.type] ??
+    (command.type === 'SET_TRANSITION' || command.type === 'SET_TRANSITION_DURATION'
+      ? 'TRANSITION_COMPLETED'
+      : 'SOURCE_UPDATED');
+  return {
+    previousGraph: graph,
+    nextGraph: next,
+    previousRevision: graph.metadata.revision,
+    nextRevision: next.metadata.revision,
+    accepted: true,
+    errors: [],
+    validationErrors: [],
+    command,
+    events: [makeEvent(command, type, { ...p }, graph.metadata.revision, next.metadata.revision)],
+  };
+}
+export function applyProductionCommands(graph: ProductionGraph, commands: ProductionCommand[]) {
+  return commands.reduce((current, command) => applyProductionCommand(current.nextGraph, command), {
+    previousGraph: graph,
+    nextGraph: graph,
+    previousRevision: graph.metadata.revision,
+    nextRevision: graph.metadata.revision,
+    accepted: true,
+    events: [],
+    errors: [],
+    validationErrors: [],
+    command: commands[0],
+  } as ProductionGraphTransition);
+}
 export const selectBroadcastStatus = (graph: ProductionGraph) => graph.status;
-export const selectProgramScene = (graph: ProductionGraph) => graph.program.sceneId ? graph.scenes[graph.program.sceneId] : undefined;
-export const selectPreviewScene = (graph: ProductionGraph) => graph.preview.sceneId ? graph.scenes[graph.preview.sceneId] : undefined;
-export const selectScenes = (graph: ProductionGraph) => Object.values(graph.scenes).sort((a,b)=>a.order-b.order);
+export const selectProgramScene = (graph: ProductionGraph) =>
+  graph.program.sceneId ? graph.scenes[graph.program.sceneId] : undefined;
+export const selectPreviewScene = (graph: ProductionGraph) =>
+  graph.preview.sceneId ? graph.scenes[graph.preview.sceneId] : undefined;
+export const selectScenes = (graph: ProductionGraph) =>
+  Object.values(graph.scenes).sort((a, b) => a.order - b.order);
 export const selectSceneById = (graph: ProductionGraph, id: StableId) => graph.scenes[id];
 export const selectSources = (graph: ProductionGraph) => Object.values(graph.sources);
 export const selectSourceById = (graph: ProductionGraph, id: StableId) => graph.sources[id];
-export const selectSourcesForScene = (graph: ProductionGraph, sceneId: StableId) => (graph.scenes[sceneId]?.sourceIds ?? []).map((id)=>graph.sources[id]).filter(Boolean);
+export const selectSourcesForScene = (graph: ProductionGraph, sceneId: StableId) =>
+  (graph.scenes[sceneId]?.sourceIds ?? []).map((id) => graph.sources[id]).filter(Boolean);
 export const selectGuests = (graph: ProductionGraph) => Object.values(graph.guests);
 export const selectGuestById = (graph: ProductionGraph, id: StableId) => graph.guests[id];
-export const selectOnAirGuests = (graph: ProductionGraph) => Object.values(graph.guests).filter((g)=>g.status==='on_air' || g.pinned);
+export const selectOnAirGuests = (graph: ProductionGraph) =>
+  Object.values(graph.guests).filter((g) => g.status === 'on_air' || g.pinned);
 export const selectDestinations = (graph: ProductionGraph) => Object.values(graph.destinations);
-export const selectEnabledDestinations = (graph: ProductionGraph) => Object.values(graph.destinations).filter((d)=>d.enabled);
+export const selectEnabledDestinations = (graph: ProductionGraph) =>
+  Object.values(graph.destinations).filter((d) => d.enabled);
 export const selectAudioChannels = (graph: ProductionGraph) => Object.values(graph.audioChannels);
 export const selectRecordingState = (graph: ProductionGraph) => graph.recording;
 export const selectHealthSummary = (graph: ProductionGraph) => graph.health;
-export const selectAgentSuggestions = (graph: ProductionGraph) => Object.values(graph.agentSuggestions);
+export const selectAgentSuggestions = (graph: ProductionGraph) =>
+  Object.values(graph.agentSuggestions);
 export const selectOperators = (graph: ProductionGraph) => Object.values(graph.operators);
 export const selectCanvases = (graph: ProductionGraph) => Object.values(graph.canvases);
 export const selectWorkspace = (graph: ProductionGraph) => graph.workspace;
-export const selectTallyForEntity = (graph: ProductionGraph, id: StableId) => graph.program.sceneId === id || graph.program.sourceId === id ? 'program' : graph.preview.sceneId === id || graph.preview.sourceId === id ? 'preview' : 'idle';
-export const selectCanExecuteCommand = (_graph: ProductionGraph, role: OperatorRole, type: ProductionCommandType) => canExecuteProductionCommand(role, type);
+export const selectTallyForEntity = (graph: ProductionGraph, id: StableId) =>
+  graph.program.sceneId === id || graph.program.sourceId === id
+    ? 'program'
+    : graph.preview.sceneId === id || graph.preview.sourceId === id
+      ? 'preview'
+      : 'idle';
+export const selectCanExecuteCommand = (
+  _graph: ProductionGraph,
+  role: OperatorRole,
+  type: ProductionCommandType,
+) => canExecuteProductionCommand(role, type);
 
-export class InMemoryProductionEventLog { private events: ProductionEvent[] = []; appendProductionEvent(event: ProductionEvent) { this.events = [...this.events, event]; } listProductionEvents() { return [...this.events]; } getProductionEventsForSession(sessionId: StableId) { return this.events.filter((event) => event.broadcastSessionId === sessionId); } clearProductionEventsForSession(sessionId: StableId) { this.events = this.events.filter((event) => event.broadcastSessionId !== sessionId); } }
-export interface MediaExecutionAdapter { onGraphUpdated(transition: ProductionGraphTransition): void; renderProgramPreview(graph: ProductionGraph): unknown; renderVerticalPreview(graph: ProductionGraph): unknown; updateDestinations(graph: ProductionGraph): unknown; updateAudioMix(graph: ProductionGraph): unknown; }
-export class MockMediaExecutionAdapter implements MediaExecutionAdapter { renderState: Record<string, unknown> = {}; onGraphUpdated(transition: ProductionGraphTransition) { this.renderState.lastTransition = transition.command.type; this.renderProgramPreview(transition.nextGraph); this.updateDestinations(transition.nextGraph); this.updateAudioMix(transition.nextGraph); } renderProgramPreview(graph: ProductionGraph) { return (this.renderState.program = { sceneId: graph.program.sceneId, graphVersion: graph.graphVersion }); } renderVerticalPreview(graph: ProductionGraph) { return (this.renderState.vertical = { sceneId: graph.program.sceneId, aspectRatio: '9:16' }); } updateDestinations(graph: ProductionGraph) { return (this.renderState.destinations = selectEnabledDestinations(graph).map((d) => d.id)); } updateAudioMix(graph: ProductionGraph) { return (this.renderState.audio = selectAudioChannels(graph).map((c) => ({ id: c.id, gain: c.gain, muted: c.muted }))); } }
-export interface AgentPlaneAdapter { observeTransition(transition: ProductionGraphTransition): ProductionCommand[]; }
-export class MockAgentPlaneAdapter implements AgentPlaneAdapter { constructor(private agentId = 'mock-agent') {} observeTransition(transition: ProductionGraphTransition) { const suggestions: ProductionCommand[] = []; if (transition.nextGraph.recording.status !== 'recording' && transition.nextGraph.status === 'live') suggestions.push({ id: `${transition.command.id}:agent-record`, type: 'ADD_AGENT_SUGGESTION', broadcastSessionId: transition.command.broadcastSessionId, actorId: this.agentId, actorRole: 'AI_AGENT', timestamp: transition.command.timestamp, payload: { title: 'Enable recording', description: 'Live broadcast is not currently recording.' } }); return suggestions; } }
-export interface ProductionEngine { handleTransition(transition: ProductionGraphTransition): void; }
-export class LocalProductionEngine implements ProductionEngine { constructor(private mediaAdapter: MediaExecutionAdapter = new MockMediaExecutionAdapter(), private agentAdapter: AgentPlaneAdapter = new MockAgentPlaneAdapter()) {} handleTransition(transition: ProductionGraphTransition) { this.mediaAdapter.onGraphUpdated(transition); this.agentAdapter.observeTransition(transition); } }
-export class LocalProductionCommandDispatcher { constructor(private session: ProductionBroadcastSession, private engine: ProductionEngine = new LocalProductionEngine(), private eventLog = new InMemoryProductionEventLog()) {} dispatch(command: ProductionCommand) { const transition = applyProductionCommand(this.session.graph, command); this.session = { ...this.session, graph: transition.nextGraph, commandLog: transition.accepted ? [...this.session.commandLog, command] : this.session.commandLog, eventLog: [...this.session.eventLog, ...transition.events] }; transition.events.forEach((event) => this.eventLog.appendProductionEvent(event)); if (transition.accepted) this.engine.handleTransition(transition); return transition; } getSession() { return this.session; } getGraph() { return this.session.graph; } }
-export function createBroadcastSession(input: { id?: string | undefined; name?: string | undefined; operatorId?: string | undefined; timestamp?: string | undefined } = {}): ProductionBroadcastSession { const graph = createInitialProductionGraph({ broadcastSessionId: input.id, name: input.name, operatorId: input.operatorId, timestamp: input.timestamp }); return { id: graph.broadcastSessionId, name: graph.session.name, status: graph.status, createdAt: graph.createdAt, runtimeMs: 0, activeOperatorId: input.operatorId, graph, commandLog: [], eventLog: [ { id: `${graph.id}:initialized`, type: 'GRAPH_INITIALIZED', broadcastSessionId: graph.broadcastSessionId, actorId: input.operatorId ?? 'system', timestamp: graph.createdAt, commandId: 'system', payload: { graphVersion: graph.graphVersion, schemaVersion: graph.schemaVersion } } ], metadata: {} }; }
-export interface BaseProductionPlugin { id: string; name: string; version: string; capabilities: string[]; emittedCommands: ProductionCommandType[]; consumedEvents: ProductionEventType[]; onLoad?: () => void; onUnload?: () => void; }
+export class InMemoryProductionEventLog {
+  private events: ProductionEvent[] = [];
+  appendProductionEvent(event: ProductionEvent) {
+    this.events = [...this.events, event];
+  }
+  listProductionEvents() {
+    return [...this.events];
+  }
+  getProductionEventsForSession(sessionId: StableId) {
+    return this.events.filter((event) => event.broadcastSessionId === sessionId);
+  }
+  clearProductionEventsForSession(sessionId: StableId) {
+    this.events = this.events.filter((event) => event.broadcastSessionId !== sessionId);
+  }
+}
+export interface MediaExecutionAdapter {
+  onGraphUpdated(transition: ProductionGraphTransition): void;
+  renderProgramPreview(graph: ProductionGraph): unknown;
+  renderVerticalPreview(graph: ProductionGraph): unknown;
+  updateDestinations(graph: ProductionGraph): unknown;
+  updateAudioMix(graph: ProductionGraph): unknown;
+}
+export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
+  renderState: Record<string, unknown> = {};
+  onGraphUpdated(transition: ProductionGraphTransition) {
+    this.renderState.lastTransition = transition.command.type;
+    this.renderProgramPreview(transition.nextGraph);
+    this.updateDestinations(transition.nextGraph);
+    this.updateAudioMix(transition.nextGraph);
+  }
+  renderProgramPreview(graph: ProductionGraph) {
+    return (this.renderState.program = {
+      sceneId: graph.program.sceneId,
+      graphVersion: graph.graphVersion,
+      revision: graph.metadata.revision,
+    });
+  }
+  renderVerticalPreview(graph: ProductionGraph) {
+    return (this.renderState.vertical = { sceneId: graph.program.sceneId, aspectRatio: '9:16' });
+  }
+  updateDestinations(graph: ProductionGraph) {
+    return (this.renderState.destinations = selectEnabledDestinations(graph).map((d) => d.id));
+  }
+  updateAudioMix(graph: ProductionGraph) {
+    return (this.renderState.audio = selectAudioChannels(graph).map((c) => ({
+      id: c.id,
+      gain: c.gain,
+      muted: c.muted,
+    })));
+  }
+}
+export interface AgentPlaneAdapter {
+  observeTransition(transition: ProductionGraphTransition): ProductionCommand[];
+}
+export class MockAgentPlaneAdapter implements AgentPlaneAdapter {
+  constructor(private agentId = 'mock-agent') {}
+  observeTransition(transition: ProductionGraphTransition) {
+    const suggestions: ProductionCommand[] = [];
+    if (
+      transition.nextGraph.recording.status !== 'recording' &&
+      transition.nextGraph.status === 'live'
+    )
+      suggestions.push({
+        id: `${transition.command.id}:agent-record`,
+        type: 'ADD_AGENT_SUGGESTION',
+        broadcastSessionId: transition.command.broadcastSessionId,
+        actorId: this.agentId,
+        actorRole: 'AI_AGENT',
+        timestamp: transition.command.timestamp,
+        payload: {
+          title: 'Enable recording',
+          description: 'Live broadcast is not currently recording.',
+        },
+      });
+    return suggestions;
+  }
+}
+export interface ProductionEngine {
+  handleTransition(transition: ProductionGraphTransition): void;
+}
+export class LocalProductionEngine implements ProductionEngine {
+  constructor(
+    private mediaAdapter: MediaExecutionAdapter = new MockMediaExecutionAdapter(),
+    private agentAdapter: AgentPlaneAdapter = new MockAgentPlaneAdapter(),
+  ) {}
+  handleTransition(transition: ProductionGraphTransition) {
+    this.mediaAdapter.onGraphUpdated(transition);
+    this.agentAdapter.observeTransition(transition);
+  }
+}
+export class LocalProductionCommandDispatcher {
+  private commandSequence = 0;
+  constructor(
+    private session: ProductionBroadcastSession,
+    private engine: ProductionEngine = new LocalProductionEngine(),
+    private eventLog = new InMemoryProductionEventLog(),
+  ) {}
+  dispatch(command: ProductionCommand) {
+    this.commandSequence += 1;
+    const reducedTransition = applyProductionCommand(this.session.graph, command);
+    const sequencedEvents = reducedTransition.events.map((event) => ({
+      ...event,
+      metadata: { ...event.metadata, commandSequence: this.commandSequence },
+    }));
+    const transition = {
+      ...reducedTransition,
+      events: sequencedEvents,
+      commandSequence: this.commandSequence,
+    };
+    this.session = {
+      ...this.session,
+      graph: transition.nextGraph,
+      commandLog: transition.accepted
+        ? [...this.session.commandLog, command]
+        : this.session.commandLog,
+      eventLog: [...this.session.eventLog, ...transition.events],
+    };
+    transition.events.forEach((event) => this.eventLog.appendProductionEvent(event));
+    if (transition.accepted) this.engine.handleTransition(transition);
+    return transition;
+  }
+  getSession() {
+    return this.session;
+  }
+  getGraph() {
+    return this.session.graph;
+  }
+}
+export function createBroadcastSession(
+  input: {
+    id?: string | undefined;
+    name?: string | undefined;
+    operatorId?: string | undefined;
+    timestamp?: string | undefined;
+  } = {},
+): ProductionBroadcastSession {
+  const graph = createInitialProductionGraph({
+    broadcastSessionId: input.id,
+    name: input.name,
+    operatorId: input.operatorId,
+    timestamp: input.timestamp,
+  });
+  return {
+    id: graph.broadcastSessionId,
+    name: graph.session.name,
+    status: graph.status,
+    createdAt: graph.createdAt,
+    runtimeMs: 0,
+    activeOperatorId: input.operatorId,
+    graph,
+    commandLog: [],
+    eventLog: [
+      {
+        id: `${graph.id}:initialized`,
+        type: 'GRAPH_INITIALIZED',
+        broadcastSessionId: graph.broadcastSessionId,
+        actorId: input.operatorId ?? 'system',
+        timestamp: graph.createdAt,
+        commandId: 'system',
+        payload: {
+          graphVersion: graph.graphVersion,
+          schemaVersion: graph.schemaVersion,
+          metadata: graph.metadata,
+        },
+        graphRevision: graph.metadata.revision,
+        previousRevision: graph.metadata.revision,
+        nextRevision: graph.metadata.revision,
+      },
+    ],
+    metadata: {},
+  };
+}
+export interface BaseProductionPlugin {
+  id: string;
+  name: string;
+  version: string;
+  capabilities: string[];
+  emittedCommands: ProductionCommandType[];
+  consumedEvents: ProductionEventType[];
+  onLoad?: () => void;
+  onUnload?: () => void;
+}
 export type DestinationPlugin = BaseProductionPlugin & { kind: 'destination' };
 export type MediaSourcePlugin = BaseProductionPlugin & { kind: 'media-source' };
 export type AutomationPlugin = BaseProductionPlugin & { kind: 'automation' };
 export type AIPlugin = BaseProductionPlugin & { kind: 'ai' };
 export type AnalyticsPlugin = BaseProductionPlugin & { kind: 'analytics' };
 export type ControlSurfacePlugin = BaseProductionPlugin & { kind: 'control-surface' };
-export type ProductionPlugin = DestinationPlugin | MediaSourcePlugin | AutomationPlugin | AIPlugin | AnalyticsPlugin | ControlSurfacePlugin;
+export type ProductionPlugin =
+  | DestinationPlugin
+  | MediaSourcePlugin
+  | AutomationPlugin
+  | AIPlugin
+  | AnalyticsPlugin
+  | ControlSurfacePlugin;
