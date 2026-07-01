@@ -11,6 +11,7 @@ import {
 import {
   SceneType,
   type AudioChannel,
+  type Guest,
   type ProductionAsset,
   type Scene,
   type SceneLayout,
@@ -143,12 +144,14 @@ export function SceneWorkspace({
   channels,
   assets,
   mediaRoutes = [],
+  guests = [],
 }: {
   initialScenes: Scene[];
   layouts: SceneLayout[];
   channels: AudioChannel[];
   assets: ProductionAsset[];
   mediaRoutes?: MediaRoute[];
+  guests?: Guest[];
 }) {
   const [isPending, startTransition] = useTransition();
   const [viewMode, setViewMode] = useState<ControlRoomViewMode>('dual');
@@ -395,6 +398,7 @@ export function SceneWorkspace({
                 scene={activeScene}
                 routes={mediaRoutes}
                 layoutPreset={layoutPreset}
+                guests={guests}
               />
             </div>
           ) : null}
@@ -412,6 +416,7 @@ export function SceneWorkspace({
                 scene={activeScene}
                 routes={mediaRoutes}
                 layoutPreset={layoutPreset}
+                guests={guests}
               />
             </div>
           ) : null}

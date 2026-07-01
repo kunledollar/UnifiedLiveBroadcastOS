@@ -477,14 +477,124 @@ const routeTypeLabels = {
   placeholder: 'Placeholder',
 } satisfies Record<MediaRoute['routeType'], string>;
 
-const sourceBackgrounds: Record<SceneSourceType, string> = {
-  camera: 'from-sky-500/25 to-slate-950/80',
-  screen: 'from-violet-500/25 to-slate-950/80',
-  media: 'from-emerald-500/25 to-slate-950/80',
-  overlay: 'from-fuchsia-500/25 to-slate-950/80',
-  browser: 'from-amber-500/25 to-slate-950/80',
-  audio: 'from-rose-500/25 to-slate-950/80',
+type RouteTheme = {
+  gradient: string;
+  ring: string;
+  accent: string;
+  chip: string;
+  glyph: string;
 };
+
+const routeThemes: Record<MediaRoute['routeType'], RouteTheme> = {
+  guest_camera: {
+    gradient: 'from-sky-500/35 via-slate-900 to-slate-950',
+    ring: 'border-sky-300/45',
+    accent: 'text-sky-200',
+    chip: 'bg-sky-400/20 text-sky-100 ring-sky-300/40',
+    glyph: '🎥',
+  },
+  guest_screen_share: {
+    gradient: 'from-violet-500/35 via-slate-900 to-slate-950',
+    ring: 'border-violet-300/45',
+    accent: 'text-violet-200',
+    chip: 'bg-violet-400/20 text-violet-100 ring-violet-300/40',
+    glyph: '🖥️',
+  },
+  host_camera: {
+    gradient: 'from-emerald-500/35 via-slate-900 to-slate-950',
+    ring: 'border-emerald-300/45',
+    accent: 'text-emerald-200',
+    chip: 'bg-emerald-400/20 text-emerald-100 ring-emerald-300/40',
+    glyph: '⭐',
+  },
+  media_source: {
+    gradient: 'from-amber-500/35 via-slate-900 to-slate-950',
+    ring: 'border-amber-300/45',
+    accent: 'text-amber-200',
+    chip: 'bg-amber-400/20 text-amber-100 ring-amber-300/40',
+    glyph: '🎬',
+  },
+  screen_share: {
+    gradient: 'from-indigo-500/35 via-slate-900 to-slate-950',
+    ring: 'border-indigo-300/45',
+    accent: 'text-indigo-200',
+    chip: 'bg-indigo-400/20 text-indigo-100 ring-indigo-300/40',
+    glyph: '🖥️',
+  },
+  placeholder: {
+    gradient: 'from-slate-600/40 via-slate-900 to-slate-950',
+    ring: 'border-slate-400/35',
+    accent: 'text-slate-200',
+    chip: 'bg-slate-500/25 text-slate-100 ring-slate-300/25',
+    glyph: '▢',
+  },
+};
+
+type SourceTheme = { glyph: string; ring: string; accent: string };
+
+const sourceThemes: Record<SceneSourceType, SourceTheme> = {
+  camera: { glyph: '🎥', ring: 'border-sky-300/45', accent: 'text-sky-100' },
+  screen: { glyph: '🖥️', ring: 'border-violet-300/45', accent: 'text-violet-100' },
+  media: { glyph: '🎬', ring: 'border-emerald-300/45', accent: 'text-emerald-100' },
+  overlay: { glyph: '✨', ring: 'border-fuchsia-300/45', accent: 'text-fuchsia-100' },
+  browser: { glyph: '🌐', ring: 'border-amber-300/45', accent: 'text-amber-100' },
+  audio: { glyph: '🎧', ring: 'border-rose-300/45', accent: 'text-rose-100' },
+};
+
+type TileSize = 'lg' | 'md' | 'sm';
+
+type ConnectionMeta = { label: string; dot: string; pulse: boolean };
+
+function humanizeState(state: string): string {
+  return (
+    state
+      .split(/[_\s]+/)
+      .filter(Boolean)
+      .map((word) => `${word[0]?.toUpperCase() ?? ''}${word.slice(1)}`)
+      .join(' ') || 'Unknown'
+  );
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || '?';
+}
+
+function connectionMeta(state: string): ConnectionMeta {
+  switch (state) {
+    case 'on_air':
+      return { label: 'On Air', dot: 'bg-red-400', pulse: true };
+    case 'connected':
+      return { label: 'Connected', dot: 'bg-emerald-400', pulse: true };
+    case 'ready':
+      return { label: 'Ready', dot: 'bg-emerald-400', pulse: false };
+    case 'green_room':
+      return { label: 'Green Room', dot: 'bg-amber-400', pulse: false };
+    case 'muted':
+      return { label: 'Muted', dot: 'bg-amber-400', pulse: false };
+    case 'reconnecting':
+      return { label: 'Reconnecting', dot: 'bg-amber-400', pulse: true };
+    case 'waiting':
+    case 'invited':
+      return { label: humanizeState(state), dot: 'bg-slate-400', pulse: false };
+    case 'disconnected':
+    case 'rejected':
+    case 'removed':
+      return { label: humanizeState(state), dot: 'bg-rose-400', pulse: false };
+    case 'inactive':
+      return { label: 'Inactive', dot: 'bg-slate-500', pulse: false };
+    default:
+      return { label: humanizeState(state), dot: 'bg-slate-400', pulse: false };
+  }
+}
+
+function tileSize(preset: MediaLayoutPreset, index: number): TileSize {
+  if (preset === 'full_screen') return 'lg';
+  if (preset === 'picture_in_picture' || preset === 'speaker_focus')
+    return index === 0 ? 'lg' : 'sm';
+  return 'md';
+}
 
 function sortedVisibleSources(sources: SceneSource[]) {
   return [...sources]
@@ -518,48 +628,46 @@ function routeConnectionState(route: MediaRoute) {
   return route.guest?.status ?? (route.isActive ? 'ready' : 'inactive');
 }
 
-function getLayerBox(
-  preset: MediaLayoutPreset,
-  index: number,
-  total: number,
-  output: OutputKind,
-): LayerBox {
+function getLayerBox(preset: MediaLayoutPreset, index: number, output: OutputKind): LayerBox {
   if (output === 'vertical') {
-    if (preset === 'side_by_side' && total > 1)
-      return { left: '6%', top: `${8 + index * 42}%`, width: '88%', height: '38%' };
-    if (preset === 'picture_in_picture' && index > 0)
-      return { left: '56%', top: '8%', width: '36%', height: '22%' };
+    if (preset === 'side_by_side')
+      return { left: '5%', top: `${7 + index * 45}%`, width: '90%', height: '41%' };
+    if (preset === 'picture_in_picture')
+      return index === 0
+        ? { left: '4%', top: '6%', width: '92%', height: '86%' }
+        : { left: '58%', top: '9%', width: '38%', height: '22%' };
     if (preset === '2x2_grid')
       return {
-        left: `${6 + (index % 2) * 45}%`,
-        top: `${10 + Math.floor(index / 2) * 32}%`,
-        width: '39%',
-        height: '28%',
+        left: `${4 + (index % 2) * 47}%`,
+        top: `${8 + Math.floor(index / 2) * 41}%`,
+        width: '45%',
+        height: '38%',
       };
-    if (preset === 'speaker_focus' && index > 0)
-      return { left: `${8 + ((index - 1) % 3) * 29}%`, top: '70%', width: '25%', height: '18%' };
-    return { left: '6%', top: '10%', width: '88%', height: index === 0 ? '62%' : '22%' };
+    if (preset === 'speaker_focus')
+      return index === 0
+        ? { left: '4%', top: '6%', width: '92%', height: '62%' }
+        : { left: `${4 + ((index - 1) % 3) * 31.5}%`, top: '72%', width: '28%', height: '20%' };
+    return { left: '4%', top: '6%', width: '92%', height: '86%' };
   }
 
   if (preset === 'side_by_side')
-    return { left: `${3 + index * 48}%`, top: '13%', width: '45%', height: '68%' };
-  if (preset === 'picture_in_picture' && index > 0)
-    return { left: '68%', top: '58%', width: '25%', height: '26%' };
+    return { left: `${2.5 + index * 49}%`, top: '11%', width: '48%', height: '70%' };
+  if (preset === 'picture_in_picture')
+    return index === 0
+      ? { left: '2.5%', top: '5%', width: '95%', height: '82%' }
+      : { left: '70%', top: '55%', width: '27%', height: '30%' };
   if (preset === '2x2_grid')
     return {
-      left: `${4 + (index % 2) * 47}%`,
-      top: `${10 + Math.floor(index / 2) * 40}%`,
-      width: '43%',
-      height: '34%',
+      left: `${2.5 + (index % 2) * 49}%`,
+      top: `${6 + Math.floor(index / 2) * 42}%`,
+      width: '48%',
+      height: '39%',
     };
-  if (preset === 'speaker_focus' && index > 0)
-    return { left: `${5 + ((index - 1) % 3) * 22}%`, top: '68%', width: '19%', height: '20%' };
-  return {
-    left: index === 0 ? '4%' : '70%',
-    top: index === 0 ? '8%' : '62%',
-    width: index === 0 ? '92%' : '24%',
-    height: index === 0 ? '78%' : '24%',
-  };
+  if (preset === 'speaker_focus')
+    return index === 0
+      ? { left: '2.5%', top: '5%', width: '72%', height: '82%' }
+      : { left: '76.5%', top: `${5 + (index - 1) * 27.5}%`, width: '21%', height: '25%' };
+  return { left: '2.5%', top: '5%', width: '95%', height: '82%' };
 }
 
 function routeCapacity(preset: MediaLayoutPreset) {
@@ -610,7 +718,7 @@ export function LayerFrame({
   zIndex?: number;
 }) {
   return (
-    <div className="absolute" style={{ ...box, zIndex }}>
+    <div className="absolute transition-all duration-500 ease-out" style={{ ...box, zIndex }}>
       {children}
     </div>
   );
@@ -631,46 +739,206 @@ function RoutedVideo({ stream }: { stream?: MediaStream | undefined }) {
   );
 }
 
+function SimulatedFeed({
+  route,
+  theme,
+  size,
+}: {
+  route: MediaRoute;
+  theme: RouteTheme;
+  size: TileSize;
+}) {
+  const big = size === 'lg';
+  const small = size === 'sm';
+  return (
+    <div className="absolute inset-0">
+      <div
+        className="absolute inset-0 opacity-[0.14]"
+        style={{
+          backgroundImage:
+            'repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 2px, transparent 2px 10px)',
+        }}
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_32%,rgba(255,255,255,.12),transparent_55%)]" />
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center">
+        <div
+          className={`grid place-items-center rounded-full border ${theme.ring} bg-slate-950/60 font-black ${theme.accent} ${
+            big ? 'h-20 w-20 text-3xl' : small ? 'h-9 w-9 text-xs' : 'h-14 w-14 text-lg'
+          }`}
+        >
+          {initials(route.displayName)}
+        </div>
+        {!small ? (
+          <>
+            <p className={`font-black leading-tight text-white ${big ? 'text-2xl' : 'text-base'}`}>
+              {route.displayName}
+            </p>
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ${theme.chip}`}
+            >
+              <span>{theme.glyph}</span>
+              {routeTypeLabels[route.routeType]}
+            </span>
+            <span className="text-[9px] font-semibold uppercase tracking-[0.25em] text-white/40">
+              Simulated Feed
+            </span>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function EmptySlot({
+  output,
+  size,
+  hasGuests,
+}: {
+  output: OutputKind;
+  size: TileSize;
+  hasGuests: boolean;
+}) {
+  const big = size === 'lg';
+  const label = hasGuests ? 'Assign guest to Program' : 'Empty slot';
+  const sub = hasGuests
+    ? 'Send a guest here from Media Routing'
+    : output === 'vertical'
+      ? 'Route a vertical source'
+      : 'Route a source to fill';
+  return (
+    <div className="grid h-full w-full place-items-center rounded-2xl border-2 border-dashed border-white/15 bg-slate-950/40">
+      <div className="flex flex-col items-center gap-1.5 px-3 text-center">
+        <div
+          className={`grid place-items-center rounded-full border border-dashed border-white/25 font-black text-white/45 ${
+            big ? 'h-12 w-12 text-2xl' : 'h-8 w-8 text-base'
+          }`}
+        >
+          +
+        </div>
+        <p
+          className={`font-black uppercase tracking-wide text-white/55 ${big ? 'text-xs' : 'text-[10px]'}`}
+        >
+          {label}
+        </p>
+        {big ? <p className="text-[10px] text-white/35">{sub}</p> : null}
+      </div>
+    </div>
+  );
+}
+
+function CanvasHud({
+  output,
+  layoutPreset,
+}: {
+  output: OutputKind;
+  layoutPreset: MediaLayoutPreset;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-x-3 top-3 z-40 flex items-center justify-between gap-2">
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/55 px-2.5 py-1 backdrop-blur">
+        <span
+          className={`h-2 w-2 rounded-full ${output === 'program' ? 'bg-red-500 animate-pulse' : 'bg-fuchsia-400'}`}
+        />
+        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
+          {output === 'program' ? 'Program · 16:9' : 'Vertical · 9:16'}
+        </span>
+      </span>
+      <span className="rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
+        {mediaLayoutLabels[layoutPreset]}
+      </span>
+    </div>
+  );
+}
+
 export function RoutedMediaTile({
   route,
   stream,
   output,
+  size = 'md',
+  hasGuests = false,
 }: {
   route?: MediaRoute | undefined;
   stream?: MediaStream | undefined;
   output: OutputKind;
+  size?: TileSize;
+  hasGuests?: boolean;
 }) {
   if (!route) {
-    return (
-      <div className="grid h-full place-items-center rounded-2xl border border-dashed border-white/15 bg-slate-950/55 text-center text-xs font-bold uppercase tracking-widest text-slate-500">
-        Empty slot
-      </div>
-    );
+    return <EmptySlot output={output} size={size} hasGuests={hasGuests} />;
   }
+  const theme = routeThemes[route.routeType];
+  const conn = connectionMeta(routeConnectionState(route));
+  const onVertical = route.metadata?.onVertical === true;
+  const big = size === 'lg';
+  const small = size === 'sm';
   return (
-    <div className="relative h-full overflow-hidden rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-slate-800 to-slate-950 shadow-2xl shadow-black/35">
+    <div
+      className={`group relative h-full w-full overflow-hidden rounded-2xl border ${theme.ring} bg-gradient-to-br ${theme.gradient} shadow-2xl shadow-black/45`}
+    >
       <RoutedVideo stream={stream} />
-      {!stream ? (
-        <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_50%_30%,rgba(34,211,238,.2),transparent_36%)] p-4 text-center">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">
-              No media connected
+      {!stream ? <SimulatedFeed route={route} theme={theme} size={size} /> : null}
+
+      <div
+        className={`absolute left-2 top-2 z-20 flex flex-wrap items-center gap-1 ${small ? 'origin-top-left scale-90' : ''}`}
+      >
+        <span
+          className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-black uppercase tracking-wide ring-1 ${theme.chip}`}
+        >
+          <span>{theme.glyph}</span>
+          {!small ? routeTypeLabels[route.routeType] : null}
+        </span>
+        {route.isPinned ? (
+          <span className="rounded-md bg-emerald-400/20 px-1.5 py-0.5 text-[10px] font-black uppercase text-emerald-100 ring-1 ring-emerald-300/30">
+            📌 Pin
+          </span>
+        ) : null}
+        {output === 'program' && onVertical ? (
+          <span className="rounded-md bg-fuchsia-500/25 px-1.5 py-0.5 text-[10px] font-black uppercase text-fuchsia-100 ring-1 ring-fuchsia-300/30">
+            ▽ Vert
+          </span>
+        ) : null}
+      </div>
+
+      <div
+        className={`absolute right-2 top-2 z-20 flex flex-col items-end gap-1 ${small ? 'origin-top-right scale-90' : ''}`}
+      >
+        <span className="inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white ring-1 ring-white/10 backdrop-blur">
+          <span className={`h-1.5 w-1.5 rounded-full ${conn.dot} ${conn.pulse ? 'animate-pulse' : ''}`} />
+          {conn.label}
+        </span>
+        {output === 'program' && route.isOnProgram ? (
+          <span className="rounded-md bg-red-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-lg shadow-red-950/40">
+            ● Program
+          </span>
+        ) : null}
+        {output === 'vertical' ? (
+          <span
+            className={`rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${onVertical ? 'bg-fuchsia-500 text-white' : 'bg-white/10 text-slate-200'}`}
+          >
+            {onVertical ? '● Vertical' : 'Fallback'}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="absolute inset-x-2 bottom-2 z-20 flex items-end justify-between gap-2 rounded-xl border border-white/10 bg-black/55 px-2.5 py-1.5 backdrop-blur">
+        <div className="min-w-0">
+          <p
+            className={`truncate font-black text-white ${big ? 'text-lg' : small ? 'text-[11px]' : 'text-sm'}`}
+          >
+            {route.displayName}
+          </p>
+          {!small ? (
+            <p className={`truncate text-[10px] uppercase tracking-wide ${theme.accent}`}>
+              {routeTypeLabels[route.routeType]}
+              {route.layoutSlot ? ` · Slot ${route.layoutSlot}` : ''}
             </p>
-            <p className="mt-2 text-2xl font-black text-white">{route.displayName}</p>
-            <p className="mt-1 text-xs text-slate-300">
-              {routeTypeLabels[route.routeType]} · {routeConnectionState(route)}
-            </p>
-          </div>
+          ) : null}
         </div>
-      ) : null}
-      <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur">
-        <span className="mr-auto text-xs font-black text-white">{route.displayName}</span>
-        <Badge tone={output === 'program' && route.isOnProgram ? 'live' : 'neutral'}>
-          {output === 'program' ? 'Program' : 'Vertical'}
-        </Badge>
-        {route.isPinned ? <Badge tone="success">Pinned</Badge> : null}
-        {route.isMuted ? <Badge tone="danger">Muted</Badge> : <Badge tone="success">Audio</Badge>}
-        {route.layoutSlot ? <Badge tone="neutral">Slot {route.layoutSlot}</Badge> : null}
+        <span
+          className={`shrink-0 rounded-md px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide ${route.isMuted ? 'bg-rose-500/80 text-white' : 'bg-emerald-400/20 text-emerald-100 ring-1 ring-emerald-300/30'}`}
+        >
+          {route.isMuted ? '🔇 Mute' : '🔊 Live'}
+        </span>
       </div>
     </div>
   );
@@ -682,71 +950,93 @@ export function CompositorLayer({
   stream,
   output,
   zIndex,
+  size = 'md',
+  hasGuests = false,
 }: {
   route?: MediaRoute | undefined;
   box: LayerBox;
   stream?: MediaStream | undefined;
   output: OutputKind;
   zIndex: number;
+  size?: TileSize;
+  hasGuests?: boolean;
 }) {
   return (
     <LayerFrame box={box} zIndex={zIndex}>
-      <RoutedMediaTile route={route} stream={stream} output={output} />
+      <RoutedMediaTile
+        route={route}
+        stream={stream}
+        output={output}
+        size={size}
+        hasGuests={hasGuests}
+      />
     </LayerFrame>
   );
 }
 
-function SourceLayers({ sources, compact = false }: { sources: SceneSource[]; compact?: boolean }) {
+function SourceLayers({ sources, output }: { sources: SceneSource[]; output: OutputKind }) {
   const visibleSources = sortedVisibleSources(sources);
-  if (!visibleSources.length)
-    return (
-      <div className="absolute inset-8 z-0 grid place-items-center rounded-xl border border-dashed border-white/15 text-sm font-semibold text-slate-400">
-        No visible sources
-      </div>
-    );
+  if (!visibleSources.length) return null;
   return (
-    <div className="absolute inset-0 z-0">
-      {visibleSources.map((source, index) => (
-        <div
-          key={source.id}
-          className={`absolute flex items-center justify-between rounded-xl border border-white/10 bg-gradient-to-br ${sourceBackgrounds[source.type]} p-3 text-white shadow-lg shadow-black/30 backdrop-blur`}
-          style={{
-            left: compact ? '8%' : `${5 + index * 3}%`,
-            top: compact ? `${8 + index * 9}%` : `${8 + index * 6}%`,
-            width: compact ? '84%' : `${78 - index * 4}%`,
-            minHeight: compact ? 42 : 54,
-            zIndex: index,
-          }}
-        >
-          <span className="font-bold">{source.name}</span>
-          <span className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-cyan-100">
-            {source.isLocked ? '🔒 ' : ''}
-            {sourceTypeLabels[source.type]}
-          </span>
-        </div>
-      ))}
+    <div
+      className={`pointer-events-none absolute z-20 flex flex-col gap-1.5 ${output === 'vertical' ? 'inset-x-4 top-16' : 'left-4 top-16 w-56'}`}
+    >
+      <span className="text-[9px] font-black uppercase tracking-[0.22em] text-white/45">
+        Scene Layers
+      </span>
+      {visibleSources.map((source, index) => {
+        const theme = sourceThemes[source.type];
+        return (
+          <div
+            key={source.id}
+            className={`flex items-center justify-between gap-2 rounded-lg border border-dashed ${theme.ring} bg-slate-950/70 px-2 py-1 backdrop-blur`}
+            style={{ zIndex: 20 + index }}
+          >
+            <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-white">
+              <span>{theme.glyph}</span>
+              <span className="truncate">{source.name}</span>
+            </span>
+            <span
+              className={`flex shrink-0 items-center gap-1 text-[9px] font-black uppercase tracking-wide ${theme.accent}`}
+            >
+              {source.isLocked ? <span title="Locked">🔒</span> : null}
+              {sourceTypeLabels[source.type]}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 function SceneFooter({
   scene,
-  output,
   layoutPreset,
+  routeCount,
+  hasGuests,
 }: {
   scene: Scene;
-  output: OutputKind;
   layoutPreset: MediaLayoutPreset;
+  routeCount: number;
+  hasGuests: boolean;
 }) {
+  const status =
+    routeCount > 0
+      ? `${routeCount} on air`
+      : hasGuests
+        ? 'Assign guests'
+        : 'Standby';
   return (
-    <div className="absolute inset-x-5 bottom-5 z-40 rounded-xl border border-white/10 bg-black/50 p-3 backdrop-blur">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-200">
-        Active Scene · {output}
-      </p>
-      <p className="text-lg font-black text-white">{scene.name}</p>
-      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-300">
-        {typeLabels[scene.type]} · {mediaLayoutLabels[layoutPreset]}
-      </p>
+    <div className="absolute inset-x-3 bottom-2 z-40 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/55 px-3 py-1.5 backdrop-blur">
+      <div className="min-w-0">
+        <p className="truncate text-[11px] font-black text-white">{scene.name}</p>
+        <p className="truncate text-[9px] uppercase tracking-[0.16em] text-slate-300">
+          {typeLabels[scene.type]} · {mediaLayoutLabels[layoutPreset]}
+        </p>
+      </div>
+      <span className="shrink-0 rounded-md bg-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-slate-100">
+        {status}
+      </span>
     </div>
   );
 }
@@ -757,34 +1047,46 @@ function BaseCompositor({
   layoutPreset,
   output,
   streams = {},
+  guests = [],
 }: {
   scene: Scene;
   routes: MediaRoute[];
   layoutPreset: MediaLayoutPreset;
   output: OutputKind;
   streams?: RoutedStreamMap | undefined;
+  guests?: Guest[];
 }) {
   const selectedRoutes = output === 'vertical' ? verticalRoutes(routes) : programRoutes(routes);
   const capacity = routeCapacity(layoutPreset);
   const slots = Array.from({ length: capacity }, (_, index) => selectedRoutes[index]);
+  const hasGuests = guests.length > 0;
+  const activeRouteCount = selectedRoutes.filter(Boolean).length;
   return (
     <BroadcastCanvas aspect={output === 'vertical' ? 'vertical' : 'video'}>
-      <SourceLayers sources={scene.sources} compact={output === 'vertical'} />
+      <CanvasHud output={output} layoutPreset={layoutPreset} />
       {slots.map((route, index) => (
         <CompositorLayer
           key={route?.id ?? `empty-${index}`}
           route={route}
           stream={route ? streams[route.id] : undefined}
           output={output}
-          box={getLayerBox(layoutPreset, index, slots.length, output)}
+          size={tileSize(layoutPreset, index)}
+          hasGuests={hasGuests}
+          box={getLayerBox(layoutPreset, index, output)}
           zIndex={10 + index}
         />
       ))}
+      <SourceLayers sources={scene.sources} output={output} />
       <SafeAreaOverlay
-        label={output === 'vertical' ? 'Mobile Safe' : 'Title Safe'}
+        label={output === 'vertical' ? 'Mobile Safe Area' : 'Title Safe'}
         output={output}
       />
-      <SceneFooter scene={scene} output={output} layoutPreset={layoutPreset} />
+      <SceneFooter
+        scene={scene}
+        layoutPreset={layoutPreset}
+        routeCount={activeRouteCount}
+        hasGuests={hasGuests}
+      />
     </BroadcastCanvas>
   );
 }
@@ -794,11 +1096,13 @@ export function ProgramCompositor({
   routes = [],
   layoutPreset = 'full_screen',
   streams,
+  guests = [],
 }: {
   scene: Scene;
   routes?: MediaRoute[];
   layoutPreset?: MediaLayoutPreset;
   streams?: RoutedStreamMap | undefined;
+  guests?: Guest[];
 }) {
   return (
     <BaseCompositor
@@ -807,6 +1111,7 @@ export function ProgramCompositor({
       layoutPreset={layoutPreset}
       output="program"
       streams={streams}
+      guests={guests}
     />
   );
 }
@@ -816,11 +1121,13 @@ export function VerticalCompositor({
   routes = [],
   layoutPreset = 'full_screen',
   streams,
+  guests = [],
 }: {
   scene: Scene;
   routes?: MediaRoute[];
   layoutPreset?: MediaLayoutPreset;
   streams?: RoutedStreamMap | undefined;
+  guests?: Guest[];
 }) {
   return (
     <BaseCompositor
@@ -829,6 +1136,7 @@ export function VerticalCompositor({
       layoutPreset={layoutPreset}
       output="vertical"
       streams={streams}
+      guests={guests}
     />
   );
 }
@@ -856,27 +1164,36 @@ export function ProgramPreview({
   routes = [],
   layoutPreset = 'full_screen',
   streams,
+  guests = [],
 }: {
   scene: Scene;
   routes?: MediaRoute[];
   layoutPreset?: MediaLayoutPreset;
   streams?: RoutedStreamMap | undefined;
+  guests?: Guest[];
 }) {
+  const onProgramCount = routes.filter((route) => route.isActive && route.isOnProgram).length;
   return (
     <Panel>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Program 16:9</p>
           <h2 className="text-xl font-bold text-white">{scene.name}</h2>
-          <p className="text-xs text-slate-400">Layout preset: {mediaLayoutLabels[layoutPreset]}</p>
+          <p className="text-xs text-slate-400">Layout: {mediaLayoutLabels[layoutPreset]}</p>
         </div>
-        <Badge tone="live">PROGRAM</Badge>
+        <div className="flex flex-col items-end gap-1">
+          <Badge tone="live">PROGRAM</Badge>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            {onProgramCount > 0 ? `${onProgramCount} on program` : 'No routes on program'}
+          </span>
+        </div>
       </div>
       <ProgramCompositor
         scene={scene}
         routes={routes}
         layoutPreset={layoutPreset}
         streams={streams}
+        guests={guests}
       />
     </Panel>
   );
@@ -887,21 +1204,35 @@ export function VerticalPreview({
   routes = [],
   layoutPreset = 'full_screen',
   streams,
+  guests = [],
 }: {
   scene: Scene;
   routes?: MediaRoute[];
   layoutPreset?: MediaLayoutPreset;
   streams?: RoutedStreamMap | undefined;
+  guests?: Guest[];
 }) {
+  const hasVerticalRoute = routes.some(
+    (route) => route.isActive && route.metadata?.onVertical === true,
+  );
   return (
     <Panel>
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Vertical 9:16</p>
           <h2 className="text-lg font-bold text-white">{scene.name}</h2>
-          <p className="text-xs text-slate-400">Vertical route with program fallback</p>
+          <p className="text-xs text-slate-400">
+            {hasVerticalRoute ? 'Dedicated vertical route' : 'Mirroring program route'}
+          </p>
         </div>
-        <Badge tone="neutral">TikTok / Reels</Badge>
+        <div className="flex flex-col items-end gap-1">
+          <Badge tone={hasVerticalRoute ? 'warning' : 'neutral'}>
+            {hasVerticalRoute ? 'VERTICAL' : 'FALLBACK'}
+          </Badge>
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+            TikTok / Reels
+          </span>
+        </div>
       </div>
       <div className="mx-auto max-h-[34rem]">
         <VerticalCompositor
@@ -909,6 +1240,7 @@ export function VerticalPreview({
           routes={routes}
           layoutPreset={layoutPreset}
           streams={streams}
+          guests={guests}
         />
       </div>
     </Panel>

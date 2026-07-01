@@ -143,6 +143,7 @@ export default async function ControlRoomPage() {
             channels={audioChannels}
             assets={assets}
             mediaRoutes={mediaRoutes}
+            guests={guests}
           />
           <aside className="space-y-5">
             <HostDeviceControls />
