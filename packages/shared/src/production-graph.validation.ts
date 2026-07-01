@@ -13,6 +13,20 @@ import {
   selectProgramScene,
   type ProductionCommand,
 } from './production-graph.js';
+import {
+  InMemoryAuthorityStore,
+  acquireLock,
+  arbitrateProductionCommand,
+  createCommandConflict,
+  createMockAuthorityScenario,
+  createSessionAuthority,
+  expireLocks,
+  getAuthorityScopeForCommand,
+  getLockForScope,
+  releaseLock,
+  renewLock,
+  roleHasAuthority,
+} from './authority.js';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -374,3 +388,31 @@ coordinator.submitCommand('tester-client', command('SET_PREVIEW_SCENE', { sceneI
 assert(transport.sentMessages.some((message) => message.type === 'COMMAND_REJECTED'), 'stale command rejected');
 assert(transport.sentMessages.some((message) => message.type === 'CLIENT_BEHIND'), 'CLIENT_BEHIND emitted');
 assert(coordinator.requestCatchUp('tester-client')?.type, 'catch-up request returns response or resync message');
+
+
+const authority = createSessionAuthority('test-session', '2026-07-01T00:00:00.000Z');
+assert(getAuthorityScopeForCommand('SET_PREVIEW_SCENE') === 'preview', 'authority scope resolution maps preview commands');
+assert(roleHasAuthority('AUDIO_ENGINEER', 'audio'), 'role authority check allows audio engineer on audio');
+assert(!roleHasAuthority('VIEWER', 'program'), 'role authority check denies viewer mutations');
+let lockSet = acquireLock([], { sessionId: 'test-session', scope: 'audio', ownerOperatorId: 'audio', ownerRole: 'AUDIO_ENGINEER', at: '2026-07-01T00:00:00.000Z', ttlMs: 1000 });
+assert(lockSet.accepted && getLockForScope(lockSet.locks, 'audio', '2026-07-01T00:00:00.500Z'), 'lock acquire stores active lock');
+const renewedLocks = renewLock(lockSet.locks, lockSet.lock.id, 'audio', 2000, '2026-07-01T00:00:00.500Z');
+assert(getLockForScope(renewedLocks, 'audio', '2026-07-01T00:00:02.000Z'), 'lock renewal extends lease');
+const expiredLocks = expireLocks(renewedLocks, '2026-07-01T00:00:03.000Z');
+assert(expiredLocks[0]?.status === 'expired', 'lock expiration marks stale lease expired');
+const releasedLocks = releaseLock(renewedLocks, lockSet.lock.id, 'owner', 'OWNER', '2026-07-01T00:00:01.000Z');
+assert(releasedLocks[0]?.status === 'released', 'owner override can release another operator lock');
+const locked = acquireLock([], { sessionId: 'test-session', scope: 'program', ownerOperatorId: 'director', ownerRole: 'DIRECTOR', at: '2026-07-01T00:00:00.000Z', ttlMs: 10000 });
+assert(!acquireLock(locked.locks, { sessionId: 'test-session', scope: 'program', ownerOperatorId: 'producer', ownerRole: 'PRODUCER', at: '2026-07-01T00:00:01.000Z' }).accepted, 'non-authorized operator cannot override active lock');
+const acceptedAuthority = arbitrateProductionCommand({ command: command('SET_AUDIO_GAIN', { channelId: 'a', gain: 0.5 }, 'AUDIO_ENGINEER', getProductionGraphRevision(graph)), authority, locks: [], graph });
+assert(acceptedAuthority.decision.allowed, 'command arbitration accepts authorized command');
+const deniedAuthority = arbitrateProductionCommand({ command: command('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }, 'VIEWER', getProductionGraphRevision(graph)), authority, locks: [], graph });
+assert(!deniedAuthority.decision.allowed && 'conflict' in deniedAuthority, 'command arbitration rejects authority violation with conflict');
+const lockDenied = arbitrateProductionCommand({ command: command('TAKE_PREVIEW', {}, 'TECHNICAL_DIRECTOR', getProductionGraphRevision(graph)), authority, locks: locked.locks, graph, at: '2026-07-01T00:00:01.000Z' });
+assert(!lockDenied.decision.allowed && lockDenied.decision.reason === 'LOCKED_SCOPE', 'command arbitration rejects locked scope');
+const conflict = createCommandConflict({ sessionId: 'test-session', commandId: 'conflict-command', actorId: 'tester', actorRole: 'DIRECTOR', commandType: 'TAKE_PREVIEW', scope: 'program', type: 'REVISION_MISMATCH', message: 'mock conflict' });
+const authorityStore = new InMemoryAuthorityStore('test-session');
+authorityStore.appendConflict(conflict);
+assert(authorityStore.resolveConflict(conflict.id, 'manual')?.status === 'resolved', 'conflict resolution updates status');
+const mockAuthority = createMockAuthorityScenario('test-session');
+assert(mockAuthority.getAuthorityState().scopes.program.owner?.operatorId === 'director' && mockAuthority.listConflicts().length >= 2, 'authority diagnostics data shape includes owners and conflicts');

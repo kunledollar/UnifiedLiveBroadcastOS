@@ -33,6 +33,7 @@ import {
   createSyncSession,
   getStaleClients,
   isRealtimeSyncEnabled,
+  createMockAuthorityScenario,
 } from '@ubos/shared';
 import {
   type ReactNode,
@@ -546,6 +547,18 @@ export function SceneWorkspace({
   const syncDiagnosticsEnabled = process.env.NEXT_PUBLIC_ENABLE_SYNC_DIAGNOSTICS === 'true';
   const realtimeSyncEnabled = isRealtimeSyncEnabled(process.env);
   const realtimeSyncUrl = process.env.NEXT_PUBLIC_UBOS_SYNC_URL;
+  const authorityDiagnostics = useMemo(() => {
+    const store = createMockAuthorityScenario(productionGraphSession.id);
+    const state = store.getAuthorityState();
+    return {
+      scopes: Object.values(state.scopes),
+      activeLocks: store.listActiveLocks(),
+      expiredLocks: store.listLocks().filter((lock) => lock.status === 'expired'),
+      conflicts: store.listConflicts(),
+      decisions: store.listRecentDecisions(),
+      canOverride: ['OWNER', 'ADMIN'].includes('DIRECTOR'),
+    };
+  }, [productionGraphSession.id]);
   const syncDiagnostics = useMemo(() => {
     const syncSession = createMockSyncScenario(
       createSyncSession({
@@ -1089,6 +1102,26 @@ export function SceneWorkspace({
                 >
                   Reset
                 </button>
+                {syncDiagnosticsEnabled ? (
+                  <details className="rounded border border-amber-400/20 bg-amber-400/5 p-2">
+                    <summary className="cursor-pointer font-bold text-amber-100">Authority diagnostics</summary>
+                    <div className="mt-2 space-y-2 font-mono text-[9px] text-slate-400">
+                      <div>scopes {authorityDiagnostics.scopes.length} · active locks {authorityDiagnostics.activeLocks.length} · expired {authorityDiagnostics.expiredLocks.length}</div>
+                      <div>conflicts {authorityDiagnostics.conflicts.length} · recent decisions {authorityDiagnostics.decisions.length} · director override {authorityDiagnostics.canOverride ? 'yes' : 'no'}</div>
+                      <div className="grid gap-1">
+                        {authorityDiagnostics.scopes.filter((node) => node.owner).slice(0, 6).map((node) => (
+                          <div key={node.scope} className="rounded bg-slate-900 p-1">{node.scope} → {node.owner?.displayName ?? node.owner?.operatorId} ({node.owner?.role})</div>
+                        ))}
+                      </div>
+                      {[...authorityDiagnostics.activeLocks, ...authorityDiagnostics.expiredLocks].map((lock) => (
+                        <div key={lock.id} className="rounded bg-slate-900 p-1">{lock.scope} lock · {lock.ownerOperatorId} · {lock.status} · expires {lock.expiresAt}</div>
+                      ))}
+                      {authorityDiagnostics.conflicts.map((conflict) => (
+                        <div key={conflict.id} className="rounded bg-slate-900 p-1 text-rose-200">{conflict.type} · {conflict.scope} · {conflict.message}</div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
                 {syncDiagnosticsEnabled ? (
                   <details className="rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
                     <summary className="cursor-pointer font-bold text-cyan-100">Sync diagnostics</summary>

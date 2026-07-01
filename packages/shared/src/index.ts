@@ -444,4 +444,6 @@ export * from "./production-graph";
 
 export * from "./collaboration";
 
+export * from "./authority";
+
 export * from './sync.js';

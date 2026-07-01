@@ -1,4 +1,5 @@
 import {
+  applyProductionCommand,
   canExecuteProductionCommand,
   getProductionGraphRevision,
   type LocalProductionCommandDispatcher,
@@ -6,7 +7,9 @@ import {
   type ProductionBroadcastSession,
   type ProductionCommand,
   type ProductionCommandType,
+  type ProductionGraphTransition,
 } from './production-graph.js';
+import type { InMemoryAuthorityStore } from './authority.js';
 
 export type CollaborationRole = OperatorRole;
 export type CollaborationPresence = 'online' | 'idle' | 'away' | 'offline' | 'reconnecting';
@@ -72,7 +75,17 @@ export type CollaborationEventType =
   | 'COMMAND_BROADCAST'
   | 'COMMAND_REJECTED_BY_REVISION'
   | 'SESSION_LOCKED'
-  | 'SESSION_UNLOCKED';
+  | 'SESSION_UNLOCKED'
+  | 'AUTHORITY_GRANTED'
+  | 'AUTHORITY_REVOKED'
+  | 'LOCK_ACQUIRED'
+  | 'LOCK_RELEASED'
+  | 'LOCK_EXPIRED'
+  | 'LOCK_RENEWED'
+  | 'COMMAND_CONFLICT_CREATED'
+  | 'COMMAND_CONFLICT_RESOLVED'
+  | 'COMMAND_ARBITRATED'
+  | 'AUTHORITY_DECISION_CREATED';
 
 export interface CollaborationEvent<TPayload = Record<string, unknown>> {
   id: string;
@@ -200,14 +213,21 @@ export class InMemoryCollaborationStore {
   }
 }
 
-export interface CollaborationCommandBus { broadcastCommand(command: ProductionCommand): ReturnType<LocalProductionCommandDispatcher['dispatch']>; }
+export interface CollaborationCommandBus { broadcastCommand(command: ProductionCommand): ProductionGraphTransition; }
 
 export class LocalCollaborationCommandBus implements CollaborationCommandBus {
-  constructor(private store: InMemoryCollaborationStore, private dispatcher: LocalProductionCommandDispatcher) {}
+  constructor(private store: InMemoryCollaborationStore, private dispatcher: LocalProductionCommandDispatcher, private authorityStore?: InMemoryAuthorityStore) {}
   broadcastCommand(command: ProductionCommand) {
     const session = this.store.getCollaborationSession();
     const commandWithRevision = command.expectedRevision === undefined ? { ...command, expectedRevision: session.currentGraphRevision } : command;
     this.store.appendCollaborationEvent({ id: eventId('COMMAND_BROADCAST'), type: 'COMMAND_BROADCAST', sessionId: session.id, operatorId: command.actorId, timestamp: command.timestamp, graphRevision: session.currentGraphRevision, payload: { commandType: command.type, commandId: command.id, expectedRevision: commandWithRevision.expectedRevision } });
+    const arbitration = this.authorityStore?.arbitrate(commandWithRevision, this.dispatcher.getGraph(), command.timestamp);
+    if (arbitration) {
+      this.store.appendCollaborationEvent({ id: eventId('COMMAND_ARBITRATED'), type: 'COMMAND_ARBITRATED', sessionId: session.id, operatorId: command.actorId, timestamp: command.timestamp, graphRevision: session.currentGraphRevision, payload: { decision: arbitration.decision } });
+      this.store.appendCollaborationEvent({ id: eventId('AUTHORITY_DECISION_CREATED'), type: 'AUTHORITY_DECISION_CREATED', sessionId: session.id, operatorId: command.actorId, timestamp: command.timestamp, graphRevision: session.currentGraphRevision, payload: { decision: arbitration.decision } });
+      if ('conflict' in arbitration) this.store.appendCollaborationEvent({ id: eventId('COMMAND_CONFLICT_CREATED'), type: 'COMMAND_CONFLICT_CREATED', sessionId: session.id, operatorId: command.actorId, timestamp: command.timestamp, graphRevision: session.currentGraphRevision, payload: { conflict: arbitration.conflict } });
+      if (!arbitration.decision.allowed) return applyProductionCommand(this.dispatcher.getGraph(), commandWithRevision);
+    }
     const transition = this.dispatcher.dispatch(commandWithRevision);
     this.store.setCurrentGraphRevision(getProductionGraphRevision(transition.nextGraph));
     if (!transition.accepted && transition.validationErrors.some((error) => error.code === 'REVISION_MISMATCH')) {
