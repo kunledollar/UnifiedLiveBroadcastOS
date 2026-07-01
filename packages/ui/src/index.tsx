@@ -640,14 +640,32 @@ function sortedRoutes(routes: MediaRoute[]) {
     });
 }
 
-function programRoutes(routes: MediaRoute[]) {
-  const onProgram = sortedRoutes(routes.filter((route) => route.isOnProgram));
-  return onProgram.length ? onProgram : sortedRoutes(routes).slice(0, 1);
+function dedupeById(routes: MediaRoute[]) {
+  const seen = new Set<string>();
+  return routes.filter((route) => {
+    if (seen.has(route.id)) return false;
+    seen.add(route.id);
+    return true;
+  });
 }
 
-function verticalRoutes(routes: MediaRoute[]) {
-  const explicit = sortedRoutes(routes.filter((route) => route.metadata?.onVertical === true));
-  return explicit.length ? explicit : programRoutes(routes).slice(0, 1);
+// Fill the program output up to the layout capacity. Routes explicitly sent to
+// program come first, then any other active routes back-fill the remaining
+// slots so a multi-slot layout is not left mostly empty when live sources exist.
+function programRoutes(routes: MediaRoute[], capacity: number) {
+  const active = sortedRoutes(routes);
+  const onProgram = active.filter((route) => route.isOnProgram);
+  const ordered = dedupeById([...onProgram, ...active]);
+  return ordered.slice(0, Math.max(capacity, 1));
+}
+
+// Vertical mirrors program, but any route flagged for vertical takes priority so
+// the 9:16 output can diverge from the horizontal program when desired.
+function verticalRoutes(routes: MediaRoute[], capacity: number) {
+  const active = sortedRoutes(routes);
+  const onVertical = active.filter((route) => route.metadata?.onVertical === true);
+  const ordered = dedupeById([...onVertical, ...programRoutes(routes, capacity)]);
+  return ordered.slice(0, Math.max(capacity, 1));
 }
 
 function routeConnectionState(route: MediaRoute) {
@@ -656,46 +674,47 @@ function routeConnectionState(route: MediaRoute) {
   return route.guest?.status ?? (route.isActive ? 'ready' : 'inactive');
 }
 
+// The canvas reserves a top band for the HUD and a bottom band for the scene
+// footer. Tiles are laid out inside this content region so their own badges and
+// footers never collide with the canvas chrome.
+const CONTENT_REGION = { top: 13, bottom: 85, left: 3, right: 97 } as const;
+const REGION_HEIGHT = CONTENT_REGION.bottom - CONTENT_REGION.top;
+const REGION_WIDTH = CONTENT_REGION.right - CONTENT_REGION.left;
+
+// Map a fractional rectangle (0..1) within the content region to CSS percentages.
+function regionBox(fx: number, fy: number, fw: number, fh: number): LayerBox {
+  return {
+    left: `${CONTENT_REGION.left + fx * REGION_WIDTH}%`,
+    top: `${CONTENT_REGION.top + fy * REGION_HEIGHT}%`,
+    width: `${fw * REGION_WIDTH}%`,
+    height: `${fh * REGION_HEIGHT}%`,
+  };
+}
+
 function getLayerBox(preset: MediaLayoutPreset, index: number, output: OutputKind): LayerBox {
   if (output === 'vertical') {
-    if (preset === 'side_by_side')
-      return { left: '5%', top: `${7 + index * 45}%`, width: '90%', height: '41%' };
+    if (preset === 'side_by_side') return regionBox(0, index * 0.51, 1, 0.49);
     if (preset === 'picture_in_picture')
-      return index === 0
-        ? { left: '4%', top: '6%', width: '92%', height: '86%' }
-        : { left: '58%', top: '9%', width: '38%', height: '22%' };
+      return index === 0 ? regionBox(0, 0, 1, 1) : regionBox(0.6, 0.03, 0.37, 0.22);
     if (preset === '2x2_grid')
-      return {
-        left: `${4 + (index % 2) * 47}%`,
-        top: `${8 + Math.floor(index / 2) * 41}%`,
-        width: '45%',
-        height: '38%',
-      };
+      return regionBox((index % 2) * 0.51, Math.floor(index / 2) * 0.51, 0.49, 0.49);
     if (preset === 'speaker_focus')
       return index === 0
-        ? { left: '4%', top: '6%', width: '92%', height: '62%' }
-        : { left: `${4 + ((index - 1) % 3) * 31.5}%`, top: '72%', width: '28%', height: '20%' };
-    return { left: '4%', top: '6%', width: '92%', height: '86%' };
+        ? regionBox(0, 0, 1, 0.66)
+        : regionBox(((index - 1) % 3) * 0.345, 0.7, 0.31, 0.28);
+    return regionBox(0, 0, 1, 1);
   }
 
-  if (preset === 'side_by_side')
-    return { left: `${2.5 + index * 49}%`, top: '11%', width: '48%', height: '70%' };
+  if (preset === 'side_by_side') return regionBox(index * 0.51, 0, 0.49, 1);
   if (preset === 'picture_in_picture')
-    return index === 0
-      ? { left: '2.5%', top: '5%', width: '95%', height: '82%' }
-      : { left: '70%', top: '55%', width: '27%', height: '30%' };
+    return index === 0 ? regionBox(0, 0, 1, 1) : regionBox(0.69, 0.66, 0.29, 0.32);
   if (preset === '2x2_grid')
-    return {
-      left: `${2.5 + (index % 2) * 49}%`,
-      top: `${6 + Math.floor(index / 2) * 42}%`,
-      width: '48%',
-      height: '39%',
-    };
+    return regionBox((index % 2) * 0.51, Math.floor(index / 2) * 0.51, 0.49, 0.49);
   if (preset === 'speaker_focus')
     return index === 0
-      ? { left: '2.5%', top: '5%', width: '72%', height: '82%' }
-      : { left: '76.5%', top: `${5 + (index - 1) * 27.5}%`, width: '21%', height: '25%' };
-  return { left: '2.5%', top: '5%', width: '95%', height: '82%' };
+      ? regionBox(0, 0, 0.73, 1)
+      : regionBox(0.76, (index - 1) * 0.345, 0.24, 0.32);
+  return regionBox(0, 0, 1, 1);
 }
 
 function routeCapacity(preset: MediaLayoutPreset) {
@@ -726,13 +745,11 @@ export function BroadcastCanvas({
   );
 }
 
-export function SafeAreaOverlay({ label, output }: { label: string; output: OutputKind }) {
+export function SafeAreaOverlay({ output }: { label?: string; output: OutputKind }) {
   return (
     <div
-      className={`pointer-events-none absolute ${output === 'vertical' ? 'inset-x-6 inset-y-10' : 'inset-6'} z-30 flex items-start justify-center rounded-xl border border-dashed border-white/20 pt-1 text-[10px] uppercase tracking-[0.25em] text-white/35`}
-    >
-      {label}
-    </div>
+      className={`pointer-events-none absolute ${output === 'vertical' ? 'inset-x-5 inset-y-8' : 'inset-4'} z-30 rounded-xl border border-dashed border-white/10`}
+    />
   );
 }
 
@@ -778,6 +795,9 @@ function SimulatedFeed({
 }) {
   const big = size === 'lg';
   const small = size === 'sm';
+  // The centered content clears the top badge row and the bottom identity
+  // footer so nothing overlaps. Name/type live in the footer to avoid duplication.
+  const contentInset = big ? 'top-9 bottom-14' : small ? 'top-5 bottom-8' : 'top-8 bottom-11';
   return (
     <div className="absolute inset-0">
       <div
@@ -787,27 +807,26 @@ function SimulatedFeed({
             'repeating-linear-gradient(135deg, rgba(255,255,255,.16) 0 2px, transparent 2px 10px)',
         }}
       />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_32%,rgba(255,255,255,.12),transparent_55%)]" />
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-3 text-center">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(255,255,255,.12),transparent_60%)]" />
+      <div
+        className={`absolute inset-x-0 ${contentInset} flex flex-col items-center justify-center gap-1.5 px-3 text-center`}
+      >
         <div
-          className={`grid place-items-center rounded-full border ${theme.ring} bg-slate-950/60 font-black ${theme.accent} ${
-            big ? 'h-20 w-20 text-3xl' : small ? 'h-9 w-9 text-xs' : 'h-14 w-14 text-lg'
+          className={`grid shrink-0 place-items-center rounded-full border ${theme.ring} bg-slate-950/60 font-black ${theme.accent} ${
+            big ? 'h-16 w-16 text-2xl' : small ? 'h-7 w-7 text-[9px]' : 'h-9 w-9 text-xs'
           }`}
         >
           {initials(route.displayName)}
         </div>
-        {!small ? (
+        {big ? (
           <>
-            <p className={`font-black leading-tight text-white ${big ? 'text-2xl' : 'text-base'}`}>
-              {route.displayName}
-            </p>
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ring-1 ${theme.chip}`}
             >
               <span>{theme.glyph}</span>
               {routeTypeLabels[route.routeType]}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-[0.25em] text-white/40">
+            <span className="text-[9px] font-semibold uppercase tracking-[0.3em] text-white/40">
               Simulated Feed
             </span>
           </>
@@ -1081,8 +1100,9 @@ function BaseCompositor({
   streams?: RoutedStreamMap | undefined;
   guests?: Guest[];
 }) {
-  const selectedRoutes = output === 'vertical' ? verticalRoutes(routes) : programRoutes(routes);
   const capacity = routeCapacity(layoutPreset);
+  const selectedRoutes =
+    output === 'vertical' ? verticalRoutes(routes, capacity) : programRoutes(routes, capacity);
   const slots = Array.from({ length: capacity }, (_, index) => selectedRoutes[index]);
   const hasGuests = guests.length > 0;
   const activeRouteCount = selectedRoutes.filter(Boolean).length;
@@ -1102,10 +1122,7 @@ function BaseCompositor({
         />
       ))}
       <SourceLayers sources={scene.sources} output={output} />
-      <SafeAreaOverlay
-        label={output === 'vertical' ? 'Mobile Safe Area' : 'Title Safe'}
-        output={output}
-      />
+      <SafeAreaOverlay output={output} />
       <SceneFooter
         scene={scene}
         layoutPreset={layoutPreset}
