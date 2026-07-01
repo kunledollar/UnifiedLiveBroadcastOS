@@ -1881,6 +1881,181 @@ export function DestinationPanel({ destinations }: { destinations: Destination[]
   );
 }
 
+type MultiviewPreset = 'classic' | 'broadcast' | 'compact';
+type MultiviewTileKind = 'camera' | 'guest' | 'media' | 'browser' | 'screen' | 'audio' | 'virtual';
+
+function classifyRoute(route: MediaRoute): MultiviewTileKind {
+  if (route.routeType === 'guest_camera' || route.routeType === 'guest_screen_share')
+    return 'guest';
+  if (route.routeType === 'media_source') return 'media';
+  if (route.routeType === 'screen_share') return 'screen';
+  if (route.routeType === 'host_camera') return 'camera';
+  const metadataKind = route.metadata?.sourceType;
+  if (metadataKind === 'browser') return 'browser';
+  if (metadataKind === 'audio') return 'audio';
+  return 'virtual';
+}
+
+const multiviewPresetLabels: Record<MultiviewPreset, string> = {
+  classic: 'Classic',
+  broadcast: 'Broadcast',
+  compact: 'Compact',
+};
+
+const multiviewKindLabels: Record<MultiviewTileKind, string> = {
+  camera: 'Camera',
+  guest: 'Guest',
+  media: 'Media',
+  browser: 'Browser',
+  screen: 'Screen',
+  audio: 'Audio',
+  virtual: 'Virtual',
+};
+
+function MultiviewSourceTile({ route }: { route?: MediaRoute | undefined }) {
+  const kind = route ? classifyRoute(route) : 'virtual';
+  return (
+    <div className="min-h-0">
+      <RoutedMediaTile route={route} output="program" size="sm" />
+      <div className="border-x border-b border-white/10 bg-slate-950/85 px-2 py-1">
+        <p className="truncate text-[9px] font-black uppercase tracking-[0.18em] text-slate-500">
+          {route ? multiviewKindLabels[kind] : 'No Source'}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function MultiviewAudioSummary({ channels }: { channels: AudioChannel[] }) {
+  const master = Math.min(
+    100,
+    Math.round(
+      channels.reduce((sum, channel) => sum + channel.level, 0) / Math.max(channels.length, 1),
+    ),
+  );
+  const masterChannel: AudioChannel = {
+    id: 'master',
+    label: 'Master',
+    level: master,
+    muted: channels.every((channel) => channel.muted),
+    kind: 'system',
+  };
+  return (
+    <section className="rounded-xl border border-white/10 bg-slate-950/75 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+          Audio Meters
+        </p>
+        <OutputBadge label="MASTER" tone="neutral" />
+      </div>
+      <div className="grid gap-2 md:grid-cols-[1.2fr_repeat(4,minmax(0,1fr))]">
+        <AudioMeter channel={masterChannel} compact />
+        {channels.slice(0, 4).map((channel) => (
+          <AudioMeter key={channel.id} channel={channel} compact />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function MultiviewHealthSummary({ metrics }: { metrics: StreamHealthMetric[] }) {
+  const required = ['CPU', 'FPS', 'Dropped Frames', 'Recording', 'RTMP', 'WebRTC'];
+  const cards = required.map(
+    (label) =>
+      metrics.find((metric) => metric.label.toLowerCase() === label.toLowerCase()) ?? {
+        id: label,
+        label,
+        value:
+          label === 'Recording' ? 'UI' : label === 'RTMP' || label === 'WebRTC' ? 'Ready' : '—',
+        status: 'good' as const,
+      },
+  );
+  return (
+    <section className="rounded-xl border border-white/10 bg-slate-950/75 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+          Broadcast Health
+        </p>
+        <OutputBadge label="HEALTH" tone="success" />
+      </div>
+      <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
+        {cards.map((metric) => (
+          <Metric key={metric.id} label={metric.label} value={metric.value} tone={metric.status} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+export function ProductionMultiview({
+  programScene,
+  previewScene,
+  routes = [],
+  layoutPreset = 'full_screen',
+  channels = [],
+  healthMetrics = [],
+  guests = [],
+  preset = 'classic',
+}: {
+  programScene: Scene;
+  previewScene: Scene;
+  routes?: MediaRoute[];
+  layoutPreset?: MediaLayoutPreset;
+  channels?: AudioChannel[];
+  healthMetrics?: StreamHealthMetric[];
+  guests?: Guest[];
+  preset?: MultiviewPreset;
+}) {
+  const orderedRoutes = dedupeById([
+    ...routes.filter((route) => route.isOnProgram),
+    ...sortedRoutes(routes),
+    ...routes,
+  ]).slice(0, preset === 'compact' ? 6 : 8);
+  const tiles = Array.from(
+    { length: preset === 'compact' ? 6 : 8 },
+    (_, index) => orderedRoutes[index],
+  );
+  return (
+    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto rounded-2xl border border-white/10 bg-slate-950/70 p-2">
+      <div className="flex items-center justify-between gap-2 px-1">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-100">
+          Professional Multiview
+        </p>
+        <div className="flex gap-1">
+          {(Object.keys(multiviewPresetLabels) as MultiviewPreset[]).map((key) => (
+            <OutputBadge
+              key={key}
+              label={preset === key ? multiviewPresetLabels[key] : key.toUpperCase()}
+              tone={preset === key ? 'success' : 'neutral'}
+            />
+          ))}
+        </div>
+      </div>
+      <div className="grid gap-2 xl:grid-cols-2">
+        <ProgramPreview
+          scene={programScene}
+          routes={routes}
+          layoutPreset={layoutPreset}
+          guests={guests}
+        />
+        <PreviewMonitor
+          scene={previewScene}
+          routes={routes}
+          layoutPreset={layoutPreset}
+          guests={guests}
+        />
+      </div>
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        {tiles.map((route, index) => (
+          <MultiviewSourceTile key={route?.id ?? `empty-mv-${index}`} route={route} />
+        ))}
+      </div>
+      <MultiviewAudioSummary channels={channels} />
+      <MultiviewHealthSummary metrics={healthMetrics} />
+    </div>
+  );
+}
+
 export function UnifiedChatPanel({ messages }: { messages: ChatMessage[] }) {
   return (
     <Panel title="Unified Chat">
@@ -1920,13 +2095,41 @@ export function StreamHealthPanel({ metrics }: { metrics: StreamHealthMetric[] }
   );
 }
 
+export function AudioMeter({
+  channel,
+  compact = false,
+}: {
+  channel: AudioChannel;
+  compact?: boolean;
+}) {
+  const level = Math.max(0, Math.min(100, channel.level));
+  const tone = channel.muted ? 'bg-rose-400' : level > 85 ? 'bg-amber-300' : 'bg-cyan-300';
+  return (
+    <div className={compact ? 'space-y-1' : 'space-y-2'}>
+      <div className="flex items-center justify-between gap-2">
+        <p className={`${compact ? 'text-[10px]' : 'text-sm'} truncate font-semibold text-white`}>
+          {channel.label}
+        </p>
+        <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
+          {channel.muted ? 'MUTE' : `${level}%`}
+        </span>
+      </div>
+      <div className={`${compact ? 'h-1.5' : 'h-2'} overflow-hidden rounded-full bg-slate-800`}>
+        <div
+          className={`${compact ? 'h-1.5' : 'h-2'} rounded-full ${tone}`}
+          style={{ width: `${level}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       {channels.map((channel) => (
         <div key={channel.id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-white">{channel.label}</p>
+          <div className="mb-3 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1">
               <TallyBadge
                 state={channel.muted ? 'muted' : 'idle'}
@@ -1937,9 +2140,7 @@ export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
               </Badge>
             </div>
           </div>
-          <div className="mt-3 h-2 rounded-full bg-slate-800">
-            <div className="h-2 rounded-full bg-cyan-300" style={{ width: `${channel.level}%` }} />
-          </div>
+          <AudioMeter channel={channel} />
         </div>
       ))}
     </div>

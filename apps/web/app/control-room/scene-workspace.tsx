@@ -4,6 +4,7 @@ import {
   LayoutSelector,
   ProductionDock,
   ProgramPreview,
+  ProductionMultiview,
   getTallyState,
   PreviewMonitor,
   SceneList,
@@ -50,7 +51,7 @@ import { ProductionSwitcher } from './production-switcher';
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
 
-type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact';
+type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact' | 'multiview';
 
 const controlRoomViewStorageKey = 'ubos.controlRoom.viewMode';
 
@@ -81,6 +82,11 @@ const viewModeOptions: Array<{
     description: 'More workspace room',
   },
   {
+    value: 'multiview',
+    label: 'Multiview',
+    description: 'Production dashboard',
+  },
+  {
     value: 'quad',
     label: 'Quad View',
     description: 'Coming soon',
@@ -89,7 +95,11 @@ const viewModeOptions: Array<{
 ];
 
 const isControlRoomViewMode = (value: string | null): value is ControlRoomViewMode =>
-  value === 'dual' || value === 'program' || value === 'vertical' || value === 'compact';
+  value === 'dual' ||
+  value === 'program' ||
+  value === 'vertical' ||
+  value === 'compact' ||
+  value === 'multiview';
 
 function formatElapsed(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
@@ -140,6 +150,7 @@ const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
   program: 'grid min-h-0 gap-1.5 lg:grid-cols-[minmax(0,4fr)_minmax(13rem,0.85fr)]',
   vertical: 'grid min-h-0 gap-1.5 md:grid-cols-1 lg:grid-cols-[minmax(0,3.5fr)_minmax(14rem,1fr)]',
   compact: 'grid min-h-0 gap-1.5 md:grid-cols-[minmax(0,3fr)_minmax(12rem,1fr)]',
+  multiview: 'grid min-h-0 gap-1.5',
 };
 
 function ViewModeSelector({
@@ -331,6 +342,28 @@ export function SceneWorkspace({
       upload: `${(6.2 + visibleRoutes * 0.4).toFixed(1)} Mbps`,
     };
   }, [mediaRoutes]);
+
+  const multiviewHealthMetrics = useMemo(
+    () => [
+      { id: 'cpu', label: 'CPU', value: safeHealthMetrics.cpu, status: 'good' as const },
+      { id: 'fps', label: 'FPS', value: safeHealthMetrics.fps, status: 'good' as const },
+      {
+        id: 'dropped',
+        label: 'Dropped Frames',
+        value: safeHealthMetrics.dropped,
+        status: 'good' as const,
+      },
+      { id: 'recording', label: 'Recording', value: 'UI', status: 'good' as const },
+      { id: 'rtmp', label: 'RTMP', value: 'Ready', status: 'good' as const },
+      {
+        id: 'webrtc',
+        label: 'WebRTC',
+        value: `${mediaRoutes.filter((route) => route.isActive).length} routes`,
+        status: 'good' as const,
+      },
+    ],
+    [mediaRoutes, safeHealthMetrics],
+  );
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -648,24 +681,37 @@ export function SceneWorkspace({
           }
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <ProgramPreview
-                scene={programScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-              />
+          {viewMode === 'multiview' ? (
+            <ProductionMultiview
+              programScene={programScene}
+              previewScene={previewScene}
+              routes={mediaRoutes}
+              layoutPreset={layoutPreset}
+              channels={channels}
+              healthMetrics={multiviewHealthMetrics}
+              guests={guests}
+              preset="classic"
+            />
+          ) : (
+            <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
+              <div className="flex min-h-0 min-w-0 flex-col">
+                <ProgramPreview
+                  scene={programScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                />
+              </div>
+              <div className="flex min-h-0 min-w-0 flex-col">
+                <PreviewMonitor
+                  scene={previewScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                />
+              </div>
             </div>
-            <div className="flex min-h-0 min-w-0 flex-col">
-              <PreviewMonitor
-                scene={previewScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-              />
-            </div>
-          </div>
+          )}
         </div>
         <div className="max-h-44 shrink-0 overflow-y-auto">
           <ProductionDock channels={channels} assets={assets} />
