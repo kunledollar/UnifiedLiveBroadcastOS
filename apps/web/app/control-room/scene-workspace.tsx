@@ -51,7 +51,30 @@ import { ProductionSwitcher } from './production-switcher';
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
 
-type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact';
+type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact' | 'multiview';
+type WorkspacePresetId = 'default' | 'broadcast' | 'compact' | 'interview' | 'streaming';
+type PanelId =
+  | 'scenes'
+  | 'sources'
+  | 'guestManager'
+  | 'programPreview'
+  | 'audioMixer'
+  | 'productionDock'
+  | 'broadcastHealth'
+  | 'chat'
+  | 'outputs';
+type PanelStatus = 'expanded' | 'collapsed' | 'hidden';
+type WorkspaceLayout = {
+  selectedPreset: WorkspacePresetId;
+  panelState: Record<PanelId, PanelStatus>;
+  sizes: { left: number; center: number; right: number; dock: number };
+  viewMode: ControlRoomViewMode;
+};
+type WorkspacePreset = WorkspaceLayout & {
+  id: WorkspacePresetId;
+  label: string;
+  description: string;
+};
 
 const controlRoomViewStorageKey = 'ubos.controlRoom.viewMode';
 const workspaceStorageKey = 'ubos.controlRoom.workspace.v1';
