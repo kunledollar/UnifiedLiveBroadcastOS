@@ -6,6 +6,7 @@ import { loadMediaRoutes } from './media-route-actions';
 import { MediaRoutingPanel } from './media-routing-panel';
 import { ControlRoomRealtime } from './_components/control-room-realtime';
 import { HostDeviceControls } from './_components/host-device-controls';
+import { ProductionTeamPanel } from './_components/production-team-panel';
 
 import { CrossFollowPanel, DestinationPanel, StreamHealthPanel, UnifiedChatPanel } from '@ubos/ui';
 import {
@@ -149,6 +150,7 @@ export default async function ControlRoomPage() {
               broadcastId="demo-broadcast"
             />
             <HostDeviceControls />
+            <ProductionTeamPanel />
             <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
               <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
                 Destinations
