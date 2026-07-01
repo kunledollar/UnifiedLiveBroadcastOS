@@ -255,12 +255,13 @@ export function ProductionSwitcher({
         </div>
         <details className="rounded-lg border border-white/5 bg-slate-950/70 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-slate-400">
           <summary className="cursor-pointer font-black text-slate-300">Keyboard Shortcuts</summary>
-          <div className="mt-2 grid gap-1 sm:grid-cols-5">
+          <div className="mt-2 grid gap-1 sm:grid-cols-6">
             <span>Space → TAKE</span>
             <span>C → CUT</span>
             <span>A → AUTO</span>
             <span>1–9 → Scene</span>
             <span>F → Fade</span>
+            <span>M → Mute route</span>
           </div>
         </details>
       </div>
