@@ -24,7 +24,7 @@ import {
   type ProductionSwitchingState,
   type TransitionType,
 } from '@ubos/shared';
-import { useEffect, useMemo, useOptimistic, useState, useTransition } from 'react';
+import { type ReactNode, useEffect, useMemo, useOptimistic, useState, useTransition } from 'react';
 import {
   addScene,
   addSource,
@@ -51,9 +51,82 @@ import { ProductionSwitcher } from './production-switcher';
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
 
-type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact' | 'multiview';
+type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact';
 
 const controlRoomViewStorageKey = 'ubos.controlRoom.viewMode';
+const workspaceStorageKey = 'ubos.controlRoom.workspace.v1';
+const panelIds: PanelId[] = [
+  'scenes',
+  'sources',
+  'guestManager',
+  'programPreview',
+  'audioMixer',
+  'productionDock',
+  'broadcastHealth',
+  'chat',
+  'outputs',
+];
+const panelLabels: Record<PanelId, string> = {
+  scenes: 'Scenes',
+  sources: 'Sources',
+  guestManager: 'Guest Manager',
+  programPreview: 'Program/Preview',
+  audioMixer: 'Audio Mixer',
+  productionDock: 'Production Dock',
+  broadcastHealth: 'Broadcast Health',
+  chat: 'Chat',
+  outputs: 'Outputs',
+};
+const allExpanded = (): Record<PanelId, PanelStatus> =>
+  Object.fromEntries(panelIds.map((id) => [id, 'expanded'])) as Record<PanelId, PanelStatus>;
+const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
+  default: {
+    id: 'default',
+    label: 'Default',
+    description: 'Balanced control room',
+    selectedPreset: 'default',
+    panelState: allExpanded(),
+    sizes: { left: 288, center: 720, right: 352, dock: 176 },
+    viewMode: 'dual',
+  },
+  broadcast: {
+    id: 'broadcast',
+    label: 'Broadcast',
+    description: 'Program emphasis',
+    selectedPreset: 'broadcast',
+    panelState: { ...allExpanded(), chat: 'collapsed' },
+    sizes: { left: 304, center: 900, right: 384, dock: 184 },
+    viewMode: 'program',
+  },
+  compact: {
+    id: 'compact',
+    label: 'Compact',
+    description: 'Laptop friendly',
+    selectedPreset: 'compact',
+    panelState: { ...allExpanded(), sources: 'collapsed', chat: 'hidden', outputs: 'hidden' },
+    sizes: { left: 232, center: 620, right: 280, dock: 132 },
+    viewMode: 'compact',
+  },
+  interview: {
+    id: 'interview',
+    label: 'Interview',
+    description: 'Guest manager focus',
+    selectedPreset: 'interview',
+    panelState: { ...allExpanded(), broadcastHealth: 'collapsed', outputs: 'hidden' },
+    sizes: { left: 272, center: 760, right: 420, dock: 160 },
+    viewMode: 'dual',
+  },
+  streaming: {
+    id: 'streaming',
+    label: 'Streaming',
+    description: 'Chat and health focus',
+    selectedPreset: 'streaming',
+    panelState: { ...allExpanded(), outputs: 'collapsed' },
+    sizes: { left: 260, center: 780, right: 400, dock: 168 },
+    viewMode: 'vertical',
+  },
+};
+const factoryWorkspace = workspacePresets.default;
 
 const viewModeOptions: Array<{
   value: ControlRoomViewMode | 'quad';
@@ -203,6 +276,7 @@ export function SceneWorkspace({
   mediaRoutes = [],
   guests = [],
   initialProductionState,
+  rightSidebar,
 }: {
   initialScenes: Scene[];
   initialProductionState: ProductionSwitchingState;
@@ -211,23 +285,44 @@ export function SceneWorkspace({
   assets: ProductionAsset[];
   mediaRoutes?: MediaRoute[];
   guests?: Guest[];
+  rightSidebar?: ReactNode;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [viewMode, setViewMode] = useState<ControlRoomViewMode>('dual');
+  const [workspace, setWorkspace] = useState<WorkspaceLayout>(factoryWorkspace);
+  const viewMode = workspace.viewMode;
   const [scenes, setScenes] = useOptimistic(initialScenes, (_current, next: Scene[]) => next);
   const [productionState, setProductionState] = useState(initialProductionState);
   const [transitionActive, setTransitionActive] = useState(false);
   const [lastTransitionLabel, setLastTransitionLabel] = useState('None');
   const [switcherFeedback, setSwitcherFeedback] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
-  const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [clock, setClock] = useState('00:00:00');
 
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
-    if (isControlRoomViewMode(storedViewMode)) setViewMode(storedViewMode);
+    const storedWorkspace = window.localStorage.getItem(workspaceStorageKey);
+    if (storedWorkspace) {
+      try {
+        const parsed = JSON.parse(storedWorkspace) as WorkspaceLayout;
+        if (parsed?.selectedPreset && parsed?.panelState && parsed?.sizes) {
+          setWorkspace({
+            ...factoryWorkspace,
+            ...parsed,
+            panelState: { ...factoryWorkspace.panelState, ...parsed.panelState },
+            sizes: { ...factoryWorkspace.sizes, ...parsed.sizes },
+          });
+          return;
+        }
+      } catch {}
+    }
+    if (isControlRoomViewMode(storedViewMode))
+      setWorkspace((current) => ({ ...current, viewMode: storedViewMode }));
   }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
+  }, [workspace]);
 
   useEffect(() => {
     const startedAt = Date.now();
@@ -241,9 +336,39 @@ export function SceneWorkspace({
   }, []);
 
   const selectViewMode = (mode: ControlRoomViewMode) => {
-    setViewMode(mode);
+    setWorkspace((current) => ({ ...current, viewMode: mode }));
     window.localStorage.setItem(controlRoomViewStorageKey, mode);
   };
+
+  const applyWorkspace = (next: WorkspaceLayout) => {
+    setWorkspace(next);
+    window.localStorage.setItem(controlRoomViewStorageKey, next.viewMode);
+  };
+  const saveWorkspace = () =>
+    window.localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
+  const restoreWorkspace = () => {
+    const storedWorkspace = window.localStorage.getItem(workspaceStorageKey);
+    if (!storedWorkspace) return applyWorkspace(factoryWorkspace);
+    try {
+      applyWorkspace(JSON.parse(storedWorkspace) as WorkspaceLayout);
+    } catch {
+      applyWorkspace(factoryWorkspace);
+    }
+  };
+  const applyPreset = (id: WorkspacePresetId) => applyWorkspace(workspacePresets[id]);
+  const resetWorkspace = () => {
+    window.localStorage.removeItem(workspaceStorageKey);
+    applyWorkspace(factoryWorkspace);
+  };
+  const setPanelStatus = (panel: PanelId, status: PanelStatus) =>
+    setWorkspace((current) => ({
+      ...current,
+      panelState: { ...current.panelState, [panel]: status },
+    }));
+  const resizeWorkspace = (key: keyof WorkspaceLayout['sizes'], value: number) =>
+    setWorkspace((current) => ({ ...current, sizes: { ...current.sizes, [key]: value } }));
+  const isPanelVisible = (panel: PanelId) => workspace.panelState[panel] !== 'hidden';
+  const isPanelExpanded = (panel: PanelId) => workspace.panelState[panel] === 'expanded';
 
   const refresh = (next: Scene[]) => startTransition(() => setScenes(next));
   const sorted = [...scenes].sort((a, b) => a.order - b.order);
@@ -365,6 +490,16 @@ export function SceneWorkspace({
     [mediaRoutes, safeHealthMetrics],
   );
 
+  const rightSidebarVisible =
+    Boolean(rightSidebar) &&
+    (isPanelVisible('guestManager') ||
+      isPanelVisible('broadcastHealth') ||
+      isPanelVisible('chat') ||
+      isPanelVisible('outputs'));
+  const workspaceColumns = rightSidebarVisible
+    ? `minmax(13rem, ${workspace.sizes.left}px) minmax(${workspace.sizes.center}px, 1fr) minmax(16rem, ${workspace.sizes.right}px)`
+    : `minmax(13rem, ${workspace.sizes.left}px) minmax(${workspace.sizes.center}px, 1fr)`;
+
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
       sorted.map((scene) =>
@@ -376,16 +511,50 @@ export function SceneWorkspace({
   };
 
   return (
-    <>
+    <div
+      className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
+      style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
+    >
       <aside className="min-h-0 space-y-3 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
-        <button
-          type="button"
-          onClick={() => setLeftCollapsed(!leftCollapsed)}
-          className="w-full rounded-xl border border-white/10 bg-slate-900/75 px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-cyan-100"
-        >
-          {leftCollapsed ? 'Show scene/source panels' : 'Collapse scene/source panels'}
-        </button>
-        {!leftCollapsed ? (
+        <div className="rounded-xl border border-white/10 bg-slate-900/75 p-2">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
+            Panel Visibility
+          </p>
+          <div className="grid grid-cols-2 gap-1">
+            {(
+              [
+                'scenes',
+                'sources',
+                'guestManager',
+                'programPreview',
+                'audioMixer',
+                'productionDock',
+                'broadcastHealth',
+                'chat',
+                'outputs',
+              ] as PanelId[]
+            ).map((panel) => (
+              <button
+                key={panel}
+                type="button"
+                onClick={() =>
+                  setPanelStatus(
+                    panel,
+                    workspace.panelState[panel] === 'hidden'
+                      ? 'expanded'
+                      : workspace.panelState[panel] === 'collapsed'
+                        ? 'hidden'
+                        : 'collapsed',
+                  )
+                }
+                className={`rounded px-2 py-1 text-left text-[10px] font-bold ${workspace.panelState[panel] === 'hidden' ? 'bg-slate-950 text-slate-500' : workspace.panelState[panel] === 'collapsed' ? 'bg-amber-400/10 text-amber-200' : 'bg-cyan-400/10 text-cyan-100'}`}
+              >
+                {panelLabels[panel]}
+              </button>
+            ))}
+          </div>
+        </div>
+        {isPanelVisible('scenes') && isPanelExpanded('scenes') ? (
           <SceneList
             scenes={sorted}
             sceneTypes={sceneTypes}
@@ -471,7 +640,7 @@ export function SceneWorkspace({
             }}
           />
         ) : null}
-        {!leftCollapsed ? (
+        {isPanelVisible('sources') && isPanelExpanded('sources') ? (
           <SourceManager
             scene={activeScene}
             sourceTypes={sourceTypes}
@@ -581,7 +750,9 @@ export function SceneWorkspace({
             }}
           />
         ) : null}
-        {!leftCollapsed ? <LayoutSelector layouts={layouts} /> : null}
+        {isPanelVisible('sources') && isPanelExpanded('sources') ? (
+          <LayoutSelector layouts={layouts} />
+        ) : null}
         <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/75 p-4 text-sm text-slate-300">
           <button className="rounded-xl bg-slate-950/70 p-3 text-left font-semibold hover:bg-slate-800">
             Assets Library
@@ -590,6 +761,15 @@ export function SceneWorkspace({
             Overlay Controls
           </button>
         </div>
+        <input
+          aria-label="Left sidebar width"
+          className="w-full accent-cyan-300"
+          type="range"
+          min={208}
+          max={360}
+          value={workspace.sizes.left}
+          onChange={(e) => resizeWorkspace('left', Number(e.target.value))}
+        />
       </aside>
       <section className="flex min-h-0 flex-col gap-1 overflow-hidden">
         <div className="shrink-0 border-b border-white/10 bg-slate-950/95 px-2 py-1 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
@@ -627,6 +807,43 @@ export function SceneWorkspace({
               {clock} · PGM {programScene.name} · PVW {previewScene.name}
             </span>
             <details className="group relative">
+              <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-cyan-400/20 bg-slate-900 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100 hover:bg-slate-800">
+                Workspace
+              </summary>
+              <div className="absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 text-[10px] text-slate-300 shadow-2xl">
+                {Object.values(workspacePresets).map((preset) => (
+                  <button
+                    key={preset.id}
+                    className="rounded px-2 py-1 text-left hover:bg-slate-800"
+                    onClick={() => applyPreset(preset.id)}
+                  >
+                    {preset.label}
+                    <span className="block text-[9px] text-slate-500">{preset.description}</span>
+                  </button>
+                ))}
+                <div className="border-t border-white/10 pt-1">
+                  <button
+                    className="w-full rounded px-2 py-1 text-left hover:bg-slate-800"
+                    onClick={saveWorkspace}
+                  >
+                    Save Current
+                  </button>
+                  <button
+                    className="w-full rounded px-2 py-1 text-left hover:bg-slate-800"
+                    onClick={restoreWorkspace}
+                  >
+                    Restore Last Workspace
+                  </button>
+                  <button
+                    className="w-full rounded px-2 py-1 text-left hover:bg-slate-800"
+                    onClick={resetWorkspace}
+                  >
+                    Reset Workspace
+                  </button>
+                </div>
+              </div>
+            </details>
+            <details className="group relative">
               <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-white/10 bg-slate-900 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300 hover:bg-slate-800">
                 Tools
               </summary>
@@ -661,6 +878,18 @@ export function SceneWorkspace({
         </div>
         <div className="shrink-0">
           <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+          <label className="flex items-center gap-2 border-b border-white/5 px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+            Center
+            <input
+              aria-label="Center workspace minimum width"
+              className="min-w-40 flex-1 accent-cyan-300"
+              type="range"
+              min={520}
+              max={1040}
+              value={workspace.sizes.center}
+              onChange={(e) => resizeWorkspace('center', Number(e.target.value))}
+            />
+          </label>
         </div>
         <ProductionSwitcher
           productionState={productionState}
@@ -681,42 +910,60 @@ export function SceneWorkspace({
           }
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {viewMode === 'multiview' ? (
-            <ProductionMultiview
-              programScene={programScene}
-              previewScene={previewScene}
-              routes={mediaRoutes}
-              layoutPreset={layoutPreset}
-              channels={channels}
-              healthMetrics={multiviewHealthMetrics}
-              guests={guests}
-              preset="classic"
-            />
-          ) : (
-            <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
-              <div className="flex min-h-0 min-w-0 flex-col">
-                <ProgramPreview
-                  scene={programScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                />
-              </div>
-              <div className="flex min-h-0 min-w-0 flex-col">
-                <PreviewMonitor
-                  scene={previewScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                />
-              </div>
+          <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <ProgramPreview
+                scene={programScene}
+                routes={mediaRoutes}
+                layoutPreset={layoutPreset}
+                guests={guests}
+              />
             </div>
-          )}
+            <div className="flex min-h-0 min-w-0 flex-col">
+              <PreviewMonitor
+                scene={previewScene}
+                routes={mediaRoutes}
+                layoutPreset={layoutPreset}
+                guests={guests}
+              />
+            </div>
+          </div>
         </div>
-        <div className="max-h-44 shrink-0 overflow-y-auto">
-          <ProductionDock channels={channels} assets={assets} />
-        </div>
+        {isPanelVisible('productionDock') ? (
+          <div className="shrink-0 overflow-y-auto" style={{ maxHeight: workspace.sizes.dock }}>
+            {isPanelExpanded('productionDock') ? (
+              <ProductionDock channels={channels} assets={assets} />
+            ) : (
+              <div className="rounded-xl border border-white/10 bg-slate-900/75 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">
+                Production Dock collapsed
+              </div>
+            )}
+          </div>
+        ) : null}
+        <input
+          aria-label="Production dock height"
+          className="w-full accent-cyan-300"
+          type="range"
+          min={96}
+          max={280}
+          value={workspace.sizes.dock}
+          onChange={(e) => resizeWorkspace('dock', Number(e.target.value))}
+        />
       </section>
-    </>
+      {rightSidebarVisible ? (
+        <aside className="min-h-0 overflow-y-auto pr-1 max-xl:max-h-[42rem]">
+          <input
+            aria-label="Right sidebar width"
+            className="mb-2 w-full accent-cyan-300"
+            type="range"
+            min={256}
+            max={520}
+            value={workspace.sizes.right}
+            onChange={(e) => resizeWorkspace('right', Number(e.target.value))}
+          />
+          {rightSidebar}
+        </aside>
+      ) : null}
+    </div>
   );
 }
