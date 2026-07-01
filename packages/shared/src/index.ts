@@ -447,3 +447,5 @@ export * from "./collaboration";
 export * from "./authority";
 
 export * from './sync.js';
+
+export * from "./persistence.js";
