@@ -5,9 +5,9 @@ import {
   Badge,
   ProductionDock,
   ProgramPreview,
+  PreviewMonitor,
   SceneList,
   SourceManager,
-  VerticalPreview,
 } from '@ubos/ui';
 import {
   SceneType,
@@ -90,11 +90,11 @@ const viewModeOptions: Array<{
 const isControlRoomViewMode = (value: string | null): value is ControlRoomViewMode =>
   value === 'dual' || value === 'program' || value === 'vertical' || value === 'compact';
 
-const previewGridClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(14rem,0.34fr)]',
-  program: 'grid min-h-0 gap-3',
-  vertical: 'grid min-h-0 gap-3 justify-items-center xl:grid-cols-1',
-  compact: 'grid min-h-0 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,0.72fr)_14rem]',
+const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
+  dual: 'grid min-h-0 gap-2 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,1fr)] xl:grid-cols-[minmax(0,3.25fr)_minmax(17rem,1fr)]',
+  program: 'grid min-h-0 gap-2 lg:grid-cols-[minmax(0,3.25fr)_minmax(16rem,0.95fr)]',
+  vertical: 'grid min-h-0 gap-2 md:grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,1fr)]',
+  compact: 'grid min-h-0 gap-2 md:grid-cols-[minmax(0,2.7fr)_minmax(14rem,1fr)]',
 };
 
 function ViewModeSelector({
@@ -472,54 +472,111 @@ export function SceneWorkspace({
         </div>
       </aside>
       <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
-        <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-2xl shadow-black/30">
-          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="shrink-0 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 shadow-lg shadow-black/20">
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">
-                Broadcast Studio · safe shortcuts: Space Take, 1-9 Preview, C Cut, F Fade, M Mute
-                route
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-300">
+                Broadcast Studio · Space Take · 1-9 Preview · C Cut · F Fade · M Mute route
               </p>
-              <h1 className="text-xl font-bold text-white">Launch Day Broadcast</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <h1 className="text-lg font-bold text-white">Launch Day Broadcast</h1>
+                <Badge tone="live">LIVE</Badge>
+                <Badge tone={transitionActive ? 'warning' : 'success'}>
+                  {transitionActive ? 'Transition active' : 'Ready'}
+                </Badge>
+                <span className="rounded-md bg-slate-900 px-2 py-1 font-mono text-[11px] text-slate-300">
+                  {new Date().toLocaleTimeString()}
+                </span>
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge tone="live">LIVE</Badge>
-              <Badge tone="neutral">Record placeholder</Badge>
+            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
               <button
-                className="rounded-xl bg-cyan-400 px-4 py-2 text-sm font-black text-slate-950"
-                onClick={() => switchProgram(productionState.transitionType)}
+                className="rounded-md bg-slate-800 px-2.5 py-1 hover:bg-slate-700"
+                onClick={() => startTransition(async () => seedDemoProductionState())}
               >
-                Take
+                Seed demo
               </button>
               <button
-                className="rounded-xl bg-white/10 px-4 py-2 text-sm font-black text-white"
-                onClick={() => switchProgram('cut')}
+                className="rounded-md bg-slate-800 px-2.5 py-1 hover:bg-slate-700"
+                onClick={() => startTransition(async () => simulateDemoProduction())}
               >
-                Cut
+                Sim active speaker/live guests
               </button>
               <button
-                className="rounded-xl bg-white/10 px-4 py-2 text-sm font-black text-white"
-                onClick={() => switchProgram('fade')}
+                className="rounded-md bg-slate-800 px-2.5 py-1 hover:bg-slate-700"
+                onClick={() => startTransition(async () => resetDemoProductionState())}
               >
-                Fade
+                Reset demo
               </button>
-              <select
-                className="rounded-xl bg-slate-900 px-3 py-2 text-sm text-white"
-                value={productionState.transitionType}
-                onChange={(e) =>
-                  persistProductionState(
-                    { ...productionState, transitionType: e.target.value as TransitionType },
-                    'stage',
-                  )
-                }
-              >
-                <option value="cut">Cut</option>
-                <option value="fade">Fade</option>
-                <option value="dip">Dip placeholder</option>
-                <option value="wipe">Wipe placeholder</option>
-              </select>
+              <span className="hidden xl:inline">Preview: {previewScene.name}</span>
+              <span className="hidden xl:inline">Program: {programScene.name}</span>
+              <button className="rounded-md bg-rose-500/80 px-3 py-1.5 text-xs font-black text-white">
+                Emergency Stop
+              </button>
+            </div>
+          </div>
+        </div>
+        <div className="shrink-0">
+          <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+        </div>
+        <div className="flex-1 overflow-y-auto pr-1">
+          <div className={monitorDeckClasses[viewMode]}>
+            <div className="min-w-0">
+              <ProgramPreview
+                scene={programScene}
+                routes={mediaRoutes}
+                layoutPreset={layoutPreset}
+                guests={guests}
+              />
+            </div>
+            <div className="min-w-0">
+              <PreviewMonitor
+                scene={previewScene}
+                routes={mediaRoutes}
+                layoutPreset={layoutPreset}
+                guests={guests}
+              />
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/90 px-2.5 py-2">
+            <button
+              className="rounded-md bg-cyan-400 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-950"
+              onClick={() => switchProgram(productionState.transitionType)}
+            >
+              Auto
+            </button>
+            <button
+              className="rounded-md bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-white/15"
+              onClick={() => switchProgram('cut')}
+            >
+              Cut
+            </button>
+            <button
+              className="rounded-md bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-white/15"
+              onClick={() => switchProgram('fade')}
+            >
+              Fade
+            </button>
+            <select
+              className="rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
+              value={productionState.transitionType}
+              onChange={(e) =>
+                persistProductionState(
+                  { ...productionState, transitionType: e.target.value as TransitionType },
+                  'stage',
+                )
+              }
+            >
+              <option value="cut">Cut</option>
+              <option value="fade">Fade</option>
+              <option value="dip">Dip placeholder</option>
+              <option value="wipe">Wipe placeholder</option>
+            </select>
+            <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+              Duration
               <input
                 aria-label="Transition duration milliseconds"
-                className="w-24 rounded-xl bg-slate-900 px-3 py-2 text-sm text-white"
+                className="w-24 rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white"
                 type="number"
                 min={0}
                 max={5000}
@@ -532,72 +589,8 @@ export function SceneWorkspace({
                   )
                 }
               />
-              <Badge tone={transitionActive ? 'warning' : 'success'}>
-                {transitionActive ? 'Transition active' : 'Ready'}
-              </Badge>
-              <button className="rounded-xl bg-rose-500/80 px-4 py-2 text-sm font-black text-white">
-                Emergency Stop
-              </button>
-              <span className="rounded-xl bg-slate-900 px-3 py-2 font-mono text-xs text-slate-200">
-                {new Date().toLocaleTimeString()}
-              </span>
-            </div>
+            </label>
           </div>
-          <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-300">
-            <button
-              className="rounded-lg bg-slate-800 px-3 py-1"
-              onClick={() => startTransition(async () => seedDemoProductionState())}
-            >
-              Seed demo
-            </button>
-            <button
-              className="rounded-lg bg-slate-800 px-3 py-1"
-              onClick={() => startTransition(async () => simulateDemoProduction())}
-            >
-              Sim active speaker/live guests
-            </button>
-            <button
-              className="rounded-lg bg-slate-800 px-3 py-1"
-              onClick={() => startTransition(async () => resetDemoProductionState())}
-            >
-              Reset demo
-            </button>
-            <span>Preview: {previewScene.name}</span>
-            <span>Program: {programScene.name}</span>
-          </div>
-        </div>
-        <div className="shrink-0">
-          <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
-        </div>
-        <div className={`flex-1 overflow-y-auto pr-1 ${previewGridClasses[viewMode]}`}>
-          {viewMode !== 'vertical' ? (
-            <div className={viewMode === 'compact' ? 'min-w-0 text-sm' : 'min-w-0'}>
-              <ProgramPreview
-                scene={programScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-              />
-            </div>
-          ) : null}
-          {viewMode !== 'program' ? (
-            <div
-              className={
-                viewMode === 'vertical'
-                  ? 'w-full max-w-md min-w-0 xl:max-w-xl'
-                  : viewMode === 'compact'
-                    ? 'min-w-0 text-sm'
-                    : 'min-w-0'
-              }
-            >
-              <VerticalPreview
-                scene={programScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-              />
-            </div>
-          ) : null}
         </div>
         <div className="max-h-56 shrink-0 overflow-y-auto">
           <ProductionDock channels={channels} assets={assets} />
