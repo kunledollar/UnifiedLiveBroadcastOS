@@ -261,3 +261,135 @@ export async function updateRouteLayoutPreset(routeId: string, layoutPreset: Med
   await emit('route:layoutChanged', route.id, { layoutPreset: preset });
   return toRoute(updated);
 }
+
+export async function seedDemoProductionState() {
+  await assertBroadcast(DEMO_BROADCAST_ID);
+  const guests = await prisma.guest.findMany({
+    where: { workspaceId: DEMO_WORKSPACE_ID, sessionId: DEMO_BROADCAST_ID },
+  });
+  if (guests.length === 0) {
+    await prisma.guest.createMany({
+      data: [
+        {
+          workspaceId: DEMO_WORKSPACE_ID,
+          sessionId: DEMO_BROADCAST_ID,
+          displayName: 'Avery Host',
+          status: 'CONNECTED',
+          role: 'HOST',
+          isSpotlighted: true,
+          lastSeenAt: new Date(),
+        },
+        {
+          workspaceId: DEMO_WORKSPACE_ID,
+          sessionId: DEMO_BROADCAST_ID,
+          displayName: 'Jordan Guest',
+          status: 'CONNECTED',
+          role: 'GUEST',
+          lastSeenAt: new Date(),
+        },
+      ],
+    });
+  }
+  const scenes = await prisma.scene.findMany({
+    where: { broadcastId: DEMO_BROADCAST_ID },
+    orderBy: { order: 'asc' },
+  });
+  const routes = await prisma.mediaRoute.findMany({
+    where: { workspaceId: DEMO_WORKSPACE_ID, broadcastId: DEMO_BROADCAST_ID },
+  });
+  if (routes.length === 0) {
+    const [host, guest] = await prisma.guest.findMany({
+      where: { workspaceId: DEMO_WORKSPACE_ID, sessionId: DEMO_BROADCAST_ID },
+      orderBy: { createdAt: 'asc' },
+      take: 2,
+    });
+    await prisma.mediaRoute.createMany({
+      data: [
+        {
+          workspaceId: DEMO_WORKSPACE_ID,
+          broadcastId: DEMO_BROADCAST_ID,
+          guestId: host?.id ?? null,
+          sceneId: scenes[1]?.id ?? scenes[0]?.id ?? null,
+          routeType: 'HOST_CAMERA',
+          displayName: host?.displayName ?? 'Avery Host',
+          isOnProgram: true,
+          order: 0,
+          metadata: { layoutPreset: 'side_by_side', demo: true, activeSpeaker: true },
+        },
+        {
+          workspaceId: DEMO_WORKSPACE_ID,
+          broadcastId: DEMO_BROADCAST_ID,
+          guestId: guest?.id ?? null,
+          sceneId: scenes[1]?.id ?? scenes[0]?.id ?? null,
+          routeType: 'GUEST_CAMERA',
+          displayName: guest?.displayName ?? 'Jordan Guest',
+          order: 1,
+          metadata: { demo: true },
+        },
+        {
+          workspaceId: DEMO_WORKSPACE_ID,
+          broadcastId: DEMO_BROADCAST_ID,
+          sceneId: scenes[2]?.id ?? scenes[0]?.id ?? null,
+          routeType: 'SCREEN_SHARE',
+          displayName: 'Product Screen Share',
+          order: 2,
+          metadata: { demo: true, onVertical: true },
+        },
+      ],
+    });
+  }
+  await emit('production:demoSeeded', 'demo', {});
+}
+
+export async function simulateDemoProduction() {
+  await assertBroadcast(DEMO_BROADCAST_ID);
+  const routes = await prisma.mediaRoute.findMany({
+    where: { workspaceId: DEMO_WORKSPACE_ID, broadcastId: DEMO_BROADCAST_ID },
+    orderBy: { order: 'asc' },
+  });
+  const activeIndex = routes.findIndex(
+    (route) => objectOrEmpty(route.metadata).activeSpeaker === true,
+  );
+  const next = routes[(activeIndex + 1 + routes.length) % Math.max(routes.length, 1)];
+  await Promise.all([
+    prisma.mediaRoute.updateMany({
+      where: { workspaceId: DEMO_WORKSPACE_ID, broadcastId: DEMO_BROADCAST_ID },
+      data: { metadata: { demo: true } },
+    }),
+    ...(next
+      ? [
+          prisma.mediaRoute.update({
+            where: { id: next.id },
+            data: {
+              isActive: true,
+              metadata: { ...objectOrEmpty(next.metadata), demo: true, activeSpeaker: true },
+            },
+          }),
+        ]
+      : []),
+    prisma.guest.updateMany({
+      where: { workspaceId: DEMO_WORKSPACE_ID, sessionId: DEMO_BROADCAST_ID },
+      data: { status: 'CONNECTED', lastSeenAt: new Date() },
+    }),
+  ]);
+  await emit('production:demoSimulated', next?.id ?? 'demo', { activeSpeakerRouteId: next?.id });
+}
+
+export async function resetDemoProductionState() {
+  await assertBroadcast(DEMO_BROADCAST_ID);
+  await prisma.mediaRoute.deleteMany({
+    where: {
+      workspaceId: DEMO_WORKSPACE_ID,
+      broadcastId: DEMO_BROADCAST_ID,
+      metadata: { path: ['demo'], equals: true },
+    },
+  });
+  await prisma.guest.deleteMany({
+    where: {
+      workspaceId: DEMO_WORKSPACE_ID,
+      sessionId: DEMO_BROADCAST_ID,
+      displayName: { in: ['Avery Host', 'Jordan Guest'] },
+    },
+  });
+  await emit('production:demoReset', 'demo', {});
+}

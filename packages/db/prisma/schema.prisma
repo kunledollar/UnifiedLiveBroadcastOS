@@ -164,24 +164,25 @@ model WorkspaceMember {
 }
 
 model BroadcastSession {
-  id              String                 @id @default(cuid())
-  workspaceId     String
-  title           String
-  status          BroadcastSessionStatus @default(DRAFT)
-  workspace       Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  guests          Guest[]
-  guestInvites    GuestInvite[]
-  guestSessions   GuestSession[]
-  deviceInfos     DeviceInfo[]
-  chatMessages    ChatMessage[]
-  followEvents    FollowEvent[]
-  recordings      Recording[]
-  analyticsEvents AnalyticsEvent[]
-  scenes          Scene[]
-  sceneSources    SceneSource[]
-  mediaRoutes     MediaRoute[]
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
+  id               String                 @id @default(cuid())
+  workspaceId      String
+  title            String
+  status           BroadcastSessionStatus @default(DRAFT)
+  productionConfig Json                   @default("{}")
+  workspace        Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  guests           Guest[]
+  guestInvites     GuestInvite[]
+  guestSessions    GuestSession[]
+  deviceInfos      DeviceInfo[]
+  chatMessages     ChatMessage[]
+  followEvents     FollowEvent[]
+  recordings       Recording[]
+  analyticsEvents  AnalyticsEvent[]
+  scenes           Scene[]
+  sceneSources     SceneSource[]
+  mediaRoutes      MediaRoute[]
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
 
   @@index([workspaceId])
   @@index([status])
@@ -407,9 +408,8 @@ model SceneSource {
   @@index([workspaceId, broadcastId, sceneId, order])
 }
 
-
 model MediaRoute {
-  id          String         @id @default(cuid())
+  id          String           @id @default(cuid())
   workspaceId String
   broadcastId String
   guestId     String?
@@ -417,19 +417,19 @@ model MediaRoute {
   sceneId     String?
   routeType   MediaRouteType
   displayName String
-  isActive    Boolean        @default(true)
-  isOnProgram Boolean        @default(false)
-  isPinned    Boolean        @default(false)
-  isMuted     Boolean        @default(false)
+  isActive    Boolean          @default(true)
+  isOnProgram Boolean          @default(false)
+  isPinned    Boolean          @default(false)
+  isMuted     Boolean          @default(false)
   layoutSlot  String?
-  order       Int            @default(0)
-  metadata    Json           @default("{}")
-  workspace   Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  order       Int              @default(0)
+  metadata    Json             @default("{}")
+  workspace   Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   broadcast   BroadcastSession @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-  guest       Guest?         @relation(fields: [guestId], references: [id], onDelete: SetNull)
-  scene       Scene?         @relation(fields: [sceneId], references: [id], onDelete: SetNull)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
+  guest       Guest?           @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  scene       Scene?           @relation(fields: [sceneId], references: [id], onDelete: SetNull)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
 
   @@index([workspaceId])
   @@index([broadcastId])

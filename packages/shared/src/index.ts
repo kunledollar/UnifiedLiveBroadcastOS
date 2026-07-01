@@ -79,6 +79,13 @@ export enum SceneType {
 
 export type CanvasAspectRatio = '16:9' | '9:16' | '1:1';
 export type ProductionStatus = 'offline' | 'rehearsal' | 'live' | 'ending';
+export type TransitionType = 'cut' | 'fade' | 'dip' | 'wipe';
+export interface ProductionSwitchingState {
+  previewSceneId: string;
+  programSceneId: string;
+  transitionType: TransitionType;
+  transitionDuration: number;
+}
 export type SceneLayout =
   'solo' | 'interview' | 'grid' | 'screen_share' | 'vertical_split' | 'picture_in_picture';
 export enum MediaRouteType {
@@ -383,11 +390,16 @@ export const broadcastRealtimeEventTypes = [
   'route:programChanged',
   'route:sceneAssigned',
   'route:layoutChanged',
+  'production:previewChanged',
+  'production:programChanged',
+  'production:demoSeeded',
+  'production:demoSimulated',
+  'production:demoReset',
 ] as const;
 
 export type BroadcastRealtimeEventType = (typeof broadcastRealtimeEventTypes)[number];
 export type BroadcastRealtimeEntityType =
-  'guest' | 'scene' | 'source' | 'broadcast' | 'system' | 'webrtc' | 'route';
+  'guest' | 'scene' | 'source' | 'broadcast' | 'system' | 'webrtc' | 'route' | 'production';
 export type WebRtcSignalRole = 'host' | 'guest';
 export type WebRtcConnectionState = RTCPeerConnectionState;
 export interface WebRtcSignalPayload {

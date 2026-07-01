@@ -13,6 +13,8 @@ import {
   type SceneLayout,
   type SceneSource,
   type SceneSourceType,
+  type ProductionSwitchingState,
+  type TransitionType,
 } from '@ubos/shared';
 import { revalidatePath } from 'next/cache';
 import { emitRealtimeEvent } from './realtime-actions';
@@ -123,6 +125,34 @@ function toJsonArray(value: unknown): SceneSource[] {
   return Array.isArray(value) ? (value as unknown as SceneSource[]) : [];
 }
 
+const transitionTypes: TransitionType[] = ['cut', 'fade', 'dip', 'wipe'];
+
+function productionConfig(
+  value: unknown,
+  scenes: Array<{ id: string; isActive: boolean }>,
+): ProductionSwitchingState {
+  const config = objectOrEmpty(value);
+  const fallbackSceneId = scenes.find((scene) => scene.isActive)?.id ?? scenes[0]?.id ?? '';
+  const previewSceneId =
+    typeof config.previewSceneId === 'string' &&
+    scenes.some((scene) => scene.id === config.previewSceneId)
+      ? config.previewSceneId
+      : fallbackSceneId;
+  const programSceneId =
+    typeof config.programSceneId === 'string' &&
+    scenes.some((scene) => scene.id === config.programSceneId)
+      ? config.programSceneId
+      : fallbackSceneId;
+  const transitionType = transitionTypes.includes(config.transitionType as TransitionType)
+    ? (config.transitionType as TransitionType)
+    : 'cut';
+  const rawDuration = Number(config.transitionDuration);
+  const transitionDuration = Number.isFinite(rawDuration)
+    ? Math.min(Math.max(Math.round(rawDuration), 0), 5000)
+    : 500;
+  return { previewSceneId, programSceneId, transitionType, transitionDuration };
+}
+
 function toScene(scene: DbScene): Scene {
   const type = dbToType(scene.type);
   return {
@@ -228,6 +258,93 @@ export async function getScenes(broadcastId = DEMO_BROADCAST_ID) {
   return scenes.map(toScene);
 }
 
+export async function getProductionState(broadcastId = DEMO_BROADCAST_ID) {
+  await ensureDemoBroadcast();
+  await assertWorkspaceAccess(broadcastId);
+  const [broadcast, scenes] = await Promise.all([
+    prisma.broadcastSession.findUnique({
+      where: { id: broadcastId },
+      select: { productionConfig: true },
+    }),
+    prisma.scene.findMany({
+      where: { broadcastId },
+      orderBy: { order: 'asc' },
+      select: { id: true, isActive: true },
+    }),
+  ]);
+  const state = productionConfig(broadcast?.productionConfig, scenes);
+  if (!objectOrEmpty(broadcast?.productionConfig).programSceneId && state.programSceneId) {
+    await prisma.broadcastSession.update({
+      where: { id: broadcastId },
+      data: { productionConfig: state as never },
+    });
+  }
+  return state;
+}
+
+export async function updateProductionState(
+  input: Partial<ProductionSwitchingState> & {
+    broadcastId?: string;
+    action?: 'stage' | 'take' | 'cut' | 'fade';
+  },
+) {
+  const broadcastId = input.broadcastId ?? DEMO_BROADCAST_ID;
+  await assertWorkspaceAccess(broadcastId);
+  const [broadcast, scenes] = await Promise.all([
+    prisma.broadcastSession.findUnique({
+      where: { id: broadcastId },
+      select: { productionConfig: true },
+    }),
+    prisma.scene.findMany({
+      where: { broadcastId },
+      orderBy: { order: 'asc' },
+      select: { id: true, isActive: true },
+    }),
+  ]);
+  const current = productionConfig(broadcast?.productionConfig, scenes);
+  const sceneIds = new Set(scenes.map((scene) => scene.id));
+  const next: ProductionSwitchingState = {
+    previewSceneId:
+      input.previewSceneId && sceneIds.has(input.previewSceneId)
+        ? input.previewSceneId
+        : current.previewSceneId,
+    programSceneId:
+      input.programSceneId && sceneIds.has(input.programSceneId)
+        ? input.programSceneId
+        : current.programSceneId,
+    transitionType: transitionTypes.includes(input.transitionType as TransitionType)
+      ? (input.transitionType as TransitionType)
+      : current.transitionType,
+    transitionDuration:
+      typeof input.transitionDuration === 'number'
+        ? Math.min(Math.max(Math.round(input.transitionDuration), 0), 5000)
+        : current.transitionDuration,
+  };
+  const programChanged = next.programSceneId !== current.programSceneId;
+  await prisma.$transaction([
+    prisma.broadcastSession.update({
+      where: { id: broadcastId },
+      data: { productionConfig: next as never },
+    }),
+    ...(programChanged
+      ? [
+          prisma.scene.updateMany({ where: { broadcastId }, data: { isActive: false } }),
+          prisma.scene.update({ where: { id: next.programSceneId }, data: { isActive: true } }),
+        ]
+      : []),
+  ]);
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId,
+    eventType: programChanged ? 'production:programChanged' : 'production:previewChanged',
+    entityType: 'scene',
+    entityId: programChanged ? next.programSceneId : next.previewSceneId,
+    payload: { ...next, action: input.action ?? 'stage' },
+  });
+  revalidatePath('/control-room');
+  return next;
+}
+
 export async function addScene(formData: FormData) {
   const broadcastId = String(formData.get('broadcastId') ?? DEMO_BROADCAST_ID);
   await assertWorkspaceAccess(broadcastId);
@@ -245,7 +362,14 @@ export async function addScene(formData: FormData) {
       order: nextOrder,
     },
   });
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId, eventType: 'scene:created', entityType: 'scene', entityId: created.id, payload: { name: created.name } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId,
+    eventType: 'scene:created',
+    entityType: 'scene',
+    entityId: created.id,
+    payload: { name: created.name },
+  });
   revalidatePath('/control-room');
 }
 
@@ -256,7 +380,14 @@ export async function renameScene(formData: FormData) {
   if (!scene) throw new Error('Scene not found.');
   await assertWorkspaceAccess(scene.broadcastId);
   await prisma.scene.update({ where: { id: sceneId }, data: { name: input.name } });
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:renamed', entityType: 'scene', entityId: sceneId, payload: { name: input.name } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: scene.broadcastId,
+    eventType: 'scene:renamed',
+    entityType: 'scene',
+    entityId: sceneId,
+    payload: { name: input.name },
+  });
   revalidatePath('/control-room');
 }
 
@@ -271,7 +402,20 @@ export async function switchScene(sceneId: string) {
     }),
     prisma.scene.update({ where: { id: sceneId }, data: { isActive: true } }),
   ]);
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:switched', entityType: 'scene', entityId: sceneId, payload: { activeSceneId: sceneId } });
+  await updateProductionState({
+    broadcastId: scene.broadcastId,
+    previewSceneId: sceneId,
+    programSceneId: sceneId,
+    action: 'take',
+  });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: scene.broadcastId,
+    eventType: 'scene:switched',
+    entityType: 'scene',
+    entityId: sceneId,
+    payload: { activeSceneId: sceneId },
+  });
   revalidatePath('/control-room');
 }
 
@@ -312,7 +456,14 @@ export async function duplicateScene(sceneId: string) {
         transform: jsonObject(source.transform),
       })),
     });
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:created', entityType: 'scene', entityId: copy.id, payload: { name: copy.name, duplicatedFrom: scene.id } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: scene.broadcastId,
+    eventType: 'scene:created',
+    entityType: 'scene',
+    entityId: copy.id,
+    payload: { name: copy.name, duplicatedFrom: scene.id },
+  });
   revalidatePath('/control-room');
 }
 
@@ -331,7 +482,14 @@ export async function deleteScene(sceneId: string) {
     if (next) await prisma.scene.update({ where: { id: next.id }, data: { isActive: true } });
   }
   await normalizeOrder(scene.broadcastId);
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'scene:deleted', entityType: 'scene', entityId: sceneId, payload: { name: scene.name } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: scene.broadcastId,
+    eventType: 'scene:deleted',
+    entityType: 'scene',
+    entityId: sceneId,
+    payload: { name: scene.name },
+  });
   revalidatePath('/control-room');
 }
 
@@ -421,7 +579,14 @@ export async function addSource(formData: FormData) {
       order: nextOrder,
     },
   });
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: scene.broadcastId, eventType: 'source:created', entityType: 'source', entityId: created.id, payload: { sceneId: scene.id, name: created.name } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: scene.broadcastId,
+    eventType: 'source:created',
+    entityType: 'source',
+    entityId: created.id,
+    payload: { sceneId: scene.id, name: created.name },
+  });
   revalidatePath('/control-room');
 }
 
@@ -432,7 +597,14 @@ export async function renameSource(formData: FormData) {
   });
   const source = await getScopedSource(input.sourceId);
   await prisma.sceneSource.update({ where: { id: input.sourceId }, data: { name: input.name } });
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:renamed', entityType: 'source', entityId: input.sourceId, payload: { sceneId: source.sceneId, name: input.name } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: source.broadcastId,
+    eventType: 'source:renamed',
+    entityType: 'source',
+    entityId: input.sourceId,
+    payload: { sceneId: source.sceneId, name: input.name },
+  });
   revalidatePath('/control-room');
 }
 
@@ -466,7 +638,14 @@ export async function deleteSource(sourceId: string) {
   const source = await getScopedSource(sourceId);
   await prisma.sceneSource.delete({ where: { id: sourceId } });
   await normalizeSourceOrder(source.sceneId);
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:deleted', entityType: 'source', entityId: sourceId, payload: { sceneId: source.sceneId, name: source.name } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: source.broadcastId,
+    eventType: 'source:deleted',
+    entityType: 'source',
+    entityId: sourceId,
+    payload: { sceneId: source.sceneId, name: source.name },
+  });
   revalidatePath('/control-room');
 }
 
@@ -494,7 +673,14 @@ export async function toggleSourceVisibility(sourceId: string) {
     where: { id: sourceId },
     data: { isVisible: !source.isVisible },
   });
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:visibilityChanged', entityType: 'source', entityId: sourceId, payload: { sceneId: source.sceneId, isVisible: !source.isVisible } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: source.broadcastId,
+    eventType: 'source:visibilityChanged',
+    entityType: 'source',
+    entityId: sourceId,
+    payload: { sceneId: source.sceneId, isVisible: !source.isVisible },
+  });
   revalidatePath('/control-room');
 }
 
@@ -504,7 +690,14 @@ export async function toggleSourceLock(sourceId: string) {
     where: { id: sourceId },
     data: { isLocked: !source.isLocked },
   });
-  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: source.broadcastId, eventType: 'source:lockChanged', entityType: 'source', entityId: sourceId, payload: { sceneId: source.sceneId, isLocked: !source.isLocked } });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: source.broadcastId,
+    eventType: 'source:lockChanged',
+    entityType: 'source',
+    entityId: sourceId,
+    payload: { sceneId: source.sceneId, isLocked: !source.isLocked },
+  });
   revalidatePath('/control-room');
 }
 
