@@ -159,3 +159,101 @@ assert(
   'command sequence is included in event diagnostics',
 );
 console.log('Production graph validation passed');
+
+import {
+  InMemoryCollaborationStore,
+  LocalCollaborationCommandBus,
+  canCollaborationOperatorExecuteCommand,
+  createCollaborationSession,
+  createMockCollaborationOperators,
+  getRevisionLag,
+  isOperatorBehindGraph,
+  mapCollaborationRoleToProductionRole,
+} from './collaboration.js';
+
+const collaborationProduction = createBroadcastSession({
+  id: 'collab-session',
+  name: 'Collab Session',
+  operatorId: 'director',
+  timestamp: '2026-07-01T00:00:00.000Z',
+});
+const collaborationSession = createCollaborationSession({
+  broadcastSessionId: collaborationProduction.id,
+  productionGraphId: collaborationProduction.graph.id,
+  currentGraphRevision: 0,
+  sessionName: 'Collab Session Team',
+  operators: createMockCollaborationOperators(0, collaborationProduction.createdAt),
+  timestamp: collaborationProduction.createdAt,
+});
+const store = new InMemoryCollaborationStore(collaborationSession);
+const guestOperator = {
+  ...store.listOperators()[0]!,
+  id: 'guest-manager',
+  displayName: 'Guest Manager',
+  role: 'GUEST_MANAGER' as const,
+  initials: 'GM',
+};
+store.joinOperator(guestOperator);
+assert(store.getCollaborationSession().operators['guest-manager'], 'operator joins collaboration session');
+store.updateOperatorPresence('guest-manager', 'away');
+assert(
+  store.getCollaborationSession().operators['guest-manager']?.presence === 'away',
+  'presence updates are stored',
+);
+store.updateOperatorActivity('guest-manager', 'managing_guests', 'Guest Manager');
+assert(
+  store.getCollaborationSession().operators['guest-manager']?.currentActivity === 'managing_guests',
+  'activity updates are stored',
+);
+store.setCurrentGraphRevision(3);
+assert(
+  isOperatorBehindGraph(store.getCollaborationSession().operators.producer!, store.getCollaborationSession()),
+  'operator revision lag is detected',
+);
+assert(
+  getRevisionLag(store.getCollaborationSession().operators.producer!, store.getCollaborationSession()) === 3,
+  'revision lag helper returns current delta',
+);
+store.markOperatorSynced('producer', 3);
+assert(
+  getRevisionLag(store.getCollaborationSession().operators.producer!, store.getCollaborationSession()) === 0,
+  'mark operator synced updates observed revision',
+);
+const collabDispatcher = new LocalProductionCommandDispatcher(collaborationProduction);
+const bus = new LocalCollaborationCommandBus(store, collabDispatcher);
+const busAccepted = bus.broadcastCommand({
+  id: 'collab-create-scene',
+  type: 'CREATE_SCENE',
+  broadcastSessionId: collaborationProduction.id,
+  actorId: 'director',
+  actorRole: 'DIRECTOR',
+  timestamp: '2026-07-01T00:00:01.000Z',
+  expectedRevision: 0,
+  payload: { id: 'collab-scene', name: 'Collab Scene' },
+});
+assert(busAccepted.accepted, 'command broadcast accepts current revision command');
+assert(store.getCollaborationSession().currentGraphRevision === 1, 'command broadcast updates session revision');
+const busRejected = bus.broadcastCommand({
+  id: 'collab-stale-preview',
+  type: 'SET_PREVIEW_SCENE',
+  broadcastSessionId: collaborationProduction.id,
+  actorId: 'director',
+  actorRole: 'DIRECTOR',
+  timestamp: '2026-07-01T00:00:02.000Z',
+  expectedRevision: 0,
+  payload: { sceneId: 'collab-scene' },
+});
+assert(!busRejected.accepted, 'stale collaboration command is rejected');
+assert(
+  store.listCollaborationEvents().some((event) => event.type === 'COMMAND_REJECTED_BY_REVISION'),
+  'revision mismatch emits collaboration event',
+);
+assert(
+  mapCollaborationRoleToProductionRole('AUDIO_ENGINEER') === 'AUDIO_ENGINEER',
+  'collaboration role maps to production role',
+);
+assert(
+  canCollaborationOperatorExecuteCommand(store.getCollaborationSession().operators.audio!, 'SET_AUDIO_GAIN'),
+  'collaboration permissions reuse production command permissions',
+);
+console.log('Collaboration validation passed');

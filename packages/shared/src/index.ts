@@ -441,3 +441,5 @@ export function broadcastRealtimeRoom({ workspaceId, broadcastId }: BroadcastRea
 }
 
 export * from "./production-graph";
+
+export * from "./collaboration";
