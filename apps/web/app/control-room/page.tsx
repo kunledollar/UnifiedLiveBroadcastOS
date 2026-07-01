@@ -1,4 +1,4 @@
-import { getScenes } from './scene-actions';
+import { getProductionState, getScenes } from './scene-actions';
 import { SceneWorkspace } from './scene-workspace';
 import { GuestManagement } from './guest-management';
 import { listGuests, listInvites } from './guest-actions';
@@ -7,13 +7,7 @@ import { MediaRoutingPanel } from './media-routing-panel';
 import { ControlRoomRealtime } from './_components/control-room-realtime';
 import { HostDeviceControls } from './_components/host-device-controls';
 
-import {
-  BroadcastToolbar,
-  CrossFollowPanel,
-  DestinationPanel,
-  StreamHealthPanel,
-  UnifiedChatPanel,
-} from '@ubos/ui';
+import { CrossFollowPanel, DestinationPanel, StreamHealthPanel, UnifiedChatPanel } from '@ubos/ui';
 import {
   ChatModerationStatus,
   ChatPlatform,
@@ -125,8 +119,9 @@ const assets: ProductionAsset[] = [
 export const dynamic = 'force-dynamic';
 
 export default async function ControlRoomPage() {
-  const [scenes, guests, invites, mediaRoutes] = await Promise.all([
+  const [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
     getScenes(),
+    getProductionState(),
     listGuests(),
     listInvites(),
     loadMediaRoutes(),
@@ -135,10 +130,10 @@ export default async function ControlRoomPage() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-4 text-slate-100 md:p-6">
       <div className="mx-auto max-w-[1800px] space-y-5">
-        <BroadcastToolbar title="Launch Day Broadcast" status="offline" elapsed="00:00:00" />
         <div className="grid gap-5 2xl:grid-cols-[20rem_minmax(0,1fr)_24rem]">
           <SceneWorkspace
             initialScenes={scenes}
+            initialProductionState={productionState}
             layouts={layouts}
             channels={audioChannels}
             assets={assets}

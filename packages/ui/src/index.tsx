@@ -148,6 +148,8 @@ export function SceneCard({
   onDuplicate,
   onDelete,
   onMove,
+  previewSceneId,
+  programSceneId,
 }: {
   scene: Scene;
   index: number;
@@ -157,12 +159,16 @@ export function SceneCard({
   onDuplicate: ((sceneId: string) => void) | undefined;
   onDelete: ((sceneId: string) => void) | undefined;
   onMove: ((sceneId: string, direction: 'up' | 'down') => void) | undefined;
+  previewSceneId?: string | undefined;
+  programSceneId?: string | undefined;
 }) {
   const sceneLayout = scene.layout ?? 'picture_in_picture';
+  const isProgram = scene.id === programSceneId || scene.isActive;
+  const isPreview = scene.id === previewSceneId;
 
   return (
     <div
-      className={`rounded-2xl border p-3 transition ${scene.isActive ? 'border-cyan-300 bg-cyan-300/10 shadow-lg shadow-cyan-950/20' : 'border-white/10 bg-slate-950/50 hover:bg-slate-800/80'}`}
+      className={`rounded-2xl border p-3 transition ${isProgram ? 'border-red-400 bg-red-500/10 shadow-lg shadow-red-950/20' : isPreview ? 'border-emerald-300 bg-emerald-300/10 shadow-lg shadow-emerald-950/20' : 'border-white/10 bg-slate-950/50 hover:bg-slate-800/80'}`}
     >
       <button className="w-full text-left" onClick={() => onSwitch?.(scene.id)} type="button">
         <div className="flex items-start justify-between gap-3">
@@ -172,7 +178,9 @@ export function SceneCard({
           </div>
           <div className="flex flex-col items-end gap-2">
             <Badge tone="neutral">{typeLabels[scene.type]}</Badge>
-            {scene.isActive ? <Badge tone="success">● Active</Badge> : null}
+            {isProgram ? <Badge tone="live">● Program</Badge> : null}
+            {isPreview ? <Badge tone="success">● Preview</Badge> : null}
+            {!isProgram && !isPreview ? <Badge tone="neutral">Standby</Badge> : null}
           </div>
         </div>
         <div className="mt-3 flex gap-1.5">
@@ -245,6 +253,8 @@ export function SceneList({
   onDuplicate,
   onDelete,
   onMove,
+  previewSceneId,
+  programSceneId,
 }: {
   scenes: Scene[];
   sceneTypes?: SceneType[];
@@ -255,6 +265,8 @@ export function SceneList({
   onDuplicate: ((sceneId: string) => void) | undefined;
   onDelete: ((sceneId: string) => void) | undefined;
   onMove: ((sceneId: string, direction: 'up' | 'down') => void) | undefined;
+  previewSceneId?: string | undefined;
+  programSceneId?: string | undefined;
 }) {
   return (
     <Panel
@@ -275,7 +287,16 @@ export function SceneList({
         ) : null
       }
     >
+      <div className="mb-3 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs text-slate-300">
+        Select a scene to stage it in Preview. Use Take/Cut/Fade from the operator toolbar to move
+        Preview to Program.
+      </div>
       <div className="space-y-3">
+        {scenes.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+            No scenes yet. Add a scene to build your rundown.
+          </p>
+        ) : null}
         {scenes.map((scene, index) => (
           <SceneCard
             key={scene.id}
@@ -287,6 +308,8 @@ export function SceneList({
             onDuplicate={onDuplicate}
             onDelete={onDelete}
             onMove={onMove}
+            previewSceneId={previewSceneId}
+            programSceneId={programSceneId}
           />
         ))}
       </div>
@@ -558,7 +581,12 @@ function humanizeState(state: string): string {
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (!parts.length) return '?';
-  return parts.slice(0, 2).map((part) => part[0]?.toUpperCase() ?? '').join('') || '?';
+  return (
+    parts
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || '?'
+  );
 }
 
 function connectionMeta(state: string): ConnectionMeta {
@@ -903,7 +931,9 @@ export function RoutedMediaTile({
         className={`absolute right-2 top-2 z-20 flex flex-col items-end gap-1 ${small ? 'origin-top-right scale-90' : ''}`}
       >
         <span className="inline-flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-bold text-white ring-1 ring-white/10 backdrop-blur">
-          <span className={`h-1.5 w-1.5 rounded-full ${conn.dot} ${conn.pulse ? 'animate-pulse' : ''}`} />
+          <span
+            className={`h-1.5 w-1.5 rounded-full ${conn.dot} ${conn.pulse ? 'animate-pulse' : ''}`}
+          />
           {conn.label}
         </span>
         {output === 'program' && route.isOnProgram ? (
@@ -1020,12 +1050,7 @@ function SceneFooter({
   routeCount: number;
   hasGuests: boolean;
 }) {
-  const status =
-    routeCount > 0
-      ? `${routeCount} on air`
-      : hasGuests
-        ? 'Assign guests'
-        : 'Standby';
+  const status = routeCount > 0 ? `${routeCount} on air` : hasGuests ? 'Assign guests' : 'Standby';
   return (
     <div className="absolute inset-x-3 bottom-2 z-40 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/55 px-3 py-1.5 backdrop-blur">
       <div className="min-w-0">
