@@ -45,6 +45,7 @@ import {
   resetDemoProductionState,
   setRouteMuted,
 } from './media-route-actions';
+import { ProductionSwitcher } from './production-switcher';
 
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
@@ -205,6 +206,8 @@ export function SceneWorkspace({
   const [scenes, setScenes] = useOptimistic(initialScenes, (_current, next: Scene[]) => next);
   const [productionState, setProductionState] = useState(initialProductionState);
   const [transitionActive, setTransitionActive] = useState(false);
+  const [lastTransitionLabel, setLastTransitionLabel] = useState('None');
+  const [switcherFeedback, setSwitcherFeedback] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -263,6 +266,15 @@ export function SceneWorkspace({
     persistProductionState({ ...productionState, previewSceneId: sceneId }, 'stage');
   const switchProgram = (type: TransitionType) => {
     const duration = type === 'cut' ? 0 : productionState.transitionDuration;
+    const label =
+      type === 'cut'
+        ? 'Cut Executed'
+        : type === 'fade'
+          ? 'Fade Executed'
+          : `${type.toUpperCase()} Executed`;
+    setLastTransitionLabel(label);
+    setSwitcherFeedback(type === 'cut' ? 'Cut Complete' : 'Transition Complete');
+    window.setTimeout(() => setSwitcherFeedback(null), 1600);
     const next = {
       ...productionState,
       programSceneId: productionState.previewSceneId,
@@ -275,6 +287,15 @@ export function SceneWorkspace({
     }
     refresh(sorted.map((scene) => ({ ...scene, isActive: scene.id === next.programSceneId })));
     persistProductionState(next, type === 'fade' ? 'fade' : type === 'cut' ? 'cut' : 'take');
+  };
+
+  const stageAdjacentScene = (direction: 'previous' | 'next') => {
+    const currentIndex = sorted.findIndex((scene) => scene.id === productionState.previewSceneId);
+    if (currentIndex < 0 || sorted.length === 0) return;
+    const offset = direction === 'previous' ? -1 : 1;
+    const nextIndex = (currentIndex + offset + sorted.length) % sorted.length;
+    const nextScene = sorted[nextIndex];
+    if (nextScene) stageScene(nextScene.id);
   };
 
   useEffect(() => {
@@ -290,6 +311,7 @@ export function SceneWorkspace({
         if (scene) stageScene(scene.id);
       }
       if (event.key.toLowerCase() === 'c') switchProgram('cut');
+      if (event.key.toLowerCase() === 'a') switchProgram('fade');
       if (event.key.toLowerCase() === 'f') switchProgram('fade');
       if (event.key.toLowerCase() === 'm' && selectedRouteId)
         startTransition(async () => {
@@ -550,58 +572,6 @@ export function SceneWorkspace({
               tone={transitionActive ? 'warning' : 'ready'}
             />
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 sm:inline" />
-            <button
-              className="h-7 min-w-[3.25rem] rounded bg-cyan-400 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-950 hover:bg-cyan-300"
-              onClick={() => switchProgram(productionState.transitionType)}
-            >
-              Take
-            </button>
-            <button
-              className="h-7 min-w-[3.25rem] rounded bg-slate-800 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-white hover:bg-slate-700"
-              onClick={() => switchProgram('cut')}
-            >
-              Cut
-            </button>
-            <button
-              className="h-7 min-w-[3.25rem] rounded bg-slate-800 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-white hover:bg-slate-700"
-              onClick={() => switchProgram('fade')}
-            >
-              Auto
-            </button>
-            <select
-              aria-label="Transition type"
-              className="h-7 w-[4.75rem] rounded border border-slate-700 bg-slate-900 px-2 text-[10px] font-semibold uppercase text-white"
-              value={productionState.transitionType}
-              onChange={(e) =>
-                persistProductionState(
-                  { ...productionState, transitionType: e.target.value as TransitionType },
-                  'stage',
-                )
-              }
-            >
-              <option value="cut">Cut</option>
-              <option value="fade">Fade</option>
-              <option value="dip">Dip</option>
-              <option value="wipe">Wipe</option>
-            </select>
-            <label className="inline-flex h-7 items-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-              Dur
-              <input
-                aria-label="Transition duration milliseconds"
-                className="w-12 bg-transparent font-mono text-slate-100 outline-none"
-                type="number"
-                min={0}
-                max={5000}
-                step={100}
-                value={productionState.transitionDuration}
-                onChange={(e) =>
-                  persistProductionState(
-                    { ...productionState, transitionDuration: Number(e.target.value) },
-                    'stage',
-                  )
-                }
-              />
-            </label>
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 md:inline" />
             <div className="hidden items-center gap-1 lg:flex">
               <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
@@ -647,7 +617,7 @@ export function SceneWorkspace({
                   Reset
                 </button>
                 <div className="border-t border-white/10 pt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-slate-500">
-                  Space Take · 1-9 PVW · C Cut · F Fade · M Mute
+                  Space Take · A Auto · 1-9 PVW · C Cut · F Fade · M Mute
                 </div>
               </div>
             </details>
@@ -659,6 +629,24 @@ export function SceneWorkspace({
         <div className="shrink-0">
           <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
         </div>
+        <ProductionSwitcher
+          productionState={productionState}
+          programSceneName={programScene.name}
+          previewSceneName={previewScene.name}
+          lastTransitionLabel={lastTransitionLabel}
+          feedbackLabel={switcherFeedback}
+          onTake={() => switchProgram(productionState.transitionType)}
+          onCut={() => switchProgram('cut')}
+          onAuto={() => switchProgram('fade')}
+          onPrevious={() => stageAdjacentScene('previous')}
+          onNext={() => stageAdjacentScene('next')}
+          onTransitionChange={(transitionType) =>
+            persistProductionState({ ...productionState, transitionType }, 'stage')
+          }
+          onDurationChange={(transitionDuration) =>
+            persistProductionState({ ...productionState, transitionDuration }, 'stage')
+          }
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
             <div className="flex min-h-0 min-w-0 flex-col">
