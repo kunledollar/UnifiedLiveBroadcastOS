@@ -449,34 +449,387 @@ export function SourceManager({
   );
 }
 
-function SourceLayers({ sources, compact = false }: { sources: SceneSource[]; compact?: boolean }) {
-  const visibleSources = sources
-    .filter((source) => source.isVisible)
+type OutputKind = 'program' | 'vertical';
+
+type RoutedStreamMap = Record<string, MediaStream | undefined>;
+
+type LayerBox = {
+  left: string;
+  top: string;
+  width: string;
+  height: string;
+};
+
+const mediaLayoutLabels: Record<MediaLayoutPreset, string> = {
+  full_screen: 'Full Screen',
+  side_by_side: 'Side by Side',
+  picture_in_picture: 'Picture in Picture',
+  '2x2_grid': '2x2 Grid',
+  speaker_focus: 'Speaker Focus',
+};
+
+const routeTypeLabels = {
+  guest_camera: 'Guest Camera',
+  guest_screen_share: 'Guest Screen',
+  host_camera: 'Host Camera',
+  media_source: 'Media Source',
+  screen_share: 'Screen Share',
+  placeholder: 'Placeholder',
+} satisfies Record<MediaRoute['routeType'], string>;
+
+const sourceBackgrounds: Record<SceneSourceType, string> = {
+  camera: 'from-sky-500/25 to-slate-950/80',
+  screen: 'from-violet-500/25 to-slate-950/80',
+  media: 'from-emerald-500/25 to-slate-950/80',
+  overlay: 'from-fuchsia-500/25 to-slate-950/80',
+  browser: 'from-amber-500/25 to-slate-950/80',
+  audio: 'from-rose-500/25 to-slate-950/80',
+};
+
+function sortedVisibleSources(sources: SceneSource[]) {
+  return [...sources]
+    .filter((source) => source.isVisible && source.visible !== false)
     .sort((a, b) => a.order - b.order);
+}
+
+function sortedRoutes(routes: MediaRoute[]) {
+  return [...routes]
+    .filter((route) => route.isActive)
+    .sort((a, b) => {
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+      const slotCompare = (a.layoutSlot ?? '').localeCompare(b.layoutSlot ?? '');
+      return slotCompare || a.order - b.order;
+    });
+}
+
+function programRoutes(routes: MediaRoute[]) {
+  const onProgram = sortedRoutes(routes.filter((route) => route.isOnProgram));
+  return onProgram.length ? onProgram : sortedRoutes(routes).slice(0, 1);
+}
+
+function verticalRoutes(routes: MediaRoute[]) {
+  const explicit = sortedRoutes(routes.filter((route) => route.metadata?.onVertical === true));
+  return explicit.length ? explicit : programRoutes(routes).slice(0, 1);
+}
+
+function routeConnectionState(route: MediaRoute) {
+  const metadataState = route.metadata?.connectionState;
+  if (typeof metadataState === 'string') return metadataState;
+  return route.guest?.status ?? (route.isActive ? 'ready' : 'inactive');
+}
+
+function getLayerBox(
+  preset: MediaLayoutPreset,
+  index: number,
+  total: number,
+  output: OutputKind,
+): LayerBox {
+  if (output === 'vertical') {
+    if (preset === 'side_by_side' && total > 1)
+      return { left: '6%', top: `${8 + index * 42}%`, width: '88%', height: '38%' };
+    if (preset === 'picture_in_picture' && index > 0)
+      return { left: '56%', top: '8%', width: '36%', height: '22%' };
+    if (preset === '2x2_grid')
+      return {
+        left: `${6 + (index % 2) * 45}%`,
+        top: `${10 + Math.floor(index / 2) * 32}%`,
+        width: '39%',
+        height: '28%',
+      };
+    if (preset === 'speaker_focus' && index > 0)
+      return { left: `${8 + ((index - 1) % 3) * 29}%`, top: '70%', width: '25%', height: '18%' };
+    return { left: '6%', top: '10%', width: '88%', height: index === 0 ? '62%' : '22%' };
+  }
+
+  if (preset === 'side_by_side')
+    return { left: `${3 + index * 48}%`, top: '13%', width: '45%', height: '68%' };
+  if (preset === 'picture_in_picture' && index > 0)
+    return { left: '68%', top: '58%', width: '25%', height: '26%' };
+  if (preset === '2x2_grid')
+    return {
+      left: `${4 + (index % 2) * 47}%`,
+      top: `${10 + Math.floor(index / 2) * 40}%`,
+      width: '43%',
+      height: '34%',
+    };
+  if (preset === 'speaker_focus' && index > 0)
+    return { left: `${5 + ((index - 1) % 3) * 22}%`, top: '68%', width: '19%', height: '20%' };
+  return {
+    left: index === 0 ? '4%' : '70%',
+    top: index === 0 ? '8%' : '62%',
+    width: index === 0 ? '92%' : '24%',
+    height: index === 0 ? '78%' : '24%',
+  };
+}
+
+function routeCapacity(preset: MediaLayoutPreset) {
+  return preset === 'full_screen'
+    ? 1
+    : preset === 'picture_in_picture'
+      ? 2
+      : preset === 'speaker_focus'
+        ? 4
+        : preset === '2x2_grid'
+          ? 4
+          : 2;
+}
+
+export function BroadcastCanvas({
+  aspect,
+  children,
+}: {
+  aspect: 'video' | 'vertical';
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className={`relative overflow-hidden border border-cyan-300/20 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,.22),transparent_30%),linear-gradient(135deg,#0f172a,#020617)] shadow-inner shadow-black ${aspect === 'video' ? 'aspect-video rounded-2xl' : 'aspect-[9/16] rounded-[1.5rem]'}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+export function SafeAreaOverlay({ label, output }: { label: string; output: OutputKind }) {
+  return (
+    <div
+      className={`pointer-events-none absolute ${output === 'vertical' ? 'inset-x-6 inset-y-10' : 'inset-6'} z-30 flex items-start justify-center rounded-xl border border-dashed border-white/20 pt-1 text-[10px] uppercase tracking-[0.25em] text-white/35`}
+    >
+      {label}
+    </div>
+  );
+}
+
+export function LayerFrame({
+  children,
+  box,
+  zIndex = 10,
+}: {
+  children: ReactNode;
+  box: LayerBox;
+  zIndex?: number;
+}) {
+  return (
+    <div className="absolute" style={{ ...box, zIndex }}>
+      {children}
+    </div>
+  );
+}
+
+function RoutedVideo({ stream }: { stream?: MediaStream | undefined }) {
+  if (!stream) return null;
+  return (
+    <video
+      ref={(element) => {
+        if (element && element.srcObject !== stream) element.srcObject = stream;
+      }}
+      autoPlay
+      muted
+      playsInline
+      className="absolute inset-0 h-full w-full object-cover"
+    />
+  );
+}
+
+export function RoutedMediaTile({
+  route,
+  stream,
+  output,
+}: {
+  route?: MediaRoute | undefined;
+  stream?: MediaStream | undefined;
+  output: OutputKind;
+}) {
+  if (!route) {
+    return (
+      <div className="grid h-full place-items-center rounded-2xl border border-dashed border-white/15 bg-slate-950/55 text-center text-xs font-bold uppercase tracking-widest text-slate-500">
+        Empty slot
+      </div>
+    );
+  }
+  return (
+    <div className="relative h-full overflow-hidden rounded-2xl border border-cyan-300/25 bg-gradient-to-br from-slate-800 to-slate-950 shadow-2xl shadow-black/35">
+      <RoutedVideo stream={stream} />
+      {!stream ? (
+        <div className="absolute inset-0 grid place-items-center bg-[radial-gradient(circle_at_50%_30%,rgba(34,211,238,.2),transparent_36%)] p-4 text-center">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-cyan-200">
+              No media connected
+            </p>
+            <p className="mt-2 text-2xl font-black text-white">{route.displayName}</p>
+            <p className="mt-1 text-xs text-slate-300">
+              {routeTypeLabels[route.routeType]} · {routeConnectionState(route)}
+            </p>
+          </div>
+        </div>
+      ) : null}
+      <div className="absolute inset-x-3 bottom-3 flex flex-wrap items-center gap-1.5 rounded-xl border border-white/10 bg-black/55 p-2 backdrop-blur">
+        <span className="mr-auto text-xs font-black text-white">{route.displayName}</span>
+        <Badge tone={output === 'program' && route.isOnProgram ? 'live' : 'neutral'}>
+          {output === 'program' ? 'Program' : 'Vertical'}
+        </Badge>
+        {route.isPinned ? <Badge tone="success">Pinned</Badge> : null}
+        {route.isMuted ? <Badge tone="danger">Muted</Badge> : <Badge tone="success">Audio</Badge>}
+        {route.layoutSlot ? <Badge tone="neutral">Slot {route.layoutSlot}</Badge> : null}
+      </div>
+    </div>
+  );
+}
+
+export function CompositorLayer({
+  route,
+  box,
+  stream,
+  output,
+  zIndex,
+}: {
+  route?: MediaRoute | undefined;
+  box: LayerBox;
+  stream?: MediaStream | undefined;
+  output: OutputKind;
+  zIndex: number;
+}) {
+  return (
+    <LayerFrame box={box} zIndex={zIndex}>
+      <RoutedMediaTile route={route} stream={stream} output={output} />
+    </LayerFrame>
+  );
+}
+
+function SourceLayers({ sources, compact = false }: { sources: SceneSource[]; compact?: boolean }) {
+  const visibleSources = sortedVisibleSources(sources);
   if (!visibleSources.length)
     return (
-      <div className="absolute inset-8 grid place-items-center rounded-xl border border-dashed border-white/15 text-sm font-semibold text-slate-400">
+      <div className="absolute inset-8 z-0 grid place-items-center rounded-xl border border-dashed border-white/15 text-sm font-semibold text-slate-400">
         No visible sources
       </div>
     );
   return (
-    <div className="absolute inset-8 grid gap-3">
+    <div className="absolute inset-0 z-0">
       {visibleSources.map((source, index) => (
         <div
           key={source.id}
-          className="flex items-center justify-between rounded-xl border border-cyan-300/20 bg-slate-950/70 p-3 text-white shadow-lg shadow-black/30 backdrop-blur"
+          className={`absolute flex items-center justify-between rounded-xl border border-white/10 bg-gradient-to-br ${sourceBackgrounds[source.type]} p-3 text-white shadow-lg shadow-black/30 backdrop-blur`}
           style={{
-            marginLeft: compact ? 0 : index * 14,
-            marginTop: compact ? index * 8 : index * 10,
+            left: compact ? '8%' : `${5 + index * 3}%`,
+            top: compact ? `${8 + index * 9}%` : `${8 + index * 6}%`,
+            width: compact ? '84%' : `${78 - index * 4}%`,
+            minHeight: compact ? 42 : 54,
+            zIndex: index,
           }}
         >
           <span className="font-bold">{source.name}</span>
-          <span className="rounded-full bg-cyan-400/15 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-cyan-200">
+          <span className="flex items-center gap-1 rounded-full bg-black/35 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-cyan-100">
+            {source.isLocked ? '🔒 ' : ''}
             {sourceTypeLabels[source.type]}
           </span>
         </div>
       ))}
     </div>
+  );
+}
+
+function SceneFooter({
+  scene,
+  output,
+  layoutPreset,
+}: {
+  scene: Scene;
+  output: OutputKind;
+  layoutPreset: MediaLayoutPreset;
+}) {
+  return (
+    <div className="absolute inset-x-5 bottom-5 z-40 rounded-xl border border-white/10 bg-black/50 p-3 backdrop-blur">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-cyan-200">
+        Active Scene · {output}
+      </p>
+      <p className="text-lg font-black text-white">{scene.name}</p>
+      <p className="text-[10px] uppercase tracking-[0.16em] text-slate-300">
+        {typeLabels[scene.type]} · {mediaLayoutLabels[layoutPreset]}
+      </p>
+    </div>
+  );
+}
+
+function BaseCompositor({
+  scene,
+  routes,
+  layoutPreset,
+  output,
+  streams = {},
+}: {
+  scene: Scene;
+  routes: MediaRoute[];
+  layoutPreset: MediaLayoutPreset;
+  output: OutputKind;
+  streams?: RoutedStreamMap | undefined;
+}) {
+  const selectedRoutes = output === 'vertical' ? verticalRoutes(routes) : programRoutes(routes);
+  const capacity = routeCapacity(layoutPreset);
+  const slots = Array.from({ length: capacity }, (_, index) => selectedRoutes[index]);
+  return (
+    <BroadcastCanvas aspect={output === 'vertical' ? 'vertical' : 'video'}>
+      <SourceLayers sources={scene.sources} compact={output === 'vertical'} />
+      {slots.map((route, index) => (
+        <CompositorLayer
+          key={route?.id ?? `empty-${index}`}
+          route={route}
+          stream={route ? streams[route.id] : undefined}
+          output={output}
+          box={getLayerBox(layoutPreset, index, slots.length, output)}
+          zIndex={10 + index}
+        />
+      ))}
+      <SafeAreaOverlay
+        label={output === 'vertical' ? 'Mobile Safe' : 'Title Safe'}
+        output={output}
+      />
+      <SceneFooter scene={scene} output={output} layoutPreset={layoutPreset} />
+    </BroadcastCanvas>
+  );
+}
+
+export function ProgramCompositor({
+  scene,
+  routes = [],
+  layoutPreset = 'full_screen',
+  streams,
+}: {
+  scene: Scene;
+  routes?: MediaRoute[];
+  layoutPreset?: MediaLayoutPreset;
+  streams?: RoutedStreamMap | undefined;
+}) {
+  return (
+    <BaseCompositor
+      scene={scene}
+      routes={routes}
+      layoutPreset={layoutPreset}
+      output="program"
+      streams={streams}
+    />
+  );
+}
+
+export function VerticalCompositor({
+  scene,
+  routes = [],
+  layoutPreset = 'full_screen',
+  streams,
+}: {
+  scene: Scene;
+  routes?: MediaRoute[];
+  layoutPreset?: MediaLayoutPreset;
+  streams?: RoutedStreamMap | undefined;
+}) {
+  return (
+    <BaseCompositor
+      scene={scene}
+      routes={routes}
+      layoutPreset={layoutPreset}
+      output="vertical"
+      streams={streams}
+    />
   );
 }
 
@@ -502,96 +855,68 @@ export function ProgramPreview({
   scene,
   routes = [],
   layoutPreset = 'full_screen',
+  streams,
 }: {
   scene: Scene;
   routes?: MediaRoute[];
   layoutPreset?: MediaLayoutPreset;
+  streams?: RoutedStreamMap | undefined;
 }) {
-  const programRoute = routes.find((route) => route.isOnProgram);
-  const routedNames = routes
-    .filter((route) => route.isActive)
-    .map((route) => `${route.displayName}${route.layoutSlot ? ` (${route.layoutSlot})` : ''}`)
-    .join(' · ');
   return (
     <Panel>
       <div className="mb-3 flex items-center justify-between">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Program 16:9</p>
-          <h2 className="text-xl font-bold text-white">
-            {programRoute?.displayName ?? scene.name}
-          </h2>
-          <p className="text-xs text-slate-400">
-            Layout preset: {layoutPreset.replaceAll('_', ' ')}
-          </p>
+          <h2 className="text-xl font-bold text-white">{scene.name}</h2>
+          <p className="text-xs text-slate-400">Layout preset: {mediaLayoutLabels[layoutPreset]}</p>
         </div>
-        <Badge tone="live">LIVE</Badge>
+        <Badge tone="live">PROGRAM</Badge>
       </div>
-      <div className="relative aspect-video overflow-hidden rounded-2xl border border-cyan-300/20 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,.22),transparent_30%),linear-gradient(135deg,#0f172a,#020617)]">
-        <SafeZone label="Title Safe" />
-        <SourceLayers sources={scene.sources} />
-        {programRoute ? (
-          <div className="absolute inset-10 grid place-items-center rounded-2xl border border-cyan-300/30 bg-cyan-950/30 text-center backdrop-blur-sm">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-cyan-200">
-                Routed Program Placeholder
-              </p>
-              <p className="mt-2 text-3xl font-black text-white">{programRoute.displayName}</p>
-              <p className="mt-1 text-sm text-slate-300">
-                {programRoute.isMuted ? 'Muted' : 'Audio active'} · Slot{' '}
-                {programRoute.layoutSlot ?? 'auto'}
-              </p>
-            </div>
-          </div>
-        ) : null}
-        <div className="absolute inset-x-8 bottom-8 rounded-xl border border-white/10 bg-black/45 p-4 backdrop-blur">
-          <p className="text-xs uppercase tracking-[0.18em] text-cyan-200">Current Scene</p>
-          <p className="text-2xl font-black text-white">{scene.name}</p>
-          <p className="mt-1 text-xs uppercase tracking-[0.18em] text-slate-300">
-            {routedNames || typeLabels[scene.type]}
-          </p>
-        </div>
-      </div>
+      <ProgramCompositor
+        scene={scene}
+        routes={routes}
+        layoutPreset={layoutPreset}
+        streams={streams}
+      />
     </Panel>
   );
 }
 
-export function VerticalPreview({ scene, routes = [] }: { scene: Scene; routes?: MediaRoute[] }) {
-  const programRoute =
-    routes.find((route) => route.metadata?.onVertical === true) ??
-    routes.find((route) => route.isOnProgram);
+export function VerticalPreview({
+  scene,
+  routes = [],
+  layoutPreset = 'full_screen',
+  streams,
+}: {
+  scene: Scene;
+  routes?: MediaRoute[];
+  layoutPreset?: MediaLayoutPreset;
+  streams?: RoutedStreamMap | undefined;
+}) {
   return (
     <Panel>
       <div className="mb-3 flex items-center justify-between">
-        <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Vertical 9:16</p>
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Vertical 9:16</p>
+          <h2 className="text-lg font-bold text-white">{scene.name}</h2>
+          <p className="text-xs text-slate-400">Vertical route with program fallback</p>
+        </div>
         <Badge tone="neutral">TikTok / Reels</Badge>
       </div>
-      <div className="mx-auto aspect-[9/16] max-h-[34rem] overflow-hidden rounded-[2rem] border border-white/10 bg-gradient-to-b from-slate-800 to-slate-950 p-3 shadow-inner shadow-black">
-        <div className="relative h-full rounded-[1.5rem] border border-cyan-300/20 bg-slate-950">
-          <SafeZone label="Vertical Safe" />
-          <SourceLayers sources={scene.sources} compact />
-          {programRoute ? (
-            <div className="absolute inset-x-5 top-16 rounded-2xl border border-cyan-300/20 bg-cyan-950/40 p-3 text-center text-white">
-              Vertical route: {programRoute.displayName}
-            </div>
-          ) : null}
-          <div className="absolute inset-x-4 bottom-6 rounded-xl bg-black/55 p-3 text-center">
-            <p className="text-sm font-bold text-white">{scene.name}</p>
-            <p className="text-[10px] uppercase tracking-widest text-cyan-200">
-              {typeLabels[scene.type]} · Mobile output mock
-            </p>
-          </div>
-        </div>
+      <div className="mx-auto max-h-[34rem]">
+        <VerticalCompositor
+          scene={scene}
+          routes={routes}
+          layoutPreset={layoutPreset}
+          streams={streams}
+        />
       </div>
     </Panel>
   );
 }
 
 function SafeZone({ label }: { label: string }) {
-  return (
-    <div className="absolute inset-6 flex items-start justify-center rounded-xl border border-dashed border-white/20 text-[10px] uppercase tracking-[0.25em] text-white/35">
-      {label}
-    </div>
-  );
+  return <SafeAreaOverlay label={label} output="program" />;
 }
 
 export function GuestPanel({ guests }: { guests: Guest[] }) {
