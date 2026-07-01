@@ -27,6 +27,19 @@ import {
   renewLock,
   roleHasAuthority,
 } from './authority.js';
+import {
+  createBroadcastSessionRecord,
+  createGraphSnapshot,
+  createInMemoryPersistentBroadcastRepositories,
+  createPersistenceDiagnostics,
+  createProductionCommandRecord,
+  createProductionEventRecord,
+  createSyncCheckpointRecord,
+  getRecoveryPlan,
+  recoverSessionFromLatestSnapshot,
+  restoreGraphFromSnapshot,
+  shouldCreateGraphSnapshot,
+} from './persistence.js';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -416,3 +429,31 @@ authorityStore.appendConflict(conflict);
 assert(authorityStore.resolveConflict(conflict.id, 'manual')?.status === 'resolved', 'conflict resolution updates status');
 const mockAuthority = createMockAuthorityScenario('test-session');
 assert(mockAuthority.getAuthorityState().scopes.program.owner?.operatorId === 'director' && mockAuthority.listConflicts().length >= 2, 'authority diagnostics data shape includes owners and conflicts');
+
+const persistenceRepos = createInMemoryPersistentBroadcastRepositories();
+const sessionRecord = persistenceRepos.sessions.upsert(createBroadcastSessionRecord({ graph, ownerOperatorId: 'tester', activeOperatorIds: ['tester'], timestamp: '2026-07-01T00:00:00.000Z' }));
+assert(sessionRecord.id === 'test-session' && sessionRecord.currentGraphRevision === getProductionGraphRevision(graph), 'session record creation stores current graph revision');
+const snapshotRecord = persistenceRepos.snapshots.append(createGraphSnapshot(graph, { reason: 'validation' }, '2026-07-01T00:00:01.000Z'));
+assert(snapshotRecord.graphRevision === getProductionGraphRevision(graph), 'graph snapshot creation stores revision');
+assert(restoreGraphFromSnapshot(snapshotRecord).id === graph.id, 'graph restore from snapshot returns graph payload');
+assert(!shouldCreateGraphSnapshot(1, 0, 25) && shouldCreateGraphSnapshot(25, 0, 25), 'snapshot policy helper checks revision interval');
+const persistedCommand = persistenceRepos.commands.append(createProductionCommandRecord(command('CREATE_SCENE', { id: 'persisted-scene', name: 'Persisted' }, 'DIRECTOR', getProductionGraphRevision(graph)), graph.id, true, getProductionGraphRevision(graph) + 1));
+assert(persistenceRepos.commands.list('test-session').length === 1, 'command log append stores immutable command record');
+const mutationAttempt = persistedCommand as { accepted: boolean };
+try { mutationAttempt.accepted = false; } catch {}
+assert(persistenceRepos.commands.list('test-session')[0]?.accepted, 'immutable command behavior prevents stored mutation');
+const persistedEvent = persistenceRepos.events.append(createProductionEventRecord(transition.events[0]!, graph.id));
+assert(persistenceRepos.events.list('test-session').length === 1 && persistedEvent.commandId === transition.command.id, 'event log append stores immutable event record');
+const eventMutation = persistedEvent as { actorId: string };
+try { eventMutation.actorId = 'mutated'; } catch {}
+assert(persistenceRepos.events.list('test-session')[0]?.actorId !== 'mutated', 'immutable event behavior prevents stored mutation');
+const recovered = recoverSessionFromLatestSnapshot({ sessionId: 'test-session', snapshots: persistenceRepos.snapshots, events: persistenceRepos.events });
+assert(recovered.status === 'replayed', 'recovery from snapshot plus events succeeds');
+assert(getRecoveryPlan({ sessionId: 'test-session', currentRevision: sessionRecord.currentGraphRevision, snapshots: persistenceRepos.snapshots, events: persistenceRepos.events, commands: persistenceRepos.commands }).status === 'ready', 'recovery plan reports ready when snapshot exists');
+const checkpoint = persistenceRepos.collaboration.upsertCheckpoint(createSyncCheckpointRecord({ clientId: 'client-1', operatorId: 'tester', broadcastSessionId: 'test-session', observedGraphRevision: getProductionGraphRevision(graph), lastHeartbeatAt: '2026-07-01T00:00:02.000Z', connectionState: 'connected' }));
+assert(checkpoint.id && persistenceRepos.collaboration.listCheckpoints('test-session').length === 1, 'sync checkpoint creation persists checkpoint');
+persistenceRepos.authority.appendConflict(conflict);
+persistenceRepos.authority.appendLock(locked.lock);
+assert(persistenceRepos.authority.listConflicts('test-session').length === 1 && persistenceRepos.authority.listActiveLocks('test-session', '2026-07-01T00:00:01.000Z').length === 1, 'authority conflict persistence stores conflict and active lock');
+const diagnostics = createPersistenceDiagnostics({ session: sessionRecord, latestSnapshot: snapshotRecord, commandCount: persistenceRepos.commands.list('test-session').length, eventCount: persistenceRepos.events.list('test-session').length, collaborationEventCount: persistenceRepos.collaboration.listEvents('test-session').length, activeLocksCount: persistenceRepos.authority.listActiveLocks('test-session').length, conflictsCount: persistenceRepos.authority.listConflicts('test-session').length, syncCheckpointCount: persistenceRepos.collaboration.listCheckpoints('test-session').length, recoveryStatus: 'ready' });
+assert(diagnostics.commandLogCount === 1 && diagnostics.syncCheckpointCount === 1, 'persistence diagnostics summarize repository state');

@@ -19,6 +19,12 @@ import {
   type Destination,
   type ProductionAsset,
   type SceneLayout,
+  createBroadcastSessionRecord,
+  createGraphSnapshot,
+  createInitialProductionGraph,
+  createInMemoryPersistentBroadcastRepositories,
+  createPersistenceDiagnostics,
+  getRecoveryPlan,
   type StreamHealthMetric,
 } from '@ubos/shared';
 
@@ -117,9 +123,44 @@ const assets: ProductionAsset[] = [
   { id: 'asset-logo', name: 'Sponsor Bug', type: 'overlay', status: 'queued' },
 ];
 
+
+function loadPersistenceDiagnostics() {
+  const graph = createInitialProductionGraph({
+    broadcastSessionId: 'demo-broadcast',
+    name: 'Demo Broadcast',
+    operatorId: 'director',
+    timestamp: '2026-07-01T00:00:00.000Z',
+  });
+  const repositories = createInMemoryPersistentBroadcastRepositories();
+  const session = repositories.sessions.upsert(
+    createBroadcastSessionRecord({ graph, ownerOperatorId: 'director', activeOperatorIds: ['director'] }),
+  );
+  const latestSnapshot = repositories.snapshots.append(createGraphSnapshot(graph, { reason: 'manual' }));
+  const recoveryPlan = getRecoveryPlan({
+    sessionId: session.id,
+    currentRevision: session.currentGraphRevision,
+    snapshots: repositories.snapshots,
+    events: repositories.events,
+    commands: repositories.commands,
+  });
+
+  return createPersistenceDiagnostics({
+    session,
+    latestSnapshot,
+    commandCount: repositories.commands.list(session.id).length,
+    eventCount: repositories.events.list(session.id).length,
+    collaborationEventCount: repositories.collaboration.listEvents(session.id).length,
+    activeLocksCount: repositories.authority.listActiveLocks(session.id).length,
+    conflictsCount: repositories.authority.listConflicts(session.id).length,
+    syncCheckpointCount: repositories.collaboration.listCheckpoints(session.id).length,
+    recoveryStatus: recoveryPlan.status,
+  });
+}
+
 export const dynamic = 'force-dynamic';
 
 export default async function ControlRoomPage() {
+  const persistenceDiagnostics = loadPersistenceDiagnostics();
   const [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
     getScenes(),
     getProductionState(),
@@ -167,6 +208,20 @@ export default async function ControlRoomPage() {
                 <UnifiedChatPanel messages={messages} />
                 <CrossFollowPanel platforms={['YouTube', 'TikTok', 'Instagram', 'Facebook']} />
               </div>
+            </details>
+
+            <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
+              <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
+                Persistence / Recovery
+              </summary>
+              <dl className="grid grid-cols-2 gap-2 p-3 text-xs text-slate-300">
+                {Object.entries(persistenceDiagnostics).map(([label, value]) => (
+                  <div key={label} className="rounded-xl border border-white/10 bg-slate-950/50 p-2">
+                    <dt className="font-bold uppercase tracking-[0.12em] text-slate-500">{label}</dt>
+                    <dd className="mt-1 truncate font-mono text-cyan-200">{String(value ?? 'none')}</dd>
+                  </div>
+                ))}
+              </dl>
             </details>
             <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
               <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
