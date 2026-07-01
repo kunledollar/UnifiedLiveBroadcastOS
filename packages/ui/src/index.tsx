@@ -1606,22 +1606,213 @@ export function StreamHealthPanel({ metrics }: { metrics: StreamHealthMetric[] }
   );
 }
 
-export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
+type AudioChannelState = 'active' | 'muted' | 'idle' | 'offline';
+
+type AudioChannelStripModel = AudioChannel & {
+  level?: number;
+  peak?: number;
+  clip?: boolean;
+  isMaster?: boolean;
+};
+
+function clampAudioLevel(level = 0) {
+  return Math.max(0, Math.min(100, Math.round(level)));
+}
+
+function getAudioChannelState(channel: AudioChannelStripModel): AudioChannelState {
+  if (channel.muted) return 'muted';
+  if (channel.level <= 0) return channel.kind === 'media' ? 'idle' : 'offline';
+  if (channel.level < 8) return 'idle';
+  return 'active';
+}
+
+const audioStateStyles: Record<
+  AudioChannelState,
+  { label: string; className: string; accent: string }
+> = {
+  active: {
+    label: 'Active',
+    className: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-200',
+    accent: 'bg-emerald-300',
+  },
+  muted: {
+    label: 'Muted',
+    className: 'border-rose-400/30 bg-rose-500/10 text-rose-200',
+    accent: 'bg-rose-400',
+  },
+  idle: {
+    label: 'Idle',
+    className: 'border-amber-300/30 bg-amber-300/10 text-amber-100',
+    accent: 'bg-amber-300',
+  },
+  offline: {
+    label: 'Offline',
+    className: 'border-slate-500/40 bg-slate-700/30 text-slate-300',
+    accent: 'bg-slate-500',
+  },
+};
+
+export function AudioStatusBadge({ state }: { state: AudioChannelState }) {
+  const style = audioStateStyles[state];
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      {channels.map((channel) => (
-        <div key={channel.id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-white">{channel.label}</p>
-            <Badge tone={channel.muted ? 'danger' : 'success'}>
-              {channel.muted ? 'Muted' : channel.kind}
-            </Badge>
-          </div>
-          <div className="mt-3 h-2 rounded-full bg-slate-800">
-            <div className="h-2 rounded-full bg-cyan-300" style={{ width: `${channel.level}%` }} />
-          </div>
+    <span
+      className={`rounded-full border px-1.5 py-0.5 text-[0.58rem] font-black uppercase tracking-[0.14em] ${style.className}`}
+    >
+      {style.label}
+    </span>
+  );
+}
+
+export function AudioMeter({
+  level,
+  muted = false,
+  peak,
+  clip = false,
+}: {
+  level?: number;
+  muted?: boolean;
+  peak?: number | undefined;
+  clip?: boolean | undefined;
+}) {
+  const safeLevel = muted ? 0 : clampAudioLevel(level);
+  const peakLevel = clampAudioLevel(peak ?? Math.min(100, safeLevel + 8));
+  const meterFill =
+    safeLevel > 86
+      ? 'from-emerald-400 via-amber-300 to-rose-500'
+      : safeLevel > 68
+        ? 'from-emerald-400 via-amber-300 to-amber-300'
+        : 'from-emerald-500 via-emerald-400 to-cyan-300';
+
+  return (
+    <div className="flex flex-col items-center gap-1.5" aria-label={`Audio level ${safeLevel}%`}>
+      <div className="flex h-4 items-center justify-center">
+        <span
+          className={`h-1.5 w-7 rounded-sm border ${
+            clip
+              ? 'border-rose-300 bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.8)]'
+              : 'border-rose-400/25 bg-rose-950/50'
+          }`}
+          title="Clip indicator reserved for live metering"
+        />
+      </div>
+      <div className="relative h-28 w-8 overflow-hidden rounded-sm border border-white/10 bg-slate-950 shadow-inner shadow-black/60">
+        <div className="absolute inset-x-0 top-[14%] h-px bg-rose-400/45" />
+        <div className="absolute inset-x-0 top-[32%] h-px bg-amber-300/35" />
+        <div className="absolute inset-x-0 bottom-[18%] h-px bg-white/10" />
+        <div
+          className={`absolute bottom-0 left-1 right-1 rounded-t-sm bg-gradient-to-t ${meterFill} transition-[height] duration-300`}
+          style={{ height: `${safeLevel}%` }}
+        />
+        <div
+          className="absolute left-0 right-0 h-0.5 bg-white/80 shadow-[0_0_8px_rgba(255,255,255,0.5)]"
+          style={{ bottom: `${peakLevel}%` }}
+          title="Peak hold reserved for live metering"
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(to_top,rgba(255,255,255,0.08)_1px,transparent_1px)] bg-[length:100%_10%]" />
+      </div>
+      <div className="flex w-9 justify-between text-[0.55rem] font-semibold text-slate-500">
+        <span>-∞</span>
+        <span>0</span>
+      </div>
+    </div>
+  );
+}
+
+export function AudioChannelStrip({ channel }: { channel: AudioChannelStripModel }) {
+  const state = getAudioChannelState(channel);
+  const accent = audioStateStyles[state].accent;
+  const level = clampAudioLevel(channel.level);
+
+  return (
+    <div
+      className={`relative flex min-h-[15.5rem] w-[5.9rem] shrink-0 flex-col items-center rounded-xl border bg-slate-950/90 px-2 py-2.5 ${
+        channel.isMaster
+          ? 'border-cyan-300/45 shadow-[inset_0_0_0_1px_rgba(103,232,249,0.08)]'
+          : 'border-white/10'
+      }`}
+    >
+      <div className={`absolute inset-x-2 top-0 h-0.5 rounded-full ${accent}`} />
+      <div className="flex min-h-12 w-full flex-col items-center justify-between gap-1 text-center">
+        <p className="line-clamp-2 text-[0.68rem] font-black uppercase leading-tight tracking-[0.08em] text-white">
+          {channel.label}
+        </p>
+        <AudioStatusBadge state={state} />
+      </div>
+      <div className="mt-2 grid w-full grid-cols-[2.25rem_1fr] items-center gap-1.5">
+        <AudioMeter level={level} muted={channel.muted} peak={channel.peak} clip={channel.clip} />
+        <div className="flex h-32 flex-col items-center justify-center gap-1">
+          <input
+            aria-label={`${channel.label} volume`}
+            className="h-28 w-4 accent-cyan-300 [writing-mode:vertical-lr]"
+            defaultValue={level}
+            max={100}
+            min={0}
+            type="range"
+          />
+          <span className="text-[0.6rem] font-bold tabular-nums text-slate-400">{level}</span>
         </div>
-      ))}
+      </div>
+      <div className="mt-auto grid w-full grid-cols-3 gap-1 pt-2">
+        <button
+          className={`rounded-md border px-1 py-1 text-[0.6rem] font-black ${
+            channel.muted
+              ? 'border-rose-400/40 bg-rose-500/20 text-rose-100'
+              : 'border-white/10 bg-white/[0.04] text-slate-300'
+          }`}
+          type="button"
+        >
+          M
+        </button>
+        <button
+          className="rounded-md border border-white/10 bg-white/[0.04] px-1 py-1 text-[0.6rem] font-black text-slate-300"
+          type="button"
+        >
+          S
+        </button>
+        <button
+          className="rounded-md border border-cyan-300/20 bg-cyan-300/10 px-1 py-1 text-[0.6rem] font-black text-cyan-100"
+          type="button"
+          title="Monitor control reserved for headphone routing"
+        >
+          ◉
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
+  const activeChannels = channels.filter((channel) => !channel.muted && channel.level > 0);
+  const masterLevel = activeChannels.length
+    ? Math.min(
+        100,
+        Math.round(
+          activeChannels.reduce((sum, channel) => sum + channel.level, 0) / activeChannels.length +
+            6,
+        ),
+      )
+    : 0;
+  const mixerChannels: AudioChannelStripModel[] = [
+    ...channels,
+    {
+      id: 'master-bus',
+      label: 'Master',
+      level: masterLevel,
+      muted: activeChannels.length === 0,
+      kind: 'system',
+      isMaster: true,
+      peak: Math.min(100, masterLevel + 5),
+    },
+  ];
+
+  return (
+    <div className="overflow-x-auto rounded-xl border border-white/10 bg-slate-950/80 p-2 shadow-inner shadow-black/40">
+      <div className="flex min-w-max gap-2">
+        {mixerChannels.map((channel) => (
+          <AudioChannelStrip key={channel.id} channel={channel} />
+        ))}
+      </div>
     </div>
   );
 }
