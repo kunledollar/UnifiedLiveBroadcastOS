@@ -130,7 +130,7 @@ export default async function ControlRoomPage() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-4 text-slate-100 md:p-6">
       <div className="mx-auto max-w-[1800px] space-y-5">
-        <div className="grid gap-5 2xl:grid-cols-[20rem_minmax(0,1fr)_24rem]">
+        <div className="grid gap-5 2xl:grid-cols-[18rem_minmax(0,1fr)_21rem]">
           <SceneWorkspace
             initialScenes={scenes}
             initialProductionState={productionState}
