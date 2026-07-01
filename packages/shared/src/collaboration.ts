@@ -12,7 +12,7 @@ import {
 import type { InMemoryAuthorityStore } from './authority.js';
 
 export type CollaborationRole = OperatorRole;
-export type CollaborationPresence = 'online' | 'idle' | 'away' | 'offline' | 'reconnecting';
+export type CollaborationPresence = 'online' | 'offline' | 'idle' | 'active' | 'editing' | 'reviewing' | 'presenting' | 'disconnected' | 'away' | 'reconnecting';
 export type CollaborationConnectionState = 'connected' | 'connecting' | 'reconnecting' | 'disconnected';
 export type CollaborationActivity =
   | 'viewing'
@@ -25,11 +25,27 @@ export type CollaborationActivity =
   | 'viewing_multiview'
   | 'idle';
 
+export type SharedSelectionType = 'scene' | 'guest' | 'source' | 'destination' | 'overlay' | 'lower_third' | 'media_asset';
+
 export interface CollaborationCursor {
   panelId: string;
   x: number;
   y: number;
   updatedAt: string;
+}
+
+export interface CollaborationSharedSelection {
+  type: SharedSelectionType;
+  resourceId: string;
+  label: string;
+  selectedAt: string;
+}
+
+export interface CollaborationWorkspaceAwareness {
+  currentView: string;
+  programFocus: string;
+  preset: string;
+  visiblePanels: string[];
 }
 
 export interface CollaborationOperator {
@@ -40,7 +56,18 @@ export interface CollaborationOperator {
   connectionState: CollaborationConnectionState;
   currentActivity: CollaborationActivity;
   currentPanel?: string;
+  joinedAt: string;
   lastSeenAt: string;
+  currentWorkspace?: string;
+  selectedPanel?: string;
+  selectedScene?: string;
+  selectedGuest?: string;
+  selectedDestination?: string;
+  activeAuthorityScope?: string;
+  authorityScopes?: string[];
+  lockCount?: number;
+  sharedSelection?: CollaborationSharedSelection;
+  workspaceAwareness?: CollaborationWorkspaceAwareness;
   color: string;
   initials: string;
   observedGraphRevision: number;
@@ -68,6 +95,7 @@ export type CollaborationEventType =
   | 'OPERATOR_PRESENCE_UPDATED'
   | 'OPERATOR_ACTIVITY_UPDATED'
   | 'OPERATOR_PANEL_CHANGED'
+  | 'OPERATOR_SELECTION_CHANGED'
   | 'OPERATOR_RECONNECTING'
   | 'OPERATOR_RECONNECTED'
   | 'GRAPH_REVISION_SYNCED'
@@ -124,26 +152,17 @@ export function getOperatorsBehindRevision(session: CollaborationSession) {
 }
 
 export function createMockCollaborationOperators(revision = 0, timestamp = now()) {
-  const operators = [
-    ['director', 'Director', 'DIRECTOR', 'switching', 'Switcher', '#22d3ee', 'DR', revision],
-    ['producer', 'Producer', 'PRODUCER', 'viewing', 'Run of Show', '#a78bfa', 'PR', Math.max(0, revision - 3)],
-    ['audio', 'Audio Engineer', 'AUDIO_ENGINEER', 'adjusting_audio', 'Audio Mixer', '#34d399', 'AE', revision],
-    ['graphics', 'Graphics Operator', 'GRAPHICS_OPERATOR', 'editing_graphics', 'Graphics', '#f59e0b', 'GO', Math.max(0, revision - 1)],
-  ] as const satisfies ReadonlyArray<readonly [string, string, CollaborationRole, CollaborationActivity, string, string, string, number]>;
-  return operators.map(([id, displayName, role, currentActivity, currentPanel, color, initials, observedGraphRevision]) => ({
-    id,
-    displayName,
-    role,
-    presence: (id === 'producer' ? 'reconnecting' : 'online') as CollaborationPresence,
-    connectionState: (id === 'producer' ? 'reconnecting' : 'connected') as CollaborationConnectionState,
-    currentActivity,
-    currentPanel,
-    lastSeenAt: timestamp,
-    color,
-    initials,
-    observedGraphRevision,
-    metadata: {},
-  })) satisfies CollaborationOperator[];
+  const rows = [
+    { id: 'director', displayName: 'Director', role: 'DIRECTOR', presence: 'presenting', connectionState: 'connected', currentActivity: 'switching', currentPanel: 'Program', color: '#22d3ee', initials: 'DR', observedGraphRevision: revision, activeAuthorityScope: 'program', authorityScopes: ['program', 'preview', 'broadcast'], lockCount: 1, sharedSelection: { type: 'scene', resourceId: 'scene-2', label: 'Scene 2', selectedAt: timestamp }, workspaceAwareness: { currentView: 'Program Focus', programFocus: 'Program', preset: 'Director', visiblePanels: ['Switcher', 'Program', 'Preview'] } },
+    { id: 'producer', displayName: 'Producer', role: 'PRODUCER', presence: 'editing', connectionState: 'connected', currentActivity: 'editing_scene', currentPanel: 'Scenes', color: '#a78bfa', initials: 'PR', observedGraphRevision: Math.max(0, revision - 2), activeAuthorityScope: 'scenes', authorityScopes: ['scenes', 'graphics', 'workspace'], lockCount: 0, sharedSelection: { type: 'scene', resourceId: 'scene-3', label: 'Scene 3', selectedAt: timestamp }, workspaceAwareness: { currentView: 'Multiview', programFocus: 'Preview', preset: 'Producer', visiblePanels: ['Scenes', 'Run of Show', 'Guests'] } },
+    { id: 'td', displayName: 'Technical Director', role: 'TECHNICAL_DIRECTOR', presence: 'active', connectionState: 'connected', currentActivity: 'viewing_multiview', currentPanel: 'Multiview', color: '#60a5fa', initials: 'TD', observedGraphRevision: revision, activeAuthorityScope: 'preview', authorityScopes: ['preview', 'sources', 'outputs'], lockCount: 0, sharedSelection: { type: 'source', resourceId: 'camera-1', label: 'Camera 1', selectedAt: timestamp }, workspaceAwareness: { currentView: 'Multiview', programFocus: 'Preview bus', preset: 'Technical', visiblePanels: ['Multiview', 'Sources', 'Destinations'] } },
+    { id: 'audio', displayName: 'Audio Engineer', role: 'AUDIO_ENGINEER', presence: 'editing', connectionState: 'connected', currentActivity: 'adjusting_audio', currentPanel: 'Audio Mixer', color: '#34d399', initials: 'AE', observedGraphRevision: revision, activeAuthorityScope: 'audio', authorityScopes: ['audio'], lockCount: 1, sharedSelection: { type: 'media_asset', resourceId: 'music-bed', label: 'Music Bed', selectedAt: timestamp }, workspaceAwareness: { currentView: 'Audio Focus', programFocus: 'Program mix', preset: 'Audio', visiblePanels: ['Audio Mixer', 'Meters'] } },
+    { id: 'graphics', displayName: 'Graphics Operator', role: 'GRAPHICS_OPERATOR', presence: 'idle', connectionState: 'connected', currentActivity: 'editing_graphics', currentPanel: 'Graphics', color: '#f59e0b', initials: 'GO', observedGraphRevision: Math.max(0, revision - 1), activeAuthorityScope: 'graphics', authorityScopes: ['graphics', 'sources'], lockCount: 1, sharedSelection: { type: 'lower_third', resourceId: 'guest-l3', label: 'Guest Lower Third', selectedAt: timestamp }, workspaceAwareness: { currentView: 'Vertical Focus', programFocus: 'Overlay safe area', preset: 'Graphics', visiblePanels: ['Graphics', 'Assets'] } },
+    { id: 'guest-manager', displayName: 'Guest Manager', role: 'GUEST_MANAGER', presence: 'offline', connectionState: 'disconnected', currentActivity: 'managing_guests', currentPanel: 'Guests', color: '#fb7185', initials: 'GM', observedGraphRevision: Math.max(0, revision - 4), activeAuthorityScope: 'guests', authorityScopes: ['guests'], lockCount: 0, sharedSelection: { type: 'guest', resourceId: 'guest-4', label: 'Guest 4', selectedAt: timestamp }, workspaceAwareness: { currentView: 'Guest Manager', programFocus: 'Green room', preset: 'Guests', visiblePanels: ['Guests', 'Invites'] } },
+    { id: 'moderator', displayName: 'Moderator', role: 'MODERATOR', presence: 'reviewing', connectionState: 'connected', currentActivity: 'viewing', currentPanel: 'Chat', color: '#c084fc', initials: 'MO', observedGraphRevision: revision, activeAuthorityScope: 'workspace', authorityScopes: ['guests', 'workspace'], lockCount: 0, sharedSelection: { type: 'destination', resourceId: 'youtube', label: 'YouTube Main', selectedAt: timestamp }, workspaceAwareness: { currentView: 'Dual View', programFocus: 'Chat + guests', preset: 'Moderator', visiblePanels: ['Chat', 'Guests'] } },
+    { id: 'viewer', displayName: 'Viewer', role: 'VIEWER', presence: 'disconnected', connectionState: 'reconnecting', currentActivity: 'idle', currentPanel: 'Diagnostics', color: '#94a3b8', initials: 'VW', observedGraphRevision: Math.max(0, revision - 6), authorityScopes: [], lockCount: 0, workspaceAwareness: { currentView: 'Observer', programFocus: 'Program', preset: 'Read only', visiblePanels: ['Program', 'Activity'] } },
+  ] as const satisfies ReadonlyArray<Omit<CollaborationOperator, 'joinedAt' | 'lastSeenAt' | 'metadata'>>;
+  return rows.map((operator) => ({ ...operator, joinedAt: timestamp, lastSeenAt: operator.presence === 'offline' ? new Date(Date.parse(timestamp) - 180000).toISOString() : timestamp, metadata: {} })) satisfies CollaborationOperator[];
 }
 
 export function createCollaborationSession(input: {
@@ -167,7 +186,7 @@ export function createCollaborationSession(input: {
     status: input.status ?? 'rehearsal',
     operators,
     activeOperatorIds: Object.values(operators)
-      .filter((operator) => operator.presence !== 'offline')
+      .filter((operator) => operator.presence !== 'offline' && operator.presence !== 'disconnected')
       .map((operator) => operator.id),
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -194,12 +213,16 @@ export class InMemoryCollaborationStore {
     return this.appendCollaborationEvent({ id: eventId('OPERATOR_LEFT'), type: 'OPERATOR_LEFT', sessionId: this.session.id, operatorId, timestamp: now(), graphRevision: this.session.currentGraphRevision, payload: {} });
   }
   updateOperatorPresence(operatorId: string, presence: CollaborationPresence) {
-    this.patchOperator(operatorId, { presence, lastSeenAt: now(), connectionState: presence === 'reconnecting' ? 'reconnecting' : presence === 'offline' ? 'disconnected' : 'connected' });
+    this.patchOperator(operatorId, { presence, lastSeenAt: now(), connectionState: presence === 'reconnecting' ? 'reconnecting' : presence === 'offline' || presence === 'disconnected' ? 'disconnected' : 'connected' });
     return this.appendCollaborationEvent({ id: eventId('OPERATOR_PRESENCE_UPDATED'), type: 'OPERATOR_PRESENCE_UPDATED', sessionId: this.session.id, operatorId, timestamp: now(), graphRevision: this.session.currentGraphRevision, payload: { presence } });
   }
   updateOperatorActivity(operatorId: string, activity: CollaborationActivity, panel?: string) {
     this.patchOperator(operatorId, { currentActivity: activity, ...(panel === undefined ? {} : { currentPanel: panel }), lastSeenAt: now() });
     return this.appendCollaborationEvent({ id: eventId('OPERATOR_ACTIVITY_UPDATED'), type: 'OPERATOR_ACTIVITY_UPDATED', sessionId: this.session.id, operatorId, timestamp: now(), graphRevision: this.session.currentGraphRevision, payload: { activity, panel } });
+  }
+  updateOperatorSelection(operatorId: string, selection: CollaborationSharedSelection) {
+    this.patchOperator(operatorId, { sharedSelection: selection, selectedPanel: selection.label, lastSeenAt: now() });
+    return this.appendCollaborationEvent({ id: eventId('OPERATOR_SELECTION_CHANGED'), type: 'OPERATOR_SELECTION_CHANGED', sessionId: this.session.id, operatorId, timestamp: now(), graphRevision: this.session.currentGraphRevision, payload: { selection } });
   }
   markOperatorSynced(operatorId: string, revision = this.session.currentGraphRevision) {
     this.patchOperator(operatorId, { observedGraphRevision: revision, lastSeenAt: now() });
