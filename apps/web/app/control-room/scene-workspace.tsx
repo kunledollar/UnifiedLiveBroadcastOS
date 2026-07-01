@@ -83,6 +83,12 @@ function ProductionGraphInspector({
   const recording = selectRecordingState(graph);
   const latestCommands = session.commandLog.slice(-3);
   const latestEvents = session.eventLog.slice(-3);
+  const rejectedCommands = session.eventLog.filter(
+    (event) => event.type === 'COMMAND_REJECTED',
+  ).length;
+  const latestEvent = latestEvents.at(-1);
+  const latestCommandSequence = latestEvent?.metadata?.commandSequence;
+  const latestEventRevision = latestEvent?.graphRevision;
   return (
     <details className="mb-2 rounded-xl border border-cyan-300/20 bg-slate-950/80 p-3 text-xs text-slate-300">
       <summary className="cursor-pointer font-black uppercase tracking-[0.18em] text-cyan-200">
@@ -90,17 +96,37 @@ function ProductionGraphInspector({
       </summary>
       <div className="mt-3 grid gap-2 md:grid-cols-4">
         <InspectorMetric label="Status" value={selectBroadcastStatus(graph)} />
+        <InspectorMetric label="Graph ID" value={graph.metadata.graphId} />
+        <InspectorMetric label="Revision" value={String(graph.metadata.revision)} />
+        <InspectorMetric label="Created" value={graph.metadata.createdAt} />
+        <InspectorMetric label="Updated" value={graph.metadata.updatedAt} />
         <InspectorMetric label="Graph" value={`${graph.graphVersion} / ${graph.schemaVersion}`} />
         <InspectorMetric label="Program" value={graph.program.sceneId ?? '—'} />
         <InspectorMetric label="Preview" value={graph.preview.sceneId ?? '—'} />
         <InspectorMetric label="Scenes" value={String(Object.keys(graph.scenes).length)} />
         <InspectorMetric label="Sources" value={String(Object.keys(graph.sources).length)} />
         <InspectorMetric label="Guests" value={String(Object.keys(graph.guests).length)} />
-        <InspectorMetric label="Destinations" value={String(Object.keys(graph.destinations).length)} />
+        <InspectorMetric
+          label="Destinations"
+          value={String(Object.keys(graph.destinations).length)}
+        />
         <InspectorMetric label="Audio" value={String(Object.keys(graph.audioChannels).length)} />
         <InspectorMetric label="Recording" value={recording.status} />
         <InspectorMetric label="Health" value={health.status} />
-        <InspectorMetric label="Logs" value={`${session.commandLog.length} cmd / ${session.eventLog.length} evt`} />
+        <InspectorMetric label="Accepted" value={String(session.commandLog.length)} />
+        <InspectorMetric label="Rejected" value={String(rejectedCommands)} />
+        <InspectorMetric
+          label="Latest Seq"
+          value={latestCommandSequence === undefined ? '—' : String(latestCommandSequence)}
+        />
+        <InspectorMetric
+          label="Event Rev"
+          value={latestEventRevision === undefined ? '—' : String(latestEventRevision)}
+        />
+        <InspectorMetric
+          label="Logs"
+          value={`${session.commandLog.length} cmd / ${session.eventLog.length} evt`}
+        />
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
@@ -1069,7 +1095,9 @@ export function SceneWorkspace({
             persistProductionState({ ...productionState, transitionType }, 'stage');
           }}
           onDurationChange={(transitionDuration) => {
-            dispatchProductionGraphCommand('SET_TRANSITION_DURATION', { durationMs: transitionDuration });
+            dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+              durationMs: transitionDuration,
+            });
             persistProductionState({ ...productionState, transitionDuration }, 'stage');
           }}
         />
