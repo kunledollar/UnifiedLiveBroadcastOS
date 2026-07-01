@@ -95,11 +95,87 @@ const messages: ChatMessage[] = [
   },
 ];
 
-const healthMetrics: StreamHealthMetric[] = [
-  { id: 'bitrate', label: 'Bitrate', value: '6,200 kbps', status: 'good', helperText: 'Stable' },
-  { id: 'latency', label: 'Latency', value: '2.4s', status: 'good', helperText: 'Low latency' },
-  { id: 'frames', label: 'Dropped', value: '0', status: 'good', helperText: 'No drops' },
-  { id: 'cpu', label: 'CPU', value: '38%', status: 'warning', helperText: 'Monitor under load' },
+// Frontend placeholder telemetry for Phase 4.8. Replace these isolated values with live runtime
+// metrics when backend telemetry is available; do not add presentation-only API contracts here.
+const broadcastHealthMetrics: StreamHealthMetric[] = [
+  {
+    id: 'cpu',
+    label: 'CPU',
+    value: '38%',
+    status: 'warning',
+    helperText: 'High CPU placeholder alert',
+  },
+  { id: 'gpu', label: 'GPU', value: '24%', status: 'good', helperText: 'Render headroom stable' },
+  {
+    id: 'memory',
+    label: 'Memory',
+    value: '4.8 GB',
+    status: 'good',
+    helperText: 'Within operator range',
+  },
+  {
+    id: 'encoder-fps',
+    label: 'Encoder FPS',
+    value: '60',
+    status: 'good',
+    helperText: 'Target frame rate locked',
+  },
+  {
+    id: 'dropped-frames',
+    label: 'Dropped Frames',
+    value: '0',
+    status: 'good',
+    helperText: 'No drops detected',
+  },
+  {
+    id: 'upload',
+    label: 'Upload Mbps',
+    value: '7.0 Mbps',
+    status: 'good',
+    helperText: 'Above stream target',
+  },
+  {
+    id: 'rtmp',
+    label: 'RTMP',
+    value: 'Standby',
+    status: 'unknown',
+    helperText: 'Destination telemetry pending',
+  },
+  {
+    id: 'recording',
+    label: 'Recording',
+    value: 'Active',
+    status: 'good',
+    helperText: 'Local record placeholder',
+  },
+  {
+    id: 'webrtc',
+    label: 'WebRTC',
+    value: 'Ready',
+    status: 'good',
+    helperText: 'Guest signaling available',
+  },
+  {
+    id: 'latency',
+    label: 'Latency',
+    value: '2.4s',
+    status: 'good',
+    helperText: 'Low latency placeholder',
+  },
+  {
+    id: 'disk',
+    label: 'Disk Space',
+    value: '68%',
+    status: 'warning',
+    helperText: 'Low disk future alert',
+  },
+  {
+    id: 'network',
+    label: 'Network',
+    value: 'Stable',
+    status: 'good',
+    helperText: 'No packet alerts',
+  },
 ];
 
 const audioChannels: AudioChannel[] = [
@@ -139,6 +215,7 @@ export default async function ControlRoomPage() {
             assets={assets}
             mediaRoutes={mediaRoutes}
             guests={guests}
+            healthMetrics={broadcastHealthMetrics}
           />
           <aside className="min-h-0 space-y-3 overflow-y-auto pr-1 max-xl:max-h-[42rem]">
             <GuestManagement guests={guests} invites={invites} broadcastId="demo-broadcast" />
@@ -172,7 +249,7 @@ export default async function ControlRoomPage() {
               </summary>
               <div className="space-y-3 p-3">
                 <ControlRoomRealtime workspaceId="demo-workspace" broadcastId="demo-broadcast" />
-                <StreamHealthPanel metrics={healthMetrics} />
+                <StreamHealthPanel metrics={broadcastHealthMetrics} />
               </div>
             </details>
           </aside>

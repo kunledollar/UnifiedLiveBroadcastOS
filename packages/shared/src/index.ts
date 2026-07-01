@@ -144,7 +144,7 @@ export interface StreamHealthMetric {
   id: string;
   label: string;
   value: string;
-  status: 'good' | 'warning' | 'critical';
+  status: 'good' | 'healthy' | 'warning' | 'critical' | 'unknown';
   helperText?: string;
 }
 export interface AudioChannel {
