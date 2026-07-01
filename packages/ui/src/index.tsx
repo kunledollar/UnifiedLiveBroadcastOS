@@ -195,7 +195,9 @@ export function Button({
   }[variant];
 
   return (
-    <button className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${cls}`}>
+    <button
+      className={`h-9 rounded-lg px-3 text-xs font-bold uppercase tracking-[0.08em] transition ${cls}`}
+    >
       {children}
     </button>
   );
@@ -211,10 +213,10 @@ export function Panel({
   action?: ReactNode;
 }) {
   return (
-    <section className="rounded-2xl border border-white/10 bg-slate-900/75 p-5 shadow-2xl shadow-black/20 backdrop-blur">
+    <section className="rounded-xl border border-white/10 bg-slate-900/70 p-3 shadow-lg shadow-black/10 backdrop-blur">
       {title ? (
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-sm font-semibold uppercase tracking-[0.18em] text-slate-300">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h2 className="text-[11px] font-black uppercase tracking-[0.16em] text-slate-300">
             {title}
           </h2>
           {action}
@@ -236,7 +238,7 @@ export function Badge({ children, tone = 'neutral' }: { children: ReactNode; ton
 
   return (
     <span
-      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-bold ring-1 ${cls}`}
+      className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-bold ring-1 ${cls}`}
     >
       {children}
     </span>
@@ -247,10 +249,10 @@ type MonitorHudPosition = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-rig
 type SafeAreaGuide = 'action-safe' | 'title-safe' | 'center-cross' | 'grid';
 
 const monitorHudPositionClasses: Record<MonitorHudPosition, string> = {
-  'top-left': 'left-2 top-2 items-start',
-  'top-right': 'right-2 top-2 items-end',
-  'bottom-left': 'bottom-2 left-2 items-start',
-  'bottom-right': 'bottom-2 right-2 items-end',
+  'top-left': 'left-1.5 top-1.5 items-start',
+  'top-right': 'right-1.5 top-1.5 items-end',
+  'bottom-left': 'bottom-1.5 left-1.5 items-start',
+  'bottom-right': 'bottom-1.5 right-1.5 items-end',
 };
 
 const outputBadgeToneClasses: Record<Tone, string> = {
@@ -318,7 +320,7 @@ export function MonitorHUD({
 }) {
   return (
     <div
-      className={`pointer-events-none absolute z-50 flex max-w-[72%] flex-col gap-1 rounded-md border border-white/10 bg-black/45 px-2 py-1.5 shadow-lg shadow-black/25 backdrop-blur-sm ${monitorHudPositionClasses[position]} ${subdued ? 'opacity-70' : 'opacity-90'}`}
+      className={`pointer-events-none absolute z-50 flex max-w-[72%] flex-col gap-0.5 rounded border border-white/5 bg-black/55 px-1.5 py-1 backdrop-blur-sm ${monitorHudPositionClasses[position]} ${subdued ? 'opacity-70' : 'opacity-90'}`}
     >
       <div className="flex w-full items-center gap-2">
         <p className="min-w-0 truncate text-[10px] font-black uppercase tracking-[0.2em] text-white/85">
@@ -372,9 +374,9 @@ export function MonitorStateScreen({
   compact?: boolean;
 }) {
   return (
-    <div className="grid h-full min-h-0 w-full place-items-center border border-slate-800/80 bg-[radial-gradient(circle_at_50%_35%,rgba(30,41,59,.75),transparent_55%),#020617] p-3 text-center transition-opacity duration-300">
+    <div className="grid h-full min-h-0 w-full place-items-center border border-slate-900/80 bg-[linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(180deg,rgba(255,255,255,.03)_1px,transparent_1px),radial-gradient(circle_at_50%_35%,rgba(30,41,59,.68),transparent_55%),#020617] bg-[length:26px_26px,26px_26px,auto,auto] p-2 animate-[broadcastScan_5s_ease-in-out_infinite] text-center transition-opacity duration-300">
       <div
-        className={`w-full ${compact ? 'max-w-[12rem] py-3' : 'max-w-sm py-7'} border-y border-slate-700/55 px-3`}
+        className={`w-full ${compact ? 'max-w-[12rem] py-3' : 'max-w-sm py-7'} border-y border-slate-700/40 px-3`}
       >
         <div className="mb-3 flex items-center justify-center gap-2">
           <span
@@ -475,15 +477,15 @@ export function SceneCard({
 
   return (
     <div
-      className={`rounded-2xl border p-3 transition ${tallyCardClasses(tallyState)} ${tallyState === 'idle' ? 'hover:bg-slate-800/80' : ''}`}
+      className={`rounded-lg border p-2 transition ${tallyCardClasses(tallyState)} ${tallyState === 'idle' ? 'hover:bg-slate-800/80' : ''}`}
     >
       <button className="w-full text-left" onClick={() => onSwitch?.(scene.id)} type="button">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="font-semibold text-white">{scene.name}</p>
-            <p className="mt-1 text-xs text-slate-400">{layoutLabels[sceneLayout]}</p>
+            <p className="text-sm font-semibold text-white">{scene.name}</p>
+            <p className="mt-0.5 text-[11px] text-slate-400">{layoutLabels[sceneLayout]}</p>
           </div>
-          <div className="flex flex-col items-end gap-2">
+          <div className="flex flex-col items-end gap-1">
             <Badge tone="neutral">{typeLabels[scene.type]}</Badge>
             <TallyBadge
               state={tallyState}
@@ -491,7 +493,7 @@ export function SceneCard({
             />
           </div>
         </div>
-        <div className="mt-3 flex gap-1.5">
+        <div className="mt-2 flex gap-1">
           {scene.canvases.map((canvas) => (
             <span
               key={canvas.id}
@@ -502,9 +504,9 @@ export function SceneCard({
           ))}
         </div>
       </button>
-      <div className="mt-3 grid grid-cols-3 gap-1.5 text-[11px] font-bold text-slate-200">
+      <div className="mt-2 grid grid-cols-3 gap-1 text-[10px] font-bold text-slate-200">
         <button
-          className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
+          className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
           disabled={index === 0}
           onClick={() => onMove?.(scene.id, 'up')}
           type="button"
@@ -512,7 +514,7 @@ export function SceneCard({
           ↑ Up
         </button>
         <button
-          className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
+          className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
           disabled={index === total - 1}
           onClick={() => onMove?.(scene.id, 'down')}
           type="button"
@@ -520,14 +522,14 @@ export function SceneCard({
           ↓ Down
         </button>
         <button
-          className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700"
+          className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700"
           onClick={() => onDuplicate?.(scene.id)}
           type="button"
         >
           Duplicate
         </button>
         <button
-          className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700"
+          className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700"
           onClick={() => {
             const name = window.prompt('Rename scene', scene.name);
             if (name) onRename?.(scene.id, name);
@@ -595,11 +597,11 @@ export function SceneList({
         ) : null
       }
     >
-      <div className="mb-3 rounded-xl border border-white/10 bg-slate-950/50 p-3 text-xs text-slate-300">
+      <div className="mb-2 rounded-lg border border-white/5 bg-slate-950/45 p-2 text-[11px] text-slate-300">
         Select a scene to stage it in Preview. Use Take/Cut/Fade from the operator toolbar to move
         Preview to Program.
       </div>
-      <div className="space-y-3">
+      <div className="space-y-2">
         {scenes.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
             No scenes yet. Add a scene to build your rundown.
@@ -802,10 +804,10 @@ export function SourceManager({
             key={source.id}
             className={`rounded-xl border p-3 ${source.isVisible ? tallyCardClasses(tallyState) : 'border-white/5 bg-slate-950/30 opacity-60'}`}
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
               <div>
-                <p className="font-semibold text-white">{source.name}</p>
-                <p className="text-xs text-slate-400">
+                <p className="text-sm font-semibold text-white">{source.name}</p>
+                <p className="text-[11px] text-slate-400">
                   {sourceTypeLabels[source.type]} · Layer {index + 1}
                 </p>
               </div>
@@ -820,7 +822,7 @@ export function SourceManager({
             <SourceMonitorPreview source={source} />
             <div className="mt-3 grid grid-cols-4 gap-1.5 text-[11px] font-bold text-slate-200">
               <button
-                className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
+                className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
                 disabled={index === 0 || source.isLocked}
                 onClick={() => onMove?.(source.id, 'up')}
                 type="button"
@@ -828,7 +830,7 @@ export function SourceManager({
                 ↑
               </button>
               <button
-                className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
+                className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700 disabled:opacity-40"
                 disabled={index === sources.length - 1 || source.isLocked}
                 onClick={() => onMove?.(source.id, 'down')}
                 type="button"
@@ -836,21 +838,21 @@ export function SourceManager({
                 ↓
               </button>
               <button
-                className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700"
+                className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700"
                 onClick={() => onToggleVisibility?.(source.id)}
                 type="button"
               >
                 {source.isVisible ? 'Hide' : 'Show'}
               </button>
               <button
-                className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700"
+                className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700"
                 onClick={() => onToggleLock?.(source.id)}
                 type="button"
               >
                 {source.isLocked ? 'Unlock' : 'Lock'}
               </button>
               <button
-                className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700"
+                className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700"
                 onClick={() => {
                   const name = window.prompt('Rename source', source.name);
                   if (name) onRename?.(source.id, name);
@@ -860,7 +862,7 @@ export function SourceManager({
                 Rename
               </button>
               <button
-                className="rounded-lg bg-slate-800 px-2 py-1 hover:bg-slate-700"
+                className="rounded-md bg-slate-800 px-2 py-1 hover:bg-slate-700"
                 onClick={() => onDuplicate?.(source.id)}
                 type="button"
               >
@@ -1723,7 +1725,7 @@ function BroadcastMonitorFrame({
   return (
     <section className={`min-w-0 border bg-black ${tallyCardClasses(tallyState)} ${className}`}>
       <div
-        className={`border-b px-2 py-1 ${tallyState === 'program' ? 'border-red-400/25' : 'border-emerald-300/25'}`}
+        className={`border-b px-1.5 py-0.5 ${tallyState === 'program' ? 'border-red-400/25' : 'border-emerald-300/25'}`}
       >
         <div className="flex items-center justify-between gap-2">
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
@@ -1827,7 +1829,7 @@ export function VerticalPreview({
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-slate-400">Vertical 9:16</p>
           <h2 className="text-lg font-bold text-white">{scene.name}</h2>
-          <p className="text-xs text-slate-400">
+          <p className="text-[11px] text-slate-400">
             {hasVerticalRoute ? 'Dedicated vertical route' : 'Mirroring program route'}
           </p>
         </div>
@@ -1872,7 +1874,7 @@ export function GuestPanel({ guests }: { guests: Guest[] }) {
 export function DestinationPanel({ destinations }: { destinations: Destination[] }) {
   return (
     <Panel title="Destinations">
-      <div className="space-y-3">
+      <div className="space-y-2">
         {destinations.map((destination) => (
           <DestinationToggle key={destination.id} destination={destination} />
         ))}
@@ -2059,7 +2061,7 @@ export function ProductionMultiview({
 export function UnifiedChatPanel({ messages }: { messages: ChatMessage[] }) {
   return (
     <Panel title="Unified Chat">
-      <div className="space-y-3">
+      <div className="space-y-2">
         {messages.map((message) => (
           <ChatMessageItem key={message.id} message={message} />
         ))}
@@ -2107,7 +2109,9 @@ export function AudioMeter({
   return (
     <div className={compact ? 'space-y-1' : 'space-y-2'}>
       <div className="flex items-center justify-between gap-2">
-        <p className={`${compact ? 'text-[10px]' : 'text-sm'} truncate font-semibold text-white`}>
+        <p
+          className={`${compact ? 'text-[10px]' : 'text-sm'} truncate text-sm font-semibold text-white`}
+        >
           {channel.label}
         </p>
         <span className="font-mono text-[9px] font-bold uppercase tracking-[0.12em] text-slate-400">
@@ -2126,10 +2130,10 @@ export function AudioMeter({
 
 export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
   return (
-    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
       {channels.map((channel) => (
-        <div key={channel.id} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
-          <div className="mb-3 flex items-center justify-between gap-2">
+        <div key={channel.id} className="rounded-lg border border-white/10 bg-slate-950/70 p-2">
+          <div className="mb-2 flex items-center justify-between gap-2">
             <div className="flex items-center gap-1">
               <TallyBadge
                 state={channel.muted ? 'muted' : 'idle'}
@@ -2158,23 +2162,23 @@ export function ProductionDock({
 
   return (
     <Panel title="Production Dock">
-      <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
+      <div className="grid gap-3 xl:grid-cols-[1.65fr_1fr]">
         <div>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
             Audio Mixer
           </p>
           <AudioMixer channels={channels} />
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2 sm:grid-cols-2">
           {assetGroups.map((group) => (
-            <div key={group} className="rounded-xl border border-white/10 bg-slate-950/70 p-3">
+            <div key={group} className="rounded-lg border border-white/10 bg-slate-950/70 p-2">
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                 {group.replace('_', ' ')}s
               </p>
-              <p className="mt-2 text-2xl font-black text-white">
+              <p className="mt-1 text-xl font-black text-white">
                 {assets.filter((asset) => getAssetDockGroup(asset) === group).length}
               </p>
-              <div className="mt-2 flex items-center justify-between gap-2">
+              <div className="mt-1 flex items-center justify-between gap-2">
                 <p className="text-xs text-slate-500">placeholder bin</p>
                 <TallyBadge state="idle" />
               </div>
@@ -2232,8 +2236,8 @@ export function GuestTile({ guest }: { guest: Guest }) {
   const state = guestMonitorState(guest);
   const conn = connectionMeta(guest.status);
   return (
-    <div className="rounded-xl border border-white/10 bg-slate-950/70 p-3 transition-colors duration-300">
-      <div className="relative aspect-video overflow-hidden rounded-lg border border-slate-700/70 bg-black">
+    <div className="rounded-lg border border-white/10 bg-slate-950/70 p-2 transition-colors duration-300">
+      <div className="relative aspect-video overflow-hidden rounded border border-slate-800 bg-black">
         <MonitorStateScreen
           title={state.title}
           subtitle={state.subtitle}
@@ -2250,22 +2254,22 @@ export function GuestTile({ guest }: { guest: Guest }) {
           badges={[
             <OutputBadge
               key="cam"
-              label={guest.isMuted ? 'CAM OFF' : 'CAM'}
+              label={guest.isMuted ? '◼ CAM' : '● CAM'}
               tone={guest.isMuted ? 'warning' : 'success'}
             />,
             <OutputBadge
               key="mic"
-              label={guest.isMuted ? 'MIC OFF' : 'MIC'}
+              label={guest.isMuted ? '◼ MIC' : '● MIC'}
               tone={guest.isMuted ? 'warning' : 'success'}
             />,
-            <OutputBadge key="screen" label="SCREEN · UI" tone="neutral" />,
+            <OutputBadge key="screen" label="▣ SCR" tone="neutral" />,
           ]}
         />
       </div>
-      <div className="mt-3 flex items-start justify-between gap-2">
+      <div className="mt-2 flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-medium text-white">{guest.displayName}</p>
-          <p className="text-xs text-slate-400">{connectionMeta(guest.status).label}</p>
+          <p className="truncate text-sm font-medium text-white">{guest.displayName}</p>
+          <p className="text-[11px] text-slate-400">{connectionMeta(guest.status).label}</p>
         </div>
         <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-[10px] font-bold uppercase text-slate-200 ring-1 ring-white/10">
           <span
@@ -2283,7 +2287,7 @@ export function DestinationToggle({ destination }: { destination: Destination })
     <div className="flex items-center justify-between rounded-xl bg-slate-800 p-4">
       <div>
         <p className="font-medium">{destination.label}</p>
-        <p className="text-xs text-slate-400">{destination.platform}</p>
+        <p className="text-[11px] text-slate-400">{destination.platform}</p>
       </div>
       <Badge tone={destination.enabled ? 'success' : 'neutral'}>{destination.status}</Badge>
     </div>
@@ -2333,7 +2337,7 @@ function Metric({
         : 'text-emerald-300';
   return (
     <div className="rounded-xl bg-slate-800 p-3">
-      <p className="text-xs text-slate-400">{label}</p>
+      <p className="text-[11px] text-slate-400">{label}</p>
       <p className={`font-semibold ${color}`}>{value}</p>
     </div>
   );

@@ -242,10 +242,10 @@ function OperatorMetric({ label, value }: { label: string; value: string }) {
 }
 
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-1.5 lg:grid-cols-[minmax(0,3.5fr)_minmax(14rem,1fr)] xl:grid-cols-[minmax(0,3.75fr)_minmax(15rem,1fr)]',
-  program: 'grid min-h-0 gap-1.5 lg:grid-cols-[minmax(0,4fr)_minmax(13rem,0.85fr)]',
-  vertical: 'grid min-h-0 gap-1.5 md:grid-cols-1 lg:grid-cols-[minmax(0,3.5fr)_minmax(14rem,1fr)]',
-  compact: 'grid min-h-0 gap-1.5 md:grid-cols-[minmax(0,3fr)_minmax(12rem,1fr)]',
+  dual: 'grid min-h-0 gap-1 lg:grid-cols-[minmax(0,3fr)_minmax(13rem,1fr)] xl:grid-cols-[minmax(0,3fr)_minmax(14rem,1fr)]',
+  program: 'grid min-h-0 gap-1 lg:grid-cols-[minmax(0,3.4fr)_minmax(12rem,0.9fr)]',
+  vertical: 'grid min-h-0 gap-1 md:grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(13rem,1fr)]',
+  compact: 'grid min-h-0 gap-1 md:grid-cols-[minmax(0,3fr)_minmax(12rem,1fr)]',
   multiview: 'grid min-h-0 gap-1.5',
 };
 
@@ -796,20 +796,26 @@ export function SceneWorkspace({
       </aside>
       <section className="flex min-h-0 flex-col gap-1 overflow-hidden">
         <div className="shrink-0 border-b border-white/10 bg-slate-950/95 px-2 py-1 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
-          <div className="flex min-h-8 items-center gap-1.5 overflow-x-auto whitespace-nowrap">
+          <div className="flex min-h-8 items-center gap-1 overflow-x-auto whitespace-nowrap">
             <span className="hidden max-w-[10rem] truncate text-xs font-bold text-white md:inline">
               Launch Day
             </span>
-            <OperatorStatusBadge label="LIVE" tone="live" pulse />
-            <OperatorStatusBadge label="REC" tone="recording" pulse />
-            <OperatorMetric label="RUN" value={formatElapsed(elapsedSeconds)} />
-            <OperatorStatusBadge
-              label={transitionActive ? 'WARN Transition' : 'READY'}
-              tone={transitionActive ? 'warning' : 'ready'}
-            />
+            <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
+              <OperatorStatusBadge label="LIVE" tone="live" pulse />
+              <OperatorStatusBadge label="REC" tone="recording" pulse />
+            </div>
+            <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
+              <OperatorMetric label="RUN" value={formatElapsed(elapsedSeconds)} />
+            </div>
+            <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
+              <OperatorStatusBadge
+                label={transitionActive ? 'WARN Transition' : 'READY'}
+                tone={transitionActive ? 'warning' : 'ready'}
+              />
+            </div>
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 sm:inline" />
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 md:inline" />
-            <div className="hidden items-center gap-1 lg:flex">
+            <div className="hidden items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5 lg:flex">
               <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
               <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
               <OperatorMetric label="DROP" value={safeHealthMetrics.dropped} />

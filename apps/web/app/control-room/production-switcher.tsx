@@ -44,10 +44,10 @@ function SwitcherButton({
     program:
       'border-red-400/35 bg-red-600 text-white shadow-[inset_0_-2px_0_rgba(0,0,0,0.35),0_0_14px_rgba(220,38,38,0.22)] hover:bg-red-500',
     preview:
-      'border-emerald-300/30 bg-emerald-500/90 text-slate-950 shadow-[inset_0_-2px_0_rgba(0,0,0,0.32)] hover:bg-emerald-400',
-    auto: 'border-amber-300/35 bg-amber-400 text-slate-950 shadow-[inset_0_-2px_0_rgba(0,0,0,0.35)] hover:bg-amber-300',
+      'border-cyan-200/45 bg-cyan-300 text-slate-950 shadow-[inset_0_-2px_0_rgba(0,0,0,0.32),0_0_18px_rgba(103,232,249,0.22)] hover:bg-cyan-200',
+    auto: 'border-amber-300/30 bg-amber-400/85 text-slate-950 shadow-[inset_0_-2px_0_rgba(0,0,0,0.3)] hover:bg-amber-300',
     utility:
-      'border-slate-600/80 bg-slate-800 text-slate-100 shadow-[inset_0_-2px_0_rgba(0,0,0,0.35)] hover:bg-slate-700',
+      'border-slate-700/70 bg-slate-900/80 text-slate-300 shadow-[inset_0_-1px_0_rgba(0,0,0,0.3)] hover:bg-slate-800 hover:text-slate-100',
     disabled: 'cursor-not-allowed border-slate-800 bg-slate-900 text-slate-600',
   };
 
@@ -57,7 +57,7 @@ function SwitcherButton({
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className={`h-11 rounded-md border px-3 font-mono text-[11px] font-black uppercase tracking-[0.16em] transition ${toneClasses[disabled ? 'disabled' : tone]}`}
+      className={`h-10 rounded border px-3 font-mono text-[11px] font-black uppercase tracking-[0.16em] transition ${toneClasses[disabled ? 'disabled' : tone]}`}
     >
       {children}
     </button>
@@ -189,8 +189,8 @@ export function ProductionSwitcher({
   const current = `${transitionLabel(productionState.transitionType)} · ${productionState.transitionDuration} ms`;
 
   return (
-    <section className="shrink-0 rounded-xl border border-slate-700/80 bg-[linear-gradient(180deg,#111827,#020617)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.06),0_18px_45px_rgba(0,0,0,0.32)]">
-      <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/10 pb-1.5">
+    <section className="shrink-0 rounded-lg border border-slate-800 bg-[linear-gradient(180deg,#0f172a,#020617)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+      <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/5 pb-1">
         <div>
           <h2 className="font-mono text-xs font-black uppercase tracking-[0.22em] text-cyan-100">
             Production Switcher
@@ -206,16 +206,16 @@ export function ProductionSwitcher({
         </div>
       </div>
 
-      <div className="grid gap-2 xl:grid-cols-[1.15fr_1fr_1.05fr]">
-        <div className="grid grid-cols-3 gap-1">
+      <div className="grid gap-2 xl:grid-cols-[1.25fr_1fr_1fr]">
+        <div className="grid grid-cols-[1fr_1fr_1.35fr] gap-1">
           <SwitcherButton tone="program" onClick={onCut}>
-            Cut
+            CUT
           </SwitcherButton>
           <SwitcherButton tone="auto" onClick={onAuto}>
-            Auto
+            AUTO
           </SwitcherButton>
           <SwitcherButton tone="preview" onClick={onTake}>
-            Take
+            TAKE
           </SwitcherButton>
         </div>
 
@@ -231,7 +231,7 @@ export function ProductionSwitcher({
         </div>
 
         <div className="grid gap-2">
-          <div className="grid grid-cols-3 gap-1">
+          <div className="grid grid-cols-3 gap-1 opacity-85">
             <SwitcherButton onClick={onPrevious}>Previous</SwitcherButton>
             <SwitcherButton
               disabled
@@ -245,7 +245,7 @@ export function ProductionSwitcher({
         </div>
       </div>
 
-      <div className="mt-2 grid gap-2 md:grid-cols-[13rem_1fr]">
+      <div className="mt-2 grid gap-2 md:grid-cols-[12rem_1fr]">
         <div className="flex items-center justify-center gap-2 rounded-lg border border-white/5 bg-slate-950/70 px-3 py-2 font-mono text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
           <span>AUTO</span>
           <span className="text-slate-700">3</span>
