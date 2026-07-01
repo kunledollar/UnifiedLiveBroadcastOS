@@ -23,6 +23,12 @@ import {
   type MediaLayoutPreset,
   type ProductionSwitchingState,
   type TransitionType,
+  LocalProductionCommandDispatcher,
+  createBroadcastSession,
+  selectBroadcastStatus,
+  selectHealthSummary,
+  selectRecordingState,
+  type ProductionCommandType,
 } from '@ubos/shared';
 import {
   type ReactNode,
@@ -55,6 +61,58 @@ import {
   setRouteMuted,
 } from './media-route-actions';
 import { ProductionSwitcher } from './production-switcher';
+
+function InspectorMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg bg-slate-900/80 p-2">
+      <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
+      <p className="truncate font-mono text-xs font-bold text-slate-100">{value}</p>
+    </div>
+  );
+}
+
+function ProductionGraphInspector({
+  session,
+}: {
+  session: ReturnType<typeof createBroadcastSession>;
+}) {
+  const enabled = process.env.NEXT_PUBLIC_UBOS_GRAPH_INSPECTOR === 'true';
+  if (!enabled) return null;
+  const graph = session.graph;
+  const health = selectHealthSummary(graph);
+  const recording = selectRecordingState(graph);
+  const latestCommands = session.commandLog.slice(-3);
+  const latestEvents = session.eventLog.slice(-3);
+  return (
+    <details className="mb-2 rounded-xl border border-cyan-300/20 bg-slate-950/80 p-3 text-xs text-slate-300">
+      <summary className="cursor-pointer font-black uppercase tracking-[0.18em] text-cyan-200">
+        Production Graph Inspector
+      </summary>
+      <div className="mt-3 grid gap-2 md:grid-cols-4">
+        <InspectorMetric label="Status" value={selectBroadcastStatus(graph)} />
+        <InspectorMetric label="Graph" value={`${graph.graphVersion} / ${graph.schemaVersion}`} />
+        <InspectorMetric label="Program" value={graph.program.sceneId ?? '—'} />
+        <InspectorMetric label="Preview" value={graph.preview.sceneId ?? '—'} />
+        <InspectorMetric label="Scenes" value={String(Object.keys(graph.scenes).length)} />
+        <InspectorMetric label="Sources" value={String(Object.keys(graph.sources).length)} />
+        <InspectorMetric label="Guests" value={String(Object.keys(graph.guests).length)} />
+        <InspectorMetric label="Destinations" value={String(Object.keys(graph.destinations).length)} />
+        <InspectorMetric label="Audio" value={String(Object.keys(graph.audioChannels).length)} />
+        <InspectorMetric label="Recording" value={recording.status} />
+        <InspectorMetric label="Health" value={health.status} />
+        <InspectorMetric label="Logs" value={`${session.commandLog.length} cmd / ${session.eventLog.length} evt`} />
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
+          {JSON.stringify(latestCommands, null, 2)}
+        </pre>
+        <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
+          {JSON.stringify(latestEvents, null, 2)}
+        </pre>
+      </div>
+    </details>
+  );
+}
 
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
@@ -443,6 +501,32 @@ export function SceneWorkspace({
   const programRoute = mediaRoutes.find((route) => route.isOnProgram);
   const layoutPreset =
     (programRoute?.metadata.layoutPreset as MediaLayoutPreset | undefined) ?? 'full_screen';
+  const productionGraphDispatcher = useMemo(
+    () =>
+      new LocalProductionCommandDispatcher(
+        createBroadcastSession({
+          id: programScene.broadcastId,
+          name: 'Control Room Session',
+          operatorId: 'local-director',
+        }),
+      ),
+    [programScene.broadcastId],
+  );
+  const productionGraphSession = productionGraphDispatcher.getSession();
+  const dispatchProductionGraphCommand = useCallback(
+    (type: ProductionCommandType, payload: Record<string, unknown> = {}) => {
+      productionGraphDispatcher.dispatch({
+        id: `ui-${type.toLowerCase()}-${Date.now()}`,
+        type,
+        broadcastSessionId: programScene.broadcastId,
+        actorId: 'local-director',
+        actorRole: 'DIRECTOR',
+        timestamp: new Date().toISOString(),
+        payload,
+      });
+    },
+    [productionGraphDispatcher, programScene.broadcastId],
+  );
 
   const persistProductionState = (
     next: ProductionSwitchingState,
@@ -454,9 +538,15 @@ export function SceneWorkspace({
     });
   };
 
-  const stageScene = (sceneId: string) =>
+  const stageScene = (sceneId: string) => {
+    dispatchProductionGraphCommand('SET_PREVIEW_SCENE', { sceneId });
     persistProductionState({ ...productionState, previewSceneId: sceneId }, 'stage');
+  };
   const switchProgram = (type: TransitionType) => {
+    dispatchProductionGraphCommand(type === 'cut' ? 'CUT_TO_PROGRAM' : 'TAKE_PREVIEW', {
+      sceneId: productionState.previewSceneId,
+      transitionType: type,
+    });
     const duration = type === 'cut' ? 0 : productionState.transitionDuration;
     const label =
       type === 'cut'
@@ -974,13 +1064,16 @@ export function SceneWorkspace({
           onAuto={() => switchProgram('fade')}
           onPrevious={() => stageAdjacentScene('previous')}
           onNext={() => stageAdjacentScene('next')}
-          onTransitionChange={(transitionType) =>
-            persistProductionState({ ...productionState, transitionType }, 'stage')
-          }
-          onDurationChange={(transitionDuration) =>
-            persistProductionState({ ...productionState, transitionDuration }, 'stage')
-          }
+          onTransitionChange={(transitionType) => {
+            dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
+            persistProductionState({ ...productionState, transitionType }, 'stage');
+          }}
+          onDurationChange={(transitionDuration) => {
+            dispatchProductionGraphCommand('SET_TRANSITION_DURATION', { durationMs: transitionDuration });
+            persistProductionState({ ...productionState, transitionDuration }, 'stage');
+          }}
         />
+        <ProductionGraphInspector session={productionGraphSession} />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {viewMode === 'multiview' ? (
             <ProductionMultiview

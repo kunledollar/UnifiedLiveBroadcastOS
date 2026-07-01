@@ -12,7 +12,8 @@
     "db:generate": "pnpm --filter @ubos/db exec prisma generate --schema prisma/schema.prisma",
     "db:push": "dotenv -- pnpm --filter @ubos/db exec prisma db push --schema prisma/schema.prisma",
     "db:migrate": "dotenv -- pnpm --filter @ubos/db exec prisma migrate dev --schema prisma/schema.prisma",
-    "db:studio": "dotenv -- pnpm --filter @ubos/db exec prisma studio --schema prisma/schema.prisma"
+    "db:studio": "dotenv -- pnpm --filter @ubos/db exec prisma studio --schema prisma/schema.prisma",
+    "test": "pnpm --filter @ubos/shared test"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",
