@@ -91,10 +91,10 @@ const isControlRoomViewMode = (value: string | null): value is ControlRoomViewMo
   value === 'dual' || value === 'program' || value === 'vertical' || value === 'compact';
 
 const previewGridClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid gap-5 xl:grid-cols-[minmax(0,1fr)_20rem]',
-  program: 'grid gap-5',
-  vertical: 'grid gap-5 justify-items-center xl:grid-cols-1',
-  compact: 'grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,0.72fr)_14rem]',
+  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(14rem,0.34fr)]',
+  program: 'grid min-h-0 gap-3',
+  vertical: 'grid min-h-0 gap-3 justify-items-center xl:grid-cols-1',
+  compact: 'grid min-h-0 gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,0.72fr)_14rem]',
 };
 
 function ViewModeSelector({
@@ -105,7 +105,7 @@ function ViewModeSelector({
   onSelect: (mode: ControlRoomViewMode) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-4 shadow-2xl shadow-black/20 backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-3 shadow-2xl shadow-black/20 backdrop-blur">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
@@ -258,7 +258,7 @@ export function SceneWorkspace({
 
   return (
     <>
-      <aside className="space-y-5">
+      <aside className="min-h-0 space-y-3 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
         <button
           type="button"
           onClick={() => setLeftCollapsed(!leftCollapsed)}
@@ -471,15 +471,15 @@ export function SceneWorkspace({
           </button>
         </div>
       </aside>
-      <section className="space-y-5">
-        <div className="rounded-3xl border border-white/10 bg-slate-950/80 p-4 shadow-2xl shadow-black/30">
+      <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
+        <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/80 p-3 shadow-2xl shadow-black/30">
           <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.22em] text-cyan-300">
                 Broadcast Studio · safe shortcuts: Space Take, 1-9 Preview, C Cut, F Fade, M Mute
                 route
               </p>
-              <h1 className="text-2xl font-bold text-white">Launch Day Broadcast</h1>
+              <h1 className="text-xl font-bold text-white">Launch Day Broadcast</h1>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge tone="live">LIVE</Badge>
@@ -566,8 +566,10 @@ export function SceneWorkspace({
             <span>Program: {programScene.name}</span>
           </div>
         </div>
-        <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
-        <div className={previewGridClasses[viewMode]}>
+        <div className="shrink-0">
+          <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+        </div>
+        <div className={`flex-1 overflow-y-auto pr-1 ${previewGridClasses[viewMode]}`}>
           {viewMode !== 'vertical' ? (
             <div className={viewMode === 'compact' ? 'min-w-0 text-sm' : 'min-w-0'}>
               <ProgramPreview
@@ -597,7 +599,9 @@ export function SceneWorkspace({
             </div>
           ) : null}
         </div>
-        <ProductionDock channels={channels} assets={assets} />
+        <div className="max-h-56 shrink-0 overflow-y-auto">
+          <ProductionDock channels={channels} assets={assets} />
+        </div>
       </section>
     </>
   );
