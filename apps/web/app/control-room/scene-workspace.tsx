@@ -391,7 +391,11 @@ export function SceneWorkspace({
         <div className={previewGridClasses[viewMode]}>
           {viewMode !== 'vertical' ? (
             <div className={viewMode === 'compact' ? 'min-w-0 text-sm' : 'min-w-0'}>
-              <ProgramPreview scene={activeScene} routes={mediaRoutes} layoutPreset={layoutPreset} />
+              <ProgramPreview
+                scene={activeScene}
+                routes={mediaRoutes}
+                layoutPreset={layoutPreset}
+              />
             </div>
           ) : null}
           {viewMode !== 'program' ? (
@@ -404,7 +408,11 @@ export function SceneWorkspace({
                     : 'min-w-0'
               }
             >
-              <VerticalPreview scene={activeScene} routes={mediaRoutes} />
+              <VerticalPreview
+                scene={activeScene}
+                routes={mediaRoutes}
+                layoutPreset={layoutPreset}
+              />
             </div>
           ) : null}
         </div>
