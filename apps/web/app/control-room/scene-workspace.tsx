@@ -459,10 +459,11 @@ export function SceneWorkspace({
   }, [mediaRoutes]);
 
   const rightSidebarVisible =
-    isPanelVisible('guestManager') ||
-    isPanelVisible('broadcastHealth') ||
-    isPanelVisible('chat') ||
-    isPanelVisible('outputs');
+    Boolean(rightSidebar) &&
+    (isPanelVisible('guestManager') ||
+      isPanelVisible('broadcastHealth') ||
+      isPanelVisible('chat') ||
+      isPanelVisible('outputs'));
   const workspaceColumns = rightSidebarVisible
     ? `minmax(13rem, ${workspace.sizes.left}px) minmax(${workspace.sizes.center}px, 1fr) minmax(16rem, ${workspace.sizes.right}px)`
     : `minmax(13rem, ${workspace.sizes.left}px) minmax(${workspace.sizes.center}px, 1fr)`;
@@ -479,8 +480,8 @@ export function SceneWorkspace({
 
   return (
     <div
-      className="grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1"
-      style={{ gridTemplateColumns: workspaceColumns }}
+      className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
+      style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
       <aside className="min-h-0 space-y-3 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
         <div className="rounded-xl border border-white/10 bg-slate-900/75 p-2">
