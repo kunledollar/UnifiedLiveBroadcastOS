@@ -738,7 +738,7 @@ export function BroadcastCanvas({
 }) {
   return (
     <div
-      className={`relative overflow-hidden border border-cyan-300/20 bg-[radial-gradient(circle_at_30%_20%,rgba(34,211,238,.22),transparent_30%),linear-gradient(135deg,#0f172a,#020617)] shadow-inner shadow-black ${aspect === 'video' ? 'aspect-video rounded-2xl' : 'aspect-[9/16] rounded-[1.5rem]'}`}
+      className={`relative overflow-hidden bg-black ${aspect === 'video' ? 'aspect-video' : 'aspect-[9/16]'}`}
     >
       {children}
     </div>
@@ -748,7 +748,7 @@ export function BroadcastCanvas({
 export function SafeAreaOverlay({ output }: { label?: string; output: OutputKind }) {
   return (
     <div
-      className={`pointer-events-none absolute ${output === 'vertical' ? 'inset-x-5 inset-y-8' : 'inset-4'} z-30 rounded-xl border border-dashed border-white/10`}
+      className={`pointer-events-none absolute ${output === 'vertical' ? 'inset-x-5 inset-y-8' : 'inset-4'} z-30 border border-white/5`}
     />
   );
 }
@@ -836,38 +836,53 @@ function SimulatedFeed({
   );
 }
 
+type MonitorRole = 'program' | 'preview';
+
 function EmptySlot({
   output,
   size,
   hasGuests,
+  monitorRole = 'program',
 }: {
   output: OutputKind;
   size: TileSize;
   hasGuests: boolean;
+  monitorRole?: MonitorRole;
 }) {
   const big = size === 'lg';
-  const label = hasGuests ? 'Assign guest to Program' : 'Empty slot';
-  const sub = hasGuests
-    ? 'Send a guest here from Media Routing'
-    : output === 'vertical'
-      ? 'Route a vertical source'
-      : 'Route a source to fill';
-  return (
-    <div className="grid h-full w-full place-items-center rounded-2xl border-2 border-dashed border-white/15 bg-slate-950/40">
-      <div className="flex flex-col items-center gap-1.5 px-3 text-center">
-        <div
-          className={`grid place-items-center rounded-full border border-dashed border-white/25 font-black text-white/45 ${
-            big ? 'h-12 w-12 text-2xl' : 'h-8 w-8 text-base'
-          }`}
-        >
-          +
+  if (big && monitorRole === 'program') {
+    return (
+      <div className="grid h-full w-full place-items-center bg-black">
+        <div className="w-full max-w-sm border-y border-slate-700/50 px-4 py-8 text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Program</p>
+          <p className="mt-4 text-sm font-semibold text-slate-200">Waiting for Source</p>
+          <p className="mt-1.5 text-[11px] text-slate-500">
+            {hasGuests ? 'Assign a guest or scene to Program.' : 'Route a source to Program.'}
+          </p>
         </div>
-        <p
-          className={`font-black uppercase tracking-wide text-white/55 ${big ? 'text-xs' : 'text-[10px]'}`}
-        >
-          {label}
+      </div>
+    );
+  }
+  if (big && monitorRole === 'preview') {
+    return (
+      <div className="grid h-full w-full place-items-center bg-black">
+        <div className="w-full max-w-sm border-y border-slate-700/50 px-4 py-8 text-center">
+          <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-500">Preview</p>
+          <p className="mt-4 text-sm font-semibold text-emerald-300/90">Ready</p>
+          <p className="mt-1.5 text-[11px] text-slate-500">
+            {hasGuests ? 'Stage a scene or assign a guest.' : 'Select a scene to preview.'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  const label = hasGuests ? 'Assign guest' : 'Empty';
+  return (
+    <div className="grid h-full w-full place-items-center border border-slate-800/80 bg-slate-950/60">
+      <div className="px-2 text-center">
+        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-slate-500">
+          {output === 'vertical' ? 'Vertical' : label}
         </p>
-        {big ? <p className="text-[10px] text-white/35">{sub}</p> : null}
       </div>
     </div>
   );
@@ -881,17 +896,9 @@ function CanvasHud({
   layoutPreset: MediaLayoutPreset;
 }) {
   return (
-    <div className="pointer-events-none absolute inset-x-3 top-3 z-40 flex items-center justify-between gap-2">
-      <span className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-black/55 px-2.5 py-1 backdrop-blur">
-        <span
-          className={`h-2 w-2 rounded-full ${output === 'program' ? 'bg-red-500 animate-pulse' : 'bg-fuchsia-400'}`}
-        />
-        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-white">
-          {output === 'program' ? 'Program · 16:9' : 'Vertical · 9:16'}
-        </span>
-      </span>
-      <span className="rounded-lg border border-cyan-300/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
-        {mediaLayoutLabels[layoutPreset]}
+    <div className="pointer-events-none absolute inset-x-2 top-2 z-40 flex items-center justify-end gap-1.5">
+      <span className="bg-black/70 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+        {output === 'program' ? '16:9' : '9:16'} · {mediaLayoutLabels[layoutPreset]}
       </span>
     </div>
   );
@@ -903,15 +910,24 @@ export function RoutedMediaTile({
   output,
   size = 'md',
   hasGuests = false,
+  monitorRole = 'program',
 }: {
   route?: MediaRoute | undefined;
   stream?: MediaStream | undefined;
   output: OutputKind;
   size?: TileSize;
   hasGuests?: boolean;
+  monitorRole?: MonitorRole;
 }) {
   if (!route) {
-    return <EmptySlot output={output} size={size} hasGuests={hasGuests} />;
+    return (
+      <EmptySlot
+        output={output}
+        size={size}
+        hasGuests={hasGuests}
+        monitorRole={monitorRole}
+      />
+    );
   }
   const theme = routeThemes[route.routeType];
   const conn = connectionMeta(routeConnectionState(route));
@@ -920,7 +936,7 @@ export function RoutedMediaTile({
   const small = size === 'sm';
   return (
     <div
-      className={`group relative h-full w-full overflow-hidden rounded-2xl border ${theme.ring} bg-gradient-to-br ${theme.gradient} shadow-2xl shadow-black/45`}
+      className={`group relative h-full w-full overflow-hidden border ${theme.ring} bg-gradient-to-br ${theme.gradient}`}
     >
       <RoutedVideo stream={stream} />
       {!stream ? <SimulatedFeed route={route} theme={theme} size={size} /> : null}
@@ -1001,6 +1017,7 @@ export function CompositorLayer({
   zIndex,
   size = 'md',
   hasGuests = false,
+  monitorRole = 'program',
 }: {
   route?: MediaRoute | undefined;
   box: LayerBox;
@@ -1009,6 +1026,7 @@ export function CompositorLayer({
   zIndex: number;
   size?: TileSize;
   hasGuests?: boolean;
+  monitorRole?: MonitorRole;
 }) {
   return (
     <LayerFrame box={box} zIndex={zIndex}>
@@ -1018,6 +1036,7 @@ export function CompositorLayer({
         output={output}
         size={size}
         hasGuests={hasGuests}
+        monitorRole={monitorRole}
       />
     </LayerFrame>
   );
@@ -1071,14 +1090,14 @@ function SceneFooter({
 }) {
   const status = routeCount > 0 ? `${routeCount} on air` : hasGuests ? 'Assign guests' : 'Standby';
   return (
-    <div className="absolute inset-x-3 bottom-2 z-40 flex items-center justify-between gap-2 rounded-lg border border-white/10 bg-black/55 px-3 py-1.5 backdrop-blur">
+    <div className="absolute inset-x-2 bottom-1.5 z-40 flex items-center justify-between gap-2 bg-black/75 px-2 py-1">
       <div className="min-w-0">
-        <p className="truncate text-[11px] font-black text-white">{scene.name}</p>
-        <p className="truncate text-[9px] uppercase tracking-[0.16em] text-slate-300">
+        <p className="truncate text-[10px] font-semibold text-slate-200">{scene.name}</p>
+        <p className="truncate text-[9px] uppercase tracking-[0.12em] text-slate-500">
           {typeLabels[scene.type]} · {mediaLayoutLabels[layoutPreset]}
         </p>
       </div>
-      <span className="shrink-0 rounded-md bg-white/10 px-2 py-1 text-[9px] font-black uppercase tracking-wide text-slate-100">
+      <span className="shrink-0 text-[9px] font-semibold uppercase tracking-wide text-slate-400">
         {status}
       </span>
     </div>
@@ -1092,6 +1111,7 @@ function BaseCompositor({
   output,
   streams = {},
   guests = [],
+  monitorRole = 'program',
 }: {
   scene: Scene;
   routes: MediaRoute[];
@@ -1099,6 +1119,7 @@ function BaseCompositor({
   output: OutputKind;
   streams?: RoutedStreamMap | undefined;
   guests?: Guest[];
+  monitorRole?: MonitorRole;
 }) {
   const capacity = routeCapacity(layoutPreset);
   const selectedRoutes =
@@ -1117,6 +1138,7 @@ function BaseCompositor({
           output={output}
           size={tileSize(layoutPreset, index)}
           hasGuests={hasGuests}
+          monitorRole={monitorRole}
           box={getLayerBox(layoutPreset, index, output)}
           zIndex={10 + index}
         />
@@ -1139,12 +1161,14 @@ export function ProgramCompositor({
   layoutPreset = 'full_screen',
   streams,
   guests = [],
+  monitorRole = 'program',
 }: {
   scene: Scene;
   routes?: MediaRoute[];
   layoutPreset?: MediaLayoutPreset;
   streams?: RoutedStreamMap | undefined;
   guests?: Guest[];
+  monitorRole?: MonitorRole;
 }) {
   return (
     <BaseCompositor
@@ -1154,6 +1178,7 @@ export function ProgramCompositor({
       output="program"
       streams={streams}
       guests={guests}
+      monitorRole={monitorRole}
     />
   );
 }
@@ -1203,34 +1228,57 @@ export function LayoutSelector({ layouts }: { layouts: SceneLayout[] }) {
 
 function BroadcastMonitorFrame({
   label,
-  scene,
   meta,
   status,
-  statusTone = 'neutral',
+  headerVariant = 'program',
+  isLive = false,
   children,
   className = '',
 }: {
   label: string;
-  scene: Scene;
-  meta: ReactNode;
+  meta?: ReactNode;
   status: ReactNode;
-  statusTone?: Tone;
+  headerVariant?: MonitorRole;
+  isLive?: boolean;
   children: ReactNode;
   className?: string;
 }) {
-  return (
-    <section
-      className={`min-w-0 rounded-lg border border-slate-700/70 bg-slate-950/95 shadow-xl shadow-black/25 ${className}`}
-    >
-      <div className="flex min-h-8 items-center justify-between gap-2 border-b border-slate-800/90 px-2.5 py-1.5 text-[11px] uppercase tracking-[0.16em] text-slate-400">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="font-black text-slate-100">{label}</span>
-          <span className="hidden text-slate-500 sm:inline">{meta}</span>
-          <span className="truncate normal-case tracking-normal text-slate-400">{scene.name}</span>
+  if (headerVariant === 'preview') {
+    return (
+      <section
+        className={`min-w-0 border border-slate-700/60 bg-black ${className}`}
+      >
+        <div className="border-b border-slate-800/80 px-2 py-1">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">{label}</p>
+          <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-emerald-400">
+            {status}
+          </p>
+          {meta ? <p className="mt-0.5 text-[10px] text-slate-500">{meta}</p> : null}
         </div>
-        <Badge tone={statusTone}>{status}</Badge>
+        <div className="bg-black">{children}</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className={`min-w-0 border border-slate-700/60 bg-black ${className}`}>
+      <div className="border-b border-slate-800/80 px-2 py-1">
+        <div className="flex items-center justify-between gap-2">
+          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">{label}</p>
+          {isLive ? (
+            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-red-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse" />
+              {status}
+            </span>
+          ) : (
+            <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+              {status}
+            </span>
+          )}
+        </div>
+        {meta ? <p className="mt-0.5 text-[10px] text-slate-500">{meta}</p> : null}
       </div>
-      <div className="bg-black p-1">{children}</div>
+      <div className="bg-black">{children}</div>
     </section>
   );
 }
@@ -1249,13 +1297,14 @@ export function ProgramPreview({
   guests?: Guest[];
 }) {
   const onProgramCount = routes.filter((route) => route.isActive && route.isOnProgram).length;
+  const isLive = onProgramCount > 0;
   return (
     <BroadcastMonitorFrame
       label="PROGRAM"
-      scene={scene}
-      meta="1920×1080 · 60 FPS"
-      status={onProgramCount > 0 ? 'LIVE' : 'PROGRAM'}
-      statusTone="live"
+      meta="1920×1080 • 60 FPS"
+      status={isLive ? 'LIVE' : 'PROGRAM'}
+      headerVariant="program"
+      isLive={isLive}
     >
       <ProgramCompositor
         scene={scene}
@@ -1263,6 +1312,7 @@ export function ProgramPreview({
         layoutPreset={layoutPreset}
         streams={streams}
         guests={guests}
+        monitorRole="program"
       />
     </BroadcastMonitorFrame>
   );
@@ -1284,10 +1334,9 @@ export function PreviewMonitor({
   return (
     <BroadcastMonitorFrame
       label="PREVIEW"
-      scene={scene}
-      meta={mediaLayoutLabels[layoutPreset]}
-      status="READY"
-      statusTone="success"
+      meta={scene.name}
+      status="Ready"
+      headerVariant="preview"
     >
       <ProgramCompositor
         scene={scene}
@@ -1295,6 +1344,7 @@ export function PreviewMonitor({
         layoutPreset={layoutPreset}
         streams={streams}
         guests={guests}
+        monitorRole="preview"
       />
     </BroadcastMonitorFrame>
   );

@@ -91,10 +91,10 @@ const isControlRoomViewMode = (value: string | null): value is ControlRoomViewMo
   value === 'dual' || value === 'program' || value === 'vertical' || value === 'compact';
 
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-2 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,1fr)] xl:grid-cols-[minmax(0,3.25fr)_minmax(17rem,1fr)]',
-  program: 'grid min-h-0 gap-2 lg:grid-cols-[minmax(0,3.25fr)_minmax(16rem,0.95fr)]',
-  vertical: 'grid min-h-0 gap-2 md:grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(16rem,1fr)]',
-  compact: 'grid min-h-0 gap-2 md:grid-cols-[minmax(0,2.7fr)_minmax(14rem,1fr)]',
+  dual: 'grid min-h-0 gap-1.5 lg:grid-cols-[minmax(0,3.5fr)_minmax(14rem,1fr)] xl:grid-cols-[minmax(0,3.75fr)_minmax(15rem,1fr)]',
+  program: 'grid min-h-0 gap-1.5 lg:grid-cols-[minmax(0,4fr)_minmax(13rem,0.85fr)]',
+  vertical: 'grid min-h-0 gap-1.5 md:grid-cols-1 lg:grid-cols-[minmax(0,3.5fr)_minmax(14rem,1fr)]',
+  compact: 'grid min-h-0 gap-1.5 md:grid-cols-[minmax(0,3fr)_minmax(12rem,1fr)]',
 };
 
 function ViewModeSelector({
@@ -105,43 +105,36 @@ function ViewModeSelector({
   onSelect: (mode: ControlRoomViewMode) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-3 shadow-2xl shadow-black/20 backdrop-blur">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-cyan-200">
-            View Mode
-          </p>
-          <h2 className="text-lg font-bold text-white">Control Room Previews</h2>
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-          {viewModeOptions.map((option) => {
-            const isSelected = option.value === selected;
-            return (
-              <button
-                key={option.value}
-                type="button"
-                disabled={option.disabled}
-                aria-pressed={!option.disabled && isSelected}
-                onClick={() => {
-                  if (!option.disabled && isControlRoomViewMode(option.value))
-                    onSelect(option.value);
-                }}
-                className={`rounded-xl border px-3 py-2 text-left transition ${
-                  option.disabled
-                    ? 'cursor-not-allowed border-white/5 bg-slate-950/30 text-slate-600'
-                    : isSelected
-                      ? 'border-cyan-300/70 bg-cyan-400/15 text-cyan-100 shadow-lg shadow-cyan-950/30'
-                      : 'border-white/10 bg-slate-950/60 text-slate-300 hover:border-cyan-300/45 hover:bg-slate-800/80'
-                }`}
-              >
-                <span className="block text-xs font-black uppercase tracking-[0.12em]">
-                  {option.label}
-                </span>
-                <span className="mt-1 block text-[11px] text-slate-400">{option.description}</span>
-              </button>
-            );
-          })}
-        </div>
+    <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 px-1 py-1">
+      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+        View
+      </span>
+      <div className="flex flex-wrap gap-1">
+        {viewModeOptions.map((option) => {
+          const isSelected = option.value === selected;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              disabled={option.disabled}
+              aria-pressed={!option.disabled && isSelected}
+              title={option.description}
+              onClick={() => {
+                if (!option.disabled && isControlRoomViewMode(option.value))
+                  onSelect(option.value);
+              }}
+              className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${
+                option.disabled
+                  ? 'cursor-not-allowed text-slate-600'
+                  : isSelected
+                    ? 'bg-cyan-400/20 text-cyan-200'
+                    : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
       </div>
     </div>
   );
@@ -471,47 +464,45 @@ export function SceneWorkspace({
           </button>
         </div>
       </aside>
-      <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
-        <div className="shrink-0 rounded-lg border border-white/10 bg-slate-950/80 px-3 py-2 shadow-lg shadow-black/20">
-          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-cyan-300">
-                Broadcast Studio · Space Take · 1-9 Preview · C Cut · F Fade · M Mute route
-              </p>
-              <div className="mt-1 flex flex-wrap items-center gap-2">
-                <h1 className="text-lg font-bold text-white">Launch Day Broadcast</h1>
-                <Badge tone="live">LIVE</Badge>
-                <Badge tone={transitionActive ? 'warning' : 'success'}>
-                  {transitionActive ? 'Transition active' : 'Ready'}
-                </Badge>
-                <span className="rounded-md bg-slate-900 px-2 py-1 font-mono text-[11px] text-slate-300">
-                  {new Date().toLocaleTimeString()}
-                </span>
-              </div>
+      <section className="flex min-h-0 flex-col gap-1 overflow-hidden">
+        <div className="shrink-0 border-b border-white/10 bg-slate-950/90 px-2 py-1">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
+              <h1 className="text-sm font-bold text-white">Launch Day Broadcast</h1>
+              <Badge tone="live">LIVE</Badge>
+              <Badge tone={transitionActive ? 'warning' : 'success'}>
+                {transitionActive ? 'Transition' : 'Ready'}
+              </Badge>
+              <span className="font-mono text-[10px] text-slate-500">
+                {new Date().toLocaleTimeString()}
+              </span>
             </div>
-            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-300">
+            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
+              <span className="hidden text-slate-500 lg:inline">
+                Space Take · 1-9 Preview · C Cut · F Fade · M Mute
+              </span>
               <button
-                className="rounded-md bg-slate-800 px-2.5 py-1 hover:bg-slate-700"
+                className="rounded px-1.5 py-0.5 hover:bg-slate-800 hover:text-slate-200"
                 onClick={() => startTransition(async () => seedDemoProductionState())}
               >
-                Seed demo
+                Seed
               </button>
               <button
-                className="rounded-md bg-slate-800 px-2.5 py-1 hover:bg-slate-700"
+                className="rounded px-1.5 py-0.5 hover:bg-slate-800 hover:text-slate-200"
                 onClick={() => startTransition(async () => simulateDemoProduction())}
               >
-                Sim active speaker/live guests
+                Sim
               </button>
               <button
-                className="rounded-md bg-slate-800 px-2.5 py-1 hover:bg-slate-700"
+                className="rounded px-1.5 py-0.5 hover:bg-slate-800 hover:text-slate-200"
                 onClick={() => startTransition(async () => resetDemoProductionState())}
               >
-                Reset demo
+                Reset
               </button>
-              <span className="hidden xl:inline">Preview: {previewScene.name}</span>
-              <span className="hidden xl:inline">Program: {programScene.name}</span>
-              <button className="rounded-md bg-rose-500/80 px-3 py-1.5 text-xs font-black text-white">
-                Emergency Stop
+              <span className="hidden text-slate-500 xl:inline">P: {programScene.name}</span>
+              <span className="hidden text-slate-500 xl:inline">PV: {previewScene.name}</span>
+              <button className="rounded bg-rose-600/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-rose-500">
+                Stop
               </button>
             </div>
           </div>
@@ -519,9 +510,9 @@ export function SceneWorkspace({
         <div className="shrink-0">
           <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
         </div>
-        <div className="flex-1 overflow-y-auto pr-1">
-          <div className={monitorDeckClasses[viewMode]}>
-            <div className="min-w-0">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
+            <div className="flex min-h-0 min-w-0 flex-col">
               <ProgramPreview
                 scene={programScene}
                 routes={mediaRoutes}
@@ -529,7 +520,7 @@ export function SceneWorkspace({
                 guests={guests}
               />
             </div>
-            <div className="min-w-0">
+            <div className="flex min-h-0 min-w-0 flex-col">
               <PreviewMonitor
                 scene={previewScene}
                 routes={mediaRoutes}
@@ -538,61 +529,63 @@ export function SceneWorkspace({
               />
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-950/90 px-2.5 py-2">
-            <button
-              className="rounded-md bg-cyan-400 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-950"
-              onClick={() => switchProgram(productionState.transitionType)}
-            >
-              Auto
-            </button>
-            <button
-              className="rounded-md bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-white/15"
-              onClick={() => switchProgram('cut')}
-            >
-              Cut
-            </button>
-            <button
-              className="rounded-md bg-white/10 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-white hover:bg-white/15"
-              onClick={() => switchProgram('fade')}
-            >
-              Fade
-            </button>
-            <select
-              className="rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs font-semibold text-white"
-              value={productionState.transitionType}
-              onChange={(e) =>
-                persistProductionState(
-                  { ...productionState, transitionType: e.target.value as TransitionType },
-                  'stage',
-                )
-              }
-            >
-              <option value="cut">Cut</option>
-              <option value="fade">Fade</option>
-              <option value="dip">Dip placeholder</option>
-              <option value="wipe">Wipe placeholder</option>
-            </select>
-            <label className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">
-              Duration
-              <input
-                aria-label="Transition duration milliseconds"
-                className="w-24 rounded-md border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white"
-                type="number"
-                min={0}
-                max={5000}
-                step={100}
-                value={productionState.transitionDuration}
+          <div className="mt-1 flex shrink-0 justify-center px-1 py-1">
+            <div className="inline-flex flex-wrap items-center justify-center gap-1.5 border border-slate-800/80 bg-slate-950/90 px-2 py-1">
+              <button
+                className="min-w-[3.5rem] rounded bg-cyan-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-300"
+                onClick={() => switchProgram(productionState.transitionType)}
+              >
+                Auto
+              </button>
+              <button
+                className="min-w-[3.5rem] rounded bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-white hover:bg-slate-700"
+                onClick={() => switchProgram('cut')}
+              >
+                Cut
+              </button>
+              <button
+                className="min-w-[3.5rem] rounded bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-white hover:bg-slate-700"
+                onClick={() => switchProgram('fade')}
+              >
+                Fade
+              </button>
+              <select
+                className="h-[1.875rem] min-w-[5rem] rounded border border-slate-700 bg-slate-900 px-2 text-[10px] font-semibold text-white"
+                value={productionState.transitionType}
                 onChange={(e) =>
                   persistProductionState(
-                    { ...productionState, transitionDuration: Number(e.target.value) },
+                    { ...productionState, transitionType: e.target.value as TransitionType },
                     'stage',
                   )
                 }
-              />
-            </label>
+              >
+                <option value="cut">Cut</option>
+                <option value="fade">Fade</option>
+                <option value="dip">Dip placeholder</option>
+                <option value="wipe">Wipe placeholder</option>
+              </select>
+              <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+                Ms
+                <input
+                  aria-label="Transition duration milliseconds"
+                  className="h-[1.875rem] w-16 rounded border border-slate-700 bg-slate-900 px-2 text-[10px] text-white"
+                  type="number"
+                  min={0}
+                  max={5000}
+                  step={100}
+                  value={productionState.transitionDuration}
+                  onChange={(e) =>
+                    persistProductionState(
+                      { ...productionState, transitionDuration: Number(e.target.value) },
+                      'stage',
+                    )
+                  }
+                />
+              </label>
+            </div>
           </div>
         </div>
-        <div className="max-h-56 shrink-0 overflow-y-auto">
+        <div className="max-h-44 shrink-0 overflow-y-auto">
           <ProductionDock channels={channels} assets={assets} />
         </div>
       </section>

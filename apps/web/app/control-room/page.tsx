@@ -128,9 +128,9 @@ export default async function ControlRoomPage() {
   ]);
 
   return (
-    <main className="min-h-screen overflow-y-auto xl:h-screen xl:overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-2 text-slate-100 md:p-3">
+    <main className="min-h-screen overflow-y-auto xl:h-screen xl:overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-1.5 text-slate-100 md:p-2">
       <div className="h-full min-h-0 w-full">
-        <div className="grid min-h-0 gap-3 xl:h-full xl:grid-cols-[17rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[19rem_minmax(0,1fr)_24rem]">
+        <div className="grid min-h-0 gap-2 xl:h-full xl:grid-cols-[17rem_minmax(0,1fr)_22rem] 2xl:grid-cols-[19rem_minmax(0,1fr)_24rem]">
           <SceneWorkspace
             initialScenes={scenes}
             initialProductionState={productionState}
