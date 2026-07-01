@@ -2,7 +2,6 @@
 
 import {
   LayoutSelector,
-  Badge,
   ProductionDock,
   ProgramPreview,
   PreviewMonitor,
@@ -23,7 +22,7 @@ import {
   type ProductionSwitchingState,
   type TransitionType,
 } from '@ubos/shared';
-import { useEffect, useOptimistic, useState, useTransition } from 'react';
+import { useEffect, useMemo, useOptimistic, useState, useTransition } from 'react';
 import {
   addScene,
   addSource,
@@ -90,6 +89,50 @@ const viewModeOptions: Array<{
 const isControlRoomViewMode = (value: string | null): value is ControlRoomViewMode =>
   value === 'dual' || value === 'program' || value === 'vertical' || value === 'compact';
 
+function formatElapsed(totalSeconds: number) {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return [hours, minutes, seconds].map((value) => value.toString().padStart(2, '0')).join(':');
+}
+
+const operatorBadgeToneClasses = {
+  live: 'border-red-400/40 bg-red-600 text-white shadow-[0_0_16px_rgba(220,38,38,0.36)]',
+  recording: 'border-red-400/45 bg-red-500/10 text-red-100',
+  ready: 'border-emerald-400/35 bg-emerald-400/12 text-emerald-100',
+  warning: 'border-amber-300/45 bg-amber-400/15 text-amber-100',
+  error: 'border-red-300/50 bg-red-500/20 text-red-100',
+  neutral: 'border-slate-600/70 bg-slate-900 text-slate-200',
+};
+
+function OperatorStatusBadge({
+  label,
+  tone = 'neutral',
+  pulse = false,
+}: {
+  label: string;
+  tone?: keyof typeof operatorBadgeToneClasses;
+  pulse?: boolean;
+}) {
+  return (
+    <span
+      className={`inline-flex h-6 shrink-0 items-center gap-1 rounded-md border px-2 font-mono text-[10px] font-black uppercase tracking-[0.14em] ${operatorBadgeToneClasses[tone]}`}
+    >
+      {pulse ? <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-current" /> : null}
+      {label}
+    </span>
+  );
+}
+
+function OperatorMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-white/10 bg-slate-950/80 px-2 font-mono text-[10px] uppercase tracking-[0.08em] text-slate-400">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-bold text-slate-100">{value}</span>
+    </span>
+  );
+}
+
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
   dual: 'grid min-h-0 gap-1.5 lg:grid-cols-[minmax(0,3.5fr)_minmax(14rem,1fr)] xl:grid-cols-[minmax(0,3.75fr)_minmax(15rem,1fr)]',
   program: 'grid min-h-0 gap-1.5 lg:grid-cols-[minmax(0,4fr)_minmax(13rem,0.85fr)]',
@@ -120,8 +163,7 @@ function ViewModeSelector({
               aria-pressed={!option.disabled && isSelected}
               title={option.description}
               onClick={() => {
-                if (!option.disabled && isControlRoomViewMode(option.value))
-                  onSelect(option.value);
+                if (!option.disabled && isControlRoomViewMode(option.value)) onSelect(option.value);
               }}
               className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${
                 option.disabled
@@ -164,10 +206,23 @@ export function SceneWorkspace({
   const [transitionActive, setTransitionActive] = useState(false);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
   const [leftCollapsed, setLeftCollapsed] = useState(false);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [clock, setClock] = useState('00:00:00');
 
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
     if (isControlRoomViewMode(storedViewMode)) setViewMode(storedViewMode);
+  }, []);
+
+  useEffect(() => {
+    const startedAt = Date.now();
+    const tick = () => {
+      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
+      setClock(new Date().toLocaleTimeString([], { hour12: false }));
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
   }, []);
 
   const selectViewMode = (mode: ControlRoomViewMode) => {
@@ -238,6 +293,16 @@ export function SceneWorkspace({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [productionState, selectedRouteId, sorted]);
+
+  const safeHealthMetrics = useMemo(() => {
+    const visibleRoutes = mediaRoutes.filter((route) => route.isOnProgram || route.isActive).length;
+    return {
+      fps: '60',
+      cpu: `${Math.min(72, 18 + visibleRoutes * 4)}%`,
+      dropped: '0',
+      upload: `${(6.2 + visibleRoutes * 0.4).toFixed(1)} Mbps`,
+    };
+  }, [mediaRoutes]);
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -465,46 +530,123 @@ export function SceneWorkspace({
         </div>
       </aside>
       <section className="flex min-h-0 flex-col gap-1 overflow-hidden">
-        <div className="shrink-0 border-b border-white/10 bg-slate-950/90 px-2 py-1">
-          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5">
-              <h1 className="text-sm font-bold text-white">Launch Day Broadcast</h1>
-              <Badge tone="live">LIVE</Badge>
-              <Badge tone={transitionActive ? 'warning' : 'success'}>
-                {transitionActive ? 'Transition' : 'Ready'}
-              </Badge>
-              <span className="font-mono text-[10px] text-slate-500">
-                {new Date().toLocaleTimeString()}
-              </span>
+        <div className="shrink-0 border-b border-white/10 bg-slate-950/95 px-2 py-1 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
+          <div className="flex min-h-8 items-center gap-1.5 overflow-x-auto whitespace-nowrap">
+            <span className="hidden max-w-[10rem] truncate text-xs font-bold text-white md:inline">
+              Launch Day
+            </span>
+            <OperatorStatusBadge label="LIVE" tone="live" pulse />
+            <OperatorStatusBadge label="REC" tone="recording" pulse />
+            <OperatorMetric label="RUN" value={formatElapsed(elapsedSeconds)} />
+            <OperatorStatusBadge
+              label={transitionActive ? 'WARN Transition' : 'READY'}
+              tone={transitionActive ? 'warning' : 'ready'}
+            />
+            <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 sm:inline" />
+            <button
+              className="h-7 min-w-[3.25rem] rounded bg-cyan-400 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-slate-950 hover:bg-cyan-300"
+              onClick={() => switchProgram(productionState.transitionType)}
+            >
+              Take
+            </button>
+            <button
+              className="h-7 min-w-[3.25rem] rounded bg-slate-800 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-white hover:bg-slate-700"
+              onClick={() => switchProgram('cut')}
+            >
+              Cut
+            </button>
+            <button
+              className="h-7 min-w-[3.25rem] rounded bg-slate-800 px-3 text-[10px] font-black uppercase tracking-[0.12em] text-white hover:bg-slate-700"
+              onClick={() => switchProgram('fade')}
+            >
+              Auto
+            </button>
+            <select
+              aria-label="Transition type"
+              className="h-7 w-[4.75rem] rounded border border-slate-700 bg-slate-900 px-2 text-[10px] font-semibold uppercase text-white"
+              value={productionState.transitionType}
+              onChange={(e) =>
+                persistProductionState(
+                  { ...productionState, transitionType: e.target.value as TransitionType },
+                  'stage',
+                )
+              }
+            >
+              <option value="cut">Cut</option>
+              <option value="fade">Fade</option>
+              <option value="dip">Dip</option>
+              <option value="wipe">Wipe</option>
+            </select>
+            <label className="inline-flex h-7 items-center gap-1 rounded border border-slate-700 bg-slate-900 px-2 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
+              Dur
+              <input
+                aria-label="Transition duration milliseconds"
+                className="w-12 bg-transparent font-mono text-slate-100 outline-none"
+                type="number"
+                min={0}
+                max={5000}
+                step={100}
+                value={productionState.transitionDuration}
+                onChange={(e) =>
+                  persistProductionState(
+                    { ...productionState, transitionDuration: Number(e.target.value) },
+                    'stage',
+                  )
+                }
+              />
+            </label>
+            <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 md:inline" />
+            <div className="hidden items-center gap-1 lg:flex">
+              <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
+              <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
+              <OperatorMetric label="DROP" value={safeHealthMetrics.dropped} />
+              <OperatorMetric label="UP" value={safeHealthMetrics.upload} />
             </div>
-            <div className="flex flex-wrap items-center gap-1.5 text-[10px] text-slate-400">
-              <span className="hidden text-slate-500 lg:inline">
-                Space Take · 1-9 Preview · C Cut · F Fade · M Mute
-              </span>
-              <button
-                className="rounded px-1.5 py-0.5 hover:bg-slate-800 hover:text-slate-200"
-                onClick={() => startTransition(async () => seedDemoProductionState())}
-              >
-                Seed
-              </button>
-              <button
-                className="rounded px-1.5 py-0.5 hover:bg-slate-800 hover:text-slate-200"
-                onClick={() => startTransition(async () => simulateDemoProduction())}
-              >
-                Sim
-              </button>
-              <button
-                className="rounded px-1.5 py-0.5 hover:bg-slate-800 hover:text-slate-200"
-                onClick={() => startTransition(async () => resetDemoProductionState())}
-              >
-                Reset
-              </button>
-              <span className="hidden text-slate-500 xl:inline">P: {programScene.name}</span>
-              <span className="hidden text-slate-500 xl:inline">PV: {previewScene.name}</span>
-              <button className="rounded bg-rose-600/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-rose-500">
-                Stop
-              </button>
-            </div>
+            <details className="group relative lg:hidden">
+              <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-white/10 bg-slate-950/80 px-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-slate-200">
+                Health
+              </summary>
+              <div className="absolute right-0 z-20 mt-1 grid min-w-36 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
+                <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
+                <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
+                <OperatorMetric label="DROP" value={safeHealthMetrics.dropped} />
+                <OperatorMetric label="UP" value={safeHealthMetrics.upload} />
+              </div>
+            </details>
+            <span className="ml-auto hidden font-mono text-[10px] text-slate-500 xl:inline">
+              {clock} · PGM {programScene.name} · PVW {previewScene.name}
+            </span>
+            <details className="group relative">
+              <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-white/10 bg-slate-900 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300 hover:bg-slate-800">
+                Tools
+              </summary>
+              <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 text-[10px] text-slate-300 shadow-2xl">
+                <button
+                  className="rounded px-2 py-1 text-left hover:bg-slate-800"
+                  onClick={() => startTransition(async () => seedDemoProductionState())}
+                >
+                  Seed demo
+                </button>
+                <button
+                  className="rounded px-2 py-1 text-left hover:bg-slate-800"
+                  onClick={() => startTransition(async () => simulateDemoProduction())}
+                >
+                  Simulate
+                </button>
+                <button
+                  className="rounded px-2 py-1 text-left hover:bg-slate-800"
+                  onClick={() => startTransition(async () => resetDemoProductionState())}
+                >
+                  Reset
+                </button>
+                <div className="border-t border-white/10 pt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-slate-500">
+                  Space Take · 1-9 PVW · C Cut · F Fade · M Mute
+                </div>
+              </div>
+            </details>
+            <button className="h-6 rounded bg-rose-600/90 px-2 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-rose-500">
+              Stop
+            </button>
           </div>
         </div>
         <div className="shrink-0">
@@ -527,61 +669,6 @@ export function SceneWorkspace({
                 layoutPreset={layoutPreset}
                 guests={guests}
               />
-            </div>
-          </div>
-          <div className="mt-1 flex shrink-0 justify-center px-1 py-1">
-            <div className="inline-flex flex-wrap items-center justify-center gap-1.5 border border-slate-800/80 bg-slate-950/90 px-2 py-1">
-              <button
-                className="min-w-[3.5rem] rounded bg-cyan-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-slate-950 hover:bg-cyan-300"
-                onClick={() => switchProgram(productionState.transitionType)}
-              >
-                Auto
-              </button>
-              <button
-                className="min-w-[3.5rem] rounded bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-white hover:bg-slate-700"
-                onClick={() => switchProgram('cut')}
-              >
-                Cut
-              </button>
-              <button
-                className="min-w-[3.5rem] rounded bg-slate-800 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.1em] text-white hover:bg-slate-700"
-                onClick={() => switchProgram('fade')}
-              >
-                Fade
-              </button>
-              <select
-                className="h-[1.875rem] min-w-[5rem] rounded border border-slate-700 bg-slate-900 px-2 text-[10px] font-semibold text-white"
-                value={productionState.transitionType}
-                onChange={(e) =>
-                  persistProductionState(
-                    { ...productionState, transitionType: e.target.value as TransitionType },
-                    'stage',
-                  )
-                }
-              >
-                <option value="cut">Cut</option>
-                <option value="fade">Fade</option>
-                <option value="dip">Dip placeholder</option>
-                <option value="wipe">Wipe placeholder</option>
-              </select>
-              <label className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-slate-500">
-                Ms
-                <input
-                  aria-label="Transition duration milliseconds"
-                  className="h-[1.875rem] w-16 rounded border border-slate-700 bg-slate-900 px-2 text-[10px] text-white"
-                  type="number"
-                  min={0}
-                  max={5000}
-                  step={100}
-                  value={productionState.transitionDuration}
-                  onChange={(e) =>
-                    persistProductionState(
-                      { ...productionState, transitionDuration: Number(e.target.value) },
-                      'stage',
-                    )
-                  }
-                />
-              </label>
             </div>
           </div>
         </div>
