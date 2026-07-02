@@ -914,11 +914,22 @@ assert.deepEqual(
   ['orch-video', 'orch-render'],
   'orchestration honors dependencies deterministically',
 );
-await orchestration.executeFramePlan(orchestrationPlan, transition.nextGraph);
+const repeatedPlan = orchestration.planFrame(
+  {
+    revision: 1,
+    intents: orchestrationPlan.orderedExecutionSteps,
+    edges: [{ from: 'orch-video', to: 'orch-render' }],
+  },
+  { frameTimestamp: orchestrationPlan.frameTimestamp, elapsedTime: orchestrationClock.getState().elapsedTime },
+  { video: 'ready', audio: 'ready', render: 'ready', output: 'ready', sync: 'ready' },
+);
+assert.deepEqual(repeatedPlan, orchestrationPlan, 'same media intent graph and clock tick produce the same frame plan');
+const mockExecutionResults = await engine.executeMediaFramePlan(orchestrationPlan, transition.nextGraph);
+assert.equal(mockExecutionResults.length, 2, 'execution engine executes orchestration frame plans');
 assert.equal(
-  orchestration.getDiagnostics().events.some((event) => event.type === 'ORCHESTRATION_FRAME_COMPLETE'),
+  orchestration.getDiagnostics().events.some((event) => event.type === 'ORCHESTRATION_PLAN_CREATED'),
   true,
-  'orchestration emits frame completion event',
+  'orchestration emits planning events without execution events',
 );
 const cycleOrchestration = new MediaOrchestrationEngine(orchestrationClock);
 cycleOrchestration.submitIntent({ id: 'cycle-a', type: 'video', executionType: 'ROUTE_PROGRAM_VIDEO', sourceGraphRevision: 1, dependencies: ['cycle-b'], priority: 0, targetSubsystem: 'video', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' });
