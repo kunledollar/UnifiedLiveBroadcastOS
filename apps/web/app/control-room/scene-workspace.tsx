@@ -28,6 +28,8 @@ import {
   createAudioRoutePlan,
   createAudioRouteGraph,
   validateAudioRoutePlan,
+  createBroadcastOutputPlan,
+  validateBroadcastOutputPlan,
   type ExecutionRuntimeMode,
 } from '@ubos/media-plane';
 import {
@@ -187,6 +189,14 @@ function MediaExecutionInspector({
     [programComposition, previewComposition].filter((composition) => composition !== undefined),
   );
   const activeRoutes = routePlan.routes.filter((route) => route.enabled);
+  const outputPlan = createBroadcastOutputPlan(graph, routePlan, audioRoutePlan, {
+    includeRecording: graph.recording.status === 'recording',
+    includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled),
+    includeConfidenceMonitor: true,
+  });
+  const outputValidation = validateBroadcastOutputPlan(outputPlan);
+  const activeOutputs = outputPlan.destinations.filter((output) => output.status === 'active');
+  const failedOutputs = outputPlan.destinations.filter((output) => output.status === 'failed');
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
   const health = state.executionHealth;
@@ -356,6 +366,12 @@ function MediaExecutionInspector({
           value={String(audioRouteValidation.warnings.length)}
         />
         <InspectorMetric label="Audio Rev" value={String(audioRouteGraph.revision)} />
+        <InspectorMetric label="Output Destinations" value={String(outputPlan.destinations.length)} />
+        <InspectorMetric label="Output Targets" value={outputPlan.outputs.map((output) => output.target).join(', ') || '—'} />
+        <InspectorMetric label="Output Warnings" value={String(outputValidation.warnings.length)} />
+        <InspectorMetric label="Active Outputs" value={String(activeOutputs.length)} />
+        <InspectorMetric label="Failed Outputs" value={String(failedOutputs.length)} />
+        <InspectorMetric label="Output Rev" value={String(outputPlan.outputGraph.revision)} />
         <InspectorMetric
           label="Changed Layers"
           value={`${compositionDiff.changedLayers.length} Δ / +${compositionDiff.addedLayers.length} / -${compositionDiff.removedLayers.length}`}
@@ -372,6 +388,29 @@ function MediaExecutionInspector({
           label="Latest Adapter"
           value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
         />
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-800 bg-black/20 p-2">
+        <p className="font-black uppercase tracking-[0.16em] text-slate-300">Broadcast Output</p>
+        <div className="mt-2 grid gap-1 md:grid-cols-2">
+          {outputPlan.destinations.slice(0, 6).map((output) => (
+            <div key={output.id} className="rounded border border-slate-800 bg-slate-950/70 p-2">
+              <p className="font-bold text-slate-100">
+                {output.label} · {output.target} · {output.status}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                video {output.videoRouteId ?? '—'} · audio {output.audioRouteId ?? '—'}
+              </p>
+              <p className="text-[10px] text-slate-500">
+                {output.format.width || 'audio'}x{output.format.height || 'only'} {output.format.fps}fps · {output.transport.type} placeholder
+              </p>
+            </div>
+          ))}
+        </div>
+        {outputValidation.warnings.length > 0 ? (
+          <p className="mt-2 text-[10px] text-amber-300">
+            {outputValidation.warnings.slice(0, 3).join(' · ')}
+          </p>
+        ) : null}
       </div>
       <div className="mt-3 rounded-lg border border-slate-800 bg-black/20 p-2">
         <p className="font-black uppercase tracking-[0.16em] text-slate-300">Video Routing</p>
