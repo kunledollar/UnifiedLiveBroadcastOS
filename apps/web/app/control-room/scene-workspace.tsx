@@ -37,6 +37,11 @@ import {
   MediaSyncStore,
   SyncDriftMonitor,
   isMediaSyncEnabled,
+  createStreamingPlan,
+  prepareStreaming,
+  connectStreaming,
+  startStreaming,
+  summarizeStreamingHealth,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -215,6 +220,25 @@ function MediaExecutionInspector({
     [programComposition, previewComposition].filter((composition) => composition !== undefined),
   );
   const activeRoutes = routePlan.routes.filter((route) => route.enabled);
+  const streamingPlan = createStreamingPlan({
+    graph,
+    videoRoutePlan: routePlan,
+    audioRoutePlan,
+    outputEngineId: 'output-engine:developer-inspector',
+    ...(graph.recording.status === 'recording'
+      ? { recordingEngineId: 'recording-engine:simultaneous' }
+      : {}),
+    mediaClock,
+    frameId: mediaClock.getCurrentFrame(),
+  });
+  const preparedStream = prepareStreaming(streamingPlan).session;
+  const connectedStream = connectStreaming(preparedStream).session;
+  const streamingSession = startStreaming(connectedStream).session;
+  const streamingHealth = summarizeStreamingHealth(streamingSession);
+  const primaryStreamTarget = streamingSession.targets[0];
+  const primaryDestination = streamingPlan.destinations.find(
+    (destination) => destination.id === primaryStreamTarget?.destinationId,
+  );
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
   const health = state.executionHealth;
@@ -400,6 +424,23 @@ function MediaExecutionInspector({
           label="Latest Adapter"
           value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
         />
+      </div>
+
+      <div className="mt-3 rounded-lg border border-sky-700/40 bg-sky-950/20 p-2">
+        <p className="font-black uppercase tracking-[0.16em] text-sky-200">Streaming</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-4">
+          <InspectorMetric label="Protocol" value={primaryStreamTarget?.transport.protocol ?? '—'} />
+          <InspectorMetric label="Destination" value={primaryDestination?.name ?? '—'} />
+          <InspectorMetric label="Status" value={streamingSession.status} />
+          <InspectorMetric label="Connected" value={String(streamingHealth.connectedTargets)} />
+          <InspectorMetric label="Latency" value={primaryStreamTarget?.transport.latencyMs ? `${primaryStreamTarget.transport.latencyMs}ms` : 'mock'} />
+          <InspectorMetric label="Health" value={streamingHealth.health} />
+          <InspectorMetric label="Warnings" value={String(streamingHealth.warnings.length)} />
+          <InspectorMetric label="Active Streams" value={String(streamingHealth.activeTargets)} />
+        </div>
+        <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-sky-300/80">
+          Transport-neutral diagnostics only; no sockets, FFmpeg, encoders, packets, HLS, DASH, CDN, or publishing are started.
+        </p>
       </div>
 
       {orchestration ? (

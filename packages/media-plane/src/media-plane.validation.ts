@@ -38,6 +38,22 @@ import {
   getNextExecutableFrame,
   summarizeFrameDrift,
   MediaOrchestrationEngine,
+  createStreamingPlan,
+  validateStreamingPlan,
+  prepareStreaming,
+  connectStreaming,
+  startStreaming,
+  pauseStreaming,
+  resumeStreaming,
+  stopStreaming,
+  simulateDisconnect,
+  simulateDestinationFailure,
+  simulateStreamingHealthChange,
+  simulateTransportSwitch,
+  summarizeStreamingHealth,
+  createStreamingManifest,
+  StreamingStore,
+  supportedStreamingProtocols,
   type FrameTickEvent,
 } from './index.js';
 
@@ -208,6 +224,65 @@ const deterministicB = new MockMediaExecutionAdapter({
 }).execute(previewIntents[0]!);
 assert.deepEqual(deterministicA, deterministicB, 'latency simulation is deterministic');
 assert.equal(deterministicA.warnings.length, 1, 'warning rate can be configured');
+
+
+const streamingGraph = {
+  ...recordingTransition.nextGraph,
+  destinations: {
+    streamA: {
+      id: 'streamA',
+      name: 'Primary RTMP',
+      platform: 'rtmp',
+      enabled: true,
+      status: 'ready' as const,
+      metadata: { protocol: 'RTMP', endpointRef: 'secret:primary' },
+    },
+  },
+};
+const streamingVideoPlan = createVideoRoutePlan(streamingGraph, [], { includeStreams: true });
+const streamingAudioPlan = createAudioRoutePlan(streamingGraph, { includeStreams: true });
+const streamingPlan = createStreamingPlan({
+  graph: streamingGraph,
+  videoRoutePlan: streamingVideoPlan,
+  audioRoutePlan: streamingAudioPlan,
+  outputEngineId: 'output-engine:test',
+  recordingEngineId: 'recording-engine:test',
+  mediaClock: createClock({ frameRate: 30 }),
+  frameId: 81,
+});
+assert.equal(streamingPlan.destinations.length, 1, 'stream planning includes enabled destinations');
+assert.equal(streamingPlan.targets[0]?.transport.protocol, 'RTMP', 'stream planning infers protocol');
+assert.equal(validateStreamingPlan(streamingPlan).valid, true, 'stream plan validation passes');
+const streamingStore = new StreamingStore();
+streamingStore.setStreamingPlan(streamingPlan);
+assert.equal(streamingStore.getStreamingPlan(streamingPlan.id)?.id, streamingPlan.id, 'stream store gets plan');
+assert.equal(streamingStore.getActiveStreams().length, 1, 'stream store lists active streams');
+let streamingResult = prepareStreaming(streamingPlan);
+assert.equal(streamingResult.session.status, 'planned', 'prepare streaming creates planned session');
+streamingResult = connectStreaming(streamingResult.session);
+assert.equal(streamingResult.session.targets[0]?.connected, true, 'mock transport connects without sockets');
+streamingResult = startStreaming(streamingResult.session);
+assert.equal(streamingResult.session.status, 'streaming', 'start streaming moves lifecycle');
+streamingResult = pauseStreaming(streamingResult.session);
+assert.equal(streamingResult.session.status, 'paused', 'pause streaming moves lifecycle');
+streamingResult = resumeStreaming(streamingResult.session);
+assert.equal(streamingResult.session.status, 'streaming', 'resume streaming moves lifecycle');
+const degradedSession = simulateStreamingHealthChange(streamingResult.session, 'streamA', 'degraded');
+assert.equal(summarizeStreamingHealth(degradedSession).health, 'degraded', 'health summarizes degradation');
+const switchedSession = simulateTransportSwitch(degradedSession, 'streamA', 'SRT');
+assert.equal(switchedSession.targets[0]?.transport.protocol, 'SRT', 'mock transport switching updates metadata');
+const disconnectResult = simulateDisconnect(switchedSession, 'streamA');
+assert.equal(disconnectResult.session.status, 'reconnecting', 'mock disconnect simulates reconnect');
+const failureResult = simulateDestinationFailure(disconnectResult.session, 'streamA');
+assert.equal(failureResult.session.status, 'failed', 'destination failure fails stream');
+const manifest = createStreamingManifest(streamingPlan);
+assert.equal(manifest.containsMediaPayloads, false, 'stream manifest contains no runtime media');
+assert.equal('mediaPayload' in manifest, false, 'stream manifest stores no media payload object');
+assert.equal(supportedStreamingProtocols.includes('WHIP'), true, 'supported protocols include WHIP');
+streamingResult = stopStreaming(streamingResult.session);
+assert.equal(streamingResult.session.status, 'stopped', 'stop streaming moves lifecycle');
+streamingStore.clearStreams();
+assert.equal(streamingStore.listStreams().length, 0, 'stream store clears streams');
 
 const health = engine.getMediaExecutionHealth();
 assert.equal(health.executedIntentCount, 1, 'execution health counts executed intents');
