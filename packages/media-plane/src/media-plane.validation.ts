@@ -102,7 +102,7 @@ const recordingTransition = applyProductionCommand(
 );
 assert.equal(
   translateGraphTransitionToIntents(recordingTransition).some(
-    (intent) => intent.type === 'START_RECORDING',
+    (intent) => intent.type === 'START_RECORDING_ENGINE',
   ),
   true,
   'START_RECORDING triggers intent',
@@ -801,25 +801,116 @@ const store = new BrowserRendererStore();
 store.registerRenderer('preview', renderer);
 store.setActiveComposition('preview', compositionA);
 assert.equal(store.getRenderer('preview'), renderer, 'render target registration works');
-assert.equal(store.getActiveComposition('preview')?.id, compositionA.id, 'renderer store tracks active composition');
+assert.equal(
+  store.getActiveComposition('preview')?.id,
+  compositionA.id,
+  'renderer store tracks active composition',
+);
 
-assert.equal(isBrowserRendererEnabled({}), false, 'feature flag disabled preserves current behavior');
+assert.equal(
+  isBrowserRendererEnabled({}),
+  false,
+  'feature flag disabled preserves current behavior',
+);
 const canvasBackend = new Canvas2DRendererBackend(() => undefined);
 canvasBackend.initialize();
-const gpuFallback = selectRendererBackend([canvasBackend, new WebGLRendererBackend()], 'webgl_preview');
-assert.equal(gpuFallback.backend?.type, 'canvas2d', 'unavailable GPU backend falls back to Canvas2D');
-const frameContext = createRenderFrameContext({ frameId: 1, frameTimestamp: 1000, graphRevision: compositionA.graphRevision, compositionId: compositionA.id, canvas: { width: 1920, height: 1080, getContext: () => null } as unknown as HTMLCanvasElement & { width: number; height: number; getContext(type: '2d'): CanvasRenderingContext2D | null }, layers: compositionA.layers, debugMode: false, renderTarget: 'preview', metadata: {} });
-assert.equal(frameContext.compositionId, compositionA.id, 'render frame context is created correctly');
-assert.equal(getDirtyLayers(compositionA, { ...compositionA, layers: [{ ...compositionA.layers[0]!, opacity: 0.5 }, ...compositionA.layers.slice(1)] }).length, 1, 'dirty-layer detection works');
+const gpuFallback = selectRendererBackend(
+  [canvasBackend, new WebGLRendererBackend()],
+  'webgl_preview',
+);
+assert.equal(
+  gpuFallback.backend?.type,
+  'canvas2d',
+  'unavailable GPU backend falls back to Canvas2D',
+);
+const frameContext = createRenderFrameContext({
+  frameId: 1,
+  frameTimestamp: 1000,
+  graphRevision: compositionA.graphRevision,
+  compositionId: compositionA.id,
+  canvas: { width: 1920, height: 1080, getContext: () => null } as unknown as HTMLCanvasElement & {
+    width: number;
+    height: number;
+    getContext(type: '2d'): CanvasRenderingContext2D | null;
+  },
+  layers: compositionA.layers,
+  debugMode: false,
+  renderTarget: 'preview',
+  metadata: {},
+});
+assert.equal(
+  frameContext.compositionId,
+  compositionA.id,
+  'render frame context is created correctly',
+);
+assert.equal(
+  getDirtyLayers(compositionA, {
+    ...compositionA,
+    layers: [{ ...compositionA.layers[0]!, opacity: 0.5 }, ...compositionA.layers.slice(1)],
+  }).length,
+  1,
+  'dirty-layer detection works',
+);
 const cache = createRenderCache();
-setCachedLayer(cache, { id: 'layer:a', kind: 'layer', layerId: 'a', revision: 1, signature: 'sig', updatedAt: '2026-07-01T00:00:00.000Z', metadata: {} });
+setCachedLayer(cache, {
+  id: 'layer:a',
+  kind: 'layer',
+  layerId: 'a',
+  revision: 1,
+  signature: 'sig',
+  updatedAt: '2026-07-01T00:00:00.000Z',
+  metadata: {},
+});
 assert.equal(getCachedLayer(cache, 'a')?.signature, 'sig', 'cache set/get works');
 assert.equal(invalidateLayer(cache, 'a'), true, 'cache invalidate works');
 assert.equal(calculateFrameBudget(50), 20, 'frame budget calculation works');
-assert.equal(evaluateRenderPerformance({ targetFps: 50, renderDurationMs: 21, dirtyLayerCount: 1, totalLayerCount: 2, cacheHitCount: 1, cacheMissCount: 1 }).overBudget, true, 'render performance detects over-budget frames');
+assert.equal(
+  evaluateRenderPerformance({
+    targetFps: 50,
+    renderDurationMs: 21,
+    dirtyLayerCount: 1,
+    totalLayerCount: 2,
+    cacheHitCount: 1,
+    cacheMissCount: 1,
+  }).overBudget,
+  true,
+  'render performance detects over-budget frames',
+);
 const pipeline = executeRenderPipeline(createRenderPipeline(), frameContext);
-assert.deepEqual(pipeline.executedStages, ['prepare_frame','resolve_sources','compute_dirty_layers','update_cache','draw_background','draw_layers','draw_overlays','draw_guides','finalize_frame'], 'pipeline stages execute in deterministic order');
-assert.equal(summarizeRendererHealth({ backendType: 'canvas2d', targetFps: 30, estimatedFps: 30, averageRenderMs: 3, p95RenderMs: null, droppedFrames: 0, overBudgetFrames: 0, cacheHitRate: 0, activeLayerCount: 1, dirtyLayerCount: 1, memoryPressure: 'unknown', isHealthy: true, warnings: [] }).includes('healthy'), true, 'renderer health summary works');
+assert.deepEqual(
+  pipeline.executedStages,
+  [
+    'prepare_frame',
+    'resolve_sources',
+    'compute_dirty_layers',
+    'update_cache',
+    'draw_background',
+    'draw_layers',
+    'draw_overlays',
+    'draw_guides',
+    'finalize_frame',
+  ],
+  'pipeline stages execute in deterministic order',
+);
+assert.equal(
+  summarizeRendererHealth({
+    backendType: 'canvas2d',
+    targetFps: 30,
+    estimatedFps: 30,
+    averageRenderMs: 3,
+    p95RenderMs: null,
+    droppedFrames: 0,
+    overBudgetFrames: 0,
+    cacheHitRate: 0,
+    activeLayerCount: 1,
+    dirtyLayerCount: 1,
+    memoryPressure: 'unknown',
+    isHealthy: true,
+    warnings: [],
+  }).includes('healthy'),
+  true,
+  'renderer health summary works',
+);
 const browserAdapter = new BrowserRendererAdapter(renderer, 'dry_run');
 const browserAdapterResult = browserAdapter.execute(
   {
@@ -831,13 +922,16 @@ const browserAdapterResult = browserAdapter.execute(
   },
   graphWithSources,
 );
-assert.equal(browserAdapterResult.success, true, 'browser renderer adapter returns structured result');
+assert.equal(
+  browserAdapterResult.success,
+  true,
+  'browser renderer adapter returns structured result',
+);
 assert.equal(
   browserAdapter.getCapabilities().includes('RENDER_FRAME'),
   true,
   'browser renderer adapter exposes render frame capability',
 );
-
 
 let mockNow = 1000;
 const clock = createClock({ frameRate: 30, now: () => mockNow });
@@ -855,31 +949,89 @@ assert.equal(clock.getCurrentFrame(), 2, 'resumed clock advances frames');
 
 assertMonotonicFrameId(1, 2);
 assertFrameTimestampFromClock(clock, 3, 100);
-const assignedCurrent = assignIntentToFrame({ id: 'timing-current', type: 'sync', executionType: 'EXECUTE_FRAME_SYNC', sourceGraphRevision: 1, dependencies: [], priority: 0, targetSubsystem: 'sync', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' }, clock.getState(), { nowMs: 70, cutoffMs: 8 });
-const assignedLate = assignIntentToFrame({ id: 'timing-late', type: 'sync', executionType: 'EXECUTE_FRAME_SYNC', sourceGraphRevision: 1, dependencies: [], priority: 0, targetSubsystem: 'sync', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' }, clock.getState(), { nowMs: 94, cutoffMs: 8 });
+const assignedCurrent = assignIntentToFrame(
+  {
+    id: 'timing-current',
+    type: 'sync',
+    executionType: 'EXECUTE_FRAME_SYNC',
+    sourceGraphRevision: 1,
+    dependencies: [],
+    priority: 0,
+    targetSubsystem: 'sync',
+    payload: {},
+    timingConstraint: {},
+    submittedAt: '2026-07-01T00:00:00.000Z',
+  },
+  clock.getState(),
+  { nowMs: 70, cutoffMs: 8 },
+);
+const assignedLate = assignIntentToFrame(
+  {
+    id: 'timing-late',
+    type: 'sync',
+    executionType: 'EXECUTE_FRAME_SYNC',
+    sourceGraphRevision: 1,
+    dependencies: [],
+    priority: 0,
+    targetSubsystem: 'sync',
+    payload: {},
+    timingConstraint: {},
+    submittedAt: '2026-07-01T00:00:00.000Z',
+  },
+  clock.getState(),
+  { nowMs: 94, cutoffMs: 8 },
+);
 assert.equal(assignedCurrent.scheduledFrameId, 2, 'intent before cutoff executes on current frame');
-assert.equal(assignedLate.scheduledFrameId, getNextExecutableFrame(clock.getState()), 'late intent moves to next executable frame');
+assert.equal(
+  assignedLate.scheduledFrameId,
+  getNextExecutableFrame(clock.getState()),
+  'late intent moves to next executable frame',
+);
 assert.equal(classifyDrift(21), 'warning', 'drift classification detects warning threshold');
-assert.equal(summarizeFrameDrift({ renderDriftMs: 0, audioDriftMs: 55, videoDriftMs: 0, outputDriftMs: 0 }).worst.severity, 'degraded', 'frame drift summary reports worst severity');
-assert.equal(createDriftWarning('renderDriftMs', 101)?.includes('CRITICAL'), true, 'drift warning includes severity');
+assert.equal(
+  summarizeFrameDrift({ renderDriftMs: 0, audioDriftMs: 55, videoDriftMs: 0, outputDriftMs: 0 })
+    .worst.severity,
+  'degraded',
+  'frame drift summary reports worst severity',
+);
+assert.equal(
+  createDriftWarning('renderDriftMs', 101)?.includes('CRITICAL'),
+  true,
+  'drift warning includes severity',
+);
 assertNoIndependentSubsystemClock({ frameId: 2, frameTimestamp: 67 });
-
 
 const bus = new MediaSyncBus();
 const schedulerClock = createClock({ frameRate: 60, now: () => mockNow });
 const syncStore = new MediaSyncStore(schedulerClock);
 const frameScheduler = new FrameScheduler(schedulerClock, bus);
 let scheduledTick: FrameTickEvent | undefined;
-frameScheduler.onTick((tick) => { scheduledTick = tick; syncStore.recordTick(tick); frameScheduler.stop(); });
+frameScheduler.onTick((tick) => {
+  scheduledTick = tick;
+  syncStore.recordTick(tick);
+  frameScheduler.stop();
+});
 frameScheduler.start();
 await new Promise((resolve) => setTimeout(resolve, 5));
 assert.equal(scheduledTick?.frameId, 0, 'frame scheduler emits deterministic initial frame');
-assert.equal(bus.listEvents().some((event) => event.type === 'FRAME_TICK'), true, 'sync bus records frame ticks');
-assert.equal(syncStore.getState().syncHealthSummary.currentFrame, 0, 'sync store exposes health summary');
+assert.equal(
+  bus.listEvents().some((event) => event.type === 'FRAME_TICK'),
+  true,
+  'sync bus records frame ticks',
+);
+assert.equal(
+  syncStore.getState().syncHealthSummary.currentFrame,
+  0,
+  'sync store exposes health summary',
+);
 
 const monitor = new SyncDriftMonitor(bus, 5);
 monitor.record({ renderDriftMs: 6, audioDriftMs: 0, videoDriftMs: 0, outputDriftMs: 0 });
-assert.equal(bus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'), true, 'drift detection emits event');
+assert.equal(
+  bus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'),
+  true,
+  'drift detection emits event',
+);
 monitor.reset();
 assert.equal(monitor.getHistory().length, 0, 'drift stats reset');
 
@@ -887,20 +1039,68 @@ const syncEngine = new MediaExecutionEngine(new ExecutionLogStore());
 const syncAdapter = new MockMediaExecutionAdapter({ latencyMs: 0 });
 syncEngine.registerAdapter(syncAdapter);
 syncEngine.setExecutionRuntimeMode('mock_live');
-const frameResults = await syncEngine.executeFrameSync({ frameId: 10, timestamp: 333, broadcastTime: 333, expectedNextFrameTime: 366, jitterEstimate: 0 }, recordingTransition.nextGraph, [
-  { id: 'b-render', type: 'RENDER_FRAME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 4, payload: {} },
-  { id: 'a-video', type: 'ROUTE_PROGRAM_VIDEO', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 4, payload: {} },
-]);
+const frameResults = await syncEngine.executeFrameSync(
+  {
+    frameId: 10,
+    timestamp: 333,
+    broadcastTime: 333,
+    expectedNextFrameTime: 366,
+    jitterEstimate: 0,
+  },
+  recordingTransition.nextGraph,
+  [
+    {
+      id: 'b-render',
+      type: 'RENDER_FRAME',
+      timestamp: '2026-07-01T00:00:00.000Z',
+      graphRevision: 4,
+      payload: {},
+    },
+    {
+      id: 'a-video',
+      type: 'ROUTE_PROGRAM_VIDEO',
+      timestamp: '2026-07-01T00:00:00.000Z',
+      graphRevision: 4,
+      payload: {},
+    },
+  ],
+);
 assert.equal(frameResults.length, 2, 'frame sync executes pending intents');
-assert.equal(syncAdapter.getLoggedIntents()[0]?.type, 'ROUTE_PROGRAM_VIDEO', 'frame sync execution order is deterministic');
-assert.equal(syncAdapter.getLoggedIntents()[0]?.payload.frameId, 10, 'frame sync attaches frame metadata');
+assert.equal(
+  syncAdapter.getLoggedIntents()[0]?.type,
+  'ROUTE_PROGRAM_VIDEO',
+  'frame sync execution order is deterministic',
+);
+assert.equal(
+  syncAdapter.getLoggedIntents()[0]?.payload.frameId,
+  10,
+  'frame sync attaches frame metadata',
+);
 
 const syncRenderer = new BrowserMediaRenderer();
 assert.equal(syncRenderer.getStats().frameCount, 0, 'renderer does not render before frame tick');
-syncRenderer.renderFrame({ frameId: 12, timestamp: 400, broadcastTime: 400, expectedNextFrameTime: 433, jitterEstimate: 0 });
-assert.equal(syncRenderer.getStats().frameCount, 0, 'manual frame tick render avoids free-running scheduler stats without canvas');
-assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'false' }), false, 'feature flag disables sync layer safely');
-assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'true' }), true, 'feature flag enables sync layer');
+syncRenderer.renderFrame({
+  frameId: 12,
+  timestamp: 400,
+  broadcastTime: 400,
+  expectedNextFrameTime: 433,
+  jitterEstimate: 0,
+});
+assert.equal(
+  syncRenderer.getStats().frameCount,
+  0,
+  'manual frame tick render avoids free-running scheduler stats without canvas',
+);
+assert.equal(
+  isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'false' }),
+  false,
+  'feature flag disables sync layer safely',
+);
+assert.equal(
+  isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'true' }),
+  true,
+  'feature flag enables sync layer',
+);
 
 const orchestrationClock = createClock({ frameRate: 30, now: () => 0 });
 orchestrationClock.startClock();
@@ -941,24 +1141,200 @@ const repeatedPlan = orchestration.planFrame(
     intents: orchestrationPlan.orderedExecutionSteps,
     edges: [{ from: 'orch-video', to: 'orch-render' }],
   },
-  { frameTimestamp: orchestrationPlan.frameTimestamp, elapsedTime: orchestrationClock.getState().elapsedTime },
+  {
+    frameTimestamp: orchestrationPlan.frameTimestamp,
+    elapsedTime: orchestrationClock.getState().elapsedTime,
+  },
   { video: 'ready', audio: 'ready', render: 'ready', output: 'ready', sync: 'ready' },
 );
-assert.deepEqual(repeatedPlan, orchestrationPlan, 'same media intent graph and clock tick produce the same frame plan');
+assert.deepEqual(
+  repeatedPlan,
+  orchestrationPlan,
+  'same media intent graph and clock tick produce the same frame plan',
+);
 assertFramePlanHasFrameIdentity(orchestrationPlan);
-const mockExecutionResults = await engine.executeMediaFramePlan(orchestrationPlan, transition.nextGraph);
+const mockExecutionResults = await engine.executeMediaFramePlan(
+  orchestrationPlan,
+  transition.nextGraph,
+);
 assert.equal(mockExecutionResults.length, 2, 'execution engine executes orchestration frame plans');
 assert.equal(
-  orchestration.getDiagnostics().events.some((event) => event.type === 'ORCHESTRATION_PLAN_CREATED'),
+  orchestration
+    .getDiagnostics()
+    .events.some((event) => event.type === 'ORCHESTRATION_PLAN_CREATED'),
   true,
   'orchestration emits planning events without execution events',
 );
 const cycleOrchestration = new MediaOrchestrationEngine(orchestrationClock);
-cycleOrchestration.submitIntent({ id: 'cycle-a', type: 'video', executionType: 'ROUTE_PROGRAM_VIDEO', sourceGraphRevision: 1, dependencies: ['cycle-b'], priority: 0, targetSubsystem: 'video', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' });
-cycleOrchestration.submitIntent({ id: 'cycle-b', type: 'audio', executionType: 'BUILD_AUDIO_ROUTE_PLAN', sourceGraphRevision: 1, dependencies: ['cycle-a'], priority: 0, targetSubsystem: 'audio', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' });
+cycleOrchestration.submitIntent({
+  id: 'cycle-a',
+  type: 'video',
+  executionType: 'ROUTE_PROGRAM_VIDEO',
+  sourceGraphRevision: 1,
+  dependencies: ['cycle-b'],
+  priority: 0,
+  targetSubsystem: 'video',
+  payload: {},
+  timingConstraint: {},
+  submittedAt: '2026-07-01T00:00:00.000Z',
+});
+cycleOrchestration.submitIntent({
+  id: 'cycle-b',
+  type: 'audio',
+  executionType: 'BUILD_AUDIO_ROUTE_PLAN',
+  sourceGraphRevision: 1,
+  dependencies: ['cycle-a'],
+  priority: 0,
+  targetSubsystem: 'audio',
+  payload: {},
+  timingConstraint: {},
+  submittedAt: '2026-07-01T00:00:00.000Z',
+});
 cycleOrchestration.resolveIntentGraph();
 assert.equal(
   cycleOrchestration.detectConflicts().some((conflict) => conflict.type === 'circular_dependency'),
   true,
   'orchestration detects circular dependencies',
+);
+
+import {
+  RecordingStore,
+  createRecordingManifest,
+  createRecordingPlan,
+  failRecording,
+  pauseRecording,
+  prepareRecording,
+  resumeRecording,
+  startRecording,
+  stopRecording,
+  summarizeRecordingHealth,
+  validateRecordingPlan,
+} from './recording/index.js';
+
+const recordingVideoPlan = createVideoRoutePlan(
+  cutTransition.nextGraph,
+  [createSceneCompositionFromGraph(cutTransition.nextGraph, 'scene-a', { target: 'program' })],
+  { includeRecording: true, now: '2026-07-01T00:00:00.000Z', frameId: 12, frameTimestamp: 400 },
+);
+const recordingAudioPlan = createAudioRoutePlan(cutTransition.nextGraph, {
+  includeRecording: true,
+  now: '2026-07-01T00:00:00.000Z',
+});
+const recordingPlan = createRecordingPlan(
+  cutTransition.nextGraph,
+  recordingVideoPlan,
+  recordingAudioPlan,
+  {
+    now: '2026-07-01T00:00:00.000Z',
+    frameId: 12,
+    frameTimestamp: 400,
+    outputId: 'output:mock-recording',
+  },
+);
+assert.equal(
+  recordingPlan.broadcastSessionId,
+  'test-session',
+  'recording plan references broadcast session',
+);
+assert.equal(
+  recordingPlan.graphRevision,
+  cutTransition.nextGraph.metadata.revision,
+  'recording plan references graph revision',
+);
+assert.equal(recordingPlan.frameId, 12, 'recording plan references frame identity');
+assert.equal(validateRecordingPlan(recordingPlan).success, true, 'recording plan validates');
+let recordingSession = prepareRecording(recordingPlan, '2026-07-01T00:00:00.000Z');
+assert.equal(recordingSession.status, 'preparing', 'recording prepare enters preparing status');
+recordingSession = startRecording(recordingSession, '2026-07-01T00:00:01.000Z');
+assert.equal(recordingSession.status, 'recording', 'recording start enters recording status');
+assert.equal(recordingSession.segments.length, 1, 'recording start creates mock segment metadata');
+recordingSession = pauseRecording(recordingSession, '2026-07-01T00:00:02.000Z');
+assert.equal(recordingSession.status, 'paused', 'recording pause enters paused status');
+recordingSession = resumeRecording(recordingSession, '2026-07-01T00:00:03.000Z');
+assert.equal(
+  recordingSession.segments.length,
+  2,
+  'recording resume creates new mock segment metadata',
+);
+const manifest = createRecordingManifest(recordingSession, '2026-07-01T00:00:04.000Z');
+assert.equal(manifest.status, 'ready', 'recording manifest becomes ready');
+assert.equal(
+  manifest.segments.every((segment) => segment.status === 'closed'),
+  true,
+  'manifest closes segment metadata',
+);
+recordingSession = stopRecording(recordingSession, '2026-07-01T00:00:05.000Z');
+assert.equal(recordingSession.status, 'stopped', 'recording stop enters stopped status');
+assert.equal(recordingSession.manifest?.status, 'ready', 'recording stop creates manifest');
+const failedRecording = failRecording(
+  recordingSession,
+  'simulated failure',
+  '2026-07-01T00:00:06.000Z',
+);
+assert.equal(failedRecording.status, 'failed', 'recording failure enters failed status');
+assert.equal(failedRecording.failures.length, 1, 'recording failure is tracked');
+assert.equal(
+  summarizeRecordingHealth(failedRecording).includes('failed'),
+  true,
+  'recording health summarizes failure',
+);
+const recordingStore = new RecordingStore();
+const storedRecording = recordingStore.setRecordingPlan(recordingPlan);
+assert.equal(
+  recordingStore.getRecordingPlan(recordingPlan.id)?.id,
+  recordingPlan.id,
+  'recording store returns plan',
+);
+recordingStore.setRecordingSession(startRecording(storedRecording, '2026-07-01T00:00:01.000Z'));
+assert.equal(
+  recordingStore.getActiveRecording()?.status,
+  'recording',
+  'recording store returns active recording',
+);
+recordingStore.setRecordingSession(
+  stopRecording(recordingStore.getActiveRecording()!, '2026-07-01T00:00:07.000Z'),
+);
+assert.equal(
+  recordingStore.getRecordingManifest(storedRecording.id)?.status,
+  'ready',
+  'recording store returns manifest',
+);
+assert.equal(
+  JSON.stringify(recordingStore.listRecordings()).includes('MediaStream'),
+  false,
+  'recording state contains no raw media stream',
+);
+recordingStore.clearRecordings();
+assert.equal(recordingStore.listRecordings().length, 0, 'recording store clears recordings');
+const recordingMock = new MockMediaExecutionAdapter();
+const buildRecordingResponse = recordingMock.execute(
+  {
+    id: 'recording-intent-build',
+    type: 'BUILD_RECORDING_PLAN',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: cutTransition.nextGraph.metadata.revision,
+    payload: { frameId: 12, frameTimestamp: 400 },
+  },
+  cutTransition.nextGraph,
+);
+assert.equal(
+  buildRecordingResponse.success,
+  true,
+  'mock adapter handles build recording plan intent',
+);
+const startRecordingResponse = recordingMock.execute(
+  {
+    id: 'recording-intent-start',
+    type: 'START_RECORDING_ENGINE',
+    timestamp: '2026-07-01T00:00:01.000Z',
+    graphRevision: cutTransition.nextGraph.metadata.revision,
+    payload: { frameId: 13, frameTimestamp: 433 },
+  },
+  cutTransition.nextGraph,
+);
+assert.equal(startRecordingResponse.success, true, 'mock adapter handles start recording intent');
+assert.equal(
+  recordingMock.getRecordingStore().getActiveRecording()?.status,
+  'recording',
+  'mock adapter stores active recording',
 );

@@ -28,6 +28,11 @@ import {
   createAudioRoutePlan,
   createAudioRouteGraph,
   validateAudioRoutePlan,
+  createRecordingPlan,
+  prepareRecording,
+  startRecording,
+  stopRecording,
+  summarizeRecordingHealth,
   type ExecutionRuntimeMode,
   BrowserMediaRenderer,
   BrowserRendererAdapter,
@@ -156,7 +161,10 @@ function MediaExecutionInspector({
   const mediaSyncStore = useMemo(() => new MediaSyncStore(mediaClock), [mediaClock]);
   const driftMonitor = useMemo(() => new SyncDriftMonitor(undefined, 20), []);
   const browserCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const browserRenderer = useMemo(() => new BrowserMediaRenderer({ target: 'debug_composition_preview', debug: true }), []);
+  const browserRenderer = useMemo(
+    () => new BrowserMediaRenderer({ target: 'debug_composition_preview', debug: true }),
+    [],
+  );
   const [browserDebug, setBrowserDebug] = useState(true);
   const webRTCAdapter = engine.getRegisteredAdapter('webrtc-media-execution-adapter');
   const webRTC = webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
@@ -184,7 +192,10 @@ function MediaExecutionInspector({
   const browserDiagnostics = browserRenderer.getRendererDiagnostics();
   const syncState = mediaSyncStore.getState();
   const syncSummary = syncState.syncHealthSummary;
-  const resetDriftStats = () => { driftMonitor.reset(); rerender(); };
+  const resetDriftStats = () => {
+    driftMonitor.reset();
+    rerender();
+  };
   const audioRoutePlan = createAudioRoutePlan(graph, {
     includeRecording: graph.recording.status === 'recording',
     includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled),
@@ -215,6 +226,18 @@ function MediaExecutionInspector({
     [programComposition, previewComposition].filter((composition) => composition !== undefined),
   );
   const activeRoutes = routePlan.routes.filter((route) => route.enabled);
+  const recordingPlan = createRecordingPlan(graph, routePlan, audioRoutePlan, {
+    frameId: Number(routePlan.metadata.frameId ?? 0),
+    outputId: 'inspector-output:mock-recording',
+  });
+  const preparedRecording = prepareRecording(recordingPlan);
+  const recordingSession =
+    graph.recording.status === 'recording'
+      ? startRecording(preparedRecording, graph.recording.startedAt ?? recordingPlan.createdAt)
+      : graph.recording.status === 'stopped'
+        ? stopRecording(preparedRecording, graph.recording.stoppedAt ?? recordingPlan.createdAt)
+        : preparedRecording;
+  const recordingManifest = recordingSession.manifest;
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
   const health = state.executionHealth;
@@ -384,6 +407,22 @@ function MediaExecutionInspector({
           value={String(audioRouteValidation.warnings.length)}
         />
         <InspectorMetric label="Audio Rev" value={String(audioRouteGraph.revision)} />
+        <InspectorMetric label="Recording Status" value={recordingSession.status} />
+        <InspectorMetric label="Active Recording" value={recordingSession.id} />
+        <InspectorMetric label="Target Output" value={recordingPlan.outputId} />
+        <InspectorMetric label="Recording Video" value={recordingPlan.videoRouteId} />
+        <InspectorMetric label="Recording Audio" value={recordingPlan.audioRouteId} />
+        <InspectorMetric label="Recording Frame" value={String(recordingPlan.frameId)} />
+        <InspectorMetric label="Segments" value={String(recordingSession.segments.length)} />
+        <InspectorMetric label="Manifest" value={recordingManifest?.status ?? 'pending'} />
+        <InspectorMetric
+          label="Recording Health"
+          value={summarizeRecordingHealth(recordingSession)}
+        />
+        <InspectorMetric
+          label="Recording Warnings"
+          value={String(recordingPlan.warnings.length + recordingSession.failures.length)}
+        />
         <InspectorMetric
           label="Changed Layers"
           value={`${compositionDiff.changedLayers.length} Δ / +${compositionDiff.addedLayers.length} / -${compositionDiff.removedLayers.length}`}
@@ -404,23 +443,52 @@ function MediaExecutionInspector({
 
       {orchestration ? (
         <div className="mt-3 rounded-lg border border-fuchsia-700/40 bg-fuchsia-950/20 p-2">
-          <p className="font-black uppercase tracking-[0.16em] text-fuchsia-200">Media Orchestration</p>
+          <p className="font-black uppercase tracking-[0.16em] text-fuchsia-200">
+            Media Orchestration
+          </p>
           <div className="mt-2 grid gap-2 md:grid-cols-4">
-            <InspectorMetric label="Active Intents" value={String(orchestration.activeIntents.length)} />
-            <InspectorMetric label="Frame Plans" value={String(orchestration.activeFramePlans.length)} />
-            <InspectorMetric label="Dependency Edges" value={String(orchestration.dependencyGraph?.edges.length ?? 0)} />
+            <InspectorMetric
+              label="Active Intents"
+              value={String(orchestration.activeIntents.length)}
+            />
+            <InspectorMetric
+              label="Frame Plans"
+              value={String(orchestration.activeFramePlans.length)}
+            />
+            <InspectorMetric
+              label="Dependency Edges"
+              value={String(orchestration.dependencyGraph?.edges.length ?? 0)}
+            />
             <InspectorMetric label="Conflicts" value={String(orchestration.conflicts.length)} />
             <InspectorMetric label="Frame Align" value={orchestration.frameAlignmentStatus} />
-            <InspectorMetric label="Queued/Dropped" value={String(orchestration.droppedOrQueuedIntents)} />
-            <InspectorMetric label="Subsystems" value={Object.entries(orchestration.subsystemStateSnapshot).map(([key, value]) => `${key}:${value}`).join(' · ')} />
-            <InspectorMetric label="Latest Plan" value={orchestration.activeFramePlans.at(-1)?.id ?? '—'} />
+            <InspectorMetric
+              label="Queued/Dropped"
+              value={String(orchestration.droppedOrQueuedIntents)}
+            />
+            <InspectorMetric
+              label="Subsystems"
+              value={Object.entries(orchestration.subsystemStateSnapshot)
+                .map(([key, value]) => `${key}:${value}`)
+                .join(' · ')}
+            />
+            <InspectorMetric
+              label="Latest Plan"
+              value={orchestration.activeFramePlans.at(-1)?.id ?? '—'}
+            />
           </div>
           <div className="mt-2 rounded border border-fuchsia-900/70 bg-slate-950/60 p-2 font-mono text-[10px] text-fuchsia-100">
-            {(orchestration.activeFramePlans.at(-1)?.orderedExecutionSteps ?? []).slice(0, 6).map((intent) => (
-              <div key={intent.id}>{intent.targetSubsystem} → {intent.executionType} · deps {intent.dependencies.length}</div>
-            ))}
+            {(orchestration.activeFramePlans.at(-1)?.orderedExecutionSteps ?? [])
+              .slice(0, 6)
+              .map((intent) => (
+                <div key={intent.id}>
+                  {intent.targetSubsystem} → {intent.executionType} · deps{' '}
+                  {intent.dependencies.length}
+                </div>
+              ))}
             {orchestration.conflicts.slice(0, 3).map((conflict) => (
-              <div key={conflict.id}>conflict {conflict.type}: {conflict.message}</div>
+              <div key={conflict.id}>
+                conflict {conflict.type}: {conflict.message}
+              </div>
             ))}
           </div>
         </div>
@@ -428,7 +496,9 @@ function MediaExecutionInspector({
 
       {mediaSyncEnabled ? (
         <div className="mt-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
-          <p className="font-black uppercase tracking-[0.16em] text-emerald-200">Media Sync Diagnostics</p>
+          <p className="font-black uppercase tracking-[0.16em] text-emerald-200">
+            Media Sync Diagnostics
+          </p>
           <div className="mt-2 grid gap-2 md:grid-cols-4">
             <InspectorMetric label="Current Frame" value={String(syncSummary.currentFrame)} />
             <InspectorMetric label="FPS" value={String(syncSummary.fps)} />
@@ -436,16 +506,45 @@ function MediaExecutionInspector({
             <InspectorMetric label="Audio Drift" value={`${syncSummary.drift.audioDriftMs}ms`} />
             <InspectorMetric label="Render Drift" value={`${syncSummary.drift.renderDriftMs}ms`} />
             <InspectorMetric label="Output Drift" value={`${syncSummary.drift.outputDriftMs}ms`} />
-            <InspectorMetric label="Last Tick" value={syncState.lastTickResult ? String(syncState.lastTickResult.broadcastTime) : '—'} />
+            <InspectorMetric
+              label="Last Tick"
+              value={
+                syncState.lastTickResult ? String(syncState.lastTickResult.broadcastTime) : '—'
+              }
+            />
             <InspectorMetric label="Jitter" value={`${syncSummary.jitterEstimate}ms`} />
             <InspectorMetric label="Dropped" value={String(syncSummary.droppedFramesCount)} />
             <InspectorMetric label="Clock" value={syncState.clockState.status} />
             <InspectorMetric label="Health Score" value={String(syncSummary.healthScore)} />
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={() => { mediaClock.pauseClock(); rerender(); }} className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200">Pause clock</button>
-            <button type="button" onClick={() => { mediaClock.resumeClock(); rerender(); }} className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200">Resume clock</button>
-            <button type="button" onClick={resetDriftStats} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Reset drift stats</button>
+            <button
+              type="button"
+              onClick={() => {
+                mediaClock.pauseClock();
+                rerender();
+              }}
+              className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200"
+            >
+              Pause clock
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                mediaClock.resumeClock();
+                rerender();
+              }}
+              className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200"
+            >
+              Resume clock
+            </button>
+            <button
+              type="button"
+              onClick={resetDriftStats}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Reset drift stats
+            </button>
           </div>
         </div>
       ) : null}
@@ -454,37 +553,158 @@ function MediaExecutionInspector({
           <p className="font-black uppercase tracking-[0.16em] text-cyan-200">Browser Renderer</p>
           <div className="mt-2 grid gap-2 md:grid-cols-4">
             <InspectorMetric label="Enabled" value="true" />
-            <InspectorMetric label="Targets" value={programComposition?.renderTargets.join(', ') ?? '—'} />
+            <InspectorMetric
+              label="Targets"
+              value={programComposition?.renderTargets.join(', ') ?? '—'}
+            />
             <InspectorMetric label="Composition" value={browserHealth.compositionId ?? '—'} />
             <InspectorMetric label="Layers" value={String(browserHealth.layerCount)} />
-            <InspectorMetric label="Runtime Sources" value={String(webRTCDiagnostics?.activeLocalStreamCount ?? 0)} />
+            <InspectorMetric
+              label="Runtime Sources"
+              value={String(webRTCDiagnostics?.activeLocalStreamCount ?? 0)}
+            />
             <InspectorMetric label="Frames" value={String(browserHealth.stats.frameCount)} />
             <InspectorMetric label="Target FPS" value={String(browserHealth.stats.targetFps)} />
             <InspectorMetric label="Est FPS" value={String(browserHealth.stats.estimatedFps)} />
-            <InspectorMetric label="Last Render" value={`${browserHealth.stats.lastRenderDurationMs}ms`} />
+            <InspectorMetric
+              label="Last Render"
+              value={`${browserHealth.stats.lastRenderDurationMs}ms`}
+            />
             <InspectorMetric label="Missing Sources" value={String(compositionWarnings.length)} />
             <InspectorMetric label="Latest Error" value={browserHealth.latestError?.code ?? '—'} />
             <InspectorMetric label="Backend" value={browserDiagnostics.activeBackend} />
             <InspectorMetric label="Fallback" value={browserDiagnostics.fallbackStatus} />
             <InspectorMetric label="Frame Budget" value={`${browserDiagnostics.frameBudget}ms`} />
-            <InspectorMetric label="Over Budget" value={String(browserDiagnostics.overBudgetFrameCount)} />
-            <InspectorMetric label="Dirty Layers" value={String(browserDiagnostics.dirtyLayerCount)} />
-            <InspectorMetric label="Cache" value={`${browserDiagnostics.cacheSummary.layers} layers ${browserDiagnostics.cacheSummary.hits}/${browserDiagnostics.cacheSummary.misses}`} />
-            <InspectorMetric label="Pipeline" value={browserDiagnostics.pipelineStages.stages.join(' → ')} />
-            <InspectorMetric label="Health" value={browserDiagnostics.rendererHealth.isHealthy ? 'healthy' : 'degraded'} />
+            <InspectorMetric
+              label="Over Budget"
+              value={String(browserDiagnostics.overBudgetFrameCount)}
+            />
+            <InspectorMetric
+              label="Dirty Layers"
+              value={String(browserDiagnostics.dirtyLayerCount)}
+            />
+            <InspectorMetric
+              label="Cache"
+              value={`${browserDiagnostics.cacheSummary.layers} layers ${browserDiagnostics.cacheSummary.hits}/${browserDiagnostics.cacheSummary.misses}`}
+            />
+            <InspectorMetric
+              label="Pipeline"
+              value={browserDiagnostics.pipelineStages.stages.join(' → ')}
+            />
+            <InspectorMetric
+              label="Health"
+              value={browserDiagnostics.rendererHealth.isHealthy ? 'healthy' : 'degraded'}
+            />
           </div>
-          <canvas ref={browserCanvasRef} className="mt-2 aspect-video w-full rounded border border-cyan-500/30 bg-black" />
+          <canvas
+            ref={browserCanvasRef}
+            className="mt-2 aspect-video w-full rounded border border-cyan-500/30 bg-black"
+          />
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={() => { browserRenderer.start(); rerender(); }} className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200">Start renderer</button>
-            <button type="button" onClick={() => { browserRenderer.stop(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Stop renderer</button>
-            <button type="button" onClick={() => { if (programComposition) browserRenderer.render(programComposition, { debug: browserDebug }); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Render frame</button>
-            <button type="button" onClick={() => { setBrowserDebug((value) => !value); browserRenderer.setDebug(!browserDebug); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Toggle guides</button>
-            <button type="button" onClick={() => { browserRenderer.clearStats(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Clear renderer stats</button>
-            <button type="button" onClick={() => { browserRenderer.switchBackend('canvas2d_default'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Use Canvas2D</button>
-            <button type="button" onClick={() => { browserRenderer.switchBackend('webgl_preview'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Try WebGL</button>
-            <button type="button" onClick={() => { browserRenderer.switchBackend('webgpu_preview'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Try WebGPU</button>
-            <button type="button" onClick={() => { browserRenderer.clearRenderCache(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Clear render cache</button>
-            <button type="button" onClick={() => { browserRenderer.forceFullRender(); if (programComposition) browserRenderer.render(programComposition, { debug: browserDebug }); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Force full redraw</button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.start();
+                rerender();
+              }}
+              className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200"
+            >
+              Start renderer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.stop();
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Stop renderer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (programComposition)
+                  browserRenderer.render(programComposition, { debug: browserDebug });
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Render frame
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBrowserDebug((value) => !value);
+                browserRenderer.setDebug(!browserDebug);
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Toggle guides
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.clearStats();
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Clear renderer stats
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.switchBackend('canvas2d_default');
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Use Canvas2D
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.switchBackend('webgl_preview');
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Try WebGL
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.switchBackend('webgpu_preview');
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Try WebGPU
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.clearRenderCache();
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Clear render cache
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.forceFullRender();
+                if (programComposition)
+                  browserRenderer.render(programComposition, { debug: browserDebug });
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Force full redraw
+            </button>
           </div>
         </div>
       ) : null}
@@ -671,6 +891,11 @@ function MediaExecutionInspector({
               audioRouteWarnings: audioRouteValidation.warnings,
               latestEvents: state.latestEvents.slice(-6),
               rendererDiagnostics: browserDiagnostics,
+              recording: {
+                plan: recordingPlan,
+                session: recordingSession,
+                manifest: recordingManifest,
+              },
             },
             null,
             2,
@@ -1168,7 +1393,10 @@ export function SceneWorkspace({
     const webRTCAdapter = new WebRTCMediaExecutionAdapter();
     engine.registerAdapter(webRTCAdapter, createWebRTCAdapterMetadata(webRTCAdapter));
     if (isBrowserRendererEnabled(process.env)) {
-      const browserAdapter = new BrowserRendererAdapter(new BrowserMediaRenderer({ target: 'preview' }), 'mock_live');
+      const browserAdapter = new BrowserRendererAdapter(
+        new BrowserMediaRenderer({ target: 'preview' }),
+        'mock_live',
+      );
       engine.registerAdapter(browserAdapter, createBrowserRendererAdapterMetadata(browserAdapter));
     }
     engine.setExecutionRuntimeMode('mock_live');
