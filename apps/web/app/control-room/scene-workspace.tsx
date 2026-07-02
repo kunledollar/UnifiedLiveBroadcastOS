@@ -10,7 +10,11 @@ import {
   SceneList,
   SourceManager,
 } from '@ubos/ui';
-import { MediaExecutionEngine, MockMediaExecutionAdapter } from '@ubos/media-plane';
+import {
+  MediaExecutionEngine,
+  MockMediaExecutionAdapter,
+  type ExecutionRuntimeMode,
+} from '@ubos/media-plane';
 import {
   SceneType,
   type AudioChannel,
@@ -77,16 +81,58 @@ function InspectorMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MediaExecutionInspector({
-  engine,
-}: {
-  engine: MediaExecutionEngine;
-}) {
+function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
   const enabled = process.env.NEXT_PUBLIC_UBOS_MEDIA_EXECUTION_INSPECTOR === 'true';
+  const [refreshToken, setRefreshToken] = useState(0);
   if (!enabled) return null;
   const state = engine.getExecutionState();
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
+  const health = state.executionHealth;
+  const adapters = state.adapterRegistry;
+  const dryRunCount = state.latestEvents.filter(
+    (event) => event.type === 'DRY_RUN_RECORDED',
+  ).length;
+  const skippedCount = state.latestEvents.filter(
+    (event) => event.type === 'EXECUTION_SKIPPED' || event.type === 'ADAPTER_UNAVAILABLE',
+  ).length;
+  const failureCount = state.latestEvents.filter(
+    (event) => event.type === 'EXECUTION_FAILED',
+  ).length;
+  const rerender = () => setRefreshToken((value) => value + 1);
+  const setMode = (mode: ExecutionRuntimeMode) => {
+    engine.setExecutionRuntimeMode(mode);
+    rerender();
+  };
+  const configureLatencyPreset = (preset: 'instant' | 'steady' | 'warning') => {
+    const activeMock = adapters.find((adapter) => adapter.isMock);
+    if (preset === 'instant')
+      engine.configureMockExecutionLatency({
+        minLatencyMs: 0,
+        maxLatencyMs: 0,
+        failureRate: 0,
+        warningRate: 0,
+        seed: 1,
+      });
+    if (preset === 'steady')
+      engine.configureMockExecutionLatency({
+        minLatencyMs: 8,
+        maxLatencyMs: 8,
+        failureRate: 0,
+        warningRate: 0,
+        seed: 1,
+      });
+    if (preset === 'warning')
+      engine.configureMockExecutionLatency({
+        minLatencyMs: 12,
+        maxLatencyMs: 18,
+        failureRate: 0,
+        warningRate: 1,
+        seed: 42,
+      });
+    if (activeMock) engine.setAdapterEnabled(activeMock.id, true);
+    rerender();
+  };
   return (
     <details className="mb-2 rounded-xl border border-purple-300/20 bg-slate-950/80 p-3 text-xs text-slate-300">
       <summary className="cursor-pointer font-black uppercase tracking-[0.18em] text-purple-200">
@@ -94,17 +140,105 @@ function MediaExecutionInspector({
       </summary>
       <div className="mt-3 grid gap-2 md:grid-cols-4">
         <InspectorMetric label="Revision" value={String(state.currentGraphRevision)} />
-        <InspectorMetric label="Intents" value={String(state.lastIntents.length)} />
-        <InspectorMetric label="Adapter" value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'} />
-        <InspectorMetric label="Status" value={latestResult ? (latestResult.success ? 'success' : 'failure') : 'idle'} />
-        <InspectorMetric label="Latency" value={latestAdapter ? `${latestAdapter.latencyMs}ms` : '—'} />
-        <InspectorMetric label="Intent" value={state.lastIntents.at(-1)?.type ?? '—'} />
-        <InspectorMetric label="Warnings" value={String(latestResult?.warnings.length ?? 0)} />
-        <InspectorMetric label="Errors" value={String(latestResult?.errors.length ?? 0)} />
+        <InspectorMetric label="Mode" value={state.runtimeMode} />
+        <InspectorMetric label="Active Adapter" value={state.activeAdapter?.name ?? '—'} />
+        <InspectorMetric label="Adapters" value={String(adapters.length)} />
+        <InspectorMetric label="Health" value={health.isHealthy ? 'healthy' : 'warning'} />
+        <InspectorMetric label="Executed" value={String(health.executedIntentCount)} />
+        <InspectorMetric
+          label="Skipped"
+          value={String(skippedCount || health.skippedIntentCount)}
+        />
+        <InspectorMetric
+          label="Failures"
+          value={String(failureCount || health.failedIntentCount)}
+        />
+        <InspectorMetric label="Dry Runs" value={String(dryRunCount)} />
+        <InspectorMetric label="Avg Latency" value={`${health.averageExecutionMs}ms`} />
+        <InspectorMetric label="Latest Intent" value={state.lastIntents.at(-1)?.type ?? '—'} />
+        <InspectorMetric
+          label="Latest Adapter"
+          value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
+        />
       </div>
-      <pre className="mt-3 overflow-auto rounded bg-black/40 p-2 text-[10px]">
-        {JSON.stringify({ intents: state.lastIntents.slice(-3), latestResult }, null, 2)}
-      </pre>
+      <div className="mt-3 flex flex-wrap gap-2" data-refresh-token={refreshToken}>
+        {(['disabled', 'dry_run', 'mock_live', 'live_ready'] as ExecutionRuntimeMode[]).map(
+          (mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setMode(mode)}
+              className={`rounded border px-2 py-1 font-bold uppercase tracking-[0.12em] ${state.runtimeMode === mode ? 'border-purple-300 bg-purple-500/20 text-purple-100' : 'border-slate-700 bg-slate-900 text-slate-400'}`}
+            >
+              {mode}
+            </button>
+          ),
+        )}
+        <button
+          type="button"
+          onClick={() => {
+            engine.clearExecutionLog();
+            rerender();
+          }}
+          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+        >
+          Clear log
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            engine.replayExecutionForRevision(state.currentGraphRevision);
+            rerender();
+          }}
+          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+        >
+          Replay latest
+        </button>
+        {adapters.find((adapter) => adapter.isMock) ? (
+          <button
+            type="button"
+            onClick={() => {
+              const adapter = adapters.find((item) => item.isMock);
+              if (adapter)
+                engine.setAdapterEnabled(adapter.id, adapter.status !== 'disabled' ? false : true);
+              rerender();
+            }}
+            className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+          >
+            Toggle mock adapter
+          </button>
+        ) : null}
+        {(['instant', 'steady', 'warning'] as const).map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => configureLatencyPreset(preset)}
+            className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+          >
+            {preset} latency
+          </button>
+        ))}
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2">
+        <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
+          {JSON.stringify(
+            { adapters, health, latestEvents: state.latestEvents.slice(-6) },
+            null,
+            2,
+          )}
+        </pre>
+        <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
+          {JSON.stringify(
+            {
+              latestIntents: state.lastIntents.slice(-5),
+              latestResult,
+              replay: engine.summarizeExecutionForRevision(state.currentGraphRevision),
+            },
+            null,
+            2,
+          )}
+        </pre>
+      </div>
     </details>
   );
 }
@@ -567,7 +701,20 @@ export function SceneWorkspace({
     (programRoute?.metadata.layoutPreset as MediaLayoutPreset | undefined) ?? 'full_screen';
   const mediaExecutionEngine = useMemo(() => {
     const engine = new MediaExecutionEngine();
-    engine.registerAdapter(new MockMediaExecutionAdapter({ latencyMs: 8 }));
+    engine.registerAdapter(new MockMediaExecutionAdapter({ latencyMs: 8 }), {
+      id: 'mock-media-execution-adapter',
+      name: 'Mock Media Execution Adapter',
+      type: 'mock',
+      capabilities: [
+        'SWITCH_PROGRAM_SCENE',
+        'UPDATE_PREVIEW_SCENE',
+        'START_RECORDING',
+        'STOP_RECORDING',
+      ],
+      isMock: true,
+      isLive: false,
+    });
+    engine.setExecutionRuntimeMode('mock_live');
     return engine;
   }, []);
   const productionGraphDispatcher = useMemo(
@@ -613,14 +760,20 @@ export function SceneWorkspace({
       clients,
       staleClientIds: new Set(getStaleClients(syncSession).map((client) => client.clientId)),
       acceptedCommands: productionGraphSession.commandLog.length,
-      rejectedCommands: productionGraphSession.eventLog.filter((event) => event.type === 'COMMAND_REJECTED').length,
-      catchUpRequiredCount: clients.filter((client) => client.recoveryState === 'catching_up').length,
-      lastSyncMessage: clients.find((client) => client.lastSyncMessage)?.lastSyncMessage ?? 'CLIENT_HEARTBEAT',
+      rejectedCommands: productionGraphSession.eventLog.filter(
+        (event) => event.type === 'COMMAND_REJECTED',
+      ).length,
+      catchUpRequiredCount: clients.filter((client) => client.recoveryState === 'catching_up')
+        .length,
+      lastSyncMessage:
+        clients.find((client) => client.lastSyncMessage)?.lastSyncMessage ?? 'CLIENT_HEARTBEAT',
       transport: realtimeSyncEnabled ? 'websocket' : 'local',
       connectionState: realtimeSyncEnabled ? 'configured' : 'local-simulation',
       syncUrl: realtimeSyncUrl ?? 'not configured',
-      connectedClientsCount: clients.filter((client) => client.connectionState === 'connected').length,
-      lastReceivedMessage: clients.find((client) => client.lastSyncMessage)?.lastSyncMessage ?? 'CLIENT_HEARTBEAT',
+      connectedClientsCount: clients.filter((client) => client.connectionState === 'connected')
+        .length,
+      lastReceivedMessage:
+        clients.find((client) => client.lastSyncMessage)?.lastSyncMessage ?? 'CLIENT_HEARTBEAT',
       lastSentMessage: 'CLIENT_HEARTBEAT',
       lastHeartbeatAt: clients.find((client) => client.lastHeartbeatAt)?.lastHeartbeatAt ?? '—',
       reconnectAttempts: 0,
@@ -1143,40 +1296,86 @@ export function SceneWorkspace({
                 </button>
                 {syncDiagnosticsEnabled ? (
                   <details className="rounded border border-amber-400/20 bg-amber-400/5 p-2">
-                    <summary className="cursor-pointer font-bold text-amber-100">Authority diagnostics</summary>
+                    <summary className="cursor-pointer font-bold text-amber-100">
+                      Authority diagnostics
+                    </summary>
                     <div className="mt-2 space-y-2 font-mono text-[9px] text-slate-400">
-                      <div>scopes {authorityDiagnostics.scopes.length} · active locks {authorityDiagnostics.activeLocks.length} · expired {authorityDiagnostics.expiredLocks.length}</div>
-                      <div>conflicts {authorityDiagnostics.conflicts.length} · recent decisions {authorityDiagnostics.decisions.length} · director override {authorityDiagnostics.canOverride ? 'yes' : 'no'}</div>
-                      <div className="grid gap-1">
-                        {authorityDiagnostics.scopes.filter((node) => node.owner).slice(0, 6).map((node) => (
-                          <div key={node.scope} className="rounded bg-slate-900 p-1">{node.scope} → {node.owner?.displayName ?? node.owner?.operatorId} ({node.owner?.role})</div>
-                        ))}
+                      <div>
+                        scopes {authorityDiagnostics.scopes.length} · active locks{' '}
+                        {authorityDiagnostics.activeLocks.length} · expired{' '}
+                        {authorityDiagnostics.expiredLocks.length}
                       </div>
-                      {[...authorityDiagnostics.activeLocks, ...authorityDiagnostics.expiredLocks].map((lock) => (
-                        <div key={lock.id} className="rounded bg-slate-900 p-1">{lock.scope} lock · {lock.ownerOperatorId} · {lock.status} · expires {lock.expiresAt}</div>
+                      <div>
+                        conflicts {authorityDiagnostics.conflicts.length} · recent decisions{' '}
+                        {authorityDiagnostics.decisions.length} · director override{' '}
+                        {authorityDiagnostics.canOverride ? 'yes' : 'no'}
+                      </div>
+                      <div className="grid gap-1">
+                        {authorityDiagnostics.scopes
+                          .filter((node) => node.owner)
+                          .slice(0, 6)
+                          .map((node) => (
+                            <div key={node.scope} className="rounded bg-slate-900 p-1">
+                              {node.scope} → {node.owner?.displayName ?? node.owner?.operatorId} (
+                              {node.owner?.role})
+                            </div>
+                          ))}
+                      </div>
+                      {[
+                        ...authorityDiagnostics.activeLocks,
+                        ...authorityDiagnostics.expiredLocks,
+                      ].map((lock) => (
+                        <div key={lock.id} className="rounded bg-slate-900 p-1">
+                          {lock.scope} lock · {lock.ownerOperatorId} · {lock.status} · expires{' '}
+                          {lock.expiresAt}
+                        </div>
                       ))}
                       {authorityDiagnostics.conflicts.map((conflict) => (
-                        <div key={conflict.id} className="rounded bg-slate-900 p-1 text-rose-200">{conflict.type} · {conflict.scope} · {conflict.message}</div>
+                        <div key={conflict.id} className="rounded bg-slate-900 p-1 text-rose-200">
+                          {conflict.type} · {conflict.scope} · {conflict.message}
+                        </div>
                       ))}
                     </div>
                   </details>
                 ) : null}
                 {syncDiagnosticsEnabled ? (
                   <details className="rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
-                    <summary className="cursor-pointer font-bold text-cyan-100">Sync diagnostics</summary>
+                    <summary className="cursor-pointer font-bold text-cyan-100">
+                      Sync diagnostics
+                    </summary>
                     <div className="mt-2 space-y-2 font-mono text-[9px] text-slate-400">
-                      <div>transport {syncDiagnostics.transport} · state {syncDiagnostics.connectionState}</div>
+                      <div>
+                        transport {syncDiagnostics.transport} · state{' '}
+                        {syncDiagnostics.connectionState}
+                      </div>
                       <div>sync URL {syncDiagnostics.syncUrl}</div>
-                      <div>clients {syncDiagnostics.connectedClientsCount} · reconnects {syncDiagnostics.reconnectAttempts}</div>
-                      <div>last rx {syncDiagnostics.lastReceivedMessage} · last tx {syncDiagnostics.lastSentMessage}</div>
+                      <div>
+                        clients {syncDiagnostics.connectedClientsCount} · reconnects{' '}
+                        {syncDiagnostics.reconnectAttempts}
+                      </div>
+                      <div>
+                        last rx {syncDiagnostics.lastReceivedMessage} · last tx{' '}
+                        {syncDiagnostics.lastSentMessage}
+                      </div>
                       <div>heartbeat {syncDiagnostics.lastHeartbeatAt}</div>
                       <div>session {syncDiagnostics.session.id}</div>
-                      <div>revision {syncDiagnostics.session.currentGraphRevision} · last {syncDiagnostics.lastSyncMessage}</div>
-                      <div>accepted {syncDiagnostics.acceptedCommands} · rejected {syncDiagnostics.rejectedCommands} · catch-up {syncDiagnostics.catchUpRequiredCount}</div>
+                      <div>
+                        revision {syncDiagnostics.session.currentGraphRevision} · last{' '}
+                        {syncDiagnostics.lastSyncMessage}
+                      </div>
+                      <div>
+                        accepted {syncDiagnostics.acceptedCommands} · rejected{' '}
+                        {syncDiagnostics.rejectedCommands} · catch-up{' '}
+                        {syncDiagnostics.catchUpRequiredCount}
+                      </div>
                       <div className="space-y-1">
                         {syncDiagnostics.clients.map((client) => (
                           <div key={client.clientId} className="rounded bg-slate-900 p-1">
-                            <span className="text-slate-200">{client.displayName}</span> rev {client.observedGraphRevision} lag {client.revisionLag} · {syncDiagnostics.staleClientIds.has(client.clientId) ? 'stale' : client.connectionState}
+                            <span className="text-slate-200">{client.displayName}</span> rev{' '}
+                            {client.observedGraphRevision} lag {client.revisionLag} ·{' '}
+                            {syncDiagnostics.staleClientIds.has(client.clientId)
+                              ? 'stale'
+                              : client.connectionState}
                           </div>
                         ))}
                       </div>
