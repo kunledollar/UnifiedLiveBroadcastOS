@@ -1,0 +1,85 @@
+import type { ProductionGraph } from '../../../shared/src/production-graph.js';
+import type { MediaExecutionAdapter, MediaExecutionAdapterResponse, MediaExecutionIntent, MediaExecutionIntentType, ExecutionRuntimeMode } from '../index.js';
+import { createSceneCompositionFromGraph, type CompositionLayer, type CompositionRenderTarget, type SceneComposition } from '../compositor/index.js';
+import type { BrowserMediaSourceManager } from '../adapters/webrtc/source-manager.js';
+
+type StreamLike = Pick<MediaStream, 'id' | 'getTracks' | 'getVideoTracks'>;
+type CanvasLike = HTMLCanvasElement & { width: number; height: number; getContext(type: '2d'): CanvasRenderingContext2D | null };
+type ContextLike = Pick<CanvasRenderingContext2D, 'save'|'restore'|'clearRect'|'fillRect'|'strokeRect'|'fillText'|'drawImage'|'beginPath'|'rect'|'clip'|'translate'|'rotate'|'scale'> & Partial<CanvasRenderingContext2D>;
+
+export type BrowserRenderTarget = CompositionRenderTarget | 'debug_composition_preview';
+export type BrowserRendererErrorCode = 'RENDER_TARGET_MISSING'|'CANVAS_CONTEXT_UNAVAILABLE'|'SOURCE_STREAM_MISSING'|'VIDEO_ELEMENT_FAILED'|'UNSUPPORTED_LAYER_TYPE'|'RENDER_LOOP_ERROR';
+export interface BrowserRendererError { readonly code: BrowserRendererErrorCode; readonly message: string; readonly layerId?: string; readonly sourceId?: string; }
+export interface BrowserRendererStats { readonly frameCount: number; readonly droppedFrames: number; readonly averageRenderTimeMs: number; readonly lastRenderDurationMs: number; readonly estimatedFps: number; readonly targetFps: number; readonly running: boolean; }
+export interface BrowserRenderOptions { readonly target?: BrowserRenderTarget; readonly debug?: boolean; }
+export interface BrowserRenderResult { readonly success: boolean; readonly target: BrowserRenderTarget; readonly compositionId?: string; readonly timestamp: string; readonly warnings: readonly string[]; readonly errors: readonly BrowserRendererError[]; readonly stats: BrowserRendererStats; }
+export interface RenderableSource { readonly sourceId: string; readonly stream?: StreamLike; readonly videoElement?: HTMLVideoElement; readonly kind: 'video'|'placeholder'; readonly warning?: string; }
+
+export function isBrowserRendererEnabled(env: Record<string, string | undefined> = {}) { return env.NEXT_PUBLIC_UBOS_BROWSER_RENDERER === 'true'; }
+export function createBrowserRendererError(code: BrowserRendererErrorCode, message: string, extra: Partial<BrowserRendererError> = {}): BrowserRendererError { return { code, message, ...extra }; }
+
+export function bindMediaStreamToVideoElement(stream: StreamLike, video: HTMLVideoElement) {
+  try { video.srcObject = stream as MediaStream; video.muted = true; video.playsInline = true; video.autoplay = true; void video.play?.().catch?.(() => undefined); return undefined; }
+  catch { return createBrowserRendererError('VIDEO_ELEMENT_FAILED', `Unable to bind stream ${stream.id} to video element`, { sourceId: stream.id }); }
+}
+export function createVideoElementForStream(stream: StreamLike, ownerDocument: Document = document) {
+  const video = ownerDocument.createElement('video');
+  const error = bindMediaStreamToVideoElement(stream, video);
+  return { video, error };
+}
+export function releaseVideoElement(video?: HTMLVideoElement) { if (!video) return; try { video.pause?.(); video.srcObject = null; video.removeAttribute('src'); video.load?.(); } catch { /* runtime cleanup only */ } }
+export function resolveLayerRuntimeSource(layer: CompositionLayer, manager?: BrowserMediaSourceManager): RenderableSource {
+  const stream = manager?.getStream(layer.sourceId) as StreamLike | undefined;
+  if (!stream) return { sourceId: layer.sourceId, kind: 'placeholder', warning: `SOURCE_STREAM_MISSING:${layer.sourceId}` };
+  const base: RenderableSource = { sourceId: layer.sourceId, stream, kind: stream.getVideoTracks().some((track) => track.readyState !== 'ended') ? 'video' : 'placeholder' };
+  return stream.getVideoTracks().length ? base : { ...base, warning: `SOURCE_STREAM_MISSING:${layer.sourceId}` };
+}
+export function getRenderableSourceForLayer(layer: CompositionLayer, manager?: BrowserMediaSourceManager, videos = new Map<string, HTMLVideoElement>(), ownerDocument?: Document): RenderableSource {
+  const resolved = resolveLayerRuntimeSource(layer, manager);
+  if (!resolved.stream || resolved.kind === 'placeholder') return resolved;
+  let video = videos.get(layer.sourceId);
+  if (!video && ownerDocument) { const created = createVideoElementForStream(resolved.stream, ownerDocument); video = created.video; videos.set(layer.sourceId, video); if (created.error) return { ...resolved, kind: 'placeholder', warning: created.error.code }; }
+  return video ? { ...resolved, videoElement: video } : resolved;
+}
+
+export class RenderScheduler {
+  private running = false; private targetFps = 30; private timer?: ReturnType<typeof setTimeout>; private frameCount = 0; private droppedFrames = 0; private totalMs = 0; private lastMs = 0; private startedAt = 0;
+  constructor(private readonly render: () => BrowserRenderResult) {}
+  start() { if (this.running) return; this.running = true; this.startedAt = Date.now(); this.tick(); }
+  stop() { this.running = false; if (this.timer) clearTimeout(this.timer); }
+  renderFrame() { const start = Date.now(); try { const result = this.render(); this.lastMs = Date.now() - start; this.totalMs += this.lastMs; this.frameCount += 1; return result; } catch { this.droppedFrames += 1; throw createBrowserRendererError('RENDER_LOOP_ERROR', 'Render loop failed'); } }
+  setTargetFps(fps: number) { this.targetFps = Math.max(1, Math.min(120, Math.round(fps))); }
+  getStats(): BrowserRendererStats { const seconds = this.startedAt ? (Date.now() - this.startedAt) / 1000 : 0; return { frameCount: this.frameCount, droppedFrames: this.droppedFrames, averageRenderTimeMs: this.frameCount ? Math.round(this.totalMs / this.frameCount) : 0, lastRenderDurationMs: this.lastMs, estimatedFps: seconds > 0 ? Math.round(this.frameCount / seconds) : 0, targetFps: this.targetFps, running: this.running }; }
+  clearStats() { this.frameCount = 0; this.droppedFrames = 0; this.totalMs = 0; this.lastMs = 0; this.startedAt = this.running ? Date.now() : 0; }
+  private tick() { if (!this.running) return; try { this.renderFrame(); } catch { this.droppedFrames += 1; } this.timer = setTimeout(() => this.tick(), 1000 / this.targetFps); }
+}
+
+export class BrowserMediaRenderer {
+  private composition?: SceneComposition; private target: BrowserRenderTarget = 'preview'; private debug = false; private videos = new Map<string, HTMLVideoElement>(); private scheduler = new RenderScheduler(() => this.renderFrame()); private latestError: BrowserRendererError | undefined;
+  constructor(private readonly options: { canvas?: CanvasLike; sourceManager?: BrowserMediaSourceManager; target?: BrowserRenderTarget; debug?: boolean } = {}) { this.target = options.target ?? 'preview'; this.debug = options.debug ?? false; }
+  setCanvas(canvas: CanvasLike) { (this.options as { canvas?: CanvasLike }).canvas = canvas; }
+  setComposition(composition: SceneComposition) { this.composition = composition; }
+  setDebug(debug: boolean) { this.debug = debug; }
+  start() { this.scheduler.start(); } stop() { this.scheduler.stop(); } setTargetFps(fps: number) { this.scheduler.setTargetFps(fps); } getStats() { return this.scheduler.getStats(); } clearStats() { this.scheduler.clearStats(); } getHealth() { return { target: this.target, compositionId: this.composition?.id, layerCount: this.composition?.layers.length ?? 0, runtimeSourceCount: this.options.sourceManager?.listSources().length ?? 0, latestError: this.latestError, stats: this.getStats() }; }
+  render(composition: SceneComposition, options: BrowserRenderOptions = {}) { this.composition = composition; this.target = options.target ?? this.target; this.debug = options.debug ?? this.debug; return this.renderFrame(); }
+  renderFrame(): BrowserRenderResult {
+    const started = Date.now(); const warnings: string[] = []; const errors: BrowserRendererError[] = []; const composition = this.composition; const canvas = this.options.canvas;
+    if (!canvas) errors.push(createBrowserRendererError('RENDER_TARGET_MISSING', 'Browser render target canvas is not registered'));
+    const context = canvas?.getContext('2d') as ContextLike | null | undefined;
+    if (canvas && !context) errors.push(createBrowserRendererError('CANVAS_CONTEXT_UNAVAILABLE', 'Canvas 2D context is unavailable'));
+    if (canvas && context && composition) this.drawComposition(context, canvas, composition, warnings);
+    else if (canvas && context) this.drawPlaceholder(context, { x: 0, y: 0, width: canvas.width, height: canvas.height }, 'No active composition');
+    this.latestError = errors.at(-1); const stats = this.scheduler.getStats();
+    return { success: errors.length === 0, target: this.target, ...(composition ? { compositionId: composition.id } : {}), timestamp: new Date(started).toISOString(), warnings, errors, stats };
+  }
+  private drawComposition(ctx: ContextLike, canvas: CanvasLike, c: SceneComposition, warnings: string[]) { canvas.width = c.canvas.width; canvas.height = c.canvas.height; ctx.clearRect(0,0,canvas.width,canvas.height); ctx.fillStyle = c.background.color ?? c.canvas.backgroundColor; ctx.fillRect(0,0,canvas.width,canvas.height); const layers = [...c.layers].filter((l)=>l.visible).sort((a,b)=>a.zIndex-b.zIndex || a.id.localeCompare(b.id)); if (!layers.length) this.drawPlaceholder(ctx,{x:0,y:0,width:canvas.width,height:canvas.height},'Empty composition'); for (const layer of layers) this.drawLayer(ctx, layer, warnings); if (this.debug) this.drawGuides(ctx, c); }
+  private drawLayer(ctx: ContextLike, layer: CompositionLayer, warnings: string[]) { const source = getRenderableSourceForLayer(layer, this.options.sourceManager, this.videos, this.options.canvas?.ownerDocument); if (source.warning) warnings.push(source.warning); ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, layer.opacity)); ctx.beginPath(); ctx.rect(layer.bounds.x, layer.bounds.y, layer.bounds.width, layer.bounds.height); ctx.clip(); if (source.videoElement) ctx.drawImage(source.videoElement, layer.bounds.x, layer.bounds.y, layer.bounds.width, layer.bounds.height); else this.drawPlaceholder(ctx, layer.bounds, layer.label || layer.sourceId); if (this.debug) { ctx.strokeStyle = '#22d3ee'; ctx.lineWidth = 3; ctx.strokeRect(layer.bounds.x, layer.bounds.y, layer.bounds.width, layer.bounds.height); } ctx.restore(); }
+  private drawPlaceholder(ctx: ContextLike, b: {x:number;y:number;width:number;height:number}, label: string) { ctx.fillStyle = '#111827'; ctx.fillRect(b.x,b.y,b.width,b.height); ctx.strokeStyle = '#f59e0b'; ctx.strokeRect(b.x,b.y,b.width,b.height); ctx.fillStyle = '#fde68a'; ctx.font = '24px sans-serif'; ctx.fillText(label, b.x + 16, b.y + 36); }
+  private drawGuides(ctx: ContextLike, c: SceneComposition) { ctx.strokeStyle = '#a78bfa'; ctx.lineWidth = 2; for (const area of c.safeAreas) ctx.strokeRect(area.bounds.x, area.bounds.y, area.bounds.width, area.bounds.height); }
+}
+
+export class BrowserRendererStore { private renderers = new Map<string, BrowserMediaRenderer>(); private canvases = new Map<string, CanvasLike>(); private compositions = new Map<BrowserRenderTarget, SceneComposition>(); private stats = new Map<string, BrowserRendererStats>(); private errors = new Map<string, BrowserRendererError>(); registerRenderer(id: string, renderer: BrowserMediaRenderer, canvas?: CanvasLike) { this.renderers.set(id, renderer); if (canvas) this.canvases.set(id, canvas); return renderer; } unregisterRenderer(id: string) { this.renderers.get(id)?.stop(); this.renderers.delete(id); this.canvases.delete(id); } getRenderer(id: string) { return this.renderers.get(id); } listRenderers() { return [...this.renderers.entries()].map(([id, renderer]) => ({ id, renderer, stats: renderer.getStats() })); } setActiveComposition(target: BrowserRenderTarget, composition: SceneComposition) { this.compositions.set(target, composition); } getActiveComposition(target: BrowserRenderTarget) { return this.compositions.get(target); } setRenderStats(id: string, stats: BrowserRendererStats) { this.stats.set(id, stats); } getRenderStats(id: string) { return this.renderers.get(id)?.getStats() ?? this.stats.get(id); } setLatestError(id: string, error: BrowserRendererError) { this.errors.set(id, error); } getLatestError(id: string) { return this.errors.get(id); } clear() { this.renderers.forEach((r)=>r.stop()); this.renderers.clear(); this.canvases.clear(); this.compositions.clear(); this.stats.clear(); this.errors.clear(); } }
+
+const SUPPORTED = ['RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME'] as const satisfies readonly MediaExecutionIntentType[];
+export class BrowserRendererAdapter implements MediaExecutionAdapter { private last?: MediaExecutionAdapterResponse; constructor(private readonly renderer: BrowserMediaRenderer, private readonly mode: ExecutionRuntimeMode = 'live_ready') {} getName() { return 'BrowserRendererAdapter'; } canHandle(intent: MediaExecutionIntent) { return SUPPORTED.includes(intent.type as (typeof SUPPORTED)[number]); } getCapabilities() { return [...SUPPORTED]; } getHealth() { return this.renderer.getHealth(); } execute(intent: MediaExecutionIntent, graph: ProductionGraph): MediaExecutionAdapterResponse { const start = Date.now(); if (this.mode === 'disabled') return this.respond(start, true, ['Browser renderer disabled'], []); if (this.mode === 'dry_run') return this.respond(start, true, [`Dry run browser render intent ${intent.type}`], []); if (!this.canHandle(intent)) return this.respond(start, false, [], [`UNSUPPORTED_INTENT:${intent.type}`]); try { if (intent.type === 'START_BROWSER_RENDERER') this.renderer.start(); else if (intent.type === 'STOP_BROWSER_RENDERER') this.renderer.stop(); else { const sceneId = String(intent.payload.sceneId ?? graph.preview.sceneId ?? graph.program.sceneId ?? ''); if (sceneId && !this.renderer.getHealth().compositionId) this.renderer.setComposition(createSceneCompositionFromGraph(graph, sceneId, { target: (intent.payload.target as CompositionRenderTarget) ?? 'preview' })); const result = this.renderer.renderFrame(); return this.respond(start, result.success, [...result.warnings], result.errors.map((e)=>`${e.code}:${e.message}`)); } return this.respond(start, true, [], []); } catch { return this.respond(start, false, [], ['RENDER_LOOP_ERROR:Browser renderer execution failed']); } } private respond(start: number, success: boolean, warnings: string[], errors: string[]) { this.last = { adapterName: this.getName(), success, timestamp: new Date().toISOString(), latencyMs: Date.now() - start, warnings, errors }; return this.last; } }
+export function createBrowserRendererAdapterMetadata(adapter: BrowserRendererAdapter) { return { id: 'browser-renderer-adapter', name: 'Browser Renderer Adapter', type: 'browser-renderer', status: isBrowserRendererEnabled(typeof globalThis !== 'undefined' && 'process' in globalThis ? ((globalThis as { process?: { env?: Record<string, string | undefined> } }).process?.env ?? {}) : {}) ? 'enabled' : 'disabled', capabilities: adapter.getCapabilities(), isMock: false, isLive: true } as const; }
