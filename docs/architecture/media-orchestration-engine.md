@@ -1,10 +1,10 @@
 # Media Orchestration Engine
 
-Phase 7.0 introduces the Media Orchestration Engine as UBOS's deterministic runtime coordinator between the Media Execution Plane and media subsystems. It is a decision and coordination layer, not a renderer, transport, decoder, or persistence layer.
+Phase 7.0.1 defines the Media Orchestration Engine as UBOS's deterministic planning layer between media intents and the Media Execution Plane. It is a pure decision system, not a renderer, transport, decoder, persistence layer, adapter, or executor.
 
 ## Orchestration Model
 
-The orchestration model centers on a `MediaIntentGraph`. Each `MediaIntent` normalizes execution-plane requests into one of five subsystem classes:
+The orchestration model centers on a read-only `MediaIntentGraph`, a `MediaClock` tick, and a read-only subsystem state snapshot. Each `MediaIntent` normalizes requests into one of five subsystem classes:
 
 - `video` for video route planning and activation.
 - `audio` for audio route and mix operations.
@@ -16,7 +16,7 @@ Each intent carries an id, source graph revision, dependencies, deterministic pr
 
 ## Frame Planning System
 
-`MediaFramePlan` is the frame-level contract produced by orchestration. It contains the aligned frame timestamp, ordered execution steps, and subsystem batches for video, audio, render, output, and sync work. Planning is stable: identical queued intents, graph revisions, dependencies, priorities, and frame timestamps produce the same step order.
+`MediaFramePlan` is the only frame-level contract produced by orchestration. It contains the aligned frame timestamp, ordered execution steps, and subsystem batches for video, audio, render, output, and sync work. Planning is stable: identical intent graphs, graph revisions, dependencies, priorities, frame ticks, and subsystem snapshots produce the same frame plan.
 
 The deterministic ordering rules are:
 
@@ -29,19 +29,21 @@ The deterministic ordering rules are:
 
 The engine builds a dependency graph for the current queue, topologically sorts intents, detects circular dependencies, and records conflicts without mutating the intent graph. Priority and timestamp conflicts are diagnostic only. Cycles are never silent; they emit orchestration conflict events and remain visible in diagnostics.
 
-## Subsystem Coordination
+## Planning and Execution Boundary
 
-Lightweight subsystem adapters expose the common interface:
+Orchestration never imports `MediaExecutionEngine`, renderer adapters, audio adapters, video adapters, output adapters, or subsystem implementations. It exposes planning contracts only and may depend on a narrow `MediaExecutionPort` type for boundary documentation:
 
-- `canExecute(intent)`
-- `validate(intent)`
-- `execute(intent)`
+- `submitVideoOps(plan)`
+- `submitAudioOps(plan)`
+- `submitRenderOps(plan)`
+- `submitOutputOps(plan)`
+- `getSubsystemState()`
 
-The current adapters are `VideoExecutionCoordinator`, `AudioExecutionCoordinator`, `RenderExecutionCoordinator`, and `OutputExecutionCoordinator`. They coordinate orchestration decisions only and do not introduce media decoding, rendering, routing, or transport behavior.
+The execution engine implements that port and is responsible for dispatching a `MediaFramePlan` to adapters. Orchestration remains planner-only; execution remains executor-only.
 
 ## MediaClock Integration
 
-The orchestration engine plans work only against MediaClock frame timestamps. Late intents are moved to the next available frame by planning against the current clock frame timestamp. Early intents remain queued until their `earliestFrameTimestamp` or requested frame timestamp is eligible. Frame execution is therefore explicit and synchronized.
+The orchestration engine plans work only against MediaClock frame timestamps. Late intents are moved to the next available frame by planning against the current clock frame timestamp. Early intents remain queued until their `earliestFrameTimestamp` or requested frame timestamp is eligible. Frame execution is performed elsewhere by the execution plane.
 
 ## Execution Lifecycle
 
@@ -49,12 +51,8 @@ The orchestration engine plans work only against MediaClock frame timestamps. La
 2. Execution intents are normalized into media intents and submitted to the orchestration queue.
 3. The engine resolves dependencies and diagnostics.
 4. The engine creates a `MediaFramePlan` for a frame timestamp.
-5. The execution plane dispatches ordered steps while orchestration coordinators simulate subsystem execution in mock mode.
-6. The engine reconciles in-memory subsystem state and emits frame completion diagnostics.
-
-## Mock Orchestration Mode
-
-`MOCK_ORCHESTRATION_MODE` is enabled for deterministic testing. In this mode, subsystem coordinators log simulated execution responses and never touch real renderer, audio, video, or output logic. The existing media adapters remain responsible for their own mock-safe behavior.
+5. The execution plane dispatches the plan's ordered steps and subsystem batches.
+6. Execution results stay in the execution layer; orchestration diagnostics remain planning-only.
 
 ## Diagnostics
 
@@ -62,4 +60,4 @@ The Control Room inspector exposes active intents, active frame plans, dependenc
 
 ## Future Real-Time Scaling Plan
 
-Future phases can replace mock coordinator execution with real subsystem-specific schedulers, add bounded per-subsystem execution budgets, introduce backpressure policies for overloaded outputs, and distribute frame plans across workers. The deterministic intent graph and frame plan should remain the stable coordination boundary.
+Future phases can add real subsystem-specific schedulers inside the execution plane, add bounded per-subsystem execution budgets, introduce backpressure policies for overloaded outputs, and distribute frame plans across workers. The deterministic intent graph and frame plan should remain the stable coordination boundary.

@@ -18,7 +18,7 @@ import {
 import {
   type FrameTickEvent,
 } from './sync/index.js';
-import { MediaOrchestrationEngine, toMediaIntent, toExecutionIntent } from './orchestration.js';
+import { MediaOrchestrationEngine, type MediaExecutionPort, type MediaFramePlan, type MediaIntent, type MediaSubsystemStateSnapshot, type TargetSubsystem } from './orchestration.js';
 import { createClock } from './sync/clock.js';
 import {
   AudioRouteStore,
@@ -96,6 +96,16 @@ export interface MediaExecutionIntent<TPayload = Record<string, unknown>> {
   readonly graphRevision: number;
   readonly payload: Readonly<TPayload>;
 }
+
+const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_PLAN','UPDATE_VIDEO_ROUTE','ACTIVATE_VIDEO_ROUTE','DEACTIVATE_VIDEO_ROUTE','ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','ROUTE_MULTIVIEW_VIDEO','ROUTE_RECORDING_VIDEO','ROUTE_STREAM_VIDEO']);
+const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
+const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','APPLY_LAYOUT']);
+const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION']);
+const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
+function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
+export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
+export function toMediaIntent(intent: MediaExecutionIntent): MediaIntent { const targetSubsystem = subsystemForExecutionType(intent.type); return { id: intent.id, type: targetSubsystem, executionType: intent.type, sourceGraphRevision: intent.graphRevision, dependencies: (intent.payload.dependencies as string[]|undefined) ?? [], priority: Number(intent.payload.priority ?? defaultOrchestrationPriority(intent.type)), targetSubsystem, payload: intent.payload, timingConstraint: typeof intent.payload.frameTimestamp === 'number' ? { requestedFrameTimestamp: intent.payload.frameTimestamp } : {}, submittedAt: intent.timestamp }; }
+export function toExecutionIntent(intent: MediaIntent, frameTimestamp: number): MediaExecutionIntent { return { id: intent.id, type: intent.executionType as MediaExecutionIntentType, timestamp: new Date(frameTimestamp).toISOString(), graphRevision: intent.sourceGraphRevision, payload: { ...intent.payload, frameTimestamp, orchestrationSubsystem: intent.targetSubsystem } }; }
 
 export interface MediaExecutionAdapterResponse {
   readonly adapterName: string;
@@ -590,7 +600,7 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   }
 }
 
-export class MediaExecutionEngine implements MediaExecutionPlane {
+export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecutionPort {
   private readonly adapterRegistry = new AdapterRegistry();
   private readonly eventStream = new ExecutionEventStream();
   private lastIntents: MediaExecutionIntent[] = [];
@@ -646,19 +656,18 @@ export class MediaExecutionEngine implements MediaExecutionPlane {
     const base = intents.length ? [...intents] : [{ id: `frame-sync:${tick.frameId}`, type: 'EXECUTE_FRAME_SYNC' as const, timestamp: new Date(tick.broadcastTime).toISOString(), graphRevision: graph.metadata.revision, payload: { frameTick: tick } }];
     const ordered = base.map((intent) => ({ ...intent, payload: { ...intent.payload, frameTick: tick, frameId: tick.frameId, frameTimestamp: tick.timestamp } })).sort((a,b) => order.indexOf(a.type) - order.indexOf(b.type) || a.id.localeCompare(b.id));
     ordered.forEach((intent) => this.orchestrationEngine.submitIntent(toMediaIntent(intent)));
-    const framePlan = this.orchestrationEngine.planExecutionFrame(tick.timestamp);
+    const framePlan = this.orchestrationEngine.planExecutionFrame(tick.timestamp, this.getSubsystemState());
     this.lastIntents = framePlan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, framePlan.frameTimestamp));
     this.currentGraphRevision = graph.metadata.revision;
     const results: MediaExecutionResult[] = [];
     for (const intent of this.lastIntents) results.push(await this.dispatchIntent(intent, graph));
-    await this.orchestrationEngine.executeFramePlan(framePlan, graph);
     this.lastResults = results;
     return results;
   }
   async onGraphTransition(transition: ProductionGraphTransition) {
     const intents = translateGraphTransitionToIntents(transition);
     intents.forEach((intent) => this.orchestrationEngine.submitIntent(toMediaIntent(intent)));
-    const framePlan = this.orchestrationEngine.planExecutionFrame(0);
+    const framePlan = this.orchestrationEngine.planExecutionFrame(0, this.getSubsystemState());
     this.lastIntents = framePlan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, framePlan.frameTimestamp));
     this.currentGraphRevision = transition.nextRevision;
     intents.forEach((intent) =>
@@ -676,12 +685,35 @@ export class MediaExecutionEngine implements MediaExecutionPlane {
       this.lastIntents.map((intent) => this.dispatchIntent(intent, transition.nextGraph)),
     );
     this.lastResults = results;
-    await this.orchestrationEngine.executeFramePlan(framePlan, transition.nextGraph);
     return results;
   }
   handleTransition(transition: ProductionGraphTransition) {
     void this.onGraphTransition(transition);
   }
+  submitVideoOps(plan: MediaFramePlan) {
+    return plan.subsystemBatches.videoOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+  }
+  submitAudioOps(plan: MediaFramePlan) {
+    return plan.subsystemBatches.audioOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+  }
+  submitRenderOps(plan: MediaFramePlan) {
+    return plan.subsystemBatches.renderOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+  }
+  submitOutputOps(plan: MediaFramePlan) {
+    return plan.subsystemBatches.outputOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+  }
+  getSubsystemState(): MediaSubsystemStateSnapshot {
+    return { video: 'ready', audio: 'ready', render: 'ready', output: 'ready', sync: 'ready' };
+  }
+  async executeMediaFramePlan(plan: MediaFramePlan, graph: ProductionGraph) {
+    const intents = plan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    const results: MediaExecutionResult[] = [];
+    for (const intent of intents) results.push(await this.dispatchIntent(intent, graph));
+    this.lastIntents = intents;
+    this.lastResults = results;
+    return results;
+  }
+
   getExecutionState(): MediaExecutionState {
     const latestLog = this.logStore.getLatest();
     const activeAdapter = this.adapterRegistry.getActiveAdapter(this.runtimeMode)?.metadata;
