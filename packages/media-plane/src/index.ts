@@ -58,7 +58,12 @@ export type MediaExecutionIntentType =
   | 'BUILD_STREAM_MIX'
   | 'BUILD_RECORDING_MIX'
   | 'BUILD_MONITOR_MIX'
-  | 'BUILD_GUEST_RETURN_MIX';
+  | 'BUILD_GUEST_RETURN_MIX'
+  | 'RENDER_BROWSER_COMPOSITION'
+  | 'START_BROWSER_RENDERER'
+  | 'STOP_BROWSER_RENDERER'
+  | 'UPDATE_BROWSER_RENDER_TARGET'
+  | 'RENDER_FRAME';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -113,6 +118,7 @@ export * from './adapters/webrtc/index.js';
 export * from './compositor/index.js';
 export * from './routing.js';
 export * from './audio-routing/index.js';
+export * from './browser-renderer/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -457,6 +463,8 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       'RENDER_PROGRAM_COMPOSITION',
       'RENDER_PREVIEW_COMPOSITION',
       'RENDER_MULTIVIEW_COMPOSITION',
+      'RENDER_BROWSER_COMPOSITION',
+      'RENDER_FRAME',
       'APPLY_LAYOUT',
     ];
     if (!shouldFail && graph && compositionIntentTypes.includes(intent.type)) {

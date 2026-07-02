@@ -29,6 +29,10 @@ import {
   createAudioRouteGraph,
   validateAudioRoutePlan,
   type ExecutionRuntimeMode,
+  BrowserMediaRenderer,
+  BrowserRendererAdapter,
+  createBrowserRendererAdapterMetadata,
+  isBrowserRendererEnabled,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -142,6 +146,10 @@ function MediaExecutionInspector({
   const enabled = process.env.NEXT_PUBLIC_UBOS_MEDIA_EXECUTION_INSPECTOR === 'true';
   const [refreshToken, setRefreshToken] = useState(0);
   const [permissionError, setPermissionError] = useState<string | undefined>();
+  const browserRendererFlagEnabled = isBrowserRendererEnabled(process.env);
+  const browserCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const browserRenderer = useMemo(() => new BrowserMediaRenderer({ target: 'debug_composition_preview', debug: true }), []);
+  const [browserDebug, setBrowserDebug] = useState(true);
   const webRTCAdapter = engine.getRegisteredAdapter('webrtc-media-execution-adapter');
   const webRTC = webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
   const webRTCDiagnostics = webRTC?.getDiagnostics();
@@ -157,6 +165,13 @@ function MediaExecutionInspector({
     ...(programComposition ? getCompositionWarnings(programComposition) : []),
     ...(previewComposition ? getCompositionWarnings(previewComposition) : []),
   ];
+  useEffect(() => {
+    if (!browserRendererFlagEnabled || !browserCanvasRef.current) return;
+    browserRenderer.setCanvas(browserCanvasRef.current);
+    browserRenderer.setDebug(browserDebug);
+    if (programComposition) browserRenderer.setComposition(programComposition);
+  }, [browserRendererFlagEnabled, browserDebug, browserRenderer, programComposition]);
+  const browserHealth = browserRenderer.getHealth();
   const audioRoutePlan = createAudioRoutePlan(graph, {
     includeRecording: graph.recording.status === 'recording',
     includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled),
@@ -373,6 +388,32 @@ function MediaExecutionInspector({
           value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
         />
       </div>
+      {browserRendererFlagEnabled ? (
+        <div className="mt-3 rounded-lg border border-cyan-700/40 bg-cyan-950/20 p-2">
+          <p className="font-black uppercase tracking-[0.16em] text-cyan-200">Browser Renderer</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-4">
+            <InspectorMetric label="Enabled" value="true" />
+            <InspectorMetric label="Targets" value={programComposition?.renderTargets.join(', ') ?? '—'} />
+            <InspectorMetric label="Composition" value={browserHealth.compositionId ?? '—'} />
+            <InspectorMetric label="Layers" value={String(browserHealth.layerCount)} />
+            <InspectorMetric label="Runtime Sources" value={String(webRTCDiagnostics?.activeLocalStreamCount ?? 0)} />
+            <InspectorMetric label="Frames" value={String(browserHealth.stats.frameCount)} />
+            <InspectorMetric label="Target FPS" value={String(browserHealth.stats.targetFps)} />
+            <InspectorMetric label="Est FPS" value={String(browserHealth.stats.estimatedFps)} />
+            <InspectorMetric label="Last Render" value={`${browserHealth.stats.lastRenderDurationMs}ms`} />
+            <InspectorMetric label="Missing Sources" value={String(compositionWarnings.length)} />
+            <InspectorMetric label="Latest Error" value={browserHealth.latestError?.code ?? '—'} />
+          </div>
+          <canvas ref={browserCanvasRef} className="mt-2 aspect-video w-full rounded border border-cyan-500/30 bg-black" />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={() => { browserRenderer.start(); rerender(); }} className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200">Start renderer</button>
+            <button type="button" onClick={() => { browserRenderer.stop(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Stop renderer</button>
+            <button type="button" onClick={() => { if (programComposition) browserRenderer.render(programComposition, { debug: browserDebug }); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Render frame</button>
+            <button type="button" onClick={() => { setBrowserDebug((value) => !value); browserRenderer.setDebug(!browserDebug); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Toggle guides</button>
+            <button type="button" onClick={() => { browserRenderer.clearStats(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Clear renderer stats</button>
+          </div>
+        </div>
+      ) : null}
       <div className="mt-3 rounded-lg border border-slate-800 bg-black/20 p-2">
         <p className="font-black uppercase tracking-[0.16em] text-slate-300">Video Routing</p>
         <div className="mt-2 grid gap-1 md:grid-cols-2">
@@ -1051,6 +1092,10 @@ export function SceneWorkspace({
     });
     const webRTCAdapter = new WebRTCMediaExecutionAdapter();
     engine.registerAdapter(webRTCAdapter, createWebRTCAdapterMetadata(webRTCAdapter));
+    if (isBrowserRendererEnabled(process.env)) {
+      const browserAdapter = new BrowserRendererAdapter(new BrowserMediaRenderer({ target: 'preview' }), 'mock_live');
+      engine.registerAdapter(browserAdapter, createBrowserRendererAdapterMetadata(browserAdapter));
+    }
     engine.setExecutionRuntimeMode('mock_live');
     return engine;
   }, []);

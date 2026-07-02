@@ -732,3 +732,60 @@ assert.equal(
   true,
   'mock adapter stores latest audio route plan',
 );
+
+import {
+  BrowserMediaRenderer,
+  BrowserRendererAdapter,
+  BrowserRendererStore,
+  RenderScheduler,
+  getRenderableSourceForLayer,
+  isBrowserRendererEnabled,
+} from './browser-renderer/index.js';
+
+const renderer = new BrowserMediaRenderer({ target: 'preview', debug: true });
+assert.equal(renderer.getStats().running, false, 'browser renderer can be constructed');
+const missingCanvasResult = renderer.render(compositionA, { target: 'preview' });
+assert.equal(
+  missingCanvasResult.errors.some((error) => error.code === 'RENDER_TARGET_MISSING'),
+  true,
+  'browser renderer reports missing render target structurally',
+);
+assert.deepEqual(
+  [...compositionA.layers].sort((a, b) => a.zIndex - b.zIndex).map((layer) => layer.id),
+  compositionA.layers.map((layer) => layer.id),
+  'composition layer ordering respects zIndex before rendering',
+);
+assert.equal(
+  getRenderableSourceForLayer(compositionA.layers[0]!, manager).kind,
+  'placeholder',
+  'missing runtime source produces placeholder renderable source',
+);
+const scheduler = new RenderScheduler(() => renderer.renderFrame());
+scheduler.setTargetFps(24);
+assert.equal(scheduler.getStats().targetFps, 24, 'scheduler target fps updates');
+scheduler.start();
+scheduler.stop();
+assert.equal(scheduler.getStats().running, false, 'scheduler start/stop works');
+const store = new BrowserRendererStore();
+store.registerRenderer('preview', renderer);
+store.setActiveComposition('preview', compositionA);
+assert.equal(store.getRenderer('preview'), renderer, 'render target registration works');
+assert.equal(store.getActiveComposition('preview')?.id, compositionA.id, 'renderer store tracks active composition');
+assert.equal(isBrowserRendererEnabled({}), false, 'feature flag disabled preserves current behavior');
+const browserAdapter = new BrowserRendererAdapter(renderer, 'dry_run');
+const browserAdapterResult = browserAdapter.execute(
+  {
+    id: 'browser-render-dry-run',
+    type: 'RENDER_BROWSER_COMPOSITION',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: graphWithSources.metadata.revision,
+    payload: { sceneId: 'scene-a', target: 'preview' },
+  },
+  graphWithSources,
+);
+assert.equal(browserAdapterResult.success, true, 'browser renderer adapter returns structured result');
+assert.equal(
+  browserAdapter.getCapabilities().includes('RENDER_FRAME'),
+  true,
+  'browser renderer adapter exposes render frame capability',
+);
