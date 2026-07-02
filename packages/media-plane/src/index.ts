@@ -34,6 +34,20 @@ import {
   validateConfidenceSignals,
   executeMockMultiview,
 } from './multiview/index.js';
+import {
+  EncoderStore,
+  createEncoderPlan,
+  prepareEncoder,
+  startEncoder,
+  pauseEncoder,
+  resumeEncoder,
+  drainEncoder,
+  stopEncoder,
+  failEncoder,
+  validateEncoderPlan,
+  summarizeEncoderHealth,
+  type EncoderSession,
+} from './encoder/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -94,7 +108,17 @@ export type MediaExecutionIntentType =
   | 'UPDATE_MULTIVIEW'
   | 'VALIDATE_MULTIVIEW'
   | 'CREATE_CONFIDENCE_MONITOR'
-  | 'UPDATE_CONFIDENCE_STATUS';
+  | 'UPDATE_CONFIDENCE_STATUS'
+  | 'BUILD_ENCODER_PLAN'
+  | 'PREPARE_ENCODER'
+  | 'START_ENCODER'
+  | 'PAUSE_ENCODER'
+  | 'RESUME_ENCODER'
+  | 'DRAIN_ENCODER'
+  | 'STOP_ENCODER'
+  | 'FAIL_ENCODER'
+  | 'VALIDATE_ENCODER_PLAN'
+  | 'REPORT_ENCODER_HEALTH';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -120,7 +144,7 @@ export interface MediaExecutionIntent<TPayload = Record<string, unknown>> {
 const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_PLAN','UPDATE_VIDEO_ROUTE','ACTIVATE_VIDEO_ROUTE','DEACTIVATE_VIDEO_ROUTE','ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','ROUTE_MULTIVIEW_VIDEO','ROUTE_RECORDING_VIDEO','ROUTE_STREAM_VIDEO']);
 const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
 const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_MULTIVIEW_PLAN','UPDATE_MULTIVIEW','RENDER_MULTIVIEW','VALIDATE_MULTIVIEW','CREATE_CONFIDENCE_MONITOR','UPDATE_CONFIDENCE_STATUS','BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','APPLY_LAYOUT']);
-const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION','BUILD_STREAMING_PLAN','PREPARE_STREAMING','CONNECT_STREAM','PAUSE_STREAM','RESUME_STREAM','FAIL_STREAM','VALIDATE_STREAM_PLAN']);
+const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION','BUILD_STREAMING_PLAN','PREPARE_STREAMING','CONNECT_STREAM','PAUSE_STREAM','RESUME_STREAM','FAIL_STREAM','VALIDATE_STREAM_PLAN','BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH']);
 const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
 function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
 export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
@@ -164,6 +188,7 @@ export * from './sync/index.js';
 export * from './orchestration.js';
 export * from './streaming/index.js';
 export * from './multiview/index.js';
+export * from './encoder/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -476,6 +501,8 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   private readonly videoRouteStore = new VideoRouteStore();
   private readonly audioRouteStore = new AudioRouteStore();
   private readonly multiviewStore = new MultiviewStore();
+  private readonly encoderStore = new EncoderStore();
+  private encoderSession?: EncoderSession;
   getVideoRouteStore() {
     return this.videoRouteStore;
   }
@@ -484,6 +511,12 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   }
   getMultiviewStore() {
     return this.multiviewStore;
+  }
+  getEncoderStore() {
+    return this.encoderStore;
+  }
+  getEncoderSession() {
+    return this.encoderSession;
   }
   getLatestAudioRouteGraph() {
     const plan = this.audioRouteStore.getRoutePlan();
@@ -647,6 +680,28 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       }
       warnings.push(...validation.warnings, ...plan.warnings);
       if (!validation.valid) warnings.push(...validation.errors);
+    }
+
+    const encoderIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH',
+    ];
+    if (!shouldFail && graph && encoderIntentTypes.includes(intent.type)) {
+      const videoRoutePlan = this.videoRouteStore.getRoutePlan() ?? createVideoRoutePlan(graph, [], { includeRecording: graph.recording.status === 'recording', includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled), includeConfidenceMonitor: true, now: intent.timestamp });
+      const audioRoutePlan = this.audioRouteStore.getRoutePlan() ?? createAudioRoutePlan(graph, { includeRecording: graph.recording.status === 'recording', includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled), includeMonitor: true, includeGuestReturns: true, now: intent.timestamp });
+      const recordingId = typeof intent.payload.recordingId === 'string' ? intent.payload.recordingId : graph.recording.activeRecordingId;
+      const streamId = typeof intent.payload.streamId === 'string' ? intent.payload.streamId : undefined;
+      const plan = createEncoderPlan({ graph, videoRoutePlan, audioRoutePlan, outputId: String(intent.payload.outputId ?? `output:${graph.broadcastSessionId}`), ...(recordingId ? { recordingId } : {}), ...(streamId ? { streamId } : {}), frameId: Number(intent.payload.frameId ?? 0), backend: (intent.payload.backend as never) ?? 'mock' });
+      this.encoderStore.setEncoderPlan(plan);
+      let result = prepareEncoder(plan);
+      if (intent.type === 'START_ENCODER') result = startEncoder(result.session);
+      else if (intent.type === 'PAUSE_ENCODER') result = pauseEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'RESUME_ENCODER') result = resumeEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'DRAIN_ENCODER') result = drainEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'STOP_ENCODER') result = stopEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'FAIL_ENCODER') result = failEncoder(this.encoderSession ?? result.session, { code: 'MOCK_ENCODER_FAILURE', message: 'Mock encoder failure', retryable: Boolean(intent.payload.retryable), occurredAt: intent.timestamp, backend: plan.backend });
+      else if (intent.type === 'VALIDATE_ENCODER_PLAN') { const validation = validateEncoderPlan(plan); warnings.push(...validation.warnings); if (!validation.valid) warnings.push(...validation.errors); }
+      this.encoderSession = result.session;
+      warnings.push(...result.warnings, summarizeEncoderHealth(result.session).summary);
     }
     return {
       adapterName: this.getName(),

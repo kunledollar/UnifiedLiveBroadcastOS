@@ -54,6 +54,20 @@ import {
   createStreamingManifest,
   StreamingStore,
   supportedStreamingProtocols,
+  createEncoderPlan,
+  validateEncoderPlan,
+  validateEncoderProfile,
+  selectEncoderBackend,
+  prepareEncoder,
+  startEncoder,
+  pauseEncoder,
+  resumeEncoder,
+  drainEncoder,
+  stopEncoder,
+  failEncoder,
+  createEncoderManifest,
+  summarizeEncoderHealth,
+  EncoderStore,
   createMultiviewPlan,
   validateMultiviewPlan,
   buildTileLayout,
@@ -295,6 +309,43 @@ assert.equal(streamingResult.session.status, 'stopped', 'stop streaming moves li
 streamingStore.clearStreams();
 assert.equal(streamingStore.listStreams().length, 0, 'stream store clears streams');
 
+
+
+const encoderStreamId = streamingPlan.targets[0]?.id;
+const encoderPlan = createEncoderPlan({ graph: streamingGraph, videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, outputId: streamingPlan.broadcastOutputPlanId, ...(encoderStreamId ? { streamId: encoderStreamId } : {}), mediaClock: createClock({ frameRate: 30 }), frameId: 82 });
+assert.equal(encoderPlan.backend, 'mock', 'encoder plan selects mock backend by default');
+assert.equal(validateEncoderPlan(encoderPlan).valid, true, 'encoder plan validation passes');
+assert.equal(validateEncoderProfile(encoderPlan.profile).valid, true, 'encoder profile validation passes');
+assert.equal(selectEncoderBackend({ preferred: 'software', available: ['mock','software'] }), 'software', 'encoder backend selection honors available preference');
+const encoderStore = new EncoderStore();
+encoderStore.setEncoderPlan(encoderPlan);
+assert.equal(encoderStore.getEncoderPlan(encoderPlan.id)?.id, encoderPlan.id, 'encoder store gets plan');
+assert.equal(encoderStore.getActiveEncoders().length, 1, 'encoder store lists active encoders');
+let encoderResult = prepareEncoder(encoderPlan);
+assert.equal(encoderResult.session.status, 'ready', 'prepare encoder creates ready mock session');
+encoderResult = startEncoder(encoderResult.session);
+assert.equal(encoderResult.session.status, 'encoding', 'start encoder moves lifecycle');
+encoderResult = pauseEncoder(encoderResult.session);
+assert.equal(encoderResult.session.status, 'paused', 'pause encoder moves lifecycle');
+encoderResult = resumeEncoder(encoderResult.session);
+encoderResult = drainEncoder(encoderResult.session);
+assert.equal(encoderResult.session.status, 'draining', 'drain encoder moves lifecycle');
+const failedEncoder = failEncoder(encoderResult.session, { code: 'MOCK_FATAL', message: 'Mock fatal encoder failure', retryable: false, occurredAt: '2026-07-01T00:00:00.000Z', backend: 'mock' });
+assert.equal(failedEncoder.session.status, 'failed', 'encoder failure handling marks failed session');
+encoderResult = stopEncoder(encoderResult.session);
+assert.equal(encoderResult.session.status, 'stopped', 'stop encoder moves lifecycle');
+const encoderManifest = createEncoderManifest(encoderPlan);
+assert.equal(encoderManifest.containsMediaPayloads, false, 'encoder manifest excludes raw media payloads');
+assert.equal(encoderManifest.containsEncodedPackets, false, 'encoder manifest excludes encoded packets');
+assert.equal(encoderStore.getEncoderManifest(encoderPlan.id)?.containsEncodedPackets, false, 'encoder store returns packet-free manifest');
+assert.equal(summarizeEncoderHealth(startEncoder(prepareEncoder(encoderPlan).session).session).active, true, 'encoder health summary reports active encoding');
+assert.equal(JSON.stringify(encoderPlan).includes('encodedPacket'), false, 'encoder state does not include encoded packet fields');
+const encoderAdapter = new MockMediaExecutionAdapter();
+const encoderIntentResponse = encoderAdapter.execute({ id: 'encoder-intent', type: 'START_ENCODER', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: streamingGraph.metadata.revision, payload: { outputId: streamingPlan.broadcastOutputPlanId, streamId: streamingPlan.targets[0]?.id, frameId: 82 } }, streamingGraph);
+assert.equal(encoderIntentResponse.success, true, 'mock execution handles encoder intent');
+assert.equal(encoderAdapter.getEncoderStore().listEncoders().length, 1, 'mock encoder execution stores encoder plan');
+encoderStore.clearEncoders();
+assert.equal(encoderStore.listEncoders().length, 0, 'encoder store clears encoders');
 
 const multiviewPlan = createMultiviewPlan({ graph: streamingGraph, preset: 'quad', videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, frameId: 82 });
 assert.equal(multiviewPlan.tiles.length, 4, 'multiview plan creation uses quad preset');

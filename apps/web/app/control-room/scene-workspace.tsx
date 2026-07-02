@@ -46,6 +46,10 @@ import {
   summarizeMultiviewHealth,
   createConfidenceMonitor,
   summarizeConfidenceStatus,
+  createEncoderPlan,
+  prepareEncoder,
+  startEncoder,
+  summarizeEncoderHealth,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -263,6 +267,18 @@ function MediaExecutionInspector({
     },
   });
   const confidenceSummary = summarizeConfidenceStatus(confidenceMonitor);
+  const encoderPlan = createEncoderPlan({
+    graph,
+    videoRoutePlan: routePlan,
+    audioRoutePlan,
+    outputId: streamingPlan.broadcastOutputPlanId,
+    ...(graph.recording.activeRecordingId ? { recordingId: graph.recording.activeRecordingId } : {}),
+    ...(primaryStreamTarget ? { streamId: primaryStreamTarget.id } : {}),
+    mediaClock,
+    frameId: mediaClock.getCurrentFrame(),
+  });
+  const encoderSession = startEncoder(prepareEncoder(encoderPlan).session).session;
+  const encoderHealth = summarizeEncoderHealth(encoderSession);
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
   const health = state.executionHealth;
@@ -486,6 +502,28 @@ function MediaExecutionInspector({
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-emerald-300/80">
           Metadata-only mock diagnostics; existing browser renderer/composition paths remain the rendering boundary.
+        </p>
+      </div>
+
+
+      <div className="mt-3 rounded-lg border border-amber-700/40 bg-amber-950/20 p-2">
+        <p className="font-black uppercase tracking-[0.16em] text-amber-200">Encoder</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-4">
+          <InspectorMetric label="Status" value={encoderSession.status} />
+          <InspectorMetric label="Active ID" value={encoderSession.id} />
+          <InspectorMetric label="Backend" value={encoderPlan.backend} />
+          <InspectorMetric label="Video Codec" value={encoderPlan.profile.videoCodec} />
+          <InspectorMetric label="Audio Codec" value={encoderPlan.profile.audioCodec} />
+          <InspectorMetric label="Bitrate" value={`${encoderSession.estimatedBitrateKbps}kbps`} />
+          <InspectorMetric label="Resolution" value={`${encoderPlan.profile.resolution.width}x${encoderPlan.profile.resolution.height}`} />
+          <InspectorMetric label="FPS" value={String(encoderSession.estimatedFps)} />
+          <InspectorMetric label="Target Output" value={encoderPlan.target.outputId} />
+          <InspectorMetric label="Recording/Stream" value={encoderPlan.recordingId ?? encoderPlan.streamId ?? '—'} />
+          <InspectorMetric label="Health" value={encoderHealth.health} />
+          <InspectorMetric label="Warn/Fail" value={`${encoderHealth.warningCount}/${encoderHealth.failureCount}`} />
+        </div>
+        <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-amber-300/80">
+          Mock lifecycle metadata only; no FFmpeg, WebCodecs, GPU APIs, raw media, or encoded packets are created.
         </p>
       </div>
 
