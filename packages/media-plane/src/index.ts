@@ -16,6 +16,9 @@ import {
   getVideoRouteWarnings,
 } from './routing.js';
 import {
+  type FrameTickEvent,
+} from './sync/index.js';
+import {
   AudioRouteStore,
   createAudioRouteGraph,
   createAudioRoutePlan,
@@ -63,7 +66,8 @@ export type MediaExecutionIntentType =
   | 'START_BROWSER_RENDERER'
   | 'STOP_BROWSER_RENDERER'
   | 'UPDATE_BROWSER_RENDER_TARGET'
-  | 'RENDER_FRAME';
+  | 'RENDER_FRAME'
+  | 'EXECUTE_FRAME_SYNC';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -119,6 +123,7 @@ export * from './compositor/index.js';
 export * from './routing.js';
 export * from './audio-routing/index.js';
 export * from './browser-renderer/index.js';
+export * from './sync/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -182,6 +187,7 @@ export interface MediaExecutionState {
 
 export interface MediaExecutionPlane {
   onGraphTransition(transition: ProductionGraphTransition): Promise<MediaExecutionResult[]>;
+  executeFrameSync(tick: FrameTickEvent, graph: ProductionGraph, intents?: readonly MediaExecutionIntent[]): Promise<MediaExecutionResult[]>;
   getExecutionState(): MediaExecutionState;
   registerAdapter(adapter: MediaExecutionAdapter, metadata?: Partial<AdapterMetadata>): void;
 }
@@ -466,6 +472,7 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       'RENDER_BROWSER_COMPOSITION',
       'RENDER_FRAME',
       'APPLY_LAYOUT',
+      'EXECUTE_FRAME_SYNC',
     ];
     if (!shouldFail && graph && compositionIntentTypes.includes(intent.type)) {
       const target =
@@ -620,6 +627,17 @@ export class MediaExecutionEngine implements MediaExecutionPlane {
   }
   configureMockExecutionLatency(config: Partial<MockExecutionLatencyConfig>) {
     configureMockExecutionLatency(config);
+  }
+  async executeFrameSync(tick: FrameTickEvent, graph: ProductionGraph, intents: readonly MediaExecutionIntent[] = []) {
+    const order: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
+    const base = intents.length ? [...intents] : [{ id: `frame-sync:${tick.frameId}`, type: 'EXECUTE_FRAME_SYNC' as const, timestamp: new Date(tick.broadcastTime).toISOString(), graphRevision: graph.metadata.revision, payload: { frameTick: tick } }];
+    const ordered = base.map((intent) => ({ ...intent, payload: { ...intent.payload, frameTick: tick, frameId: tick.frameId, frameTimestamp: tick.timestamp } })).sort((a,b) => order.indexOf(a.type) - order.indexOf(b.type) || a.id.localeCompare(b.id));
+    this.lastIntents = ordered;
+    this.currentGraphRevision = graph.metadata.revision;
+    const results: MediaExecutionResult[] = [];
+    for (const intent of ordered) results.push(await this.dispatchIntent(intent, graph));
+    this.lastResults = results;
+    return results;
   }
   async onGraphTransition(transition: ProductionGraphTransition) {
     const intents = translateGraphTransitionToIntents(transition);

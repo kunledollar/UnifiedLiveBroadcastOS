@@ -30,6 +30,8 @@ export interface VideoRoute {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly graphRevision: number;
+  readonly frameId?: number;
+  readonly frameTimestamp?: number;
   readonly metadata: Record<string, unknown>;
 }
 export interface VideoRoutePlan {
@@ -65,6 +67,8 @@ export interface VideoRoutePlannerOptions {
   readonly includeStreams?: boolean;
   readonly includeConfidenceMonitor?: boolean;
   readonly now?: string;
+  readonly frameId?: number;
+  readonly frameTimestamp?: number;
 }
 
 const supportedTargets: readonly VideoRouteTarget[] = [
@@ -114,6 +118,8 @@ function createRoute(input: {
     createdAt: input.now,
     updatedAt: input.now,
     graphRevision: input.graph.metadata.revision,
+    ...(input.metadata?.frameId !== undefined ? { frameId: Number(input.metadata.frameId) } : {}),
+    ...(input.metadata?.frameTimestamp !== undefined ? { frameTimestamp: Number(input.metadata.frameTimestamp) } : {}),
     metadata: input.metadata ?? {},
   };
 }
@@ -178,7 +184,7 @@ export function createVideoRoutePlan(
     routes,
     warnings,
     createdAt: now,
-    metadata: { routeCount: routes.length },
+    metadata: { routeCount: routes.length, frameId: options.frameId, frameTimestamp: options.frameTimestamp },
   };
   return { ...plan, warnings: [...warnings, ...getVideoRouteWarnings(plan, graph, compositions)] };
 }

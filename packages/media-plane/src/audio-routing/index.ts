@@ -102,6 +102,8 @@ export interface AudioRoute {
   readonly createdAt: string;
   readonly updatedAt: string;
   readonly graphRevision: number;
+  readonly frameId?: number;
+  readonly frameTimestamp?: number;
   readonly metadata: Record<string, unknown>;
 }
 export interface AudioRoutePlan {
@@ -147,6 +149,8 @@ export interface AudioRoutePlannerOptions {
   readonly includeMonitor?: boolean;
   readonly includeGuestReturns?: boolean;
   readonly previousPlan?: AudioRoutePlan;
+  readonly frameId?: number;
+  readonly frameTimestamp?: number;
 }
 
 const targets: readonly AudioRouteTarget[] = [
@@ -299,6 +303,8 @@ function route(
     createdAt: now,
     updatedAt: now,
     graphRevision: revision,
+    ...(extra.metadata?.frameId !== undefined ? { frameId: Number(extra.metadata.frameId) } : {}),
+    ...(extra.metadata?.frameTimestamp !== undefined ? { frameTimestamp: Number(extra.metadata.frameTimestamp) } : {}),
     metadata: {},
     ...extra,
   };
@@ -426,7 +432,7 @@ export function createAudioRoutePlan(
     routes,
     warnings: [],
     createdAt: now,
-    metadata: { routeCount: routes.length },
+    metadata: { routeCount: routes.length, frameId: options.frameId, frameTimestamp: options.frameTimestamp },
   } satisfies AudioRoutePlan;
   return { ...plan, warnings: getAudioRouteWarnings(plan, graph) };
 }
