@@ -128,10 +128,10 @@ engine.registerAdapter(mock);
 engine.setExecutionRuntimeMode('mock_live');
 const results = await engine.onGraphTransition(recordingTransition);
 assert.equal(results[0]?.success, true, 'mock adapter executes successfully');
-assert.equal(mock.getLoggedIntents().length, 1, 'mock live calls mock adapter');
+assert.equal(mock.getLoggedIntents().length, results.length, 'mock live calls mock adapter for each intent');
 assert.equal(
   logStore.queryByRevision(recordingTransition.nextRevision).length,
-  1,
+  results.length,
   'execution log records results',
 );
 assert.equal(
@@ -165,7 +165,7 @@ assert.equal(
 );
 assert.equal(
   summarizeExecutionForRevision(engine, recordingTransition.nextRevision).intentCount,
-  1,
+  results.length,
   'revision summary includes intents',
 );
 const graphBeforeReplay = JSON.stringify(recordingTransition.nextGraph);
@@ -193,7 +193,7 @@ assert.deepEqual(deterministicA, deterministicB, 'latency simulation is determin
 assert.equal(deterministicA.warnings.length, 1, 'warning rate can be configured');
 
 const health = engine.getMediaExecutionHealth();
-assert.equal(health.executedIntentCount, 1, 'execution health counts executed intents');
+assert.equal(health.executedIntentCount, results.length, 'execution health counts executed intents');
 assert.equal(
   engine.summarizeExecutionHealth().includes('mock_live'),
   true,
@@ -732,3 +732,102 @@ assert.equal(
   true,
   'mock adapter stores latest audio route plan',
 );
+
+import {
+  BroadcastOutputStore,
+  createBroadcastOutputPlan,
+  defaultBroadcastOutputFormats,
+  disableOutput,
+  enableOutput,
+  failOutput,
+  getBroadcastOutputWarnings,
+  prepareOutput,
+  startOutput,
+  stopOutput,
+  validateBroadcastOutputPlan,
+} from './output/index.js';
+
+const outputGraph = {
+  ...audioGraph,
+  destinations: {
+    youtube: {
+      id: 'youtube',
+      name: 'YouTube Placeholder',
+      platform: 'rtmp',
+      enabled: true,
+      status: 'ready' as const,
+      metadata: { streamKeyPlaceholder: true },
+    },
+    facebook: {
+      id: 'facebook',
+      name: 'Facebook Placeholder',
+      platform: 'rtmp',
+      enabled: true,
+      status: 'ready' as const,
+      metadata: { streamKeyPlaceholder: true },
+    },
+  },
+};
+const outputVideoPlan = createVideoRoutePlan(
+  outputGraph,
+  [routingProgramComposition, routingPreviewComposition, routingMultiviewComposition],
+  { includeRecording: true, includeStreams: true, includeConfidenceMonitor: true },
+);
+const outputAudioPlan = createAudioRoutePlan(outputGraph, {
+  includeRecording: true,
+  includeStreams: true,
+  includeMonitor: true,
+  includeGuestReturns: true,
+});
+const outputPlan = createBroadcastOutputPlan(outputGraph, outputVideoPlan, outputAudioPlan, {
+  includeRecording: true,
+  includeStreams: true,
+  includeConfidenceMonitor: true,
+});
+assert.equal(outputPlan.destinations.some((output) => output.target === 'program'), true, 'output plan creates program destination');
+assert.equal(outputPlan.destinations.some((output) => output.target === 'preview'), true, 'output plan creates preview destination');
+assert.equal(outputPlan.destinations.some((output) => output.target === 'vertical'), true, 'output plan creates vertical destination');
+assert.equal(outputPlan.destinations.some((output) => output.target === 'recording'), true, 'output plan creates recording placeholder');
+assert.equal(outputPlan.destinations.filter((output) => output.target === 'stream').length, 2, 'output plan creates stream placeholders');
+assert.equal((outputPlan.outputGraph.fanOut.program?.length ?? 0) >= 5, true, 'output graph represents program fan-out');
+assert.equal(validateBroadcastOutputPlan(outputPlan).valid, true, 'output plan validates');
+const { videoRouteId: _missingOutputVideoRouteId, ...missingVideoOutput } = outputPlan.destinations[2]!;
+const invalidOutputPlan = {
+  ...outputPlan,
+  destinations: [
+    { ...outputPlan.destinations[0]!, format: { ...defaultBroadcastOutputFormats.hd1080p60, width: -1 } },
+    { ...outputPlan.destinations[1]!, id: outputPlan.destinations[0]!.id },
+    missingVideoOutput,
+  ],
+};
+assert.equal(
+  getBroadcastOutputWarnings(invalidOutputPlan).some((warning) => warning.includes('Invalid format')),
+  true,
+  'invalid output format warning is reported',
+);
+assert.equal(
+  getBroadcastOutputWarnings(invalidOutputPlan).some((warning) => warning.includes('Missing video route')),
+  true,
+  'missing output route warning is reported',
+);
+assert.equal(startOutput(prepareOutput(outputPlan.destinations[0]!)).status, 'active', 'output prepare/start lifecycle works');
+assert.equal(stopOutput(startOutput(outputPlan.destinations[0]!)).status, 'stopped', 'output stop lifecycle works');
+assert.equal(failOutput(outputPlan.destinations[0]!, 'boom').status, 'failed', 'output fail lifecycle works');
+assert.equal(enableOutput(disableOutput(outputPlan.destinations[0]!)).enabled, true, 'output enable/disable lifecycle works');
+const outputStore = new BroadcastOutputStore();
+outputStore.setOutputPlan(outputPlan);
+assert.equal(outputStore.getOutputPlan()?.id, outputPlan.id, 'output store set/get works');
+assert.equal(outputStore.getOutputsByTarget('stream').length, 2, 'output store queries target');
+const outputMock = new MockMediaExecutionAdapter();
+const outputResponse = outputMock.execute(
+  {
+    id: 'output-intent',
+    type: 'BUILD_OUTPUT_PLAN' as const,
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: outputGraph.metadata.revision,
+    payload: {},
+  },
+  outputGraph,
+);
+assert.equal(outputResponse.success, true, 'mock adapter executes output intent');
+assert.equal(Boolean(outputMock.getBroadcastOutputStore().getOutputPlan()), true, 'mock adapter stores latest output plan');

@@ -21,6 +21,21 @@ import {
   createAudioRoutePlan,
   getAudioRouteWarnings,
 } from './audio-routing/index.js';
+import {
+  BroadcastOutputStore,
+  createBroadcastOutputPlan,
+  createBroadcastOutputGraph,
+  getBroadcastOutputWarnings,
+  prepareOutput,
+  startOutput,
+  stopOutput,
+  disableOutput,
+  enableOutput,
+  failOutput,
+  markOutputDegraded,
+  markOutputUnavailable,
+  type BroadcastOutputDestination,
+} from './output/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -58,7 +73,16 @@ export type MediaExecutionIntentType =
   | 'BUILD_STREAM_MIX'
   | 'BUILD_RECORDING_MIX'
   | 'BUILD_MONITOR_MIX'
-  | 'BUILD_GUEST_RETURN_MIX';
+  | 'BUILD_GUEST_RETURN_MIX'
+  | 'BUILD_OUTPUT_PLAN'
+  | 'PREPARE_OUTPUT'
+  | 'START_OUTPUT'
+  | 'STOP_OUTPUT'
+  | 'ENABLE_OUTPUT'
+  | 'DISABLE_OUTPUT'
+  | 'UPDATE_OUTPUT_DESTINATION'
+  | 'ROUTE_OUTPUT_AV'
+  | 'VALIDATE_OUTPUTS';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -113,6 +137,7 @@ export * from './adapters/webrtc/index.js';
 export * from './compositor/index.js';
 export * from './routing.js';
 export * from './audio-routing/index.js';
+export * from './output/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -232,8 +257,12 @@ const eventIntentMap = {
   AUDIO_LEVEL_CHANGED: 'SET_AUDIO_ROUTE_GAIN',
   GUEST_ADDED: 'BUILD_GUEST_RETURN_MIX',
   GUEST_REMOVED: 'BUILD_AUDIO_ROUTE_PLAN',
-  DESTINATION_ENABLED: 'ROUTE_STREAM_VIDEO',
-  DESTINATION_DISABLED: 'UPDATE_DESTINATION',
+  DESTINATION_ENABLED: 'ENABLE_OUTPUT',
+  DESTINATION_DISABLED: 'DISABLE_OUTPUT',
+  RECORDING_STARTED: 'START_OUTPUT',
+  RECORDING_STOPPED: 'STOP_OUTPUT',
+  BROADCAST_STARTED: 'START_OUTPUT',
+  BROADCAST_STOPPED: 'STOP_OUTPUT',
   PREVIEW_SCENE_CHANGED: 'ROUTE_PREVIEW_VIDEO',
   PROGRAM_SCENE_CHANGED: 'ROUTE_PROGRAM_VIDEO',
   TRANSITION_COMPLETED: 'UPDATE_SCENE_COMPOSITION',
@@ -422,11 +451,15 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   private readonly compositionStore = new CompositionStore();
   private readonly videoRouteStore = new VideoRouteStore();
   private readonly audioRouteStore = new AudioRouteStore();
+  private readonly outputStore = new BroadcastOutputStore();
   getVideoRouteStore() {
     return this.videoRouteStore;
   }
   getAudioRouteStore() {
     return this.audioRouteStore;
+  }
+  getBroadcastOutputStore() {
+    return this.outputStore;
   }
   getLatestAudioRouteGraph() {
     const plan = this.audioRouteStore.getRoutePlan();
@@ -435,6 +468,10 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   getLatestVideoRouteGraph() {
     const plan = this.videoRouteStore.getRoutePlan();
     return plan ? createVideoRouteGraph(plan) : undefined;
+  }
+  getLatestBroadcastOutputGraph() {
+    const plan = this.outputStore.getOutputPlan();
+    return plan ? createBroadcastOutputGraph(plan) : undefined;
   }
   getCompositionStore() {
     return this.compositionStore;
@@ -554,6 +591,39 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       });
       this.audioRouteStore.setRoutePlan(plan);
       warnings.push(...getAudioRouteWarnings(plan, graph));
+    }
+
+    const outputIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_OUTPUT_PLAN','PREPARE_OUTPUT','START_OUTPUT','STOP_OUTPUT','ENABLE_OUTPUT','DISABLE_OUTPUT','UPDATE_OUTPUT_DESTINATION','ROUTE_OUTPUT_AV','VALIDATE_OUTPUTS','START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING'
+    ];
+    if (!shouldFail && graph && outputIntentTypes.includes(intent.type)) {
+      let videoPlan = this.videoRouteStore.getRoutePlan();
+      if (!videoPlan) {
+        const programScene = graph.program.sceneId;
+        const previewScene = graph.preview.sceneId;
+        const generated = [
+          ...(programScene ? [createSceneCompositionFromGraph(graph, programScene, { target: 'program' })] : []),
+          ...(previewScene ? [createSceneCompositionFromGraph(graph, previewScene, { target: 'preview' })] : []),
+          ...(programScene ? [createSceneCompositionFromGraph(graph, programScene, { target: 'vertical' as CompositionRenderTarget })] : []),
+        ];
+        videoPlan = createVideoRoutePlan(graph, generated, { includeRecording: true, includeStreams: true, includeConfidenceMonitor: true, now: intent.timestamp });
+        this.videoRouteStore.setRoutePlan(videoPlan);
+      }
+      let audioPlan = this.audioRouteStore.getRoutePlan();
+      if (!audioPlan) {
+        audioPlan = createAudioRoutePlan(graph, { includeRecording: true, includeStreams: true, includeMonitor: true, includeGuestReturns: true, now: intent.timestamp });
+        this.audioRouteStore.setRoutePlan(audioPlan);
+      }
+      const plan = createBroadcastOutputPlan(graph, videoPlan, audioPlan, { includeRecording: true, includeStreams: true, includeConfidenceMonitor: true, now: intent.timestamp });
+      const mutate = (output: BroadcastOutputDestination) =>
+        intent.type === 'PREPARE_OUTPUT' ? prepareOutput(output) :
+        intent.type === 'START_OUTPUT' || intent.type === 'START_STREAM' || intent.type === 'START_RECORDING' ? startOutput(output) :
+        intent.type === 'STOP_OUTPUT' || intent.type === 'STOP_STREAM' || intent.type === 'STOP_RECORDING' ? stopOutput(output) :
+        intent.type === 'ENABLE_OUTPUT' ? enableOutput(output) :
+        intent.type === 'DISABLE_OUTPUT' ? disableOutput(output) : output;
+      const nextPlan = { ...plan, destinations: plan.destinations.map(mutate) };
+      this.outputStore.setOutputPlan(nextPlan);
+      warnings.push(...getBroadcastOutputWarnings(nextPlan));
     }
     return {
       adapterName: this.getName(),
