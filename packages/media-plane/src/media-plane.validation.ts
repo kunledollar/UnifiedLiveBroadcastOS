@@ -28,6 +28,15 @@ import {
   SyncDriftMonitor,
   MediaSyncStore,
   isMediaSyncEnabled,
+  assignIntentToFrame,
+  assertFramePlanHasFrameIdentity,
+  assertFrameTimestampFromClock,
+  assertMonotonicFrameId,
+  assertNoIndependentSubsystemClock,
+  classifyDrift,
+  createDriftWarning,
+  getNextExecutableFrame,
+  summarizeFrameDrift,
   MediaOrchestrationEngine,
   type FrameTickEvent,
 } from './index.js';
@@ -844,6 +853,18 @@ clock.resumeClock();
 mockNow += 34;
 assert.equal(clock.getCurrentFrame(), 2, 'resumed clock advances frames');
 
+assertMonotonicFrameId(1, 2);
+assertFrameTimestampFromClock(clock, 3, 100);
+const assignedCurrent = assignIntentToFrame({ id: 'timing-current', type: 'sync', executionType: 'EXECUTE_FRAME_SYNC', sourceGraphRevision: 1, dependencies: [], priority: 0, targetSubsystem: 'sync', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' }, clock.getState(), { nowMs: 70, cutoffMs: 8 });
+const assignedLate = assignIntentToFrame({ id: 'timing-late', type: 'sync', executionType: 'EXECUTE_FRAME_SYNC', sourceGraphRevision: 1, dependencies: [], priority: 0, targetSubsystem: 'sync', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' }, clock.getState(), { nowMs: 94, cutoffMs: 8 });
+assert.equal(assignedCurrent.scheduledFrameId, 2, 'intent before cutoff executes on current frame');
+assert.equal(assignedLate.scheduledFrameId, getNextExecutableFrame(clock.getState()), 'late intent moves to next executable frame');
+assert.equal(classifyDrift(21), 'warning', 'drift classification detects warning threshold');
+assert.equal(summarizeFrameDrift({ renderDriftMs: 0, audioDriftMs: 55, videoDriftMs: 0, outputDriftMs: 0 }).worst.severity, 'degraded', 'frame drift summary reports worst severity');
+assert.equal(createDriftWarning('renderDriftMs', 101)?.includes('CRITICAL'), true, 'drift warning includes severity');
+assertNoIndependentSubsystemClock({ frameId: 2, frameTimestamp: 67 });
+
+
 const bus = new MediaSyncBus();
 const schedulerClock = createClock({ frameRate: 60, now: () => mockNow });
 const syncStore = new MediaSyncStore(schedulerClock);
@@ -924,6 +945,7 @@ const repeatedPlan = orchestration.planFrame(
   { video: 'ready', audio: 'ready', render: 'ready', output: 'ready', sync: 'ready' },
 );
 assert.deepEqual(repeatedPlan, orchestrationPlan, 'same media intent graph and clock tick produce the same frame plan');
+assertFramePlanHasFrameIdentity(orchestrationPlan);
 const mockExecutionResults = await engine.executeMediaFramePlan(orchestrationPlan, transition.nextGraph);
 assert.equal(mockExecutionResults.length, 2, 'execution engine executes orchestration frame plans');
 assert.equal(

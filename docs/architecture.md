@@ -4,4 +4,5 @@ The scaffold separates product surfaces, integration contracts, and persistence 
 ## Architecture Contracts
 
 - [UBOS Execution Contract v1](architecture/ubos-execution-contract-v1.md)
+- [UBOS Timing, Clock & Frame Determinism v1](architecture/ubos-timing-clock-frame-determinism-v1.md)
 
