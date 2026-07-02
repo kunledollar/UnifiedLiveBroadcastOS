@@ -449,3 +449,4 @@ export * from "./authority";
 export * from './sync.js';
 
 export * from "./persistence.js";
+export * from "./execution-contract.js";
