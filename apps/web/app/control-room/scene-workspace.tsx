@@ -180,6 +180,7 @@ function MediaExecutionInspector({
     if (programComposition) browserRenderer.setComposition(programComposition);
   }, [browserRendererFlagEnabled, browserDebug, browserRenderer, programComposition]);
   const browserHealth = browserRenderer.getHealth();
+  const browserDiagnostics = browserRenderer.getRendererDiagnostics();
   const syncState = mediaSyncStore.getState();
   const syncSummary = syncState.syncHealthSummary;
   const resetDriftStats = () => { driftMonitor.reset(); rerender(); };
@@ -438,6 +439,14 @@ function MediaExecutionInspector({
             <InspectorMetric label="Last Render" value={`${browserHealth.stats.lastRenderDurationMs}ms`} />
             <InspectorMetric label="Missing Sources" value={String(compositionWarnings.length)} />
             <InspectorMetric label="Latest Error" value={browserHealth.latestError?.code ?? '—'} />
+            <InspectorMetric label="Backend" value={browserDiagnostics.activeBackend} />
+            <InspectorMetric label="Fallback" value={browserDiagnostics.fallbackStatus} />
+            <InspectorMetric label="Frame Budget" value={`${browserDiagnostics.frameBudget}ms`} />
+            <InspectorMetric label="Over Budget" value={String(browserDiagnostics.overBudgetFrameCount)} />
+            <InspectorMetric label="Dirty Layers" value={String(browserDiagnostics.dirtyLayerCount)} />
+            <InspectorMetric label="Cache" value={`${browserDiagnostics.cacheSummary.layers} layers ${browserDiagnostics.cacheSummary.hits}/${browserDiagnostics.cacheSummary.misses}`} />
+            <InspectorMetric label="Pipeline" value={browserDiagnostics.pipelineStages.stages.join(' → ')} />
+            <InspectorMetric label="Health" value={browserDiagnostics.rendererHealth.isHealthy ? 'healthy' : 'degraded'} />
           </div>
           <canvas ref={browserCanvasRef} className="mt-2 aspect-video w-full rounded border border-cyan-500/30 bg-black" />
           <div className="mt-2 flex flex-wrap gap-2">
@@ -446,6 +455,11 @@ function MediaExecutionInspector({
             <button type="button" onClick={() => { if (programComposition) browserRenderer.render(programComposition, { debug: browserDebug }); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Render frame</button>
             <button type="button" onClick={() => { setBrowserDebug((value) => !value); browserRenderer.setDebug(!browserDebug); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Toggle guides</button>
             <button type="button" onClick={() => { browserRenderer.clearStats(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Clear renderer stats</button>
+            <button type="button" onClick={() => { browserRenderer.switchBackend('canvas2d_default'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Use Canvas2D</button>
+            <button type="button" onClick={() => { browserRenderer.switchBackend('webgl_preview'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Try WebGL</button>
+            <button type="button" onClick={() => { browserRenderer.switchBackend('webgpu_preview'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Try WebGPU</button>
+            <button type="button" onClick={() => { browserRenderer.clearRenderCache(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Clear render cache</button>
+            <button type="button" onClick={() => { browserRenderer.forceFullRender(); if (programComposition) browserRenderer.render(programComposition, { debug: browserDebug }); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Force full redraw</button>
           </div>
         </div>
       ) : null}
@@ -631,6 +645,7 @@ function MediaExecutionInspector({
               audioRoutePlan,
               audioRouteWarnings: audioRouteValidation.warnings,
               latestEvents: state.latestEvents.slice(-6),
+              rendererDiagnostics: browserDiagnostics,
             },
             null,
             2,

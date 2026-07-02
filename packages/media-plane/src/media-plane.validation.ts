@@ -747,6 +747,20 @@ import {
   RenderScheduler,
   getRenderableSourceForLayer,
   isBrowserRendererEnabled,
+  Canvas2DRendererBackend,
+  WebGLRendererBackend,
+  createRenderFrameContext,
+  getDirtyLayers,
+  createRenderCache,
+  setCachedLayer,
+  getCachedLayer,
+  invalidateLayer,
+  calculateFrameBudget,
+  evaluateRenderPerformance,
+  createRenderPipeline,
+  executeRenderPipeline,
+  selectRendererBackend,
+  summarizeRendererHealth,
 } from './browser-renderer/index.js';
 
 const renderer = new BrowserMediaRenderer({ target: 'preview', debug: true });
@@ -778,7 +792,24 @@ store.registerRenderer('preview', renderer);
 store.setActiveComposition('preview', compositionA);
 assert.equal(store.getRenderer('preview'), renderer, 'render target registration works');
 assert.equal(store.getActiveComposition('preview')?.id, compositionA.id, 'renderer store tracks active composition');
+
 assert.equal(isBrowserRendererEnabled({}), false, 'feature flag disabled preserves current behavior');
+const canvasBackend = new Canvas2DRendererBackend(() => undefined);
+canvasBackend.initialize();
+const gpuFallback = selectRendererBackend([canvasBackend, new WebGLRendererBackend()], 'webgl_preview');
+assert.equal(gpuFallback.backend?.type, 'canvas2d', 'unavailable GPU backend falls back to Canvas2D');
+const frameContext = createRenderFrameContext({ frameId: 1, frameTimestamp: 1000, graphRevision: compositionA.graphRevision, compositionId: compositionA.id, canvas: { width: 1920, height: 1080, getContext: () => null } as unknown as HTMLCanvasElement & { width: number; height: number; getContext(type: '2d'): CanvasRenderingContext2D | null }, layers: compositionA.layers, debugMode: false, renderTarget: 'preview', metadata: {} });
+assert.equal(frameContext.compositionId, compositionA.id, 'render frame context is created correctly');
+assert.equal(getDirtyLayers(compositionA, { ...compositionA, layers: [{ ...compositionA.layers[0]!, opacity: 0.5 }, ...compositionA.layers.slice(1)] }).length, 1, 'dirty-layer detection works');
+const cache = createRenderCache();
+setCachedLayer(cache, { id: 'layer:a', kind: 'layer', layerId: 'a', revision: 1, signature: 'sig', updatedAt: '2026-07-01T00:00:00.000Z', metadata: {} });
+assert.equal(getCachedLayer(cache, 'a')?.signature, 'sig', 'cache set/get works');
+assert.equal(invalidateLayer(cache, 'a'), true, 'cache invalidate works');
+assert.equal(calculateFrameBudget(50), 20, 'frame budget calculation works');
+assert.equal(evaluateRenderPerformance({ targetFps: 50, renderDurationMs: 21, dirtyLayerCount: 1, totalLayerCount: 2, cacheHitCount: 1, cacheMissCount: 1 }).overBudget, true, 'render performance detects over-budget frames');
+const pipeline = executeRenderPipeline(createRenderPipeline(), frameContext);
+assert.deepEqual(pipeline.executedStages, ['prepare_frame','resolve_sources','compute_dirty_layers','update_cache','draw_background','draw_layers','draw_overlays','draw_guides','finalize_frame'], 'pipeline stages execute in deterministic order');
+assert.equal(summarizeRendererHealth({ backendType: 'canvas2d', targetFps: 30, estimatedFps: 30, averageRenderMs: 3, p95RenderMs: null, droppedFrames: 0, overBudgetFrames: 0, cacheHitRate: 0, activeLayerCount: 1, dirtyLayerCount: 1, memoryPressure: 'unknown', isHealthy: true, warnings: [] }).includes('healthy'), true, 'renderer health summary works');
 const browserAdapter = new BrowserRendererAdapter(renderer, 'dry_run');
 const browserAdapterResult = browserAdapter.execute(
   {
