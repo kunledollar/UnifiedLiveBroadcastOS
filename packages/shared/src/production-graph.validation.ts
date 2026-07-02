@@ -53,6 +53,26 @@ import {
   shouldRetryFailure,
   summarizeFailureState,
 } from './failure-recovery.js';
+import {
+  appendReplayTimelineEvent,
+  compareFramePlans,
+  createDryRunReplay,
+  createReplayCheckpoint,
+  createReplayTimeline,
+  detectNonReplayablePayload,
+  detectReplayDivergence,
+  detectReplayGap,
+  getReplayPlan,
+  reconstructGraphFromCheckpoint,
+  replayCommandsToRevision,
+  selectNearestCheckpoint,
+  summarizeAuditTrail,
+  validateReplayCheckpoint,
+  type ReplaySnapshot,
+  type ReplayableFramePlan,
+  type UBOSReplaySession,
+} from './replay.js';
+
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -938,3 +958,122 @@ assert(
   'system load preserves active degraded transitions',
 );
 console.log('Backpressure validation passed');
+
+
+const replayBaseGraph = createInitialProductionGraph({
+  broadcastSessionId: 'replay-session',
+  timestamp: '2026-07-01T00:00:00.000Z',
+});
+const replayCreateScene: ProductionCommand = {
+  id: 'replay-command-1',
+  type: 'CREATE_SCENE',
+  broadcastSessionId: 'replay-session',
+  actorId: 'director-1',
+  actorRole: 'DIRECTOR',
+  timestamp: '2026-07-01T00:00:01.000Z',
+  expectedRevision: 0,
+  payload: { id: 'scene-replay', name: 'Replay Scene' },
+  metadata: { sequence: 1, frameId: 'frame-1', authorityDecision: 'accepted' },
+};
+const replayTransition = applyProductionCommand(replayBaseGraph, replayCreateScene);
+assert(replayTransition.accepted, 'replay fixture command is accepted');
+const replaySnapshot: ReplaySnapshot = {
+  id: 'snapshot-0',
+  timestamp: replayBaseGraph.createdAt,
+  graphRevision: replayBaseGraph.metadata.revision,
+  graph: replayBaseGraph,
+  metadata: {},
+};
+let replayTimeline = createReplayTimeline('timeline-validation', '2026-07-01T00:00:00.000Z');
+replayTimeline = appendReplayTimelineEvent(replayTimeline, {
+  id: 'timeline-command-1',
+  timestamp: replayCreateScene.timestamp,
+  graphRevision: 1,
+  commandId: replayCreateScene.id,
+  frameId: 'frame-1',
+  category: 'command',
+  payload: { commandType: replayCreateScene.type },
+});
+assert(replayTimeline.events.length === 1, 'replay timeline appends events immutably');
+assert(replayTimeline.events[0]?.commandId === replayCreateScene.id, 'replay timeline preserves command metadata');
+const replayCheckpoint = createReplayCheckpoint({
+  id: 'checkpoint-0',
+  timestamp: replayBaseGraph.createdAt,
+  graphSnapshotRef: replaySnapshot.id,
+  snapshot: replaySnapshot,
+  graphRevision: 0,
+  frameId: 'frame-0',
+  commandSequence: 0,
+  eventSequence: 0,
+  metadata: {},
+});
+assert(validateReplayCheckpoint(replayCheckpoint).valid, 'replay checkpoint validates without raw media');
+const laterCheckpoint = createReplayCheckpoint({
+  id: 'checkpoint-1',
+  timestamp: replayCreateScene.timestamp,
+  graphSnapshotRef: 'snapshot-1',
+  graphRevision: 1,
+  frameId: 'frame-1',
+  commandSequence: 1,
+  eventSequence: 1,
+  metadata: {},
+});
+assert(
+  selectNearestCheckpoint([replayCheckpoint, laterCheckpoint], { graphRevision: 1 })?.id ===
+    'checkpoint-1',
+  'nearest replay checkpoint selection prefers closest prior revision',
+);
+const reconstructed = reconstructGraphFromCheckpoint(replayCheckpoint);
+assert(reconstructed.ok && reconstructed.graph?.metadata.revision === 0, 'graph reconstructs from checkpoint clone');
+const commandReplay = replayCommandsToRevision(replayBaseGraph, [replayCreateScene], 1);
+assert(commandReplay.ok && commandReplay.graph?.metadata.revision === 1, 'command replay reaches target revision');
+assert(replayBaseGraph.metadata.revision === 0, 'replay helpers do not mutate input graph');
+assert(
+  getReplayPlan({
+    id: 'replay-session-model',
+    mode: 'command_replay',
+    status: 'planning',
+    timeline: replayTimeline,
+    checkpoints: [replayCheckpoint],
+    commands: [replayCreateScene],
+    events: replayTransition.events,
+    framePlans: [],
+    createdAt: replayBaseGraph.createdAt,
+    metadata: {},
+  }, { graphRevision: 0 }).checkpointId === 'checkpoint-0',
+  'replay plan includes nearest checkpoint',
+);
+const framePlanA: ReplayableFramePlan = {
+  id: 'plan-a',
+  frameId: 'frame-1',
+  frameTimestamp: 1000,
+  graphRevision: 1,
+  plannerRevision: 1,
+  steps: [{ kind: 'compose', target: 'program' }],
+};
+const framePlanB: ReplayableFramePlan = { ...framePlanA, id: 'plan-b', steps: [{ kind: 'compose', target: 'program' }] };
+assert(compareFramePlans(framePlanA, framePlanB).valid, 'frame plan comparison accepts deterministic shape');
+assert(
+  !compareFramePlans(framePlanA, { ...framePlanB, frameTimestamp: 1001 }).valid,
+  'frame plan comparison detects timestamp divergence',
+);
+assert(
+  !detectReplayGap([
+    { id: 'event-1', previousRevision: 0, nextRevision: 1 },
+    { id: 'event-3', previousRevision: 2, nextRevision: 3 },
+  ]).valid,
+  'replay gap detection detects revision gaps',
+);
+assert(
+  !detectReplayDivergence({ revision: 1 }, { revision: 2 }).valid,
+  'replay divergence detection detects mismatched payloads',
+);
+assert(
+  !detectNonReplayablePayload({ mediaStream: { id: 'forbidden' } }).valid,
+  'forbidden runtime payload detection rejects media stream keys',
+);
+const audit = summarizeAuditTrail({ commands: [replayCreateScene], events: replayTransition.events });
+assert(audit[0]?.actorId === 'director-1' && audit[0]?.status === 'accepted', 'audit summary includes issuer and status');
+const dryRun = createDryRunReplay({ id: 'dry-run-1', graphRevision: 1, executionMetadata: { planner: 'mock' } });
+assert(dryRun.mode === 'dry_run_execution_replay', 'dry-run replay model is metadata-only');
+console.log('Replay validation passed');
