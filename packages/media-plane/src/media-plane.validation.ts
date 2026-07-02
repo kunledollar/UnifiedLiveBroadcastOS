@@ -28,6 +28,7 @@ import {
   SyncDriftMonitor,
   MediaSyncStore,
   isMediaSyncEnabled,
+  MediaOrchestrationEngine,
   type FrameTickEvent,
 } from './index.js';
 
@@ -879,3 +880,52 @@ syncRenderer.renderFrame({ frameId: 12, timestamp: 400, broadcastTime: 400, expe
 assert.equal(syncRenderer.getStats().frameCount, 0, 'manual frame tick render avoids free-running scheduler stats without canvas');
 assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'false' }), false, 'feature flag disables sync layer safely');
 assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'true' }), true, 'feature flag enables sync layer');
+
+const orchestrationClock = createClock({ frameRate: 30, now: () => 0 });
+orchestrationClock.startClock();
+const orchestration = new MediaOrchestrationEngine(orchestrationClock);
+orchestration.submitIntent({
+  id: 'orch-video',
+  type: 'video',
+  executionType: 'ROUTE_PROGRAM_VIDEO',
+  sourceGraphRevision: 1,
+  dependencies: [],
+  priority: 1,
+  targetSubsystem: 'video',
+  payload: {},
+  timingConstraint: {},
+  submittedAt: '2026-07-01T00:00:00.000Z',
+});
+orchestration.submitIntent({
+  id: 'orch-render',
+  type: 'render',
+  executionType: 'RENDER_FRAME',
+  sourceGraphRevision: 1,
+  dependencies: ['orch-video'],
+  priority: 1,
+  targetSubsystem: 'render',
+  payload: {},
+  timingConstraint: {},
+  submittedAt: '2026-07-01T00:00:00.000Z',
+});
+const orchestrationPlan = orchestration.planExecutionFrame(0);
+assert.deepEqual(
+  orchestrationPlan.orderedExecutionSteps.map((intent) => intent.id),
+  ['orch-video', 'orch-render'],
+  'orchestration honors dependencies deterministically',
+);
+await orchestration.executeFramePlan(orchestrationPlan, transition.nextGraph);
+assert.equal(
+  orchestration.getDiagnostics().events.some((event) => event.type === 'ORCHESTRATION_FRAME_COMPLETE'),
+  true,
+  'orchestration emits frame completion event',
+);
+const cycleOrchestration = new MediaOrchestrationEngine(orchestrationClock);
+cycleOrchestration.submitIntent({ id: 'cycle-a', type: 'video', executionType: 'ROUTE_PROGRAM_VIDEO', sourceGraphRevision: 1, dependencies: ['cycle-b'], priority: 0, targetSubsystem: 'video', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' });
+cycleOrchestration.submitIntent({ id: 'cycle-b', type: 'audio', executionType: 'BUILD_AUDIO_ROUTE_PLAN', sourceGraphRevision: 1, dependencies: ['cycle-a'], priority: 0, targetSubsystem: 'audio', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' });
+cycleOrchestration.resolveIntentGraph();
+assert.equal(
+  cycleOrchestration.detectConflicts().some((conflict) => conflict.type === 'circular_dependency'),
+  true,
+  'orchestration detects circular dependencies',
+);

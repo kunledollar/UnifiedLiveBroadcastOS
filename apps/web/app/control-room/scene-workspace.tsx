@@ -162,6 +162,7 @@ function MediaExecutionInspector({
   const webRTC = webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
   const webRTCDiagnostics = webRTC?.getDiagnostics();
   const state = engine.getExecutionState();
+  const orchestration = state.orchestrationDiagnostics;
   const programComposition = graph.program.sceneId
     ? createSceneCompositionFromGraph(graph, graph.program.sceneId, { target: 'program' })
     : undefined;
@@ -400,6 +401,30 @@ function MediaExecutionInspector({
           value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
         />
       </div>
+
+      {orchestration ? (
+        <div className="mt-3 rounded-lg border border-fuchsia-700/40 bg-fuchsia-950/20 p-2">
+          <p className="font-black uppercase tracking-[0.16em] text-fuchsia-200">Media Orchestration</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-4">
+            <InspectorMetric label="Active Intents" value={String(orchestration.activeIntents.length)} />
+            <InspectorMetric label="Frame Plans" value={String(orchestration.activeFramePlans.length)} />
+            <InspectorMetric label="Dependency Edges" value={String(orchestration.dependencyGraph?.edges.length ?? 0)} />
+            <InspectorMetric label="Conflicts" value={String(orchestration.conflicts.length)} />
+            <InspectorMetric label="Frame Align" value={orchestration.frameAlignmentStatus} />
+            <InspectorMetric label="Queued/Dropped" value={String(orchestration.droppedOrQueuedIntents)} />
+            <InspectorMetric label="Subsystems" value={Object.entries(orchestration.subsystemStateSnapshot).map(([key, value]) => `${key}:${value}`).join(' · ')} />
+            <InspectorMetric label="Latest Plan" value={orchestration.activeFramePlans.at(-1)?.id ?? '—'} />
+          </div>
+          <div className="mt-2 rounded border border-fuchsia-900/70 bg-slate-950/60 p-2 font-mono text-[10px] text-fuchsia-100">
+            {(orchestration.activeFramePlans.at(-1)?.orderedExecutionSteps ?? []).slice(0, 6).map((intent) => (
+              <div key={intent.id}>{intent.targetSubsystem} → {intent.executionType} · deps {intent.dependencies.length}</div>
+            ))}
+            {orchestration.conflicts.slice(0, 3).map((conflict) => (
+              <div key={conflict.id}>conflict {conflict.type}: {conflict.message}</div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {mediaSyncEnabled ? (
         <div className="mt-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
