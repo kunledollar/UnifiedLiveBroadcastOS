@@ -15,10 +15,15 @@ import {
   createVideoRoutePlan,
   getVideoRouteWarnings,
 } from './routing.js';
+import { type FrameTickEvent } from './sync/index.js';
 import {
-  type FrameTickEvent,
-} from './sync/index.js';
-import { MediaOrchestrationEngine, type MediaExecutionPort, type MediaFramePlan, type MediaIntent, type MediaSubsystemStateSnapshot, type TargetSubsystem } from './orchestration.js';
+  MediaOrchestrationEngine,
+  type MediaExecutionPort,
+  type MediaFramePlan,
+  type MediaIntent,
+  type MediaSubsystemStateSnapshot,
+  type TargetSubsystem,
+} from './orchestration.js';
 import { createClock } from './sync/clock.js';
 import {
   AudioRouteStore,
@@ -26,6 +31,18 @@ import {
   createAudioRoutePlan,
   getAudioRouteWarnings,
 } from './audio-routing/index.js';
+import {
+  RecordingStore,
+  createRecordingManifest,
+  createRecordingPlan,
+  failRecording,
+  pauseRecording,
+  prepareRecording,
+  resumeRecording,
+  startRecording,
+  stopRecording,
+  validateRecordingPlan,
+} from './recording/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -74,7 +91,15 @@ export type MediaExecutionIntentType =
   | 'CLEAR_RENDER_CACHE'
   | 'FORCE_FULL_RENDER'
   | 'UPDATE_RENDER_PERFORMANCE_MODE'
-  | 'REPORT_RENDER_HEALTH';
+  | 'REPORT_RENDER_HEALTH'
+  | 'BUILD_RECORDING_PLAN'
+  | 'PREPARE_RECORDING'
+  | 'START_RECORDING_ENGINE'
+  | 'PAUSE_RECORDING_ENGINE'
+  | 'RESUME_RECORDING_ENGINE'
+  | 'STOP_RECORDING_ENGINE'
+  | 'FAIL_RECORDING_ENGINE'
+  | 'VALIDATE_RECORDING_PLAN';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -97,15 +122,122 @@ export interface MediaExecutionIntent<TPayload = Record<string, unknown>> {
   readonly payload: Readonly<TPayload>;
 }
 
-const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_PLAN','UPDATE_VIDEO_ROUTE','ACTIVATE_VIDEO_ROUTE','DEACTIVATE_VIDEO_ROUTE','ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','ROUTE_MULTIVIEW_VIDEO','ROUTE_RECORDING_VIDEO','ROUTE_STREAM_VIDEO']);
-const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
-const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','APPLY_LAYOUT']);
-const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION']);
-const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
-function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
-export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
-export function toMediaIntent(intent: MediaExecutionIntent): MediaIntent { const targetSubsystem = subsystemForExecutionType(intent.type); return { id: intent.id, type: targetSubsystem, executionType: intent.type, sourceGraphRevision: intent.graphRevision, dependencies: (intent.payload.dependencies as string[]|undefined) ?? [], priority: Number(intent.payload.priority ?? defaultOrchestrationPriority(intent.type)), targetSubsystem, payload: intent.payload, timingConstraint: typeof intent.payload.frameTimestamp === 'number' ? { requestedFrameTimestamp: intent.payload.frameTimestamp } : {}, submittedAt: intent.timestamp }; }
-export function toExecutionIntent(intent: MediaIntent, frameTimestamp: number): MediaExecutionIntent { return { id: intent.id, type: intent.executionType as MediaExecutionIntentType, timestamp: new Date(frameTimestamp).toISOString(), graphRevision: intent.sourceGraphRevision, payload: { ...intent.payload, frameTimestamp, orchestrationSubsystem: intent.targetSubsystem } }; }
+const videoIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_VIDEO_ROUTE_PLAN',
+  'UPDATE_VIDEO_ROUTE',
+  'ACTIVATE_VIDEO_ROUTE',
+  'DEACTIVATE_VIDEO_ROUTE',
+  'ROUTE_PROGRAM_VIDEO',
+  'ROUTE_PREVIEW_VIDEO',
+  'ROUTE_MULTIVIEW_VIDEO',
+  'ROUTE_RECORDING_VIDEO',
+  'ROUTE_STREAM_VIDEO',
+]);
+const audioIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_AUDIO_ROUTE_PLAN',
+  'UPDATE_AUDIO_ROUTE',
+  'ACTIVATE_AUDIO_ROUTE',
+  'DEACTIVATE_AUDIO_ROUTE',
+  'MUTE_AUDIO_ROUTE',
+  'UNMUTE_AUDIO_ROUTE',
+  'SET_AUDIO_ROUTE_GAIN',
+  'BUILD_PROGRAM_MIX',
+  'BUILD_STREAM_MIX',
+  'BUILD_RECORDING_MIX',
+  'BUILD_MONITOR_MIX',
+  'BUILD_GUEST_RETURN_MIX',
+  'UPDATE_AUDIO_MIX',
+]);
+const renderIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_SCENE_COMPOSITION',
+  'UPDATE_SCENE_COMPOSITION',
+  'RENDER_PROGRAM_COMPOSITION',
+  'RENDER_PREVIEW_COMPOSITION',
+  'RENDER_MULTIVIEW_COMPOSITION',
+  'RENDER_BROWSER_COMPOSITION',
+  'START_BROWSER_RENDERER',
+  'STOP_BROWSER_RENDERER',
+  'UPDATE_BROWSER_RENDER_TARGET',
+  'RENDER_FRAME',
+  'SELECT_RENDER_BACKEND',
+  'CLEAR_RENDER_CACHE',
+  'FORCE_FULL_RENDER',
+  'UPDATE_RENDER_PERFORMANCE_MODE',
+  'REPORT_RENDER_HEALTH',
+  'APPLY_LAYOUT',
+]);
+const outputIntentTypes = new Set<MediaExecutionIntentType>([
+  'START_STREAM',
+  'STOP_STREAM',
+  'START_RECORDING',
+  'STOP_RECORDING',
+  'UPDATE_DESTINATION',
+  'BUILD_RECORDING_PLAN',
+  'PREPARE_RECORDING',
+  'START_RECORDING_ENGINE',
+  'PAUSE_RECORDING_ENGINE',
+  'RESUME_RECORDING_ENGINE',
+  'STOP_RECORDING_ENGINE',
+  'FAIL_RECORDING_ENGINE',
+  'VALIDATE_RECORDING_PLAN',
+]);
+const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = [
+  'ROUTE_PROGRAM_VIDEO',
+  'ROUTE_PREVIEW_VIDEO',
+  'BUILD_VIDEO_ROUTE_PLAN',
+  'BUILD_AUDIO_ROUTE_PLAN',
+  'UPDATE_AUDIO_MIX',
+  'UPDATE_SCENE_COMPOSITION',
+  'BUILD_SCENE_COMPOSITION',
+  'UPDATE_DESTINATION',
+  'ROUTE_STREAM_VIDEO',
+  'BUILD_RECORDING_PLAN',
+  'PREPARE_RECORDING',
+  'START_RECORDING_ENGINE',
+  'RENDER_BROWSER_COMPOSITION',
+  'RENDER_FRAME',
+];
+function defaultOrchestrationPriority(type: MediaExecutionIntentType) {
+  const index = orchestrationIntentOrder.indexOf(type);
+  return index === -1 ? 0 : 1000 - index;
+}
+export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem {
+  if (videoIntentTypes.has(type)) return 'video';
+  if (audioIntentTypes.has(type)) return 'audio';
+  if (renderIntentTypes.has(type)) return 'render';
+  if (outputIntentTypes.has(type)) return 'output';
+  return 'sync';
+}
+export function toMediaIntent(intent: MediaExecutionIntent): MediaIntent {
+  const targetSubsystem = subsystemForExecutionType(intent.type);
+  return {
+    id: intent.id,
+    type: targetSubsystem,
+    executionType: intent.type,
+    sourceGraphRevision: intent.graphRevision,
+    dependencies: (intent.payload.dependencies as string[] | undefined) ?? [],
+    priority: Number(intent.payload.priority ?? defaultOrchestrationPriority(intent.type)),
+    targetSubsystem,
+    payload: intent.payload,
+    timingConstraint:
+      typeof intent.payload.frameTimestamp === 'number'
+        ? { requestedFrameTimestamp: intent.payload.frameTimestamp }
+        : {},
+    submittedAt: intent.timestamp,
+  };
+}
+export function toExecutionIntent(
+  intent: MediaIntent,
+  frameTimestamp: number,
+): MediaExecutionIntent {
+  return {
+    id: intent.id,
+    type: intent.executionType as MediaExecutionIntentType,
+    timestamp: new Date(frameTimestamp).toISOString(),
+    graphRevision: intent.sourceGraphRevision,
+    payload: { ...intent.payload, frameTimestamp, orchestrationSubsystem: intent.targetSubsystem },
+  };
+}
 
 export interface MediaExecutionAdapterResponse {
   readonly adapterName: string;
@@ -139,6 +271,7 @@ export * from './adapters/webrtc/index.js';
 export * from './compositor/index.js';
 export * from './routing.js';
 export * from './audio-routing/index.js';
+export * from './recording/index.js';
 export * from './browser-renderer/index.js';
 export * from './sync/index.js';
 export * from './orchestration.js';
@@ -206,7 +339,11 @@ export interface MediaExecutionState {
 
 export interface MediaExecutionPlane {
   onGraphTransition(transition: ProductionGraphTransition): Promise<MediaExecutionResult[]>;
-  executeFrameSync(tick: FrameTickEvent, graph: ProductionGraph, intents?: readonly MediaExecutionIntent[]): Promise<MediaExecutionResult[]>;
+  executeFrameSync(
+    tick: FrameTickEvent,
+    graph: ProductionGraph,
+    intents?: readonly MediaExecutionIntent[],
+  ): Promise<MediaExecutionResult[]>;
   getExecutionState(): MediaExecutionState;
   registerAdapter(adapter: MediaExecutionAdapter, metadata?: Partial<AdapterMetadata>): void;
 }
@@ -251,8 +388,8 @@ export function configureMockExecutionLatency(config: Partial<MockExecutionLaten
 const commandIntentMap = {
   CUT_TO_PROGRAM: 'SWITCH_PROGRAM_SCENE',
   SET_PREVIEW_SCENE: 'UPDATE_PREVIEW_SCENE',
-  START_RECORDING: 'START_RECORDING',
-  STOP_RECORDING: 'STOP_RECORDING',
+  START_RECORDING: 'START_RECORDING_ENGINE',
+  STOP_RECORDING: 'STOP_RECORDING_ENGINE',
   SET_WORKSPACE_PRESET: 'APPLY_LAYOUT',
   ASSIGN_SOURCE_TO_SCENE: 'UPDATE_SCENE_COMPOSITION',
   UPDATE_SOURCE: 'UPDATE_SCENE_COMPOSITION',
@@ -453,11 +590,15 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   private readonly compositionStore = new CompositionStore();
   private readonly videoRouteStore = new VideoRouteStore();
   private readonly audioRouteStore = new AudioRouteStore();
+  private readonly recordingStore = new RecordingStore();
   getVideoRouteStore() {
     return this.videoRouteStore;
   }
   getAudioRouteStore() {
     return this.audioRouteStore;
+  }
+  getRecordingStore() {
+    return this.recordingStore;
   }
   getLatestAudioRouteGraph() {
     const plan = this.audioRouteStore.getRoutePlan();
@@ -560,6 +701,76 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       warnings.push(...getVideoRouteWarnings(plan, graph, [...existing, ...generated]));
     }
 
+    const recordingIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_RECORDING_PLAN',
+      'PREPARE_RECORDING',
+      'START_RECORDING_ENGINE',
+      'PAUSE_RECORDING_ENGINE',
+      'RESUME_RECORDING_ENGINE',
+      'STOP_RECORDING_ENGINE',
+      'FAIL_RECORDING_ENGINE',
+      'VALIDATE_RECORDING_PLAN',
+    ];
+    if (!shouldFail && graph && recordingIntentTypes.includes(intent.type)) {
+      let session = this.recordingStore.getActiveRecording();
+      const videoPlan = this.videoRouteStore.getRoutePlan();
+      const audioPlan = this.audioRouteStore.getRoutePlan();
+      if (
+        !session ||
+        intent.type === 'BUILD_RECORDING_PLAN' ||
+        intent.type === 'PREPARE_RECORDING'
+      ) {
+        const recordingOptions: {
+          now: string;
+          frameId?: number;
+          frameTimestamp?: number;
+          outputId?: string;
+          destination?: string;
+        } = { now: intent.timestamp };
+        if (typeof intent.payload.frameId === 'number')
+          recordingOptions.frameId = intent.payload.frameId;
+        if (typeof intent.payload.frameTimestamp === 'number')
+          recordingOptions.frameTimestamp = intent.payload.frameTimestamp;
+        if (typeof intent.payload.outputId === 'string')
+          recordingOptions.outputId = intent.payload.outputId;
+        if (typeof intent.payload.destination === 'string')
+          recordingOptions.destination = intent.payload.destination;
+        const plan = createRecordingPlan(graph, videoPlan, audioPlan, recordingOptions);
+        const validation = validateRecordingPlan(plan);
+        warnings.push(...validation.warnings);
+        if (!validation.success) warnings.push(...validation.errors);
+        session = this.recordingStore.setRecordingPlan(plan);
+      }
+      if (
+        session &&
+        (intent.type === 'START_RECORDING_ENGINE' || intent.type === 'START_RECORDING')
+      )
+        session = startRecording(session, intent.timestamp);
+      else if (session && intent.type === 'PAUSE_RECORDING_ENGINE')
+        session = pauseRecording(session, intent.timestamp);
+      else if (session && intent.type === 'RESUME_RECORDING_ENGINE')
+        session = resumeRecording(session, intent.timestamp);
+      else if (
+        session &&
+        (intent.type === 'STOP_RECORDING_ENGINE' || intent.type === 'STOP_RECORDING')
+      )
+        session = stopRecording(session, intent.timestamp);
+      else if (session && intent.type === 'FAIL_RECORDING_ENGINE')
+        session = failRecording(
+          session,
+          String(intent.payload.reason ?? 'Mock recording failure'),
+          intent.timestamp,
+        );
+      else if (session && intent.type === 'VALIDATE_RECORDING_PLAN')
+        warnings.push(...validateRecordingPlan(session.plan).warnings);
+      if (session && intent.type === 'STOP_RECORDING_ENGINE' && !session.manifest)
+        session = { ...session, manifest: createRecordingManifest(session, intent.timestamp) };
+      if (session) {
+        this.recordingStore.setRecordingSession(session);
+        warnings.push(`Recording ${session.status}: ${session.id}`);
+      }
+    }
+
     const audioRoutingIntentTypes: MediaExecutionIntentType[] = [
       'BUILD_AUDIO_ROUTE_PLAN',
       'UPDATE_AUDIO_ROUTE',
@@ -607,7 +818,9 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
   private lastResults: MediaExecutionResult[] = [];
   private currentGraphRevision = 0;
   private runtimeMode: ExecutionRuntimeMode = globalRuntimeMode;
-  private readonly orchestrationEngine = new MediaOrchestrationEngine(createClock({ frameRate: 30 }));
+  private readonly orchestrationEngine = new MediaOrchestrationEngine(
+    createClock({ frameRate: 30 }),
+  );
   constructor(private logStore = new ExecutionLogStore()) {}
   registerAdapter(adapter: MediaExecutionAdapter, metadata?: Partial<AdapterMetadata>) {
     this.adapterRegistry.register(adapter, metadata);
@@ -651,13 +864,57 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
   configureMockExecutionLatency(config: Partial<MockExecutionLatencyConfig>) {
     configureMockExecutionLatency(config);
   }
-  async executeFrameSync(tick: FrameTickEvent, graph: ProductionGraph, intents: readonly MediaExecutionIntent[] = []) {
-    const order: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
-    const base = intents.length ? [...intents] : [{ id: `frame-sync:${tick.frameId}`, type: 'EXECUTE_FRAME_SYNC' as const, timestamp: new Date(tick.broadcastTime).toISOString(), graphRevision: graph.metadata.revision, payload: { frameTick: tick } }];
-    const ordered = base.map((intent) => ({ ...intent, payload: { ...intent.payload, frameTick: tick, frameId: tick.frameId, frameTimestamp: tick.timestamp } })).sort((a,b) => order.indexOf(a.type) - order.indexOf(b.type) || a.id.localeCompare(b.id));
+  async executeFrameSync(
+    tick: FrameTickEvent,
+    graph: ProductionGraph,
+    intents: readonly MediaExecutionIntent[] = [],
+  ) {
+    const order: readonly MediaExecutionIntentType[] = [
+      'ROUTE_PROGRAM_VIDEO',
+      'ROUTE_PREVIEW_VIDEO',
+      'BUILD_VIDEO_ROUTE_PLAN',
+      'BUILD_AUDIO_ROUTE_PLAN',
+      'UPDATE_AUDIO_MIX',
+      'UPDATE_SCENE_COMPOSITION',
+      'BUILD_SCENE_COMPOSITION',
+      'UPDATE_DESTINATION',
+      'ROUTE_STREAM_VIDEO',
+      'BUILD_RECORDING_PLAN',
+      'PREPARE_RECORDING',
+      'START_RECORDING_ENGINE',
+      'RENDER_BROWSER_COMPOSITION',
+      'RENDER_FRAME',
+    ];
+    const base = intents.length
+      ? [...intents]
+      : [
+          {
+            id: `frame-sync:${tick.frameId}`,
+            type: 'EXECUTE_FRAME_SYNC' as const,
+            timestamp: new Date(tick.broadcastTime).toISOString(),
+            graphRevision: graph.metadata.revision,
+            payload: { frameTick: tick },
+          },
+        ];
+    const ordered = base
+      .map((intent) => ({
+        ...intent,
+        payload: {
+          ...intent.payload,
+          frameTick: tick,
+          frameId: tick.frameId,
+          frameTimestamp: tick.timestamp,
+        },
+      }))
+      .sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type) || a.id.localeCompare(b.id));
     ordered.forEach((intent) => this.orchestrationEngine.submitIntent(toMediaIntent(intent)));
-    const framePlan = this.orchestrationEngine.planExecutionFrame(tick.timestamp, this.getSubsystemState());
-    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, framePlan.frameTimestamp));
+    const framePlan = this.orchestrationEngine.planExecutionFrame(
+      tick.timestamp,
+      this.getSubsystemState(),
+    );
+    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) =>
+      toExecutionIntent(intent, framePlan.frameTimestamp),
+    );
     this.currentGraphRevision = graph.metadata.revision;
     const results: MediaExecutionResult[] = [];
     for (const intent of this.lastIntents) results.push(await this.dispatchIntent(intent, graph));
@@ -668,7 +925,9 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
     const intents = translateGraphTransitionToIntents(transition);
     intents.forEach((intent) => this.orchestrationEngine.submitIntent(toMediaIntent(intent)));
     const framePlan = this.orchestrationEngine.planExecutionFrame(0, this.getSubsystemState());
-    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, framePlan.frameTimestamp));
+    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) =>
+      toExecutionIntent(intent, framePlan.frameTimestamp),
+    );
     this.currentGraphRevision = transition.nextRevision;
     intents.forEach((intent) =>
       this.eventStream.emit({
@@ -691,22 +950,32 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
     void this.onGraphTransition(transition);
   }
   submitVideoOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.videoOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.videoOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   submitAudioOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.audioOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.audioOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   submitRenderOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.renderOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.renderOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   submitOutputOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.outputOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.outputOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   getSubsystemState(): MediaSubsystemStateSnapshot {
     return { video: 'ready', audio: 'ready', render: 'ready', output: 'ready', sync: 'ready' };
   }
   async executeMediaFramePlan(plan: MediaFramePlan, graph: ProductionGraph) {
-    const intents = plan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    const intents = plan.orderedExecutionSteps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
     const results: MediaExecutionResult[] = [];
     for (const intent of intents) results.push(await this.dispatchIntent(intent, graph));
     this.lastIntents = intents;
