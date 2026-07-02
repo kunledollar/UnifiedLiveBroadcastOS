@@ -15,6 +15,9 @@ import {
   ExecutionLogStore,
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
+  BrowserMediaSourceManager,
+  WebRTCMediaExecutionAdapter,
+  stopAllTracks,
   configureMockExecutionLatency,
   replayExecutionForRevision,
   summarizeExecutionForRevision,
@@ -196,4 +199,73 @@ assert.equal(
   Boolean(engine.getExecutionState().executionHealth && engine.getExecutionState().adapterRegistry),
   true,
   'inspector data shape is valid',
+);
+
+
+const webRTC = new WebRTCMediaExecutionAdapter();
+assert.equal(webRTC.getName(), 'WebRTCMediaExecutionAdapter', 'WebRTC adapter can be constructed');
+assert.equal(
+  webRTC.getCapabilities().includes('SWITCH_PROGRAM_SCENE'),
+  true,
+  'WebRTC adapter declares safe capabilities',
+);
+const unsupported = webRTC.execute(
+  {
+    id: 'unsupported-start-stream',
+    type: 'START_STREAM',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: 1,
+    payload: {},
+  },
+  recordingTransition.nextGraph,
+);
+assert.equal(unsupported.success, false, 'unsupported WebRTC intent fails structurally');
+assert.equal(
+  unsupported.errors[0]?.startsWith('UNSUPPORTED_INTENT'),
+  true,
+  'unsupported WebRTC intent returns structured error',
+);
+const manager = new BrowserMediaSourceManager();
+let stopped = false;
+const streamLike = {
+  id: 'mock-stream',
+  getAudioTracks: () => [{ readyState: 'live', stop: () => undefined }],
+  getVideoTracks: () => [],
+  getTracks: () => [{ readyState: 'live', stop: () => { stopped = true; } }],
+} as unknown as MediaStream;
+const metadata = manager.registerStream(streamLike, { sourceId: 'camera-a', kind: 'camera' });
+assert.equal(metadata.hasAudio, true, 'source manager tracks audio availability');
+assert.equal(manager.getStream('camera-a')?.id, 'mock-stream', 'source manager returns streams by source');
+assert.equal(manager.unregisterStream('camera-a')?.sourceId, 'camera-a', 'source manager unregisters streams');
+stopAllTracks(streamLike);
+assert.equal(stopped, true, 'stopAllTracks stops stream tracks');
+stopAllTracks(undefined);
+
+const liveReadyEngine = new MediaExecutionEngine(new ExecutionLogStore());
+liveReadyEngine.registerAdapter(new MockMediaExecutionAdapter({ latencyMs: 1 }), {
+  id: 'mock-live-ready-test',
+  name: 'Mock Live Ready Test',
+  isMock: true,
+  isLive: false,
+});
+liveReadyEngine.registerAdapter(webRTC, {
+  id: 'webrtc-live-ready-test',
+  name: 'WebRTC Live Ready Test',
+  type: 'webrtc',
+  status: 'enabled',
+  capabilities: webRTC.getCapabilities(),
+  isMock: false,
+  isLive: true,
+});
+liveReadyEngine.setExecutionRuntimeMode('live_ready');
+assert.equal(
+  liveReadyEngine.getExecutionState().activeAdapter?.id,
+  'webrtc-live-ready-test',
+  'live_ready mode can select WebRTC adapter',
+);
+liveReadyEngine.setExecutionRuntimeMode('mock_live');
+assert.equal(
+  liveReadyEngine.getExecutionState().activeAdapter?.id,
+  'mock-live-ready-test',
+  'mock_live mode still selects mock adapter',
 );
