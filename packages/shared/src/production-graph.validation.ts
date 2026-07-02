@@ -234,7 +234,10 @@ const guestOperator = {
   initials: 'GM',
 };
 store.joinOperator(guestOperator);
-assert(store.getCollaborationSession().operators['guest-manager'], 'operator joins collaboration session');
+assert(
+  store.getCollaborationSession().operators['guest-manager'],
+  'operator joins collaboration session',
+);
 store.updateOperatorPresence('guest-manager', 'away');
 assert(
   store.getCollaborationSession().operators['guest-manager']?.presence === 'away',
@@ -247,16 +250,25 @@ assert(
 );
 store.setCurrentGraphRevision(3);
 assert(
-  isOperatorBehindGraph(store.getCollaborationSession().operators.producer!, store.getCollaborationSession()),
+  isOperatorBehindGraph(
+    store.getCollaborationSession().operators.producer!,
+    store.getCollaborationSession(),
+  ),
   'operator revision lag is detected',
 );
 assert(
-  getRevisionLag(store.getCollaborationSession().operators.producer!, store.getCollaborationSession()) === 3,
+  getRevisionLag(
+    store.getCollaborationSession().operators.producer!,
+    store.getCollaborationSession(),
+  ) === 3,
   'revision lag helper returns current delta',
 );
 store.markOperatorSynced('producer', 3);
 assert(
-  getRevisionLag(store.getCollaborationSession().operators.producer!, store.getCollaborationSession()) === 0,
+  getRevisionLag(
+    store.getCollaborationSession().operators.producer!,
+    store.getCollaborationSession(),
+  ) === 0,
   'mark operator synced updates observed revision',
 );
 const collabDispatcher = new LocalProductionCommandDispatcher(collaborationProduction);
@@ -272,7 +284,10 @@ const busAccepted = bus.broadcastCommand({
   payload: { id: 'collab-scene', name: 'Collab Scene' },
 });
 assert(busAccepted.accepted, 'command broadcast accepts current revision command');
-assert(store.getCollaborationSession().currentGraphRevision === 1, 'command broadcast updates session revision');
+assert(
+  store.getCollaborationSession().currentGraphRevision === 1,
+  'command broadcast updates session revision',
+);
 const busRejected = bus.broadcastCommand({
   id: 'collab-stale-preview',
   type: 'SET_PREVIEW_SCENE',
@@ -293,7 +308,10 @@ assert(
   'collaboration role maps to production role',
 );
 assert(
-  canCollaborationOperatorExecuteCommand(store.getCollaborationSession().operators.audio!, 'SET_AUDIO_GAIN'),
+  canCollaborationOperatorExecuteCommand(
+    store.getCollaborationSession().operators.audio!,
+    'SET_AUDIO_GAIN',
+  ),
   'collaboration permissions reuse production command permissions',
 );
 console.log('Collaboration validation passed');
@@ -344,133 +362,425 @@ const envelope = createSyncEnvelope({
   graphRevision: syncSession.currentGraphRevision,
   payload: { ok: true },
 });
-assert(envelope.id && envelope.type === 'CLIENT_HEARTBEAT', 'sync envelope creation assigns id and type');
+assert(
+  envelope.id && envelope.type === 'CLIENT_HEARTBEAT',
+  'sync envelope creation assigns id and type',
+);
 
 const serializedEnvelope = serializeSyncEnvelope(envelope);
-assert(deserializeSyncEnvelope(serializedEnvelope).id === envelope.id, 'sync envelope serialization round-trips');
+assert(
+  deserializeSyncEnvelope(serializedEnvelope).id === envelope.id,
+  'sync envelope serialization round-trips',
+);
 assert(validateSyncEnvelope(envelope), 'sync envelope validation accepts valid messages');
-assert(!validateSyncEnvelope({ type: 'CLIENT_HEARTBEAT' }), 'sync envelope validation rejects invalid messages');
-const heartbeatEnvelope = createHeartbeatEnvelope({ sessionId: syncSession.id, broadcastSessionId: syncSession.broadcastSessionId, clientId: directorClient.clientId, operatorId: directorClient.operatorId, graphRevision: syncSession.currentGraphRevision });
-assert(heartbeatEnvelope.type === 'CLIENT_HEARTBEAT', 'heartbeat envelope helper creates heartbeat messages');
-const websocketClient = new WebSocketSyncClient({ url: 'ws://localhost:4000/realtime/sync', maxReconnectAttempts: 1 });
+assert(
+  !validateSyncEnvelope({ type: 'CLIENT_HEARTBEAT' }),
+  'sync envelope validation rejects invalid messages',
+);
+const heartbeatEnvelope = createHeartbeatEnvelope({
+  sessionId: syncSession.id,
+  broadcastSessionId: syncSession.broadcastSessionId,
+  clientId: directorClient.clientId,
+  operatorId: directorClient.operatorId,
+  graphRevision: syncSession.currentGraphRevision,
+});
+assert(
+  heartbeatEnvelope.type === 'CLIENT_HEARTBEAT',
+  'heartbeat envelope helper creates heartbeat messages',
+);
+const websocketClient = new WebSocketSyncClient({
+  url: 'ws://localhost:4000/realtime/sync',
+  maxReconnectAttempts: 1,
+});
 const websocketTransport = new WebSocketSyncTransport(websocketClient);
-assert(websocketTransport.getState() === 'idle', 'websocket sync transport constructs in idle state');
-assert(isRealtimeSyncEnabled({ NEXT_PUBLIC_UBOS_REALTIME_SYNC: 'true', NEXT_PUBLIC_UBOS_SYNC_URL: 'ws://localhost:4000/realtime/sync' }), 'realtime sync feature flag enables websocket transport');
+assert(
+  websocketTransport.getState() === 'idle',
+  'websocket sync transport constructs in idle state',
+);
+assert(
+  isRealtimeSyncEnabled({
+    NEXT_PUBLIC_UBOS_REALTIME_SYNC: 'true',
+    NEXT_PUBLIC_UBOS_SYNC_URL: 'ws://localhost:4000/realtime/sync',
+  }),
+  'realtime sync feature flag enables websocket transport',
+);
 
 const ack = createRevisionAck(producerClient, syncSession.currentGraphRevision);
 const ackedSession = applyRevisionAck(syncSession, ack);
-assert(isClientSynced(ackedSession.clients['producer-client']!, ackedSession), 'revision acknowledgement marks client current');
-assert(getClientRevisionLag(producerClient, syncSession) >= 0, 'revision lag calculation is non-negative');
-assert(markClientSynced(producerClient, syncSession).recoveryState === 'synced', 'markClientSynced sets recovery state');
-const heartbeatClient = updateClientHeartbeat(producerClient, {
-  clientId: producerClient.clientId,
-  operatorId: producerClient.operatorId,
-  sentAt: '2026-07-01T00:00:10.000Z',
-  observedGraphRevision: syncSession.currentGraphRevision,
-}, syncSession.currentGraphRevision);
-assert(heartbeatClient.lastHeartbeatAt === '2026-07-01T00:00:10.000Z', 'heartbeat update stores last heartbeat');
-assert(isClientStale({ ...producerClient, lastHeartbeatAt: '2026-07-01T00:00:00.000Z' }, 1000, Date.parse('2026-07-01T00:00:02.000Z')), 'stale client detection works');
-assert(getStaleClients(syncSession, 1, Date.now()).length >= 0, 'stale client listing returns array');
-assert(getMissingRevisionRange(1, 3)?.fromRevision === 2, 'missing revision range starts after observed revision');
-const catchUpRequest = createCatchUpRequest({
-  sessionId: syncSession.id,
-  broadcastSessionId: syncSession.broadcastSessionId,
-  clientId: producerClient.clientId,
-  operatorId: producerClient.operatorId,
-  graphRevision: syncSession.currentGraphRevision,
-}, producerClient.observedGraphRevision);
+assert(
+  isClientSynced(ackedSession.clients['producer-client']!, ackedSession),
+  'revision acknowledgement marks client current',
+);
+assert(
+  getClientRevisionLag(producerClient, syncSession) >= 0,
+  'revision lag calculation is non-negative',
+);
+assert(
+  markClientSynced(producerClient, syncSession).recoveryState === 'synced',
+  'markClientSynced sets recovery state',
+);
+const heartbeatClient = updateClientHeartbeat(
+  producerClient,
+  {
+    clientId: producerClient.clientId,
+    operatorId: producerClient.operatorId,
+    sentAt: '2026-07-01T00:00:10.000Z',
+    observedGraphRevision: syncSession.currentGraphRevision,
+  },
+  syncSession.currentGraphRevision,
+);
+assert(
+  heartbeatClient.lastHeartbeatAt === '2026-07-01T00:00:10.000Z',
+  'heartbeat update stores last heartbeat',
+);
+assert(
+  isClientStale(
+    { ...producerClient, lastHeartbeatAt: '2026-07-01T00:00:00.000Z' },
+    1000,
+    Date.parse('2026-07-01T00:00:02.000Z'),
+  ),
+  'stale client detection works',
+);
+assert(
+  getStaleClients(syncSession, 1, Date.now()).length >= 0,
+  'stale client listing returns array',
+);
+assert(
+  getMissingRevisionRange(1, 3)?.fromRevision === 2,
+  'missing revision range starts after observed revision',
+);
+const catchUpRequest = createCatchUpRequest(
+  {
+    sessionId: syncSession.id,
+    broadcastSessionId: syncSession.broadcastSessionId,
+    clientId: producerClient.clientId,
+    operatorId: producerClient.operatorId,
+    graphRevision: syncSession.currentGraphRevision,
+  },
+  producerClient.observedGraphRevision,
+);
 assert(catchUpRequest.type === 'GRAPH_REVISION_REQUEST', 'catch-up request created');
-const catchUpResponse = createCatchUpResponse({
-  sessionId: syncSession.id,
-  broadcastSessionId: syncSession.broadcastSessionId,
-  clientId: producerClient.clientId,
-  operatorId: producerClient.operatorId,
-  graphRevision: syncSession.currentGraphRevision,
-}, [], 1, 2);
+const catchUpResponse = createCatchUpResponse(
+  {
+    sessionId: syncSession.id,
+    broadcastSessionId: syncSession.broadcastSessionId,
+    clientId: producerClient.clientId,
+    operatorId: producerClient.operatorId,
+    graphRevision: syncSession.currentGraphRevision,
+  },
+  [],
+  1,
+  2,
+);
 assert(catchUpResponse.type === 'EVENTS_BATCH', 'catch-up response created');
-const resync = createResyncRequiredMessage({
-  sessionId: syncSession.id,
-  broadcastSessionId: syncSession.broadcastSessionId,
-  clientId: producerClient.clientId,
-  operatorId: producerClient.operatorId,
-  graphRevision: syncSession.currentGraphRevision,
-}, 0, syncSession.currentGraphRevision);
+const resync = createResyncRequiredMessage(
+  {
+    sessionId: syncSession.id,
+    broadcastSessionId: syncSession.broadcastSessionId,
+    clientId: producerClient.clientId,
+    operatorId: producerClient.operatorId,
+    graphRevision: syncSession.currentGraphRevision,
+  },
+  0,
+  syncSession.currentGraphRevision,
+);
 assert(resync.type === 'CLIENT_RESYNC_REQUIRED', 'resync required message created');
 const transport = new LocalSyncTransport();
-const syncDispatcher = new LocalProductionCommandDispatcher(createBroadcastSession({ id: 'test-session', operatorId: 'tester', timestamp: '2026-07-01T00:00:00.000Z' }));
+const syncDispatcher = new LocalProductionCommandDispatcher(
+  createBroadcastSession({
+    id: 'test-session',
+    operatorId: 'tester',
+    timestamp: '2026-07-01T00:00:00.000Z',
+  }),
+);
 const syncCurrentRevision = getProductionGraphRevision(syncDispatcher.getGraph());
 const coordinator = new SyncCoordinator(
-  createSyncSession({ id: 'sync-coordinator-test', broadcastSessionId: 'test-session', productionGraphId: syncDispatcher.getGraph().id, currentGraphRevision: syncCurrentRevision }),
+  createSyncSession({
+    id: 'sync-coordinator-test',
+    broadcastSessionId: 'test-session',
+    productionGraphId: syncDispatcher.getGraph().id,
+    currentGraphRevision: syncCurrentRevision,
+  }),
   syncDispatcher,
   transport,
 );
-coordinator.joinClient({ clientId: 'tester-client', operatorId: 'tester', displayName: 'Tester', observedGraphRevision: syncCurrentRevision, metadata: {} });
+coordinator.joinClient({
+  clientId: 'tester-client',
+  operatorId: 'tester',
+  displayName: 'Tester',
+  observedGraphRevision: syncCurrentRevision,
+  metadata: {},
+});
 assert(coordinator.listClients().length === 1, 'client join registers client');
 coordinator.leaveClient('missing-client');
 assert(coordinator.listClients().length === 1, 'client leave ignores unknown client');
-const acceptedTransition = coordinator.submitCommand('tester-client', command('CREATE_SCENE', { id: 'sync-scene', name: 'Sync' }, 'DIRECTOR', syncCurrentRevision));
+const acceptedTransition = coordinator.submitCommand(
+  'tester-client',
+  command('CREATE_SCENE', { id: 'sync-scene', name: 'Sync' }, 'DIRECTOR', syncCurrentRevision),
+);
 assert(acceptedTransition?.accepted, 'command submit accepted');
-coordinator.submitCommand('tester-client', command('SET_PREVIEW_SCENE', { sceneId: 'sync-scene' }, 'DIRECTOR', 0));
-assert(transport.sentMessages.some((message) => message.type === 'COMMAND_REJECTED'), 'stale command rejected');
-assert(transport.sentMessages.some((message) => message.type === 'CLIENT_BEHIND'), 'CLIENT_BEHIND emitted');
-assert(coordinator.requestCatchUp('tester-client')?.type, 'catch-up request returns response or resync message');
-
+coordinator.submitCommand(
+  'tester-client',
+  command('SET_PREVIEW_SCENE', { sceneId: 'sync-scene' }, 'DIRECTOR', 0),
+);
+assert(
+  transport.sentMessages.some((message) => message.type === 'COMMAND_REJECTED'),
+  'stale command rejected',
+);
+assert(
+  transport.sentMessages.some((message) => message.type === 'CLIENT_BEHIND'),
+  'CLIENT_BEHIND emitted',
+);
+assert(
+  coordinator.requestCatchUp('tester-client')?.type,
+  'catch-up request returns response or resync message',
+);
 
 const authority = createSessionAuthority('test-session', '2026-07-01T00:00:00.000Z');
-assert(getAuthorityScopeForCommand('SET_PREVIEW_SCENE') === 'preview', 'authority scope resolution maps preview commands');
-assert(roleHasAuthority('AUDIO_ENGINEER', 'audio'), 'role authority check allows audio engineer on audio');
+assert(
+  getAuthorityScopeForCommand('SET_PREVIEW_SCENE') === 'preview',
+  'authority scope resolution maps preview commands',
+);
+assert(
+  roleHasAuthority('AUDIO_ENGINEER', 'audio'),
+  'role authority check allows audio engineer on audio',
+);
 assert(!roleHasAuthority('VIEWER', 'program'), 'role authority check denies viewer mutations');
-let lockSet = acquireLock([], { sessionId: 'test-session', scope: 'audio', ownerOperatorId: 'audio', ownerRole: 'AUDIO_ENGINEER', at: '2026-07-01T00:00:00.000Z', ttlMs: 1000 });
-assert(lockSet.accepted && getLockForScope(lockSet.locks, 'audio', '2026-07-01T00:00:00.500Z'), 'lock acquire stores active lock');
-const renewedLocks = renewLock(lockSet.locks, lockSet.lock.id, 'audio', 2000, '2026-07-01T00:00:00.500Z');
-assert(getLockForScope(renewedLocks, 'audio', '2026-07-01T00:00:02.000Z'), 'lock renewal extends lease');
+let lockSet = acquireLock([], {
+  sessionId: 'test-session',
+  scope: 'audio',
+  ownerOperatorId: 'audio',
+  ownerRole: 'AUDIO_ENGINEER',
+  at: '2026-07-01T00:00:00.000Z',
+  ttlMs: 1000,
+});
+assert(
+  lockSet.accepted && getLockForScope(lockSet.locks, 'audio', '2026-07-01T00:00:00.500Z'),
+  'lock acquire stores active lock',
+);
+const renewedLocks = renewLock(
+  lockSet.locks,
+  lockSet.lock.id,
+  'audio',
+  2000,
+  '2026-07-01T00:00:00.500Z',
+);
+assert(
+  getLockForScope(renewedLocks, 'audio', '2026-07-01T00:00:02.000Z'),
+  'lock renewal extends lease',
+);
 const expiredLocks = expireLocks(renewedLocks, '2026-07-01T00:00:03.000Z');
 assert(expiredLocks[0]?.status === 'expired', 'lock expiration marks stale lease expired');
-const releasedLocks = releaseLock(renewedLocks, lockSet.lock.id, 'owner', 'OWNER', '2026-07-01T00:00:01.000Z');
+const releasedLocks = releaseLock(
+  renewedLocks,
+  lockSet.lock.id,
+  'owner',
+  'OWNER',
+  '2026-07-01T00:00:01.000Z',
+);
 assert(releasedLocks[0]?.status === 'released', 'owner override can release another operator lock');
-const locked = acquireLock([], { sessionId: 'test-session', scope: 'program', ownerOperatorId: 'director', ownerRole: 'DIRECTOR', at: '2026-07-01T00:00:00.000Z', ttlMs: 10000 });
-assert(!acquireLock(locked.locks, { sessionId: 'test-session', scope: 'program', ownerOperatorId: 'producer', ownerRole: 'PRODUCER', at: '2026-07-01T00:00:01.000Z' }).accepted, 'non-authorized operator cannot override active lock');
-const acceptedAuthority = arbitrateProductionCommand({ command: command('SET_AUDIO_GAIN', { channelId: 'a', gain: 0.5 }, 'AUDIO_ENGINEER', getProductionGraphRevision(graph)), authority, locks: [], graph });
+const locked = acquireLock([], {
+  sessionId: 'test-session',
+  scope: 'program',
+  ownerOperatorId: 'director',
+  ownerRole: 'DIRECTOR',
+  at: '2026-07-01T00:00:00.000Z',
+  ttlMs: 10000,
+});
+assert(
+  !acquireLock(locked.locks, {
+    sessionId: 'test-session',
+    scope: 'program',
+    ownerOperatorId: 'producer',
+    ownerRole: 'PRODUCER',
+    at: '2026-07-01T00:00:01.000Z',
+  }).accepted,
+  'non-authorized operator cannot override active lock',
+);
+const acceptedAuthority = arbitrateProductionCommand({
+  command: command(
+    'SET_AUDIO_GAIN',
+    { channelId: 'a', gain: 0.5 },
+    'AUDIO_ENGINEER',
+    getProductionGraphRevision(graph),
+  ),
+  authority,
+  locks: [],
+  graph,
+});
 assert(acceptedAuthority.decision.allowed, 'command arbitration accepts authorized command');
-const deniedAuthority = arbitrateProductionCommand({ command: command('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }, 'VIEWER', getProductionGraphRevision(graph)), authority, locks: [], graph });
-assert(!deniedAuthority.decision.allowed && 'conflict' in deniedAuthority, 'command arbitration rejects authority violation with conflict');
-const lockDenied = arbitrateProductionCommand({ command: command('TAKE_PREVIEW', {}, 'TECHNICAL_DIRECTOR', getProductionGraphRevision(graph)), authority, locks: locked.locks, graph, at: '2026-07-01T00:00:01.000Z' });
-assert(!lockDenied.decision.allowed && lockDenied.decision.reason === 'LOCKED_SCOPE', 'command arbitration rejects locked scope');
-const conflict = createCommandConflict({ sessionId: 'test-session', commandId: 'conflict-command', actorId: 'tester', actorRole: 'DIRECTOR', commandType: 'TAKE_PREVIEW', scope: 'program', type: 'REVISION_MISMATCH', message: 'mock conflict' });
+const deniedAuthority = arbitrateProductionCommand({
+  command: command(
+    'SET_PREVIEW_SCENE',
+    { sceneId: 'scene-a' },
+    'VIEWER',
+    getProductionGraphRevision(graph),
+  ),
+  authority,
+  locks: [],
+  graph,
+});
+assert(
+  !deniedAuthority.decision.allowed && 'conflict' in deniedAuthority,
+  'command arbitration rejects authority violation with conflict',
+);
+const lockDenied = arbitrateProductionCommand({
+  command: command('TAKE_PREVIEW', {}, 'TECHNICAL_DIRECTOR', getProductionGraphRevision(graph)),
+  authority,
+  locks: locked.locks,
+  graph,
+  at: '2026-07-01T00:00:01.000Z',
+});
+assert(
+  !lockDenied.decision.allowed && lockDenied.decision.reason === 'LOCKED_SCOPE',
+  'command arbitration rejects locked scope',
+);
+const conflict = createCommandConflict({
+  sessionId: 'test-session',
+  commandId: 'conflict-command',
+  actorId: 'tester',
+  actorRole: 'DIRECTOR',
+  commandType: 'TAKE_PREVIEW',
+  scope: 'program',
+  type: 'REVISION_MISMATCH',
+  message: 'mock conflict',
+});
 const authorityStore = new InMemoryAuthorityStore('test-session');
 authorityStore.appendConflict(conflict);
-assert(authorityStore.resolveConflict(conflict.id, 'manual')?.status === 'resolved', 'conflict resolution updates status');
+assert(
+  authorityStore.resolveConflict(conflict.id, 'manual')?.status === 'resolved',
+  'conflict resolution updates status',
+);
 const mockAuthority = createMockAuthorityScenario('test-session');
-assert(mockAuthority.getAuthorityState().scopes.program.owner?.operatorId === 'director' && mockAuthority.listConflicts().length >= 2, 'authority diagnostics data shape includes owners and conflicts');
+assert(
+  mockAuthority.getAuthorityState().scopes.program.owner?.operatorId === 'director' &&
+    mockAuthority.listConflicts().length >= 2,
+  'authority diagnostics data shape includes owners and conflicts',
+);
 
 const persistenceRepos = createInMemoryPersistentBroadcastRepositories();
-const sessionRecord = persistenceRepos.sessions.upsert(createBroadcastSessionRecord({ graph, ownerOperatorId: 'tester', activeOperatorIds: ['tester'], timestamp: '2026-07-01T00:00:00.000Z' }));
-assert(sessionRecord.id === 'test-session' && sessionRecord.currentGraphRevision === getProductionGraphRevision(graph), 'session record creation stores current graph revision');
-const snapshotRecord = persistenceRepos.snapshots.append(createGraphSnapshot(graph, { reason: 'validation' }, '2026-07-01T00:00:01.000Z'));
-assert(snapshotRecord.graphRevision === getProductionGraphRevision(graph), 'graph snapshot creation stores revision');
-assert(restoreGraphFromSnapshot(snapshotRecord).id === graph.id, 'graph restore from snapshot returns graph payload');
-assert(!shouldCreateGraphSnapshot(1, 0, 25) && shouldCreateGraphSnapshot(25, 0, 25), 'snapshot policy helper checks revision interval');
-const persistedCommand = persistenceRepos.commands.append(createProductionCommandRecord(command('CREATE_SCENE', { id: 'persisted-scene', name: 'Persisted' }, 'DIRECTOR', getProductionGraphRevision(graph)), graph.id, true, getProductionGraphRevision(graph) + 1));
-assert(persistenceRepos.commands.list('test-session').length === 1, 'command log append stores immutable command record');
+const sessionRecord = persistenceRepos.sessions.upsert(
+  createBroadcastSessionRecord({
+    graph,
+    ownerOperatorId: 'tester',
+    activeOperatorIds: ['tester'],
+    timestamp: '2026-07-01T00:00:00.000Z',
+  }),
+);
+assert(
+  sessionRecord.id === 'test-session' &&
+    sessionRecord.currentGraphRevision === getProductionGraphRevision(graph),
+  'session record creation stores current graph revision',
+);
+const snapshotRecord = persistenceRepos.snapshots.append(
+  createGraphSnapshot(graph, { reason: 'validation' }, '2026-07-01T00:00:01.000Z'),
+);
+assert(
+  snapshotRecord.graphRevision === getProductionGraphRevision(graph),
+  'graph snapshot creation stores revision',
+);
+assert(
+  restoreGraphFromSnapshot(snapshotRecord).id === graph.id,
+  'graph restore from snapshot returns graph payload',
+);
+assert(
+  !shouldCreateGraphSnapshot(1, 0, 25) && shouldCreateGraphSnapshot(25, 0, 25),
+  'snapshot policy helper checks revision interval',
+);
+const persistedCommand = persistenceRepos.commands.append(
+  createProductionCommandRecord(
+    command(
+      'CREATE_SCENE',
+      { id: 'persisted-scene', name: 'Persisted' },
+      'DIRECTOR',
+      getProductionGraphRevision(graph),
+    ),
+    graph.id,
+    true,
+    getProductionGraphRevision(graph) + 1,
+  ),
+);
+assert(
+  persistenceRepos.commands.list('test-session').length === 1,
+  'command log append stores immutable command record',
+);
 const mutationAttempt = persistedCommand as { accepted: boolean };
-try { mutationAttempt.accepted = false; } catch {}
-assert(persistenceRepos.commands.list('test-session')[0]?.accepted, 'immutable command behavior prevents stored mutation');
-const persistedEvent = persistenceRepos.events.append(createProductionEventRecord(transition.events[0]!, graph.id));
-assert(persistenceRepos.events.list('test-session').length === 1 && persistedEvent.commandId === transition.command.id, 'event log append stores immutable event record');
+try {
+  mutationAttempt.accepted = false;
+} catch {}
+assert(
+  persistenceRepos.commands.list('test-session')[0]?.accepted,
+  'immutable command behavior prevents stored mutation',
+);
+const persistedEvent = persistenceRepos.events.append(
+  createProductionEventRecord(transition.events[0]!, graph.id),
+);
+assert(
+  persistenceRepos.events.list('test-session').length === 1 &&
+    persistedEvent.commandId === transition.command.id,
+  'event log append stores immutable event record',
+);
 const eventMutation = persistedEvent as { actorId: string };
-try { eventMutation.actorId = 'mutated'; } catch {}
-assert(persistenceRepos.events.list('test-session')[0]?.actorId !== 'mutated', 'immutable event behavior prevents stored mutation');
-const recovered = recoverSessionFromLatestSnapshot({ sessionId: 'test-session', snapshots: persistenceRepos.snapshots, events: persistenceRepos.events });
+try {
+  eventMutation.actorId = 'mutated';
+} catch {}
+assert(
+  persistenceRepos.events.list('test-session')[0]?.actorId !== 'mutated',
+  'immutable event behavior prevents stored mutation',
+);
+const recovered = recoverSessionFromLatestSnapshot({
+  sessionId: 'test-session',
+  snapshots: persistenceRepos.snapshots,
+  events: persistenceRepos.events,
+});
 assert(recovered.status === 'replayed', 'recovery from snapshot plus events succeeds');
-assert(getRecoveryPlan({ sessionId: 'test-session', currentRevision: sessionRecord.currentGraphRevision, snapshots: persistenceRepos.snapshots, events: persistenceRepos.events, commands: persistenceRepos.commands }).status === 'ready', 'recovery plan reports ready when snapshot exists');
-const checkpoint = persistenceRepos.collaboration.upsertCheckpoint(createSyncCheckpointRecord({ clientId: 'client-1', operatorId: 'tester', broadcastSessionId: 'test-session', observedGraphRevision: getProductionGraphRevision(graph), lastHeartbeatAt: '2026-07-01T00:00:02.000Z', connectionState: 'connected' }));
-assert(checkpoint.id && persistenceRepos.collaboration.listCheckpoints('test-session').length === 1, 'sync checkpoint creation persists checkpoint');
+assert(
+  getRecoveryPlan({
+    sessionId: 'test-session',
+    currentRevision: sessionRecord.currentGraphRevision,
+    snapshots: persistenceRepos.snapshots,
+    events: persistenceRepos.events,
+    commands: persistenceRepos.commands,
+  }).status === 'ready',
+  'recovery plan reports ready when snapshot exists',
+);
+const checkpoint = persistenceRepos.collaboration.upsertCheckpoint(
+  createSyncCheckpointRecord({
+    clientId: 'client-1',
+    operatorId: 'tester',
+    broadcastSessionId: 'test-session',
+    observedGraphRevision: getProductionGraphRevision(graph),
+    lastHeartbeatAt: '2026-07-01T00:00:02.000Z',
+    connectionState: 'connected',
+  }),
+);
+assert(
+  checkpoint.id && persistenceRepos.collaboration.listCheckpoints('test-session').length === 1,
+  'sync checkpoint creation persists checkpoint',
+);
 persistenceRepos.authority.appendConflict(conflict);
 persistenceRepos.authority.appendLock(locked.lock);
-assert(persistenceRepos.authority.listConflicts('test-session').length === 1 && persistenceRepos.authority.listActiveLocks('test-session', '2026-07-01T00:00:01.000Z').length === 1, 'authority conflict persistence stores conflict and active lock');
-const diagnostics = createPersistenceDiagnostics({ session: sessionRecord, latestSnapshot: snapshotRecord, commandCount: persistenceRepos.commands.list('test-session').length, eventCount: persistenceRepos.events.list('test-session').length, collaborationEventCount: persistenceRepos.collaboration.listEvents('test-session').length, activeLocksCount: persistenceRepos.authority.listActiveLocks('test-session').length, conflictsCount: persistenceRepos.authority.listConflicts('test-session').length, syncCheckpointCount: persistenceRepos.collaboration.listCheckpoints('test-session').length, recoveryStatus: 'ready' });
-assert(diagnostics.commandLogCount === 1 && diagnostics.syncCheckpointCount === 1, 'persistence diagnostics summarize repository state');
-
+assert(
+  persistenceRepos.authority.listConflicts('test-session').length === 1 &&
+    persistenceRepos.authority.listActiveLocks('test-session', '2026-07-01T00:00:01.000Z')
+      .length === 1,
+  'authority conflict persistence stores conflict and active lock',
+);
+const diagnostics = createPersistenceDiagnostics({
+  session: sessionRecord,
+  latestSnapshot: snapshotRecord,
+  commandCount: persistenceRepos.commands.list('test-session').length,
+  eventCount: persistenceRepos.events.list('test-session').length,
+  collaborationEventCount: persistenceRepos.collaboration.listEvents('test-session').length,
+  activeLocksCount: persistenceRepos.authority.listActiveLocks('test-session').length,
+  conflictsCount: persistenceRepos.authority.listConflicts('test-session').length,
+  syncCheckpointCount: persistenceRepos.collaboration.listCheckpoints('test-session').length,
+  recoveryStatus: 'ready',
+});
+assert(
+  diagnostics.commandLogCount === 1 && diagnostics.syncCheckpointCount === 1,
+  'persistence diagnostics summarize repository state',
+);
 
 const rendererFailure = createFailureRecord({
   id: 'failure-validation-renderer',
@@ -479,21 +789,49 @@ const rendererFailure = createFailureRecord({
   message: 'Renderer validation failure',
   createdAt: '2026-07-01T00:00:04.000Z',
 });
-assert(rendererFailure.category === 'RENDERER_FAILURE' && rendererFailure.recoveryPolicy === 'fallback', 'failure record creation classifies renderer fallback');
-assert(selectRecoveryPolicy(rendererFailure) === 'fallback', 'recovery policy selection uses category defaults');
+assert(
+  rendererFailure.category === 'RENDERER_FAILURE' && rendererFailure.recoveryPolicy === 'fallback',
+  'failure record creation classifies renderer fallback',
+);
+assert(
+  selectRecoveryPolicy(rendererFailure) === 'fallback',
+  'recovery policy selection uses category defaults',
+);
 assert(shouldRetryFailure(rendererFailure), 'retry decision allows recoverable renderer failures');
-const exhaustedFailure = createFailureRecord({ ...rendererFailure, retryCount: 3, message: 'Renderer exhausted retries' });
-assert(shouldEscalateFailure(exhaustedFailure), 'escalation decision triggers after retry threshold');
+const exhaustedFailure = createFailureRecord({
+  ...rendererFailure,
+  retryCount: 3,
+  message: 'Renderer exhausted retries',
+});
+assert(
+  shouldEscalateFailure(exhaustedFailure),
+  'escalation decision triggers after retry threshold',
+);
 let breaker = createCircuitBreakerState('renderer-breaker', 2, 1000);
 breaker = recordCircuitBreakerFailure(breaker, '2026-07-01T00:00:00.000Z');
-assert(!shouldOpenCircuit(breaker) && breaker.status === 'closed', 'circuit breaker remains closed before threshold');
+assert(
+  !shouldOpenCircuit(breaker) && breaker.status === 'closed',
+  'circuit breaker remains closed before threshold',
+);
 breaker = recordCircuitBreakerFailure(breaker, '2026-07-01T00:00:01.000Z');
 assert(breaker.status === 'open', 'circuit breaker opens at threshold');
-assert(shouldAttemptHalfOpen(breaker, Date.parse('2026-07-01T00:00:02.500Z')), 'circuit breaker allows half-open after cooldown');
-breaker = recordCircuitBreakerSuccess({ ...breaker, status: 'half_open' }, '2026-07-01T00:00:03.000Z');
-assert(breaker.status === 'closed' && breaker.failureCount === 0, 'circuit breaker success closes circuit');
+assert(
+  shouldAttemptHalfOpen(breaker, Date.parse('2026-07-01T00:00:02.500Z')),
+  'circuit breaker allows half-open after cooldown',
+);
+breaker = recordCircuitBreakerSuccess(
+  { ...breaker, status: 'half_open' },
+  '2026-07-01T00:00:03.000Z',
+);
+assert(
+  breaker.status === 'closed' && breaker.failureCount === 0,
+  'circuit breaker success closes circuit',
+);
 const summary = summarizeFailureState([rendererFailure], ['renderer_placeholder_mode']);
-assert(summary.active === 1 && summary.degradedModes.includes('renderer_placeholder_mode'), 'degraded mode summary includes active renderer mode');
+assert(
+  summary.active === 1 && summary.degradedModes.includes('renderer_placeholder_mode'),
+  'degraded mode summary includes active renderer mode',
+);
 const frameFailure = createFrameFailure({
   id: 'frame-failure-validation',
   frameFailureType: 'FRAME_RENDER_FAILED',
@@ -501,4 +839,102 @@ const frameFailure = createFrameFailure({
   message: 'Frame render failed',
   createdAt: '2026-07-01T00:00:05.000Z',
 });
-assert(frameFailure.frameId === 'frame-1' && frameFailure.metadata.graphMutationAllowed === false, 'frame failure shape forbids graph mutation');
+assert(
+  frameFailure.frameId === 'frame-1' && frameFailure.metadata.graphMutationAllowed === false,
+  'frame failure shape forbids graph mutation',
+);
+
+import {
+  calculateQueuePressure,
+  calculateSchedulerPressure,
+  createQueueBudget,
+  shouldDropWork,
+  shouldPauseProducer,
+  shouldThrottleSubsystem,
+  summarizeQueueHealth,
+  summarizeSystemLoad,
+  type QueueMetrics,
+} from './backpressure.js';
+
+const commandQueueBudget = createQueueBudget({
+  queue: 'COMMAND_QUEUE',
+  maxSize: 100,
+  priority: 'CRITICAL',
+  overflowPolicy: 'BLOCK',
+});
+const diagnosticQueueBudget = createQueueBudget({
+  queue: 'DIAGNOSTIC_QUEUE',
+  maxSize: 100,
+  priority: 'LOW',
+  overflowPolicy: 'DROP_OLDEST',
+});
+const busyCommandMetrics: QueueMetrics = {
+  queue: 'COMMAND_QUEUE',
+  depth: 50,
+  oldestItemAgeMs: 20,
+  enqueueRatePerSecond: 10,
+  dequeueRatePerSecond: 9,
+};
+const overloadedDiagnosticMetrics: QueueMetrics = {
+  queue: 'DIAGNOSTIC_QUEUE',
+  depth: 95,
+  oldestItemAgeMs: 2000,
+  enqueueRatePerSecond: 80,
+  dequeueRatePerSecond: 20,
+};
+assert(
+  calculateQueuePressure(busyCommandMetrics, commandQueueBudget) === 'BUSY',
+  'queue pressure reaches BUSY at deterministic threshold',
+);
+assert(
+  calculateQueuePressure(overloadedDiagnosticMetrics, diagnosticQueueBudget) === 'OVERLOADED',
+  'queue pressure reaches OVERLOADED at deterministic threshold',
+);
+assert(
+  calculateSchedulerPressure({ utilization: 0.76, queuePressures: ['BUSY'] }) === 'HEAVY',
+  'scheduler pressure includes utilization',
+);
+assert(
+  !shouldThrottleSubsystem('OVERLOADED', { priority: 'CRITICAL' }),
+  'critical subsystem is not throttled before CRITICAL pressure',
+);
+assert(
+  shouldThrottleSubsystem('HEAVY', { priority: 'LOW' }),
+  'low priority subsystem throttles under HEAVY pressure',
+);
+assert(
+  shouldDropWork('OVERLOADED', 'LOW', 'DROP_OLDEST'),
+  'drop policy drops low-priority overloaded work',
+);
+assert(!shouldDropWork('OVERLOADED', 'CRITICAL', 'BLOCK'), 'critical blocked work is not dropped');
+assert(
+  shouldPauseProducer('HEAVY', 'PAUSE_PRODUCER'),
+  'pause producer policy pauses under HEAVY pressure',
+);
+const diagnosticSummary = summarizeQueueHealth(overloadedDiagnosticMetrics, diagnosticQueueBudget);
+assert(diagnosticSummary.health === 'stressed', 'overloaded queue summarizes as stressed health');
+assert(diagnosticSummary.shouldDrop, 'overloaded diagnostic queue recommends dropping work');
+const recoveringSummary = summarizeQueueHealth(
+  { ...busyCommandMetrics, recovering: true },
+  commandQueueBudget,
+);
+assert(recoveringSummary.health === 'recovering', 'recovering queues expose recovering health');
+const systemLoad = summarizeSystemLoad({
+  schedulerUtilization: 0.92,
+  queues: [diagnosticSummary, recoveringSummary],
+  activeDegradedModes: ['reduced_diagnostics'],
+});
+assert(
+  systemLoad.pressure === 'OVERLOADED',
+  'system load summarizes overloaded scheduler pressure',
+);
+assert(systemLoad.shedWork[0] === 'diagnostics', 'load shedding starts with diagnostics');
+assert(
+  systemLoad.shedWork.includes('confidence_monitoring'),
+  'overloaded load shedding reaches confidence monitoring',
+);
+assert(
+  systemLoad.activeDegradedModes.includes('reduced_diagnostics'),
+  'system load preserves active degraded transitions',
+);
+console.log('Backpressure validation passed');
