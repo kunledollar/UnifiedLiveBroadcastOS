@@ -26,6 +26,14 @@ import {
   createAudioRoutePlan,
   getAudioRouteWarnings,
 } from './audio-routing/index.js';
+import {
+  MultiviewStore,
+  createMultiviewPlan,
+  validateMultiviewPlan,
+  createConfidenceMonitor,
+  validateConfidenceSignals,
+  executeMockMultiview,
+} from './multiview/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -81,7 +89,12 @@ export type MediaExecutionIntentType =
   | 'PAUSE_STREAM'
   | 'RESUME_STREAM'
   | 'FAIL_STREAM'
-  | 'VALIDATE_STREAM_PLAN';
+  | 'VALIDATE_STREAM_PLAN'
+  | 'BUILD_MULTIVIEW_PLAN'
+  | 'UPDATE_MULTIVIEW'
+  | 'VALIDATE_MULTIVIEW'
+  | 'CREATE_CONFIDENCE_MONITOR'
+  | 'UPDATE_CONFIDENCE_STATUS';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -106,7 +119,7 @@ export interface MediaExecutionIntent<TPayload = Record<string, unknown>> {
 
 const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_PLAN','UPDATE_VIDEO_ROUTE','ACTIVATE_VIDEO_ROUTE','DEACTIVATE_VIDEO_ROUTE','ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','ROUTE_MULTIVIEW_VIDEO','ROUTE_RECORDING_VIDEO','ROUTE_STREAM_VIDEO']);
 const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
-const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','APPLY_LAYOUT']);
+const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_MULTIVIEW_PLAN','UPDATE_MULTIVIEW','RENDER_MULTIVIEW','VALIDATE_MULTIVIEW','CREATE_CONFIDENCE_MONITOR','UPDATE_CONFIDENCE_STATUS','BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','APPLY_LAYOUT']);
 const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION','BUILD_STREAMING_PLAN','PREPARE_STREAMING','CONNECT_STREAM','PAUSE_STREAM','RESUME_STREAM','FAIL_STREAM','VALIDATE_STREAM_PLAN']);
 const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
 function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
@@ -150,6 +163,7 @@ export * from './browser-renderer/index.js';
 export * from './sync/index.js';
 export * from './orchestration.js';
 export * from './streaming/index.js';
+export * from './multiview/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -461,11 +475,15 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   private readonly compositionStore = new CompositionStore();
   private readonly videoRouteStore = new VideoRouteStore();
   private readonly audioRouteStore = new AudioRouteStore();
+  private readonly multiviewStore = new MultiviewStore();
   getVideoRouteStore() {
     return this.videoRouteStore;
   }
   getAudioRouteStore() {
     return this.audioRouteStore;
+  }
+  getMultiviewStore() {
+    return this.multiviewStore;
   }
   getLatestAudioRouteGraph() {
     const plan = this.audioRouteStore.getRoutePlan();
@@ -596,6 +614,39 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       });
       this.audioRouteStore.setRoutePlan(plan);
       warnings.push(...getAudioRouteWarnings(plan, graph));
+    }
+
+    const multiviewIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_MULTIVIEW_PLAN',
+      'UPDATE_MULTIVIEW',
+      'RENDER_MULTIVIEW',
+      'VALIDATE_MULTIVIEW',
+      'CREATE_CONFIDENCE_MONITOR',
+      'UPDATE_CONFIDENCE_STATUS',
+    ];
+    if (!shouldFail && graph && multiviewIntentTypes.includes(intent.type)) {
+      const videoRoutePlan = this.videoRouteStore.getRoutePlan();
+      const audioRoutePlan = this.audioRouteStore.getRoutePlan();
+      const plan = createMultiviewPlan({
+        graph,
+        preset: (intent.payload.preset as never) ?? 'quad',
+        ...(videoRoutePlan ? { videoRoutePlan } : {}),
+        ...(audioRoutePlan ? { audioRoutePlan } : {}),
+        frameId: Number(intent.payload.frameId ?? 0),
+        metadata: { intentType: intent.type, mockExecution: true },
+      });
+      const validation = validateMultiviewPlan(plan);
+      this.multiviewStore.setMultiviewPlan(plan);
+      if (intent.type === 'CREATE_CONFIDENCE_MONITOR' || intent.type === 'UPDATE_CONFIDENCE_STATUS') {
+        const monitor = createConfidenceMonitor({ plan });
+        this.multiviewStore.setConfidenceMonitor(monitor);
+        warnings.push(...validateConfidenceSignals(monitor).warnings);
+      } else {
+        const result = executeMockMultiview(plan);
+        if (result.monitor) this.multiviewStore.setConfidenceMonitor(result.monitor);
+      }
+      warnings.push(...validation.warnings, ...plan.warnings);
+      if (!validation.valid) warnings.push(...validation.errors);
     }
     return {
       adapterName: this.getName(),

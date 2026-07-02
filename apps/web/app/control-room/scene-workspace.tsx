@@ -42,6 +42,10 @@ import {
   connectStreaming,
   startStreaming,
   summarizeStreamingHealth,
+  createMultiviewPlan,
+  summarizeMultiviewHealth,
+  createConfidenceMonitor,
+  summarizeConfidenceStatus,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -239,6 +243,26 @@ function MediaExecutionInspector({
   const primaryDestination = streamingPlan.destinations.find(
     (destination) => destination.id === primaryStreamTarget?.destinationId,
   );
+  const multiviewPlan = createMultiviewPlan({
+    graph,
+    preset: 'quad',
+    videoRoutePlan: routePlan,
+    audioRoutePlan,
+    mediaClock,
+    frameId: mediaClock.getCurrentFrame(),
+  });
+  const multiviewHealth = summarizeMultiviewHealth(multiviewPlan);
+  const confidenceMonitor = createConfidenceMonitor({
+    plan: multiviewPlan,
+    signals: {
+      stream: streamingHealth.health === 'healthy' ? 'healthy' : streamingHealth.health,
+      recording: graph.recording.status === 'recording' ? 'healthy' : 'unknown',
+      audio: audioRouteValidation.valid ? 'healthy' : 'warning',
+      network: streamingHealth.warnings.length ? 'warning' : 'healthy',
+      renderer: browserDiagnostics.rendererHealth.isHealthy ? 'healthy' : 'degraded',
+    },
+  });
+  const confidenceSummary = summarizeConfidenceStatus(confidenceMonitor);
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
   const health = state.executionHealth;
@@ -440,6 +464,28 @@ function MediaExecutionInspector({
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-sky-300/80">
           Transport-neutral diagnostics only; no sockets, FFmpeg, encoders, packets, HLS, DASH, CDN, or publishing are started.
+        </p>
+      </div>
+
+
+      <div className="mt-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
+        <p className="font-black uppercase tracking-[0.16em] text-emerald-200">Multiview Confidence</p>
+        <div className="mt-2 grid gap-2 md:grid-cols-4">
+          <InspectorMetric label="Preset" value={multiviewPlan.preset} />
+          <InspectorMetric label="Tiles" value={String(multiviewPlan.tiles.length)} />
+          <InspectorMetric label="Program Conf" value={confidenceMonitor.signals.program} />
+          <InspectorMetric label="Stream Conf" value={confidenceMonitor.signals.stream} />
+          <InspectorMetric label="Recording Conf" value={confidenceMonitor.signals.recording} />
+          <InspectorMetric label="Audio Conf" value={confidenceMonitor.signals.audio} />
+          <InspectorMetric label="Network Conf" value={confidenceMonitor.signals.network} />
+          <InspectorMetric label="Unhealthy Tiles" value={String(multiviewHealth.unhealthyTiles)} />
+          <InspectorMetric label="Warnings" value={String(multiviewHealth.warnings.length + confidenceSummary.warnings.length)} />
+          <InspectorMetric label="Latest Frame" value={String(multiviewPlan.frameId)} />
+          <InspectorMetric label="Graph Rev" value={String(multiviewPlan.graphRevision)} />
+          <InspectorMetric label="Overall" value={confidenceSummary.status} />
+        </div>
+        <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-emerald-300/80">
+          Metadata-only mock diagnostics; existing browser renderer/composition paths remain the rendering boundary.
         </p>
       </div>
 
