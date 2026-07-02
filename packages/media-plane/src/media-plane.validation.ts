@@ -22,6 +22,13 @@ import {
   replayExecutionForRevision,
   summarizeExecutionForRevision,
   translateGraphTransitionToIntents,
+  createClock,
+  FrameScheduler,
+  MediaSyncBus,
+  SyncDriftMonitor,
+  MediaSyncStore,
+  isMediaSyncEnabled,
+  type FrameTickEvent,
 } from './index.js';
 
 const command = (
@@ -789,3 +796,55 @@ assert.equal(
   true,
   'browser renderer adapter exposes render frame capability',
 );
+
+
+let mockNow = 1000;
+const clock = createClock({ frameRate: 30, now: () => mockNow });
+clock.startClock();
+assert.equal(clock.getCurrentBroadcastTime(), 0, 'clock starts at zero broadcast time');
+mockNow += 34;
+assert.equal(clock.getCurrentFrame(), 1, 'frame increments at frame interval');
+assert.equal(clock.getFrameTimestamp(3), 100, 'frame timestamps are deterministic');
+clock.pauseClock();
+mockNow += 1000;
+assert.equal(clock.getCurrentFrame(), 1, 'paused clock does not advance frames');
+clock.resumeClock();
+mockNow += 34;
+assert.equal(clock.getCurrentFrame(), 2, 'resumed clock advances frames');
+
+const bus = new MediaSyncBus();
+const schedulerClock = createClock({ frameRate: 60, now: () => mockNow });
+const syncStore = new MediaSyncStore(schedulerClock);
+const frameScheduler = new FrameScheduler(schedulerClock, bus);
+let scheduledTick: FrameTickEvent | undefined;
+frameScheduler.onTick((tick) => { scheduledTick = tick; syncStore.recordTick(tick); frameScheduler.stop(); });
+frameScheduler.start();
+await new Promise((resolve) => setTimeout(resolve, 5));
+assert.equal(scheduledTick?.frameId, 0, 'frame scheduler emits deterministic initial frame');
+assert.equal(bus.listEvents().some((event) => event.type === 'FRAME_TICK'), true, 'sync bus records frame ticks');
+assert.equal(syncStore.getState().syncHealthSummary.currentFrame, 0, 'sync store exposes health summary');
+
+const monitor = new SyncDriftMonitor(bus, 5);
+monitor.record({ renderDriftMs: 6, audioDriftMs: 0, videoDriftMs: 0, outputDriftMs: 0 });
+assert.equal(bus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'), true, 'drift detection emits event');
+monitor.reset();
+assert.equal(monitor.getHistory().length, 0, 'drift stats reset');
+
+const syncEngine = new MediaExecutionEngine(new ExecutionLogStore());
+const syncAdapter = new MockMediaExecutionAdapter({ latencyMs: 0 });
+syncEngine.registerAdapter(syncAdapter);
+syncEngine.setExecutionRuntimeMode('mock_live');
+const frameResults = await syncEngine.executeFrameSync({ frameId: 10, timestamp: 333, broadcastTime: 333, expectedNextFrameTime: 366, jitterEstimate: 0 }, recordingTransition.nextGraph, [
+  { id: 'b-render', type: 'RENDER_FRAME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 4, payload: {} },
+  { id: 'a-video', type: 'ROUTE_PROGRAM_VIDEO', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 4, payload: {} },
+]);
+assert.equal(frameResults.length, 2, 'frame sync executes pending intents');
+assert.equal(syncAdapter.getLoggedIntents()[0]?.type, 'ROUTE_PROGRAM_VIDEO', 'frame sync execution order is deterministic');
+assert.equal(syncAdapter.getLoggedIntents()[0]?.payload.frameId, 10, 'frame sync attaches frame metadata');
+
+const syncRenderer = new BrowserMediaRenderer();
+assert.equal(syncRenderer.getStats().frameCount, 0, 'renderer does not render before frame tick');
+syncRenderer.renderFrame({ frameId: 12, timestamp: 400, broadcastTime: 400, expectedNextFrameTime: 433, jitterEstimate: 0 });
+assert.equal(syncRenderer.getStats().frameCount, 0, 'manual frame tick render avoids free-running scheduler stats without canvas');
+assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'false' }), false, 'feature flag disables sync layer safely');
+assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'true' }), true, 'feature flag enables sync layer');

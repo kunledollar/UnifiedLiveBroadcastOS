@@ -33,6 +33,10 @@ import {
   BrowserRendererAdapter,
   createBrowserRendererAdapterMetadata,
   isBrowserRendererEnabled,
+  createClock,
+  MediaSyncStore,
+  SyncDriftMonitor,
+  isMediaSyncEnabled,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -147,6 +151,10 @@ function MediaExecutionInspector({
   const [refreshToken, setRefreshToken] = useState(0);
   const [permissionError, setPermissionError] = useState<string | undefined>();
   const browserRendererFlagEnabled = isBrowserRendererEnabled(process.env);
+  const mediaSyncEnabled = isMediaSyncEnabled(process.env);
+  const mediaClock = useMemo(() => createClock({ frameRate: 30 }), []);
+  const mediaSyncStore = useMemo(() => new MediaSyncStore(mediaClock), [mediaClock]);
+  const driftMonitor = useMemo(() => new SyncDriftMonitor(undefined, 20), []);
   const browserCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const browserRenderer = useMemo(() => new BrowserMediaRenderer({ target: 'debug_composition_preview', debug: true }), []);
   const [browserDebug, setBrowserDebug] = useState(true);
@@ -172,6 +180,9 @@ function MediaExecutionInspector({
     if (programComposition) browserRenderer.setComposition(programComposition);
   }, [browserRendererFlagEnabled, browserDebug, browserRenderer, programComposition]);
   const browserHealth = browserRenderer.getHealth();
+  const syncState = mediaSyncStore.getState();
+  const syncSummary = syncState.syncHealthSummary;
+  const resetDriftStats = () => { driftMonitor.reset(); rerender(); };
   const audioRoutePlan = createAudioRoutePlan(graph, {
     includeRecording: graph.recording.status === 'recording',
     includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled),
@@ -388,6 +399,30 @@ function MediaExecutionInspector({
           value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
         />
       </div>
+
+      {mediaSyncEnabled ? (
+        <div className="mt-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
+          <p className="font-black uppercase tracking-[0.16em] text-emerald-200">Media Sync Diagnostics</p>
+          <div className="mt-2 grid gap-2 md:grid-cols-4">
+            <InspectorMetric label="Current Frame" value={String(syncSummary.currentFrame)} />
+            <InspectorMetric label="FPS" value={String(syncSummary.fps)} />
+            <InspectorMetric label="Video Drift" value={`${syncSummary.drift.videoDriftMs}ms`} />
+            <InspectorMetric label="Audio Drift" value={`${syncSummary.drift.audioDriftMs}ms`} />
+            <InspectorMetric label="Render Drift" value={`${syncSummary.drift.renderDriftMs}ms`} />
+            <InspectorMetric label="Output Drift" value={`${syncSummary.drift.outputDriftMs}ms`} />
+            <InspectorMetric label="Last Tick" value={syncState.lastTickResult ? String(syncState.lastTickResult.broadcastTime) : '—'} />
+            <InspectorMetric label="Jitter" value={`${syncSummary.jitterEstimate}ms`} />
+            <InspectorMetric label="Dropped" value={String(syncSummary.droppedFramesCount)} />
+            <InspectorMetric label="Clock" value={syncState.clockState.status} />
+            <InspectorMetric label="Health Score" value={String(syncSummary.healthScore)} />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" onClick={() => { mediaClock.pauseClock(); rerender(); }} className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200">Pause clock</button>
+            <button type="button" onClick={() => { mediaClock.resumeClock(); rerender(); }} className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200">Resume clock</button>
+            <button type="button" onClick={resetDriftStats} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Reset drift stats</button>
+          </div>
+        </div>
+      ) : null}
       {browserRendererFlagEnabled ? (
         <div className="mt-3 rounded-lg border border-cyan-700/40 bg-cyan-950/20 p-2">
           <p className="font-black uppercase tracking-[0.16em] text-cyan-200">Browser Renderer</p>
