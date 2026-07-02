@@ -19,6 +19,9 @@ import {
   requestLocalMicrophone,
   requestScreenShare,
   stopAllTracks,
+  createSceneCompositionFromGraph,
+  diffSceneCompositions,
+  getCompositionWarnings,
   type ExecutionRuntimeMode,
 } from '@ubos/media-plane';
 import {
@@ -123,7 +126,13 @@ function InspectorMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
+function MediaExecutionInspector({
+  engine,
+  graph,
+}: {
+  engine: MediaExecutionEngine;
+  graph: ReturnType<typeof createBroadcastSession>['graph'];
+}) {
   const enabled = process.env.NEXT_PUBLIC_UBOS_MEDIA_EXECUTION_INSPECTOR === 'true';
   const [refreshToken, setRefreshToken] = useState(0);
   const [permissionError, setPermissionError] = useState<string | undefined>();
@@ -132,6 +141,17 @@ function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
     webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
   const webRTCDiagnostics = webRTC?.getDiagnostics();
   const state = engine.getExecutionState();
+  const programComposition = graph.program.sceneId
+    ? createSceneCompositionFromGraph(graph, graph.program.sceneId, { target: 'program' })
+    : undefined;
+  const previewComposition = graph.preview.sceneId
+    ? createSceneCompositionFromGraph(graph, graph.preview.sceneId, { target: 'preview' })
+    : undefined;
+  const compositionDiff = diffSceneCompositions(previewComposition, programComposition);
+  const compositionWarnings = [
+    ...(programComposition ? getCompositionWarnings(programComposition) : []),
+    ...(previewComposition ? getCompositionWarnings(previewComposition) : []),
+  ];
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
   const health = state.executionHealth;
@@ -242,6 +262,32 @@ function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
         <InspectorMetric label="Dry Runs" value={String(dryRunCount)} />
         <InspectorMetric label="Avg Latency" value={`${health.averageExecutionMs}ms`} />
         <InspectorMetric label="Latest Intent" value={state.lastIntents.at(-1)?.type ?? '—'} />
+        <InspectorMetric
+          label="Program Composition"
+          value={programComposition ? `${programComposition.canvas.width}x${programComposition.canvas.height}` : '—'}
+        />
+        <InspectorMetric
+          label="Preview Composition"
+          value={previewComposition ? `${previewComposition.canvas.width}x${previewComposition.canvas.height}` : '—'}
+        />
+        <InspectorMetric
+          label="Layout Preset"
+          value={String(programComposition?.metadata.layoutPreset ?? previewComposition?.metadata.layoutPreset ?? '—')}
+        />
+        <InspectorMetric
+          label="Visible Layers"
+          value={String(programComposition?.layers.filter((layer) => layer.visible).length ?? 0)}
+        />
+        <InspectorMetric label="Overlays" value={String(programComposition?.overlays.length ?? 0)} />
+        <InspectorMetric label="Warnings" value={String(compositionWarnings.length)} />
+        <InspectorMetric
+          label="Changed Layers"
+          value={`${compositionDiff.changedLayers.length} Δ / +${compositionDiff.addedLayers.length} / -${compositionDiff.removedLayers.length}`}
+        />
+        <InspectorMetric
+          label="Composition Rev"
+          value={String(programComposition?.graphRevision ?? previewComposition?.graphRevision ?? state.currentGraphRevision)}
+        />
         <InspectorMetric
           label="Latest Adapter"
           value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
@@ -374,7 +420,7 @@ function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
           {JSON.stringify(
-            { adapters, health, webRTCDiagnostics, latestEvents: state.latestEvents.slice(-6) },
+            { adapters, health, webRTCDiagnostics, compositionWarnings, latestEvents: state.latestEvents.slice(-6) },
             null,
             2,
           )}
@@ -384,6 +430,8 @@ function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
             {
               latestIntents: state.lastIntents.slice(-5),
               latestResult,
+              programComposition,
+              previewComposition,
               replay: engine.summarizeExecutionForRevision(state.currentGraphRevision),
             },
             null,
@@ -1584,7 +1632,7 @@ export function SceneWorkspace({
           }}
         />
         <ProductionGraphInspector session={productionGraphSession} />
-        <MediaExecutionInspector engine={mediaExecutionEngine} />
+        <MediaExecutionInspector engine={mediaExecutionEngine} graph={productionGraphSession.graph} />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {viewMode === 'multiview' ? (
             <ProductionMultiview

@@ -3,6 +3,12 @@ import type {
   ProductionGraphTransition,
   ProductionEvent,
 } from '../../shared/src/production-graph.js';
+import {
+  CompositionStore,
+  createSceneCompositionFromGraph,
+  getCompositionWarnings,
+  type CompositionRenderTarget,
+} from './compositor/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -14,7 +20,12 @@ export type MediaExecutionIntentType =
   | 'UPDATE_AUDIO_MIX'
   | 'APPLY_LAYOUT'
   | 'UPDATE_DESTINATION'
-  | 'RENDER_MULTIVIEW';
+  | 'RENDER_MULTIVIEW'
+  | 'BUILD_SCENE_COMPOSITION'
+  | 'UPDATE_SCENE_COMPOSITION'
+  | 'RENDER_PROGRAM_COMPOSITION'
+  | 'RENDER_PREVIEW_COMPOSITION'
+  | 'RENDER_MULTIVIEW_COMPOSITION';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -66,6 +77,7 @@ export interface MediaExecutionAdapter {
 
 export interface WebRtcMediaExecutionAdapter extends MediaExecutionAdapter {}
 export * from './adapters/webrtc/index.js';
+export * from './compositor/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -175,10 +187,22 @@ const commandIntentMap = {
   SET_PREVIEW_SCENE: 'UPDATE_PREVIEW_SCENE',
   START_RECORDING: 'START_RECORDING',
   STOP_RECORDING: 'STOP_RECORDING',
+  SET_WORKSPACE_PRESET: 'APPLY_LAYOUT',
+  ASSIGN_SOURCE_TO_SCENE: 'UPDATE_SCENE_COMPOSITION',
+  UPDATE_SOURCE: 'UPDATE_SCENE_COMPOSITION',
 } as const;
 const eventIntentMap = {
   AUDIO_MUTED: 'UPDATE_AUDIO_MIX',
+  AUDIO_UNMUTED: 'UPDATE_AUDIO_MIX',
   DESTINATION_ENABLED: 'UPDATE_DESTINATION',
+  DESTINATION_DISABLED: 'UPDATE_DESTINATION',
+  PREVIEW_SCENE_CHANGED: 'RENDER_PREVIEW_COMPOSITION',
+  PROGRAM_SCENE_CHANGED: 'RENDER_PROGRAM_COMPOSITION',
+  TRANSITION_COMPLETED: 'UPDATE_SCENE_COMPOSITION',
+  SOURCE_ADDED: 'BUILD_SCENE_COMPOSITION',
+  SOURCE_REMOVED: 'UPDATE_SCENE_COMPOSITION',
+  SOURCE_UPDATED: 'UPDATE_SCENE_COMPOSITION',
+  SCENE_UPDATED: 'UPDATE_SCENE_COMPOSITION',
 } as const;
 
 export function translateGraphTransitionToIntents(
@@ -357,7 +381,11 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   getLoggedIntents() {
     return [...this.log];
   }
-  execute(intent: MediaExecutionIntent) {
+  private readonly compositionStore = new CompositionStore();
+  getCompositionStore() {
+    return this.compositionStore;
+  }
+  execute(intent: MediaExecutionIntent, graph?: ProductionGraph) {
     this.log.push(intent);
     const seed = this.latencyConfig.seed ?? 1;
     const span = Math.max(0, this.latencyConfig.maxLatencyMs - this.latencyConfig.minLatencyMs);
@@ -368,12 +396,42 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
     const rateFailure = controlledFraction(seed, intent, 2) < this.latencyConfig.failureRate;
     const shouldWarn = controlledFraction(seed, intent, 3) < this.latencyConfig.warningRate;
     const shouldFail = configuredFailure || rateFailure;
+    const warnings = shouldWarn ? [`Mock warning for ${intent.type}`] : [];
+    const compositionIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_SCENE_COMPOSITION',
+      'UPDATE_SCENE_COMPOSITION',
+      'RENDER_PROGRAM_COMPOSITION',
+      'RENDER_PREVIEW_COMPOSITION',
+      'RENDER_MULTIVIEW_COMPOSITION',
+      'APPLY_LAYOUT',
+    ];
+    if (!shouldFail && graph && compositionIntentTypes.includes(intent.type)) {
+      const target =
+        intent.type === 'RENDER_PREVIEW_COMPOSITION'
+          ? 'preview'
+          : intent.type === 'RENDER_MULTIVIEW_COMPOSITION'
+            ? 'multiview'
+            : 'program';
+      const sceneId = String(
+        intent.payload.sceneId ??
+          (target === 'preview' ? graph.preview.sceneId : graph.program.sceneId) ??
+          '',
+      );
+      if (sceneId) {
+        const composition = createSceneCompositionFromGraph(graph, sceneId, {
+          target: target as CompositionRenderTarget,
+          layoutPreset: intent.payload.layoutPreset as never,
+        });
+        this.compositionStore.setComposition(target as CompositionRenderTarget, composition);
+        warnings.push(...getCompositionWarnings(composition));
+      } else warnings.push(`No scene available for ${intent.type}`);
+    }
     return {
       adapterName: this.getName(),
       success: !shouldFail,
       timestamp: intent.timestamp,
       latencyMs,
-      warnings: shouldWarn ? [`Mock warning for ${intent.type}`] : [],
+      warnings,
       errors: shouldFail ? [`Mock failure for ${intent.type}`] : [],
     } satisfies MediaExecutionAdapterResponse;
   }

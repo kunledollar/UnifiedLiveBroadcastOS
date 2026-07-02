@@ -55,10 +55,10 @@ transition = applyProductionCommand(
 );
 
 const previewIntents = translateGraphTransitionToIntents(transition);
-assert.equal(previewIntents.length, 1, 'graph transition generates intent');
+assert.equal(previewIntents.length > 0, true, 'graph transition generates intent');
 assert.equal(
-  previewIntents[0]?.type,
-  'UPDATE_PREVIEW_SCENE',
+  previewIntents.some((intent) => intent.type === 'UPDATE_PREVIEW_SCENE'),
+  true,
   'SET_PREVIEW_SCENE triggers UPDATE_PREVIEW_SCENE',
 );
 assert.deepEqual(
@@ -72,8 +72,8 @@ const cutTransition = applyProductionCommand(
   command('CUT_TO_PROGRAM', { sceneId: 'scene-a' }, 2),
 );
 assert.equal(
-  translateGraphTransitionToIntents(cutTransition)[0]?.type,
-  'SWITCH_PROGRAM_SCENE',
+  translateGraphTransitionToIntents(cutTransition).some((intent) => intent.type === 'SWITCH_PROGRAM_SCENE'),
+  true,
   'CUT triggers SWITCH_PROGRAM_SCENE',
 );
 
@@ -82,8 +82,8 @@ const recordingTransition = applyProductionCommand(
   command('START_RECORDING', {}, 3),
 );
 assert.equal(
-  translateGraphTransitionToIntents(recordingTransition)[0]?.type,
-  'START_RECORDING',
+  translateGraphTransitionToIntents(recordingTransition).some((intent) => intent.type === 'START_RECORDING'),
+  true,
   'START_RECORDING triggers intent',
 );
 
@@ -269,3 +269,57 @@ assert.equal(
   'mock-live-ready-test',
   'mock_live mode still selects mock adapter',
 );
+
+import {
+  CompositionStore,
+  createDefaultCanvas,
+  createSceneCompositionFromGraph,
+  diffSceneCompositions,
+  getLayoutBounds,
+  validateLayerBounds,
+  validateSceneComposition,
+} from './compositor/index.js';
+
+const canvas = createDefaultCanvas();
+assert.equal(canvas.width, 1920, 'default canvas width is 1920');
+assert.equal(canvas.height, 1080, 'default canvas height is 1080');
+assert.equal(canvas.fps, 60, 'default canvas fps is 60');
+assert.deepEqual(getLayoutBounds('fullscreen', 0, 1, canvas), { x: 0, y: 0, width: 1920, height: 1080 }, 'fullscreen bounds fill canvas');
+assert.deepEqual(getLayoutBounds('side_by_side', 1, 2, canvas), { x: 960, y: 0, width: 960, height: 1080 }, 'side by side second layer uses right half');
+assert.deepEqual(getLayoutBounds('picture_in_picture', 0, 2, canvas), { x: 0, y: 0, width: 1920, height: 1080 }, 'PiP primary fills canvas');
+const verticalCanvas = createDefaultCanvas({ width: 1080, height: 1920, aspectRatio: '9:16' });
+assert.deepEqual(getLayoutBounds('vertical_split', 1, 2, verticalCanvas), { x: 0, y: 960, width: 1080, height: 960 }, 'vertical split bounds bottom half');
+
+const graphWithSources = {
+  ...cutTransition.nextGraph,
+  scenes: {
+    ...cutTransition.nextGraph.scenes,
+    'scene-a': {
+      ...cutTransition.nextGraph.scenes['scene-a']!,
+      sourceIds: ['source-a', 'missing-source', 'source-b'],
+      metadata: { layoutPreset: 'side_by_side' },
+    },
+  },
+  sources: {
+    ...cutTransition.nextGraph.sources,
+    'source-a': { id: 'source-a', name: 'Camera A', type: 'camera' as const, enabled: true, metadata: {} },
+    'source-b': { id: 'source-b', name: 'Guest B', type: 'guest' as const, enabled: false, metadata: {} },
+  },
+};
+const compositionA = createSceneCompositionFromGraph(graphWithSources, 'scene-a', { target: 'program' });
+const compositionB = createSceneCompositionFromGraph(graphWithSources, 'scene-a', { target: 'program' });
+assert.deepEqual(compositionA, compositionB, 'graph-to-composition translator is deterministic');
+assert.equal(compositionA.layers[0]?.sourceId, 'source-a', 'layers preserve deterministic ordering');
+assert.equal(validateSceneComposition(compositionA).some((issue) => issue.code === 'MISSING_SOURCE'), true, 'missing source warning is reported');
+assert.equal(validateLayerBounds({ ...compositionA.layers[0]!, bounds: { x: 0, y: 0, width: 0, height: 0 } }, canvas).some((issue) => issue.code === 'ZERO_SIZE_LAYER'), true, 'invalid bounds warning is reported');
+const changed = createSceneCompositionFromGraph({ ...graphWithSources, sources: { ...graphWithSources.sources, 'source-a': { ...graphWithSources.sources['source-a'], enabled: false } } }, 'scene-a');
+assert.equal(diffSceneCompositions(compositionA, changed).changedLayers.length > 0, true, 'composition diff detects changed layers');
+const compositionStore = new CompositionStore();
+compositionStore.setComposition('program', compositionA);
+assert.equal(compositionStore.getComposition('program')?.id, compositionA.id, 'composition store set/get works');
+assert.equal(compositionStore.getCompositionByScene('scene-a').length, 1, 'composition store looks up by scene');
+const layoutTransition = applyProductionCommand(graphWithSources, command('SET_WORKSPACE_PRESET', { preset: 'side_by_side' }, graphWithSources.metadata.revision));
+assert.equal(translateGraphTransitionToIntents(layoutTransition).some((intent) => intent.type === 'APPLY_LAYOUT'), true, 'layout changes generate composition-related intent');
+const compositionMock = new MockMediaExecutionAdapter({ latencyMs: 1 });
+compositionMock.execute({ id: 'build-composition', type: 'RENDER_PROGRAM_COMPOSITION', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: graphWithSources.metadata.revision, payload: { sceneId: 'scene-a' } }, graphWithSources);
+assert.equal(compositionMock.getCompositionStore().getComposition('program')?.sceneId, 'scene-a', 'mock adapter stores latest program composition');
