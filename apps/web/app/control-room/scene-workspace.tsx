@@ -22,6 +22,9 @@ import {
   createSceneCompositionFromGraph,
   diffSceneCompositions,
   getCompositionWarnings,
+  createVideoRoutePlan,
+  createVideoRouteGraph,
+  validateVideoRoutePlan,
   type ExecutionRuntimeMode,
 } from '@ubos/media-plane';
 import {
@@ -137,8 +140,7 @@ function MediaExecutionInspector({
   const [refreshToken, setRefreshToken] = useState(0);
   const [permissionError, setPermissionError] = useState<string | undefined>();
   const webRTCAdapter = engine.getRegisteredAdapter('webrtc-media-execution-adapter');
-  const webRTC =
-    webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
+  const webRTC = webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
   const webRTCDiagnostics = webRTC?.getDiagnostics();
   const state = engine.getExecutionState();
   const programComposition = graph.program.sceneId
@@ -152,6 +154,22 @@ function MediaExecutionInspector({
     ...(programComposition ? getCompositionWarnings(programComposition) : []),
     ...(previewComposition ? getCompositionWarnings(previewComposition) : []),
   ];
+  const routePlan = createVideoRoutePlan(
+    graph,
+    [programComposition, previewComposition].filter((composition) => composition !== undefined),
+    {
+      includeRecording: graph.recording.status === 'recording',
+      includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled),
+      includeConfidenceMonitor: true,
+    },
+  );
+  const routeGraph = createVideoRouteGraph(routePlan);
+  const routeValidation = validateVideoRoutePlan(
+    routePlan,
+    graph,
+    [programComposition, previewComposition].filter((composition) => composition !== undefined),
+  );
+  const activeRoutes = routePlan.routes.filter((route) => route.enabled);
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
   const health = state.executionHealth;
@@ -189,11 +207,14 @@ function MediaExecutionInspector({
     rerender();
   };
   const stopLocalStreams = () => {
-    webRTC?.getSourceManager().listSources().forEach((source) => {
-      const stream = webRTC.getSourceManager().getStream(source.sourceId);
-      stopAllTracks(stream);
-      webRTC.getSourceManager().updateSourceStatus(source.sourceId, 'disconnected');
-    });
+    webRTC
+      ?.getSourceManager()
+      .listSources()
+      .forEach((source) => {
+        const stream = webRTC.getSourceManager().getStream(source.sourceId);
+        stopAllTracks(stream);
+        webRTC.getSourceManager().updateSourceStatus(source.sourceId, 'disconnected');
+      });
     rerender();
   };
   const registerTestStream = () => {
@@ -264,34 +285,85 @@ function MediaExecutionInspector({
         <InspectorMetric label="Latest Intent" value={state.lastIntents.at(-1)?.type ?? '—'} />
         <InspectorMetric
           label="Program Composition"
-          value={programComposition ? `${programComposition.canvas.width}x${programComposition.canvas.height}` : '—'}
+          value={
+            programComposition
+              ? `${programComposition.canvas.width}x${programComposition.canvas.height}`
+              : '—'
+          }
         />
         <InspectorMetric
           label="Preview Composition"
-          value={previewComposition ? `${previewComposition.canvas.width}x${previewComposition.canvas.height}` : '—'}
+          value={
+            previewComposition
+              ? `${previewComposition.canvas.width}x${previewComposition.canvas.height}`
+              : '—'
+          }
         />
         <InspectorMetric
           label="Layout Preset"
-          value={String(programComposition?.metadata.layoutPreset ?? previewComposition?.metadata.layoutPreset ?? '—')}
+          value={String(
+            programComposition?.metadata.layoutPreset ??
+              previewComposition?.metadata.layoutPreset ??
+              '—',
+          )}
         />
         <InspectorMetric
           label="Visible Layers"
           value={String(programComposition?.layers.filter((layer) => layer.visible).length ?? 0)}
         />
-        <InspectorMetric label="Overlays" value={String(programComposition?.overlays.length ?? 0)} />
+        <InspectorMetric
+          label="Overlays"
+          value={String(programComposition?.overlays.length ?? 0)}
+        />
         <InspectorMetric label="Warnings" value={String(compositionWarnings.length)} />
+        <InspectorMetric label="Video Routes" value={String(activeRoutes.length)} />
+        <InspectorMetric
+          label="Route Targets"
+          value={activeRoutes.map((route) => route.target).join(', ') || '—'}
+        />
+        <InspectorMetric
+          label="Route Fan-out"
+          value={String(
+            Math.max(0, ...Object.values(routeGraph.fanOut).map((routes) => routes.length)),
+          )}
+        />
+        <InspectorMetric label="Route Rev" value={String(routeGraph.revision)} />
         <InspectorMetric
           label="Changed Layers"
           value={`${compositionDiff.changedLayers.length} Δ / +${compositionDiff.addedLayers.length} / -${compositionDiff.removedLayers.length}`}
         />
         <InspectorMetric
           label="Composition Rev"
-          value={String(programComposition?.graphRevision ?? previewComposition?.graphRevision ?? state.currentGraphRevision)}
+          value={String(
+            programComposition?.graphRevision ??
+              previewComposition?.graphRevision ??
+              state.currentGraphRevision,
+          )}
         />
         <InspectorMetric
           label="Latest Adapter"
           value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'}
         />
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-800 bg-black/20 p-2">
+        <p className="font-black uppercase tracking-[0.16em] text-slate-300">Video Routing</p>
+        <div className="mt-2 grid gap-1 md:grid-cols-2">
+          {activeRoutes.slice(0, 6).map((route) => (
+            <div key={route.id} className="rounded border border-slate-800 bg-slate-950/70 p-2">
+              <p className="font-bold text-slate-100">
+                {route.target} → {route.targetId}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {route.sourceCompositionId} · {route.status} · p{route.priority}
+              </p>
+            </div>
+          ))}
+        </div>
+        {routeValidation.warnings.length > 0 ? (
+          <p className="mt-2 text-[10px] text-amber-200">
+            {routeValidation.warnings.slice(0, 3).join(' · ')}
+          </p>
+        ) : null}
       </div>
       <div className="mt-3 flex flex-wrap gap-2" data-refresh-token={refreshToken}>
         {(['disabled', 'dry_run', 'mock_live', 'live_ready'] as ExecutionRuntimeMode[]).map(
@@ -407,20 +479,33 @@ function MediaExecutionInspector({
       ) : null}
       {webRTC ? (
         <div className="mt-3 grid gap-2 md:grid-cols-3">
-          {webRTC.getSourceManager().listSources().map((source) => (
-            <MediaStreamPreview
-              key={source.sourceId}
-              stream={webRTC.getSourceManager().getStream(source.sourceId) as MediaStream | undefined}
-              label={source.sourceId}
-              status={`${source.kind}:${source.status}`}
-            />
-          ))}
+          {webRTC
+            .getSourceManager()
+            .listSources()
+            .map((source) => (
+              <MediaStreamPreview
+                key={source.sourceId}
+                stream={
+                  webRTC.getSourceManager().getStream(source.sourceId) as MediaStream | undefined
+                }
+                label={source.sourceId}
+                status={`${source.kind}:${source.status}`}
+              />
+            ))}
         </div>
       ) : null}
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
           {JSON.stringify(
-            { adapters, health, webRTCDiagnostics, compositionWarnings, latestEvents: state.latestEvents.slice(-6) },
+            {
+              adapters,
+              health,
+              webRTCDiagnostics,
+              compositionWarnings,
+              routePlan,
+              routeWarnings: routeValidation.warnings,
+              latestEvents: state.latestEvents.slice(-6),
+            },
             null,
             2,
           )}
@@ -1632,7 +1717,10 @@ export function SceneWorkspace({
           }}
         />
         <ProductionGraphInspector session={productionGraphSession} />
-        <MediaExecutionInspector engine={mediaExecutionEngine} graph={productionGraphSession.graph} />
+        <MediaExecutionInspector
+          engine={mediaExecutionEngine}
+          graph={productionGraphSession.graph}
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {viewMode === 'multiview' ? (
             <ProductionMultiview

@@ -72,7 +72,9 @@ const cutTransition = applyProductionCommand(
   command('CUT_TO_PROGRAM', { sceneId: 'scene-a' }, 2),
 );
 assert.equal(
-  translateGraphTransitionToIntents(cutTransition).some((intent) => intent.type === 'SWITCH_PROGRAM_SCENE'),
+  translateGraphTransitionToIntents(cutTransition).some(
+    (intent) => intent.type === 'SWITCH_PROGRAM_SCENE',
+  ),
   true,
   'CUT triggers SWITCH_PROGRAM_SCENE',
 );
@@ -82,7 +84,9 @@ const recordingTransition = applyProductionCommand(
   command('START_RECORDING', {}, 3),
 );
 assert.equal(
-  translateGraphTransitionToIntents(recordingTransition).some((intent) => intent.type === 'START_RECORDING'),
+  translateGraphTransitionToIntents(recordingTransition).some(
+    (intent) => intent.type === 'START_RECORDING',
+  ),
   true,
   'START_RECORDING triggers intent',
 );
@@ -201,7 +205,6 @@ assert.equal(
   'inspector data shape is valid',
 );
 
-
 const webRTC = new WebRTCMediaExecutionAdapter();
 assert.equal(webRTC.getName(), 'WebRTCMediaExecutionAdapter', 'WebRTC adapter can be constructed');
 assert.equal(
@@ -231,12 +234,27 @@ const streamLike = {
   id: 'mock-stream',
   getAudioTracks: () => [{ readyState: 'live', stop: () => undefined }],
   getVideoTracks: () => [],
-  getTracks: () => [{ readyState: 'live', stop: () => { stopped = true; } }],
+  getTracks: () => [
+    {
+      readyState: 'live',
+      stop: () => {
+        stopped = true;
+      },
+    },
+  ],
 } as unknown as MediaStream;
 const metadata = manager.registerStream(streamLike, { sourceId: 'camera-a', kind: 'camera' });
 assert.equal(metadata.hasAudio, true, 'source manager tracks audio availability');
-assert.equal(manager.getStream('camera-a')?.id, 'mock-stream', 'source manager returns streams by source');
-assert.equal(manager.unregisterStream('camera-a')?.sourceId, 'camera-a', 'source manager unregisters streams');
+assert.equal(
+  manager.getStream('camera-a')?.id,
+  'mock-stream',
+  'source manager returns streams by source',
+);
+assert.equal(
+  manager.unregisterStream('camera-a')?.sourceId,
+  'camera-a',
+  'source manager unregisters streams',
+);
 stopAllTracks(streamLike);
 assert.equal(stopped, true, 'stopAllTracks stops stream tracks');
 stopAllTracks(undefined);
@@ -284,11 +302,27 @@ const canvas = createDefaultCanvas();
 assert.equal(canvas.width, 1920, 'default canvas width is 1920');
 assert.equal(canvas.height, 1080, 'default canvas height is 1080');
 assert.equal(canvas.fps, 60, 'default canvas fps is 60');
-assert.deepEqual(getLayoutBounds('fullscreen', 0, 1, canvas), { x: 0, y: 0, width: 1920, height: 1080 }, 'fullscreen bounds fill canvas');
-assert.deepEqual(getLayoutBounds('side_by_side', 1, 2, canvas), { x: 960, y: 0, width: 960, height: 1080 }, 'side by side second layer uses right half');
-assert.deepEqual(getLayoutBounds('picture_in_picture', 0, 2, canvas), { x: 0, y: 0, width: 1920, height: 1080 }, 'PiP primary fills canvas');
+assert.deepEqual(
+  getLayoutBounds('fullscreen', 0, 1, canvas),
+  { x: 0, y: 0, width: 1920, height: 1080 },
+  'fullscreen bounds fill canvas',
+);
+assert.deepEqual(
+  getLayoutBounds('side_by_side', 1, 2, canvas),
+  { x: 960, y: 0, width: 960, height: 1080 },
+  'side by side second layer uses right half',
+);
+assert.deepEqual(
+  getLayoutBounds('picture_in_picture', 0, 2, canvas),
+  { x: 0, y: 0, width: 1920, height: 1080 },
+  'PiP primary fills canvas',
+);
 const verticalCanvas = createDefaultCanvas({ width: 1080, height: 1920, aspectRatio: '9:16' });
-assert.deepEqual(getLayoutBounds('vertical_split', 1, 2, verticalCanvas), { x: 0, y: 960, width: 1080, height: 960 }, 'vertical split bounds bottom half');
+assert.deepEqual(
+  getLayoutBounds('vertical_split', 1, 2, verticalCanvas),
+  { x: 0, y: 960, width: 1080, height: 960 },
+  'vertical split bounds bottom half',
+);
 
 const graphWithSources = {
   ...cutTransition.nextGraph,
@@ -302,24 +336,232 @@ const graphWithSources = {
   },
   sources: {
     ...cutTransition.nextGraph.sources,
-    'source-a': { id: 'source-a', name: 'Camera A', type: 'camera' as const, enabled: true, metadata: {} },
-    'source-b': { id: 'source-b', name: 'Guest B', type: 'guest' as const, enabled: false, metadata: {} },
+    'source-a': {
+      id: 'source-a',
+      name: 'Camera A',
+      type: 'camera' as const,
+      enabled: true,
+      metadata: {},
+    },
+    'source-b': {
+      id: 'source-b',
+      name: 'Guest B',
+      type: 'guest' as const,
+      enabled: false,
+      metadata: {},
+    },
   },
 };
-const compositionA = createSceneCompositionFromGraph(graphWithSources, 'scene-a', { target: 'program' });
-const compositionB = createSceneCompositionFromGraph(graphWithSources, 'scene-a', { target: 'program' });
+const compositionA = createSceneCompositionFromGraph(graphWithSources, 'scene-a', {
+  target: 'program',
+});
+const compositionB = createSceneCompositionFromGraph(graphWithSources, 'scene-a', {
+  target: 'program',
+});
 assert.deepEqual(compositionA, compositionB, 'graph-to-composition translator is deterministic');
-assert.equal(compositionA.layers[0]?.sourceId, 'source-a', 'layers preserve deterministic ordering');
-assert.equal(validateSceneComposition(compositionA).some((issue) => issue.code === 'MISSING_SOURCE'), true, 'missing source warning is reported');
-assert.equal(validateLayerBounds({ ...compositionA.layers[0]!, bounds: { x: 0, y: 0, width: 0, height: 0 } }, canvas).some((issue) => issue.code === 'ZERO_SIZE_LAYER'), true, 'invalid bounds warning is reported');
-const changed = createSceneCompositionFromGraph({ ...graphWithSources, sources: { ...graphWithSources.sources, 'source-a': { ...graphWithSources.sources['source-a'], enabled: false } } }, 'scene-a');
-assert.equal(diffSceneCompositions(compositionA, changed).changedLayers.length > 0, true, 'composition diff detects changed layers');
+assert.equal(
+  compositionA.layers[0]?.sourceId,
+  'source-a',
+  'layers preserve deterministic ordering',
+);
+assert.equal(
+  validateSceneComposition(compositionA).some((issue) => issue.code === 'MISSING_SOURCE'),
+  true,
+  'missing source warning is reported',
+);
+assert.equal(
+  validateLayerBounds(
+    { ...compositionA.layers[0]!, bounds: { x: 0, y: 0, width: 0, height: 0 } },
+    canvas,
+  ).some((issue) => issue.code === 'ZERO_SIZE_LAYER'),
+  true,
+  'invalid bounds warning is reported',
+);
+const changed = createSceneCompositionFromGraph(
+  {
+    ...graphWithSources,
+    sources: {
+      ...graphWithSources.sources,
+      'source-a': { ...graphWithSources.sources['source-a'], enabled: false },
+    },
+  },
+  'scene-a',
+);
+assert.equal(
+  diffSceneCompositions(compositionA, changed).changedLayers.length > 0,
+  true,
+  'composition diff detects changed layers',
+);
 const compositionStore = new CompositionStore();
 compositionStore.setComposition('program', compositionA);
-assert.equal(compositionStore.getComposition('program')?.id, compositionA.id, 'composition store set/get works');
-assert.equal(compositionStore.getCompositionByScene('scene-a').length, 1, 'composition store looks up by scene');
-const layoutTransition = applyProductionCommand(graphWithSources, command('SET_WORKSPACE_PRESET', { preset: 'side_by_side' }, graphWithSources.metadata.revision));
-assert.equal(translateGraphTransitionToIntents(layoutTransition).some((intent) => intent.type === 'APPLY_LAYOUT'), true, 'layout changes generate composition-related intent');
+assert.equal(
+  compositionStore.getComposition('program')?.id,
+  compositionA.id,
+  'composition store set/get works',
+);
+assert.equal(
+  compositionStore.getCompositionByScene('scene-a').length,
+  1,
+  'composition store looks up by scene',
+);
+const layoutTransition = applyProductionCommand(
+  graphWithSources,
+  command('SET_WORKSPACE_PRESET', { preset: 'side_by_side' }, graphWithSources.metadata.revision),
+);
+assert.equal(
+  translateGraphTransitionToIntents(layoutTransition).some(
+    (intent) => intent.type === 'APPLY_LAYOUT',
+  ),
+  true,
+  'layout changes generate composition-related intent',
+);
 const compositionMock = new MockMediaExecutionAdapter({ latencyMs: 1 });
-compositionMock.execute({ id: 'build-composition', type: 'RENDER_PROGRAM_COMPOSITION', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: graphWithSources.metadata.revision, payload: { sceneId: 'scene-a' } }, graphWithSources);
-assert.equal(compositionMock.getCompositionStore().getComposition('program')?.sceneId, 'scene-a', 'mock adapter stores latest program composition');
+compositionMock.execute(
+  {
+    id: 'build-composition',
+    type: 'RENDER_PROGRAM_COMPOSITION',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: graphWithSources.metadata.revision,
+    payload: { sceneId: 'scene-a' },
+  },
+  graphWithSources,
+);
+assert.equal(
+  compositionMock.getCompositionStore().getComposition('program')?.sceneId,
+  'scene-a',
+  'mock adapter stores latest program composition',
+);
+
+import {
+  VideoRouteStore,
+  activateRoute,
+  createVideoRouteGraph,
+  createVideoRoutePlan,
+  deactivateRoute,
+  failRoute,
+  markRouteUnavailable,
+  validateVideoRoute,
+  validateVideoRoutePlan,
+} from './routing.js';
+const routingProgramComposition = createSceneCompositionFromGraph(
+  recordingTransition.nextGraph,
+  'scene-a',
+  {
+    target: 'program',
+  },
+);
+const routingPreviewComposition = createSceneCompositionFromGraph(
+  recordingTransition.nextGraph,
+  'scene-a',
+  {
+    target: 'preview',
+  },
+);
+const routingMultiviewComposition = createSceneCompositionFromGraph(
+  recordingTransition.nextGraph,
+  'scene-a',
+  {
+    target: 'multiview',
+  },
+);
+const routePlan = createVideoRoutePlan(
+  recordingTransition.nextGraph,
+  [routingProgramComposition, routingPreviewComposition, routingMultiviewComposition],
+  {
+    includeRecording: true,
+    includeStreams: true,
+    includeConfidenceMonitor: true,
+    now: '2026-07-01T00:00:00.000Z',
+  },
+);
+assert.equal(
+  routePlan.routes.some((route) => route.target === 'program'),
+  true,
+  'route planner creates program route',
+);
+assert.equal(
+  routePlan.routes.some((route) => route.target === 'preview'),
+  true,
+  'route planner creates preview route',
+);
+assert.equal(
+  routePlan.routes.some((route) => route.target === 'multiview'),
+  true,
+  'route planner creates multiview route',
+);
+assert.equal(
+  routePlan.routes.some((route) => route.target === 'recording'),
+  true,
+  'route planner creates recording placeholder route',
+);
+const routeGraph = createVideoRouteGraph(routePlan);
+assert.equal(
+  Math.max(...Object.values(routeGraph.fanOut).map((routes) => routes.length)) > 1,
+  true,
+  'route graph represents fan-out',
+);
+assert.equal(
+  validateVideoRoutePlan(routePlan, recordingTransition.nextGraph, [
+    routingProgramComposition,
+    routingPreviewComposition,
+    routingMultiviewComposition,
+  ]).valid,
+  true,
+  'valid route plan passes validation',
+);
+assert.equal(
+  validateVideoRoute({ ...routePlan.routes[0]!, priority: -1 }, recordingTransition.nextGraph, [])
+    .valid,
+  false,
+  'invalid route priority fails validation',
+);
+assert.equal(
+  activateRoute(routePlan.routes[0]!).status,
+  'active',
+  'activateRoute marks route active',
+);
+assert.equal(
+  deactivateRoute(routePlan.routes[0]!).status,
+  'idle',
+  'deactivateRoute marks route idle',
+);
+assert.equal(
+  failRoute(routePlan.routes[0]!, 'test').status,
+  'failed',
+  'failRoute marks route failed',
+);
+assert.equal(
+  markRouteUnavailable(routePlan.routes[0]!, 'test').status,
+  'unavailable',
+  'markRouteUnavailable marks route unavailable',
+);
+const routeStore = new VideoRouteStore();
+routeStore.setRoutePlan(routePlan);
+assert.equal(routeStore.getRoutePlan()?.id, routePlan.id, 'route store returns latest plan');
+assert.equal(
+  routeStore.getRoutesByTarget('program').length,
+  1,
+  'route store queries routes by target',
+);
+assert.equal(
+  routeStore.getRoutesByScene('scene-a').length > 1,
+  true,
+  'route store queries routes by scene',
+);
+routeStore.clearRoutes();
+assert.equal(routeStore.listRoutes().length, 0, 'route store clears routes');
+const routingIntent = {
+  id: 'routing-intent',
+  type: 'BUILD_VIDEO_ROUTE_PLAN' as const,
+  timestamp: '2026-07-01T00:00:00.000Z',
+  graphRevision: recordingTransition.nextRevision,
+  payload: {},
+};
+const routingMock = new MockMediaExecutionAdapter();
+const routingResponse = routingMock.execute(routingIntent, recordingTransition.nextGraph);
+assert.equal(routingResponse.success, true, 'mock adapter executes routing intent');
+assert.equal(
+  Boolean(routingMock.getVideoRouteStore().getRoutePlan()),
+  true,
+  'mock adapter stores latest route plan',
+);
