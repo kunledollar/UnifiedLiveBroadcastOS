@@ -67,7 +67,12 @@ export type MediaExecutionIntentType =
   | 'STOP_BROWSER_RENDERER'
   | 'UPDATE_BROWSER_RENDER_TARGET'
   | 'RENDER_FRAME'
-  | 'EXECUTE_FRAME_SYNC';
+  | 'EXECUTE_FRAME_SYNC'
+  | 'SELECT_RENDER_BACKEND'
+  | 'CLEAR_RENDER_CACHE'
+  | 'FORCE_FULL_RENDER'
+  | 'UPDATE_RENDER_PERFORMANCE_MODE'
+  | 'REPORT_RENDER_HEALTH';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
