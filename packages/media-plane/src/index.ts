@@ -9,6 +9,12 @@ import {
   getCompositionWarnings,
   type CompositionRenderTarget,
 } from './compositor/index.js';
+import {
+  VideoRouteStore,
+  createVideoRouteGraph,
+  createVideoRoutePlan,
+  getVideoRouteWarnings,
+} from './routing.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -25,7 +31,16 @@ export type MediaExecutionIntentType =
   | 'UPDATE_SCENE_COMPOSITION'
   | 'RENDER_PROGRAM_COMPOSITION'
   | 'RENDER_PREVIEW_COMPOSITION'
-  | 'RENDER_MULTIVIEW_COMPOSITION';
+  | 'RENDER_MULTIVIEW_COMPOSITION'
+  | 'BUILD_VIDEO_ROUTE_PLAN'
+  | 'UPDATE_VIDEO_ROUTE'
+  | 'ACTIVATE_VIDEO_ROUTE'
+  | 'DEACTIVATE_VIDEO_ROUTE'
+  | 'ROUTE_PROGRAM_VIDEO'
+  | 'ROUTE_PREVIEW_VIDEO'
+  | 'ROUTE_MULTIVIEW_VIDEO'
+  | 'ROUTE_RECORDING_VIDEO'
+  | 'ROUTE_STREAM_VIDEO';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -78,6 +93,7 @@ export interface MediaExecutionAdapter {
 export interface WebRtcMediaExecutionAdapter extends MediaExecutionAdapter {}
 export * from './adapters/webrtc/index.js';
 export * from './compositor/index.js';
+export * from './routing.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -194,10 +210,10 @@ const commandIntentMap = {
 const eventIntentMap = {
   AUDIO_MUTED: 'UPDATE_AUDIO_MIX',
   AUDIO_UNMUTED: 'UPDATE_AUDIO_MIX',
-  DESTINATION_ENABLED: 'UPDATE_DESTINATION',
+  DESTINATION_ENABLED: 'ROUTE_STREAM_VIDEO',
   DESTINATION_DISABLED: 'UPDATE_DESTINATION',
-  PREVIEW_SCENE_CHANGED: 'RENDER_PREVIEW_COMPOSITION',
-  PROGRAM_SCENE_CHANGED: 'RENDER_PROGRAM_COMPOSITION',
+  PREVIEW_SCENE_CHANGED: 'ROUTE_PREVIEW_VIDEO',
+  PROGRAM_SCENE_CHANGED: 'ROUTE_PROGRAM_VIDEO',
   TRANSITION_COMPLETED: 'UPDATE_SCENE_COMPOSITION',
   SOURCE_ADDED: 'BUILD_SCENE_COMPOSITION',
   SOURCE_REMOVED: 'UPDATE_SCENE_COMPOSITION',
@@ -382,6 +398,14 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
     return [...this.log];
   }
   private readonly compositionStore = new CompositionStore();
+  private readonly videoRouteStore = new VideoRouteStore();
+  getVideoRouteStore() {
+    return this.videoRouteStore;
+  }
+  getLatestVideoRouteGraph() {
+    const plan = this.videoRouteStore.getRoutePlan();
+    return plan ? createVideoRouteGraph(plan) : undefined;
+  }
   getCompositionStore() {
     return this.compositionStore;
   }
@@ -425,6 +449,51 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
         this.compositionStore.setComposition(target as CompositionRenderTarget, composition);
         warnings.push(...getCompositionWarnings(composition));
       } else warnings.push(`No scene available for ${intent.type}`);
+    }
+    const routingIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_VIDEO_ROUTE_PLAN',
+      'UPDATE_VIDEO_ROUTE',
+      'ACTIVATE_VIDEO_ROUTE',
+      'DEACTIVATE_VIDEO_ROUTE',
+      'ROUTE_PROGRAM_VIDEO',
+      'ROUTE_PREVIEW_VIDEO',
+      'ROUTE_MULTIVIEW_VIDEO',
+      'ROUTE_RECORDING_VIDEO',
+      'ROUTE_STREAM_VIDEO',
+    ];
+    if (!shouldFail && graph && routingIntentTypes.includes(intent.type)) {
+      const programScene = graph.program.sceneId;
+      const previewScene = graph.preview.sceneId;
+      const existing = this.compositionStore.listCompositions().map((entry) => entry.composition);
+      const generated = [
+        ...(programScene
+          ? [createSceneCompositionFromGraph(graph, programScene, { target: 'program' })]
+          : []),
+        ...(previewScene
+          ? [createSceneCompositionFromGraph(graph, previewScene, { target: 'preview' })]
+          : []),
+        ...(programScene
+          ? [createSceneCompositionFromGraph(graph, programScene, { target: 'multiview' })]
+          : []),
+        ...(programScene
+          ? [
+              createSceneCompositionFromGraph(graph, programScene, {
+                target: 'vertical' as CompositionRenderTarget,
+              }),
+            ]
+          : []),
+      ];
+      const plan = createVideoRoutePlan(graph, [...existing, ...generated], {
+        includeRecording:
+          intent.type === 'ROUTE_RECORDING_VIDEO' || graph.recording.status === 'recording',
+        includeStreams:
+          intent.type === 'ROUTE_STREAM_VIDEO' ||
+          Object.values(graph.destinations).some((destination) => destination.enabled),
+        includeConfidenceMonitor: true,
+        now: intent.timestamp,
+      });
+      this.videoRouteStore.setRoutePlan(plan);
+      warnings.push(...getVideoRouteWarnings(plan, graph, [...existing, ...generated]));
     }
     return {
       adapterName: this.getName(),
