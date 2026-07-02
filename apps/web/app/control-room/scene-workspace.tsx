@@ -13,6 +13,12 @@ import {
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
+  WebRTCMediaExecutionAdapter,
+  createWebRTCAdapterMetadata,
+  requestLocalCamera,
+  requestLocalMicrophone,
+  requestScreenShare,
+  stopAllTracks,
   type ExecutionRuntimeMode,
 } from '@ubos/media-plane';
 import {
@@ -46,6 +52,7 @@ import {
   useEffect,
   useMemo,
   useOptimistic,
+  useRef,
   useState,
   useTransition,
 } from 'react';
@@ -72,6 +79,41 @@ import {
 } from './media-route-actions';
 import { ProductionSwitcher } from './production-switcher';
 
+function MediaStreamPreview({
+  stream,
+  muted = true,
+  label,
+  status,
+}: {
+  stream?: MediaStream | undefined;
+  muted?: boolean;
+  label: string;
+  status: string;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.srcObject = stream ?? null;
+    return () => {
+      if (videoRef.current) videoRef.current.srcObject = null;
+    };
+  }, [stream]);
+  return (
+    <div className="overflow-hidden rounded-lg border border-slate-700 bg-black/40">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted={muted}
+        className="aspect-video w-full object-cover"
+      />
+      <div className="flex items-center justify-between px-2 py-1 text-[10px] uppercase tracking-[0.12em]">
+        <span>{label}</span>
+        <span className="text-slate-400">{status}</span>
+      </div>
+    </div>
+  );
+}
+
 function InspectorMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-slate-900/80 p-2">
@@ -84,7 +126,11 @@ function InspectorMetric({ label, value }: { label: string; value: string }) {
 function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
   const enabled = process.env.NEXT_PUBLIC_UBOS_MEDIA_EXECUTION_INSPECTOR === 'true';
   const [refreshToken, setRefreshToken] = useState(0);
-  if (!enabled) return null;
+  const [permissionError, setPermissionError] = useState<string | undefined>();
+  const webRTCAdapter = engine.getRegisteredAdapter('webrtc-media-execution-adapter');
+  const webRTC =
+    webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
+  const webRTCDiagnostics = webRTC?.getDiagnostics();
   const state = engine.getExecutionState();
   const latestResult = state.lastResults.at(-1);
   const latestAdapter = latestResult?.adapterResponses.at(-1);
@@ -100,8 +146,48 @@ function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
     (event) => event.type === 'EXECUTION_FAILED',
   ).length;
   const rerender = () => setRefreshToken((value) => value + 1);
+  if (!enabled) return null;
   const setMode = (mode: ExecutionRuntimeMode) => {
     engine.setExecutionRuntimeMode(mode);
+    rerender();
+  };
+  const requestAndRegister = async (
+    kind: 'camera' | 'screen' | 'media',
+    request: () => Promise<MediaStream>,
+  ) => {
+    if (!webRTC) return;
+    setPermissionError(undefined);
+    try {
+      const stream = await request();
+      webRTC.getSourceManager().registerStream(stream, {
+        sourceId: `local-${kind}-${stream.id}`,
+        kind,
+      });
+    } catch (error) {
+      setPermissionError(error instanceof Error ? error.message : 'Unknown media error');
+    }
+    rerender();
+  };
+  const stopLocalStreams = () => {
+    webRTC?.getSourceManager().listSources().forEach((source) => {
+      const stream = webRTC.getSourceManager().getStream(source.sourceId);
+      stopAllTracks(stream);
+      webRTC.getSourceManager().updateSourceStatus(source.sourceId, 'disconnected');
+    });
+    rerender();
+  };
+  const registerTestStream = () => {
+    if (!webRTC) return;
+    const testStream = {
+      id: `test-stream-${Date.now()}`,
+      getAudioTracks: () => [],
+      getVideoTracks: () => [],
+      getTracks: () => [],
+    } as unknown as MediaStream;
+    webRTC.getSourceManager().registerStream(testStream, {
+      sourceId: testStream.id,
+      kind: 'browser',
+    });
     rerender();
   };
   const configureLatencyPreset = (preset: 'instant' | 'steady' | 'warning') => {
@@ -218,11 +304,77 @@ function MediaExecutionInspector({ engine }: { engine: MediaExecutionEngine }) {
             {preset} latency
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => requestAndRegister('camera', requestLocalCamera)}
+          className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200"
+        >
+          Request Camera
+        </button>
+        <button
+          type="button"
+          onClick={() => requestAndRegister('media', requestLocalMicrophone)}
+          className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200"
+        >
+          Request Microphone
+        </button>
+        <button
+          type="button"
+          onClick={() => requestAndRegister('screen', requestScreenShare)}
+          className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200"
+        >
+          Request Screen Share
+        </button>
+        <button
+          type="button"
+          onClick={stopLocalStreams}
+          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+        >
+          Stop Local Streams
+        </button>
+        <button
+          type="button"
+          onClick={registerTestStream}
+          className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+        >
+          Register Test Stream
+        </button>
       </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-3">
+        <InspectorMetric
+          label="WebRTC"
+          value={webRTCDiagnostics?.isAvailable ? 'available' : 'unavailable'}
+        />
+        <InspectorMetric
+          label="Capture APIs"
+          value={`cam:${webRTCDiagnostics?.supportsCamera ? 'yes' : 'no'} mic:${webRTCDiagnostics?.supportsMicrophone ? 'yes' : 'no'} screen:${webRTCDiagnostics?.supportsScreenShare ? 'yes' : 'no'}`}
+        />
+        <InspectorMetric
+          label="Local Streams"
+          value={String(webRTCDiagnostics?.activeLocalStreamCount ?? 0)}
+        />
+      </div>
+      {permissionError ? (
+        <p className="mt-2 rounded border border-red-500/30 bg-red-950/40 p-2 text-red-200">
+          {permissionError}
+        </p>
+      ) : null}
+      {webRTC ? (
+        <div className="mt-3 grid gap-2 md:grid-cols-3">
+          {webRTC.getSourceManager().listSources().map((source) => (
+            <MediaStreamPreview
+              key={source.sourceId}
+              stream={webRTC.getSourceManager().getStream(source.sourceId) as MediaStream | undefined}
+              label={source.sourceId}
+              status={`${source.kind}:${source.status}`}
+            />
+          ))}
+        </div>
+      ) : null}
       <div className="mt-3 grid gap-2 md:grid-cols-2">
         <pre className="overflow-auto rounded bg-black/40 p-2 text-[10px]">
           {JSON.stringify(
-            { adapters, health, latestEvents: state.latestEvents.slice(-6) },
+            { adapters, health, webRTCDiagnostics, latestEvents: state.latestEvents.slice(-6) },
             null,
             2,
           )}
@@ -714,6 +866,8 @@ export function SceneWorkspace({
       isMock: true,
       isLive: false,
     });
+    const webRTCAdapter = new WebRTCMediaExecutionAdapter();
+    engine.registerAdapter(webRTCAdapter, createWebRTCAdapterMetadata(webRTCAdapter));
     engine.setExecutionRuntimeMode('mock_live');
     return engine;
   }, []);

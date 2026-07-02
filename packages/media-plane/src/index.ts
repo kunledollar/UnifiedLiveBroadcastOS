@@ -65,6 +65,7 @@ export interface MediaExecutionAdapter {
 }
 
 export interface WebRtcMediaExecutionAdapter extends MediaExecutionAdapter {}
+export * from './adapters/webrtc/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -294,6 +295,9 @@ export class AdapterRegistry {
   reportAdapterHealth(adapterId: string) {
     return this.records.find((record) => record.metadata.id === adapterId)?.metadata;
   }
+  getAdapter(adapterId: string) {
+    return this.records.find((record) => record.metadata.id === adapterId)?.adapter;
+  }
   update(adapterId: string, metadata: Partial<AdapterMetadata>) {
     this.records = this.records.map((record) =>
       record.metadata.id === adapterId
@@ -388,6 +392,9 @@ export class MediaExecutionEngine implements MediaExecutionPlane {
   }
   getAdapterRegistry() {
     return this.adapterRegistry;
+  }
+  getRegisteredAdapter(adapterId: string) {
+    return this.adapterRegistry.getAdapter(adapterId);
   }
   getExecutionEventStream() {
     return this.eventStream;
