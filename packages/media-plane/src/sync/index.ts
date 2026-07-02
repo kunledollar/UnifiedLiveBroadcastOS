@@ -1,4 +1,5 @@
 export * from './clock.js';
+export * from './timing.js';
 import { createClock, type MediaClock } from './clock.js';
 export interface FrameTickEvent { readonly frameId: number; readonly timestamp: number; readonly broadcastTime: number; readonly expectedNextFrameTime: number; readonly jitterEstimate: number; }
 export type MediaSyncEventType = 'FRAME_TICK'|'FRAME_DROPPED'|'DRIFT_DETECTED'|'CLOCK_RESYNC'|'TIMESTAMP_ANOMALY';
