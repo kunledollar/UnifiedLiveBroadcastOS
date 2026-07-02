@@ -54,6 +54,17 @@ import {
   createStreamingManifest,
   StreamingStore,
   supportedStreamingProtocols,
+  createMultiviewPlan,
+  validateMultiviewPlan,
+  buildTileLayout,
+  updateMultiviewTile,
+  removeMultiviewTile,
+  createMultiviewSnapshot,
+  summarizeMultiviewHealth,
+  createConfidenceMonitor,
+  summarizeConfidenceStatus,
+  validateConfidenceSignals,
+  MultiviewStore,
   type FrameTickEvent,
 } from './index.js';
 
@@ -283,6 +294,36 @@ streamingResult = stopStreaming(streamingResult.session);
 assert.equal(streamingResult.session.status, 'stopped', 'stop streaming moves lifecycle');
 streamingStore.clearStreams();
 assert.equal(streamingStore.listStreams().length, 0, 'stream store clears streams');
+
+
+const multiviewPlan = createMultiviewPlan({ graph: streamingGraph, preset: 'quad', videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, frameId: 82 });
+assert.equal(multiviewPlan.tiles.length, 4, 'multiview plan creation uses quad preset');
+assert.deepEqual(buildTileLayout('two_view', 1, 2), { x: 960, y: 0, width: 960, height: 1080 }, 'two view layout generates right tile');
+assert.equal(validateMultiviewPlan(multiviewPlan).valid, true, 'multiview metadata-only validation passes');
+const updatedMultiview = updateMultiviewTile(multiviewPlan, multiviewPlan.tiles[0]!.id, { health: 'degraded', status: 'degraded', metadata: { simulatedDrop: true } });
+assert.equal(updatedMultiview.tiles[0]?.health, 'degraded', 'multiview tile update works');
+const removedMultiview = removeMultiviewTile(updatedMultiview, updatedMultiview.tiles[0]!.id);
+assert.equal(removedMultiview.tiles.length, 3, 'multiview tile remove works');
+const multiviewSummary = summarizeMultiviewHealth(updatedMultiview);
+assert.equal(multiviewSummary.unhealthyTiles > 0, true, 'tile health summary counts unhealthy tiles');
+const multiviewSnapshot = createMultiviewSnapshot(multiviewPlan);
+assert.equal(multiviewSnapshot.containsMediaPayloads, false, 'multiview snapshot is replay-safe metadata only');
+assert.equal('mediaStream' in multiviewSnapshot, false, 'multiview snapshot stores no raw media');
+const confidenceMonitor = createConfidenceMonitor({ plan: multiviewPlan, signals: { stream: 'warning', network: 'degraded' } });
+assert.equal(validateConfidenceSignals(confidenceMonitor).valid, true, 'confidence monitor validation passes');
+assert.equal(summarizeConfidenceStatus(confidenceMonitor).status, 'degraded', 'confidence summary reports worst status');
+const multiviewStore = new MultiviewStore();
+multiviewStore.setMultiviewPlan(multiviewPlan);
+multiviewStore.setConfidenceMonitor(confidenceMonitor);
+assert.equal(multiviewStore.getTileById(multiviewPlan.tiles[0]!.id)?.id, multiviewPlan.tiles[0]!.id, 'multiview store gets tile by id');
+assert.equal(multiviewStore.getTilesByType('program').length, 1, 'multiview store filters tiles by type');
+const multiviewMock = new MockMediaExecutionAdapter({ latencyMs: 1 });
+const multiviewMockResult = multiviewMock.execute({ id: 'mock-multiview', type: 'BUILD_MULTIVIEW_PLAN', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: streamingGraph.metadata.revision, payload: { preset: 'quad', frameId: 82 } }, streamingGraph);
+assert.equal(multiviewMockResult.success, true, 'mock multiview execution intent handling succeeds');
+assert.equal(multiviewMock.getMultiviewStore().getMultiviewPlan()?.preset, 'quad', 'mock multiview execution stores plan');
+assert.equal(validateMultiviewPlan(createMultiviewPlan({ graph: streamingGraph, metadata: { rawFrame: 'forbidden' } })).valid, false, 'multiview validation rejects raw media-like metadata');
+multiviewStore.clearMultiview();
+assert.equal(multiviewStore.listMultiviewTiles().length, 0, 'multiview store clears state');
 
 const health = engine.getMediaExecutionHealth();
 assert.equal(health.executedIntentCount, 1, 'execution health counts executed intents');
