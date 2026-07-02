@@ -10,6 +10,7 @@ import {
   SceneList,
   SourceManager,
 } from '@ubos/ui';
+import { MediaExecutionEngine, MockMediaExecutionAdapter } from '@ubos/media-plane';
 import {
   SceneType,
   type AudioChannel,
@@ -73,6 +74,38 @@ function InspectorMetric({ label, value }: { label: string; value: string }) {
       <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">{label}</p>
       <p className="truncate font-mono text-xs font-bold text-slate-100">{value}</p>
     </div>
+  );
+}
+
+function MediaExecutionInspector({
+  engine,
+}: {
+  engine: MediaExecutionEngine;
+}) {
+  const enabled = process.env.NEXT_PUBLIC_UBOS_MEDIA_EXECUTION_INSPECTOR === 'true';
+  if (!enabled) return null;
+  const state = engine.getExecutionState();
+  const latestResult = state.lastResults.at(-1);
+  const latestAdapter = latestResult?.adapterResponses.at(-1);
+  return (
+    <details className="mb-2 rounded-xl border border-purple-300/20 bg-slate-950/80 p-3 text-xs text-slate-300">
+      <summary className="cursor-pointer font-black uppercase tracking-[0.18em] text-purple-200">
+        Media Execution Inspector
+      </summary>
+      <div className="mt-3 grid gap-2 md:grid-cols-4">
+        <InspectorMetric label="Revision" value={String(state.currentGraphRevision)} />
+        <InspectorMetric label="Intents" value={String(state.lastIntents.length)} />
+        <InspectorMetric label="Adapter" value={latestAdapter?.adapterName ?? state.registeredAdapters.at(-1) ?? '—'} />
+        <InspectorMetric label="Status" value={latestResult ? (latestResult.success ? 'success' : 'failure') : 'idle'} />
+        <InspectorMetric label="Latency" value={latestAdapter ? `${latestAdapter.latencyMs}ms` : '—'} />
+        <InspectorMetric label="Intent" value={state.lastIntents.at(-1)?.type ?? '—'} />
+        <InspectorMetric label="Warnings" value={String(latestResult?.warnings.length ?? 0)} />
+        <InspectorMetric label="Errors" value={String(latestResult?.errors.length ?? 0)} />
+      </div>
+      <pre className="mt-3 overflow-auto rounded bg-black/40 p-2 text-[10px]">
+        {JSON.stringify({ intents: state.lastIntents.slice(-3), latestResult }, null, 2)}
+      </pre>
+    </details>
   );
 }
 
@@ -532,6 +565,11 @@ export function SceneWorkspace({
   const programRoute = mediaRoutes.find((route) => route.isOnProgram);
   const layoutPreset =
     (programRoute?.metadata.layoutPreset as MediaLayoutPreset | undefined) ?? 'full_screen';
+  const mediaExecutionEngine = useMemo(() => {
+    const engine = new MediaExecutionEngine();
+    engine.registerAdapter(new MockMediaExecutionAdapter({ latencyMs: 8 }));
+    return engine;
+  }, []);
   const productionGraphDispatcher = useMemo(
     () =>
       new LocalProductionCommandDispatcher(
@@ -540,8 +578,9 @@ export function SceneWorkspace({
           name: 'Control Room Session',
           operatorId: 'local-director',
         }),
+        mediaExecutionEngine,
       ),
-    [programScene.broadcastId],
+    [programScene.broadcastId, mediaExecutionEngine],
   );
   const productionGraphSession = productionGraphDispatcher.getSession();
   const syncDiagnosticsEnabled = process.env.NEXT_PUBLIC_ENABLE_SYNC_DIAGNOSTICS === 'true';
@@ -1192,6 +1231,7 @@ export function SceneWorkspace({
           }}
         />
         <ProductionGraphInspector session={productionGraphSession} />
+        <MediaExecutionInspector engine={mediaExecutionEngine} />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {viewMode === 'multiview' ? (
             <ProductionMultiview

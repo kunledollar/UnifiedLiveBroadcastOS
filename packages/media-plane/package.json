@@ -1,0 +1,23 @@
+{
+  "name": "@ubos/media-plane",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/media-plane/src/index.js",
+  "types": "dist/media-plane/src/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node dist/media-plane/src/media-plane.validation.js"
+  },
+  "dependencies": {
+    "@ubos/shared": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/media-plane/src/index.d.ts",
+      "import": "./dist/media-plane/src/index.js"
+    }
+  }
+}

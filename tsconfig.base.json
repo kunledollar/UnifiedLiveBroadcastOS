@@ -17,7 +17,8 @@
       "@ubos/shared": ["packages/shared/src"],
       "@ubos/ui": ["packages/ui/src"],
       "@ubos/config": ["packages/config/src"],
-      "@ubos/db": ["packages/db/src"]
+      "@ubos/db": ["packages/db/src"],
+      "@ubos/media-plane": ["packages/media-plane/src"]
     }
   }
 }
