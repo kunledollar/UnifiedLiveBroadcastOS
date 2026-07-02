@@ -15,6 +15,12 @@ import {
   createVideoRoutePlan,
   getVideoRouteWarnings,
 } from './routing.js';
+import {
+  AudioRouteStore,
+  createAudioRouteGraph,
+  createAudioRoutePlan,
+  getAudioRouteWarnings,
+} from './audio-routing/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -40,7 +46,19 @@ export type MediaExecutionIntentType =
   | 'ROUTE_PREVIEW_VIDEO'
   | 'ROUTE_MULTIVIEW_VIDEO'
   | 'ROUTE_RECORDING_VIDEO'
-  | 'ROUTE_STREAM_VIDEO';
+  | 'ROUTE_STREAM_VIDEO'
+  | 'BUILD_AUDIO_ROUTE_PLAN'
+  | 'UPDATE_AUDIO_ROUTE'
+  | 'ACTIVATE_AUDIO_ROUTE'
+  | 'DEACTIVATE_AUDIO_ROUTE'
+  | 'MUTE_AUDIO_ROUTE'
+  | 'UNMUTE_AUDIO_ROUTE'
+  | 'SET_AUDIO_ROUTE_GAIN'
+  | 'BUILD_PROGRAM_MIX'
+  | 'BUILD_STREAM_MIX'
+  | 'BUILD_RECORDING_MIX'
+  | 'BUILD_MONITOR_MIX'
+  | 'BUILD_GUEST_RETURN_MIX';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -94,6 +112,7 @@ export interface WebRtcMediaExecutionAdapter extends MediaExecutionAdapter {}
 export * from './adapters/webrtc/index.js';
 export * from './compositor/index.js';
 export * from './routing.js';
+export * from './audio-routing/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -208,15 +227,18 @@ const commandIntentMap = {
   UPDATE_SOURCE: 'UPDATE_SCENE_COMPOSITION',
 } as const;
 const eventIntentMap = {
-  AUDIO_MUTED: 'UPDATE_AUDIO_MIX',
-  AUDIO_UNMUTED: 'UPDATE_AUDIO_MIX',
+  AUDIO_MUTED: 'MUTE_AUDIO_ROUTE',
+  AUDIO_UNMUTED: 'UNMUTE_AUDIO_ROUTE',
+  AUDIO_LEVEL_CHANGED: 'SET_AUDIO_ROUTE_GAIN',
+  GUEST_ADDED: 'BUILD_GUEST_RETURN_MIX',
+  GUEST_REMOVED: 'BUILD_AUDIO_ROUTE_PLAN',
   DESTINATION_ENABLED: 'ROUTE_STREAM_VIDEO',
   DESTINATION_DISABLED: 'UPDATE_DESTINATION',
   PREVIEW_SCENE_CHANGED: 'ROUTE_PREVIEW_VIDEO',
   PROGRAM_SCENE_CHANGED: 'ROUTE_PROGRAM_VIDEO',
   TRANSITION_COMPLETED: 'UPDATE_SCENE_COMPOSITION',
-  SOURCE_ADDED: 'BUILD_SCENE_COMPOSITION',
-  SOURCE_REMOVED: 'UPDATE_SCENE_COMPOSITION',
+  SOURCE_ADDED: 'BUILD_AUDIO_ROUTE_PLAN',
+  SOURCE_REMOVED: 'BUILD_AUDIO_ROUTE_PLAN',
   SOURCE_UPDATED: 'UPDATE_SCENE_COMPOSITION',
   SCENE_UPDATED: 'UPDATE_SCENE_COMPOSITION',
 } as const;
@@ -399,8 +421,16 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   }
   private readonly compositionStore = new CompositionStore();
   private readonly videoRouteStore = new VideoRouteStore();
+  private readonly audioRouteStore = new AudioRouteStore();
   getVideoRouteStore() {
     return this.videoRouteStore;
+  }
+  getAudioRouteStore() {
+    return this.audioRouteStore;
+  }
+  getLatestAudioRouteGraph() {
+    const plan = this.audioRouteStore.getRoutePlan();
+    return plan ? createAudioRouteGraph(plan) : undefined;
   }
   getLatestVideoRouteGraph() {
     const plan = this.videoRouteStore.getRoutePlan();
@@ -494,6 +524,36 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       });
       this.videoRouteStore.setRoutePlan(plan);
       warnings.push(...getVideoRouteWarnings(plan, graph, [...existing, ...generated]));
+    }
+
+    const audioRoutingIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_AUDIO_ROUTE_PLAN',
+      'UPDATE_AUDIO_ROUTE',
+      'ACTIVATE_AUDIO_ROUTE',
+      'DEACTIVATE_AUDIO_ROUTE',
+      'MUTE_AUDIO_ROUTE',
+      'UNMUTE_AUDIO_ROUTE',
+      'SET_AUDIO_ROUTE_GAIN',
+      'BUILD_PROGRAM_MIX',
+      'BUILD_STREAM_MIX',
+      'BUILD_RECORDING_MIX',
+      'BUILD_MONITOR_MIX',
+      'BUILD_GUEST_RETURN_MIX',
+      'UPDATE_AUDIO_MIX',
+    ];
+    if (!shouldFail && graph && audioRoutingIntentTypes.includes(intent.type)) {
+      const plan = createAudioRoutePlan(graph, {
+        includeRecording:
+          intent.type === 'BUILD_RECORDING_MIX' || graph.recording.status === 'recording',
+        includeStreams:
+          intent.type === 'BUILD_STREAM_MIX' ||
+          Object.values(graph.destinations).some((destination) => destination.enabled),
+        includeMonitor: intent.type === 'BUILD_MONITOR_MIX' || true,
+        includeGuestReturns: intent.type === 'BUILD_GUEST_RETURN_MIX' || true,
+        now: intent.timestamp,
+      });
+      this.audioRouteStore.setRoutePlan(plan);
+      warnings.push(...getAudioRouteWarnings(plan, graph));
     }
     return {
       adapterName: this.getName(),
