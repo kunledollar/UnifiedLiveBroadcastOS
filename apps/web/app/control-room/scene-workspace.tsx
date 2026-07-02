@@ -25,6 +25,9 @@ import {
   createVideoRoutePlan,
   createVideoRouteGraph,
   validateVideoRoutePlan,
+  createAudioRoutePlan,
+  createAudioRouteGraph,
+  validateAudioRoutePlan,
   type ExecutionRuntimeMode,
 } from '@ubos/media-plane';
 import {
@@ -154,6 +157,20 @@ function MediaExecutionInspector({
     ...(programComposition ? getCompositionWarnings(programComposition) : []),
     ...(previewComposition ? getCompositionWarnings(previewComposition) : []),
   ];
+  const audioRoutePlan = createAudioRoutePlan(graph, {
+    includeRecording: graph.recording.status === 'recording',
+    includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled),
+    includeMonitor: true,
+    includeGuestReturns: true,
+  });
+  const audioRouteGraph = createAudioRouteGraph(audioRoutePlan);
+  const audioRouteValidation = validateAudioRoutePlan(audioRoutePlan, graph);
+  const activeAudioRoutes = audioRoutePlan.routes.filter((route) => route.enabled);
+  const mutedAudioRoutes = audioRoutePlan.routes.filter((route) => route.muted);
+  const soloedAudioRoutes = audioRoutePlan.routes.filter((route) => route.solo);
+  const guestReturnRoutes = audioRoutePlan.routes.filter(
+    (route) => route.target === 'guest_return',
+  );
   const routePlan = createVideoRoutePlan(
     graph,
     [programComposition, previewComposition].filter((composition) => composition !== undefined),
@@ -328,6 +345,17 @@ function MediaExecutionInspector({
           )}
         />
         <InspectorMetric label="Route Rev" value={String(routeGraph.revision)} />
+        <InspectorMetric label="Audio Buses" value={String(audioRoutePlan.buses.length)} />
+        <InspectorMetric label="Audio Routes" value={String(activeAudioRoutes.length)} />
+        <InspectorMetric label="Muted Audio" value={String(mutedAudioRoutes.length)} />
+        <InspectorMetric label="Soloed Audio" value={String(soloedAudioRoutes.length)} />
+        <InspectorMetric label="Guest Returns" value={String(guestReturnRoutes.length)} />
+        <InspectorMetric label="Mix-minus" value={audioRoutePlan.returns.length ? 'ready' : '—'} />
+        <InspectorMetric
+          label="Audio Warnings"
+          value={String(audioRouteValidation.warnings.length)}
+        />
+        <InspectorMetric label="Audio Rev" value={String(audioRouteGraph.revision)} />
         <InspectorMetric
           label="Changed Layers"
           value={`${compositionDiff.changedLayers.length} Δ / +${compositionDiff.addedLayers.length} / -${compositionDiff.removedLayers.length}`}
@@ -362,6 +390,26 @@ function MediaExecutionInspector({
         {routeValidation.warnings.length > 0 ? (
           <p className="mt-2 text-[10px] text-amber-200">
             {routeValidation.warnings.slice(0, 3).join(' · ')}
+          </p>
+        ) : null}
+      </div>
+      <div className="mt-3 rounded-lg border border-slate-800 bg-black/20 p-2">
+        <p className="font-black uppercase tracking-[0.16em] text-slate-300">Audio Routing</p>
+        <div className="mt-2 grid gap-1 md:grid-cols-2">
+          {activeAudioRoutes.slice(0, 6).map((route) => (
+            <div key={route.id} className="rounded border border-slate-800 bg-slate-950/70 p-2">
+              <p className="font-bold text-slate-100">
+                {route.sourceType} → {route.target}
+              </p>
+              <p className="text-[10px] text-slate-400">
+                {route.busId} · {route.status} · gain {route.gain}
+              </p>
+            </div>
+          ))}
+        </div>
+        {audioRouteValidation.warnings.length > 0 ? (
+          <p className="mt-2 text-[10px] text-amber-200">
+            {audioRouteValidation.warnings.slice(0, 3).join(' · ')}
           </p>
         ) : null}
       </div>
@@ -504,6 +552,8 @@ function MediaExecutionInspector({
               compositionWarnings,
               routePlan,
               routeWarnings: routeValidation.warnings,
+              audioRoutePlan,
+              audioRouteWarnings: audioRouteValidation.warnings,
               latestEvents: state.latestEvents.slice(-6),
             },
             null,

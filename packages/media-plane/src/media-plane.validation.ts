@@ -565,3 +565,170 @@ assert.equal(
   true,
   'mock adapter stores latest route plan',
 );
+
+import {
+  AudioRouteStore,
+  createAudioRoutePlan,
+  validateAudioRoutePlan,
+  validateAudioRoute,
+  createMixMinusForGuest,
+  validateMixMinusRoute,
+  muteAudioRoute,
+  unmuteAudioRoute,
+  soloAudioRoute,
+  unsoloAudioRoute,
+} from './audio-routing/index.js';
+
+const audioGraph = {
+  ...recordingTransition.nextGraph,
+  sources: {
+    ...recordingTransition.nextGraph.sources,
+    'host-mic': {
+      id: 'host-mic',
+      name: 'Host Mic',
+      type: 'audio' as const,
+      enabled: true,
+      muted: false,
+      metadata: {},
+    },
+    'guest-source': {
+      id: 'guest-source',
+      name: 'Guest Mic',
+      type: 'guest' as const,
+      enabled: true,
+      muted: false,
+      metadata: {},
+    },
+  },
+  guests: {
+    ...recordingTransition.nextGraph.guests,
+    'guest-1': {
+      id: 'guest-1',
+      displayName: 'Guest 1',
+      status: 'connected' as const,
+      muted: false,
+      pinned: false,
+      sourceId: 'guest-source',
+      metadata: {},
+    },
+  },
+  audioChannels: {
+    ...recordingTransition.nextGraph.audioChannels,
+    'audio-host': {
+      id: 'audio-host',
+      label: 'Host Mic',
+      gain: 1,
+      muted: false,
+      sourceId: 'host-mic',
+      metadata: {},
+    },
+    'audio-guest': {
+      id: 'audio-guest',
+      label: 'Guest Mic',
+      gain: 1,
+      muted: false,
+      sourceId: 'guest-source',
+      guestId: 'guest-1',
+      metadata: {},
+    },
+  },
+};
+const audioPlan = createAudioRoutePlan(audioGraph, {
+  includeRecording: true,
+  includeStreams: true,
+  includeMonitor: true,
+  includeGuestReturns: true,
+  now: '2026-07-01T00:00:00.000Z',
+});
+assert.equal(
+  audioPlan.routes.some((route) => route.target === 'program_mix'),
+  true,
+  'audio route plan creates default program mix',
+);
+assert.equal(
+  audioPlan.routes.some((route) => route.target === 'stream_mix'),
+  true,
+  'audio route plan creates stream mix',
+);
+assert.equal(
+  audioPlan.routes.some((route) => route.target === 'recording_mix'),
+  true,
+  'audio route plan creates recording mix placeholder',
+);
+assert.equal(
+  audioPlan.routes.some((route) => route.target === 'monitor_mix'),
+  true,
+  'audio route plan creates monitor mix placeholder',
+);
+assert.equal(
+  audioPlan.routes.some((route) => route.target === 'guest_return' && route.mixMinus),
+  true,
+  'audio route plan creates guest return mix-minus route',
+);
+assert.equal(
+  validateAudioRoutePlan(audioPlan, audioGraph).valid,
+  true,
+  'audio route plan validates',
+);
+const invalidGainRoute = { ...audioPlan.routes[0]!, gain: 99 };
+assert.equal(
+  validateAudioRoute(invalidGainRoute, audioGraph, audioPlan.buses).warnings.some((warning) =>
+    warning.includes('Invalid gain'),
+  ),
+  true,
+  'invalid gain warning is reported',
+);
+const guestReturn = createMixMinusForGuest(
+  audioGraph.guests['guest-1']!,
+  audioPlan.sources,
+  audioGraph.metadata.revision,
+  '2026-07-01T00:00:00.000Z',
+);
+const feedbackRoute = {
+  ...audioPlan.routes.find((route) => route.sourceId === 'guest-source')!,
+  target: 'guest_return' as const,
+  targetId: 'guest-1',
+  mixMinus: true,
+};
+assert.equal(
+  validateMixMinusRoute(feedbackRoute, guestReturn).warnings.some((warning) =>
+    warning.includes('Feedback risk'),
+  ),
+  true,
+  'feedback risk warning is reported',
+);
+assert.equal(
+  unmuteAudioRoute(muteAudioRoute(audioPlan.routes[0]!)).muted,
+  false,
+  'mute/unmute lifecycle updates route',
+);
+assert.equal(
+  unsoloAudioRoute(soloAudioRoute(audioPlan.routes[0]!)).solo,
+  false,
+  'solo/unsolo lifecycle updates route',
+);
+const audioStore = new AudioRouteStore();
+audioStore.setRoutePlan(audioPlan);
+assert.equal(audioStore.getRoutePlan()?.id, audioPlan.id, 'audio route store set/get works');
+assert.equal(
+  audioStore.getRoutesBySource('host-mic').length > 0,
+  true,
+  'audio route store queries by source',
+);
+const audioMock = new MockMediaExecutionAdapter();
+const audioResponse = audioMock.execute(
+  {
+    id: 'audio-routing-intent',
+    type: 'BUILD_AUDIO_ROUTE_PLAN' as const,
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: audioGraph.metadata.revision,
+    payload: {},
+  },
+  audioGraph,
+);
+assert.equal(audioResponse.success, true, 'mock adapter executes audio route intent');
+assert.equal(
+  Boolean(audioMock.getAudioRouteStore().getRoutePlan()),
+  true,
+  'mock adapter stores latest audio route plan',
+);
