@@ -450,3 +450,5 @@ export * from './sync.js';
 
 export * from "./persistence.js";
 export * from "./execution-contract.js";
+
+export * from "./failure-recovery.js";

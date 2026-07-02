@@ -40,6 +40,19 @@ import {
   restoreGraphFromSnapshot,
   shouldCreateGraphSnapshot,
 } from './persistence.js';
+import {
+  createCircuitBreakerState,
+  createFailureRecord,
+  createFrameFailure,
+  recordCircuitBreakerFailure,
+  recordCircuitBreakerSuccess,
+  selectRecoveryPolicy,
+  shouldAttemptHalfOpen,
+  shouldEscalateFailure,
+  shouldOpenCircuit,
+  shouldRetryFailure,
+  summarizeFailureState,
+} from './failure-recovery.js';
 
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
@@ -457,3 +470,35 @@ persistenceRepos.authority.appendLock(locked.lock);
 assert(persistenceRepos.authority.listConflicts('test-session').length === 1 && persistenceRepos.authority.listActiveLocks('test-session', '2026-07-01T00:00:01.000Z').length === 1, 'authority conflict persistence stores conflict and active lock');
 const diagnostics = createPersistenceDiagnostics({ session: sessionRecord, latestSnapshot: snapshotRecord, commandCount: persistenceRepos.commands.list('test-session').length, eventCount: persistenceRepos.events.list('test-session').length, collaborationEventCount: persistenceRepos.collaboration.listEvents('test-session').length, activeLocksCount: persistenceRepos.authority.listActiveLocks('test-session').length, conflictsCount: persistenceRepos.authority.listConflicts('test-session').length, syncCheckpointCount: persistenceRepos.collaboration.listCheckpoints('test-session').length, recoveryStatus: 'ready' });
 assert(diagnostics.commandLogCount === 1 && diagnostics.syncCheckpointCount === 1, 'persistence diagnostics summarize repository state');
+
+
+const rendererFailure = createFailureRecord({
+  id: 'failure-validation-renderer',
+  category: 'RENDERER_FAILURE',
+  subsystem: 'browser-renderer',
+  message: 'Renderer validation failure',
+  createdAt: '2026-07-01T00:00:04.000Z',
+});
+assert(rendererFailure.category === 'RENDERER_FAILURE' && rendererFailure.recoveryPolicy === 'fallback', 'failure record creation classifies renderer fallback');
+assert(selectRecoveryPolicy(rendererFailure) === 'fallback', 'recovery policy selection uses category defaults');
+assert(shouldRetryFailure(rendererFailure), 'retry decision allows recoverable renderer failures');
+const exhaustedFailure = createFailureRecord({ ...rendererFailure, retryCount: 3, message: 'Renderer exhausted retries' });
+assert(shouldEscalateFailure(exhaustedFailure), 'escalation decision triggers after retry threshold');
+let breaker = createCircuitBreakerState('renderer-breaker', 2, 1000);
+breaker = recordCircuitBreakerFailure(breaker, '2026-07-01T00:00:00.000Z');
+assert(!shouldOpenCircuit(breaker) && breaker.status === 'closed', 'circuit breaker remains closed before threshold');
+breaker = recordCircuitBreakerFailure(breaker, '2026-07-01T00:00:01.000Z');
+assert(breaker.status === 'open', 'circuit breaker opens at threshold');
+assert(shouldAttemptHalfOpen(breaker, Date.parse('2026-07-01T00:00:02.500Z')), 'circuit breaker allows half-open after cooldown');
+breaker = recordCircuitBreakerSuccess({ ...breaker, status: 'half_open' }, '2026-07-01T00:00:03.000Z');
+assert(breaker.status === 'closed' && breaker.failureCount === 0, 'circuit breaker success closes circuit');
+const summary = summarizeFailureState([rendererFailure], ['renderer_placeholder_mode']);
+assert(summary.active === 1 && summary.degradedModes.includes('renderer_placeholder_mode'), 'degraded mode summary includes active renderer mode');
+const frameFailure = createFrameFailure({
+  id: 'frame-failure-validation',
+  frameFailureType: 'FRAME_RENDER_FAILED',
+  frameId: 'frame-1',
+  message: 'Frame render failed',
+  createdAt: '2026-07-01T00:00:05.000Z',
+});
+assert(frameFailure.frameId === 'frame-1' && frameFailure.metadata.graphMutationAllowed === false, 'frame failure shape forbids graph mutation');
