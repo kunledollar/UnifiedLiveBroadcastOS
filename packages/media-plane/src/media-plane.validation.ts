@@ -194,6 +194,13 @@ import {
   ExecutionCoordinator,
   ResourceCoordinator,
   isBroadcastOrchestratorEnabled,
+  HighAvailabilityRuntime,
+  createClusterNode,
+  ClusterManager,
+  ElectionManager,
+  RecoveryPlanner,
+  tripCircuitBreaker,
+  isHighAvailabilityEnabled,
 } from './index.js';
 
 const command = (
@@ -1543,6 +1550,27 @@ assert.equal(isBroadcastOrchestratorEnabled({ UBOS_ENABLE_ORCHESTRATOR: 'true', 
 const disabledOrchestrator = new BroadcastOrchestrator({ UBOS_ENABLE_ORCHESTRATOR: 'false', NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'false' });
 disabledOrchestrator.register(encoderSubsystem);
 assert.equal(disabledOrchestrator.startProduction().success, true, 'broadcast orchestrator falls back to supervisor when disabled');
+
+const haPrimary = createClusterNode({ id: 'node-primary', role: 'primary', state: 'healthy', leaderState: 'leader', priority: 100, subsystems: [encoderSubsystem] });
+const haStandby = createClusterNode({ id: 'node-standby', role: 'standby', standbyMode: 'hot', state: 'healthy', leaderState: 'follower', priority: 90 });
+const haRuntime = new HighAvailabilityRuntime([haPrimary, haStandby], supervisor, orchestrator, { UBOS_ENABLE_HIGH_AVAILABILITY: 'true', NEXT_PUBLIC_UBOS_HIGH_AVAILABILITY: 'true' });
+assert.equal(haRuntime.enabled(), true, 'high availability feature flags enable runtime');
+haRuntime.beat('node-primary');
+haRuntime.recordHealth('node-primary', 'encoder', 'healthy', true, 'encoder healthy');
+const failoverResult = haRuntime.failoverPrimary('node-primary');
+assert.equal(failoverResult.cluster.leaderNodeId, 'node-standby', 'high availability promotes hot standby on primary failure');
+const recoveryResult = haRuntime.recover('encoder-runtime', ['restart_encoder', 'restart_ffmpeg', 'confirm_recovery', 'stabilize_health']);
+assert.equal(recoveryResult.manifest.containsRuntimeHandles, false, 'recovery manifest is metadata-only');
+assert.equal(recoveryResult.diagnostics.progress, 100, 'automatic recovery reports completion progress');
+const haSnapshot = haRuntime.snapshot();
+assert.equal(haSnapshot.containsRuntimeHandles, false, 'high availability snapshot is metadata-only');
+assert.equal(haSnapshot.dashboard.failoverEvents.length > 0, true, 'control room failover events are reported');
+assert.equal(new ClusterManager().validate({ ...haSnapshot.cluster, nodes: haSnapshot.cluster.nodes.map((node) => ({ ...node, leaderState: 'leader' as const })) }).includes('multiple leaders rejected'), true, 'high availability rejects multiple leaders');
+assert.equal(new RecoveryPlanner().validate({ ...recoveryResult.manifest, steps: [{ ...recoveryResult.manifest.steps[0]!, dependsOn: [recoveryResult.manifest.steps[0]!.id] }] }).includes('circular recovery rejected'), true, 'high availability rejects circular recovery plans');
+assert.equal(new ElectionManager().elect([haPrimary, haStandby])?.id, 'node-primary', 'leader election prefers highest-priority healthy node');
+assert.equal(tripCircuitBreaker({ id: 'ha-breaker', status: 'closed', failureCount: 1, threshold: 2, cooldownMs: 1000 }).status, 'open', 'circuit breaker opens at threshold');
+assert.equal(isHighAvailabilityEnabled({ UBOS_ENABLE_HIGH_AVAILABILITY: 'true', NEXT_PUBLIC_UBOS_HIGH_AVAILABILITY: 'true' }), true, 'high availability environment flags are recognized');
+
 
 // Phase 9.2 recording pipeline runtime validation
 const recordingPipeline = new RecordingPipeline({ UBOS_ENABLE_REAL_RECORDING: 'false', NEXT_PUBLIC_UBOS_REAL_RECORDING: 'false' });
