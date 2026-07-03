@@ -134,6 +134,15 @@ import {
   mapRuntimeFailure,
   redactRuntimeDiagnostics,
   RuntimeSupervisor,
+  createFFmpegRuntime,
+  buildCommand,
+  validateExecutable,
+  locateFFmpeg,
+  probeCapabilities,
+  summarizeHealth as summarizeFFmpegRuntimeHealth,
+  summarizeStatistics as summarizeFFmpegRuntimeStatistics,
+  createManifest as createFFmpegRuntimeManifest,
+  mapFailure as mapFFmpegRuntimeFailure,
   type RuntimeSubsystem,
   type FrameTickEvent,
 } from './index.js';
@@ -1326,6 +1335,32 @@ assert.equal(typeof frameToken, 'number', 'browser renderer mock frame request w
 assert.equal(JSON.stringify(brPlan).includes('HTMLElement'), false, 'browser renderer graph plan stores no DOM elements');
 assert.equal(JSON.stringify(brPlan).includes('MediaStream'), false, 'browser renderer graph plan stores no media streams');
 
+
+
+
+const ffmpegRuntimeCommand = buildCommand({ executable: 'ffmpeg', args: ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'testsrc2=size=16x16:rate=1', '-t', '0.1', '-f', 'null', '-'], outputs: ['-'], metadata: { graphRevision: 55 } });
+assert.equal(ffmpegRuntimeCommand.args.includes('-nostdin'), true, 'real FFmpeg runtime command generation uses argument arrays');
+assert.equal(validateExecutable('../ffmpeg').valid, false, 'real FFmpeg runtime rejects path traversal executables');
+try { buildCommand({ executable: 'ffmpeg', args: ['-i', 'safe', ';rm -rf /'] }); throw new Error('unsafe arg accepted'); } catch (error) { assert.equal(String(error).includes('unsafe'), true, 'real FFmpeg runtime rejects shell injection arguments'); }
+assert.equal(locateFFmpeg({ UBOS_FFMPEG_PATH: '/usr/bin/ffmpeg' }), '/usr/bin/ffmpeg', 'real FFmpeg runtime locates configured executable');
+const ffmpegRuntime = createFFmpegRuntime({ env: {}, featureFlags: { UBOS_ENABLE_REAL_FFMPEG: false, NEXT_PUBLIC_UBOS_REAL_FFMPEG: false } });
+const ffmpegMockProcess = await ffmpegRuntime.manager.start(ffmpegRuntimeCommand);
+assert.equal(ffmpegMockProcess.state, 'running', 'real FFmpeg runtime mock fallback preserves lifecycle without spawning');
+assert.equal(ffmpegRuntime.summarizeHealth().featureFlag, false, 'real FFmpeg runtime diagnostics expose disabled feature flag');
+assert.equal(summarizeFFmpegRuntimeStatistics(ffmpegMockProcess).lifecycleEvents.some((event) => JSON.stringify(event).includes('pid')), false, 'real FFmpeg runtime replay events omit PID');
+const ffmpegRestart = await ffmpegRuntime.manager.restart(ffmpegRuntimeCommand);
+assert.equal(ffmpegRestart.state, 'recovering', 'real FFmpeg runtime restart enters recovering');
+const ffmpegStopped = await ffmpegRuntime.manager.stop();
+assert.equal(ffmpegStopped?.state, 'stopped', 'real FFmpeg runtime stop lifecycle works');
+const ffmpegFailure = mapFFmpegRuntimeFailure({ kind: 'spawn_failure', message: 'spawn failed' });
+assert.equal(ffmpegFailure.ubosFailure.subsystem, 'ffmpeg-runtime', 'real FFmpeg runtime failure maps into UBOS failure model');
+const ffmpegRuntimeHealth = summarizeFFmpegRuntimeHealth(ffmpegMockProcess, ffmpegRuntime.environment);
+assert.equal(ffmpegRuntimeHealth.queueDepth, 0, 'real FFmpeg runtime health reports backpressure queue depth');
+const ffmpegManifest = createFFmpegRuntimeManifest(ffmpegMockProcess, ffmpegRuntime.environment);
+assert.equal(ffmpegManifest.containsProcessHandles, false, 'real FFmpeg runtime manifest excludes process handles');
+assert.equal(ffmpegManifest.replayStoresStdout, false, 'real FFmpeg runtime manifest excludes stdout from replay');
+const ffmpegCapabilities = await probeCapabilities('ffmpeg');
+assert.equal(ffmpegCapabilities.shellExecution, false, 'real FFmpeg runtime capabilities forbid shell execution');
 
 const productionRuntimeValidation = createProductionRuntime({ id: 'runtime-validation', latestFrameId: 101, latestGraphRevision: 55 });
 const runtimeSession = createProductionRuntimeSession({ runtimeId: productionRuntimeValidation.id, broadcastSessionId: 'test-session' });
