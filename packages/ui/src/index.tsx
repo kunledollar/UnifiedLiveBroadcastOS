@@ -796,7 +796,7 @@ export function SourceManager({
       <div className="space-y-2">
         {sources.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
-            No sources yet. Add placeholders for camera, screen, media, overlays, browser, or audio.
+            No sources configured. Add camera, screen, media, overlay, browser, or audio metadata; real capture starts only when a runtime is available.
           </p>
         ) : null}
         {sources.map((source, index) => (
@@ -1354,14 +1354,14 @@ function CanvasHud({
           label: isPreview ? 'Raster' : 'Format',
         },
         { value: output === 'program' ? '16:9' : '9:16', label: 'Aspect' },
-        { value: '60 FPS', label: 'FPS' },
+        { value: 'Unavailable', label: 'FPS' },
       ]}
       badges={
         isProgram
           ? [
-              <OutputBadge key="rec" label="REC · UI" tone="neutral" />,
-              <OutputBadge key="rtmp" label="RTMP · UI" tone="neutral" />,
-              <OutputBadge key="youtube" label="YouTube · UI" tone="neutral" />,
+              <OutputBadge key="rec" label="REC idle" tone="neutral" />,
+              <OutputBadge key="stream" label="Stream unavailable" tone="neutral" />,
+              <OutputBadge key="metrics" label="Metrics unavailable" tone="neutral" />,
             ]
           : [<OutputBadge key="layout" label={mediaLayoutLabels[layoutPreset]} tone="neutral" />]
       }
@@ -1763,7 +1763,7 @@ export function ProgramPreview({
   return (
     <BroadcastMonitorFrame
       label="PROGRAM"
-      meta="1920×1080 • 60 FPS"
+      meta="1920×1080 • FPS unavailable"
       status={isLive ? 'LIVE' : 'PROGRAM READY'}
       headerVariant="program"
       isLive={isLive}
@@ -1875,6 +1875,11 @@ export function DestinationPanel({ destinations }: { destinations: Destination[]
   return (
     <Panel title="Destinations">
       <div className="space-y-2">
+        {destinations.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+            No destinations configured. Connect a streaming runtime destination before going live.
+          </p>
+        ) : null}
         {destinations.map((destination) => (
           <DestinationToggle key={destination.id} destination={destination} />
         ))}
@@ -1961,15 +1966,14 @@ function MultiviewAudioSummary({ channels }: { channels: AudioChannel[] }) {
 }
 
 function MultiviewHealthSummary({ metrics }: { metrics: StreamHealthMetric[] }) {
-  const required = ['CPU', 'FPS', 'Dropped Frames', 'Recording', 'RTMP', 'WebRTC'];
+  const required = ['CPU', 'FPS', 'Dropped Frames', 'Recording', 'Streaming', 'WebRTC'];
   const cards = required.map(
     (label) =>
       metrics.find((metric) => metric.label.toLowerCase() === label.toLowerCase()) ?? {
         id: label,
         label,
-        value:
-          label === 'Recording' ? 'UI' : label === 'RTMP' || label === 'WebRTC' ? 'Ready' : '—',
-        status: 'good' as const,
+        value: label === 'WebRTC' ? '0 routes' : 'unavailable',
+        status: 'warning' as const,
       },
   );
   return (
@@ -2062,6 +2066,11 @@ export function UnifiedChatPanel({ messages }: { messages: ChatMessage[] }) {
   return (
     <Panel title="Unified Chat">
       <div className="space-y-2">
+        {messages.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+            No chat connectors connected. Messages will appear after a platform integration is configured.
+          </p>
+        ) : null}
         {messages.map((message) => (
           <ChatMessageItem key={message.id} message={message} />
         ))}
@@ -2077,6 +2086,7 @@ export function CrossFollowPanel({ platforms }: { platforms: string[] }) {
         Promote follows across active platforms after destination integrations are connected.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
+        {platforms.length === 0 ? <Badge tone="neutral">No platforms configured</Badge> : null}
         {platforms.map((platform) => (
           <Badge key={platform}>{platform}</Badge>
         ))}
@@ -2089,6 +2099,11 @@ export function StreamHealthPanel({ metrics }: { metrics: StreamHealthMetric[] }
   return (
     <Panel title="Stream Health">
       <div className="grid grid-cols-2 gap-3">
+        {metrics.length === 0 ? (
+          <p className="col-span-2 rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
+            No runtime metrics available.
+          </p>
+        ) : null}
         {metrics.map((metric) => (
           <Metric key={metric.id} label={metric.label} value={metric.value} tone={metric.status} />
         ))}
@@ -2131,6 +2146,11 @@ export function AudioMeter({
 export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
   return (
     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      {channels.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400 sm:col-span-2 xl:col-span-4">
+          No audio runtime channels available.
+        </p>
+      ) : null}
       {channels.map((channel) => (
         <div key={channel.id} className="rounded-lg border border-white/10 bg-slate-950/70 p-2">
           <div className="mb-2 flex items-center justify-between gap-2">
@@ -2179,7 +2199,7 @@ export function ProductionDock({
                 {assets.filter((asset) => getAssetDockGroup(asset) === group).length}
               </p>
               <div className="mt-1 flex items-center justify-between gap-2">
-                <p className="text-xs text-slate-500">placeholder bin</p>
+                <p className="text-xs text-slate-500">asset metadata</p>
                 <TallyBadge state="idle" />
               </div>
             </div>
