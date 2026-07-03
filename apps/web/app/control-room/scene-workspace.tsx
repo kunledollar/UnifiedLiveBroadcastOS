@@ -56,6 +56,8 @@ import {
   summarizeProductionRuntimeHealth,
   HardwareRuntime,
   isHardwareRuntimeEnabled,
+  ProductionEngine,
+  isProductionEngineEnabled,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -199,6 +201,12 @@ function MediaExecutionInspector({
   const hardwareRuntime = useMemo(() => new HardwareRuntime(process.env), []);
   const hardwareDashboard = useMemo(() => hardwareRuntime.manifest(), [hardwareRuntime]);
   const hardwareEnabled = isHardwareRuntimeEnabled(process.env);
+  const productionEngineEnabled = isProductionEngineEnabled(process.env);
+  const productionEngineDashboard = useMemo(() => {
+    const engine = new ProductionEngine(process.env);
+    engine.scheduleFrame(100);
+    return engine.dashboard();
+  }, [state.currentGraphRevision]);
   const orchestration = state.orchestrationDiagnostics;
   const programComposition = graph.program.sceneId
     ? createSceneCompositionFromGraph(graph, graph.program.sceneId, { target: 'program' })
@@ -444,6 +452,14 @@ function MediaExecutionInspector({
         <InspectorMetric label="Hardware Temp" value={hardwareDashboard.diagnostics.devices.map((device) => device.temperatureC ?? '—').join(', ')} />
         <InspectorMetric label="Hardware Util" value={hardwareDashboard.diagnostics.devices.map((device) => `${Math.round(device.utilization * 100)}%`).join(', ') || '—'} />
         <InspectorMetric label="Hardware Caps" value={hardwareDashboard.capabilities.map((capability) => capability.apis.join('/')).join(', ') || 'software'} />
+        <InspectorMetric label="Production Engine" value={productionEngineEnabled ? productionEngineDashboard.productionEngine : 'feature disabled'} />
+        <InspectorMetric label="Engine Timeline" value={String(productionEngineDashboard.executionTimeline.length)} />
+        <InspectorMetric label="Frame Scheduler" value={`${productionEngineDashboard.frameScheduler.length} frames`} />
+        <InspectorMetric label="Sync Drift" value={`${productionEngineDashboard.synchronizationView.driftMs}ms`} />
+        <InspectorMetric label="Engine Resources" value={`${productionEngineDashboard.resourceView.cpu}% CPU / ${productionEngineDashboard.resourceView.gpu}% GPU`} />
+        <InspectorMetric label="Performance" value={`${productionEngineDashboard.performanceMetrics.pipelineLatencyMs}ms pipeline`} />
+        <InspectorMetric label="Recovery Status" value={productionEngineDashboard.recoveryStatus.at(-1) ?? 'ready'} />
+        <InspectorMetric label="Session Inspector" value={String(productionEngineDashboard.sessionInspector.sessionId)} />
         <InspectorMetric label="Runtime Degraded" value={productionRuntimeHealth.degradedModes.join(', ') || '—'} />
         <InspectorMetric label="Runtime Failure" value={productionRuntimeHealth.latestFailure?.code ?? '—'} />
         <InspectorMetric label="Runtime Frame" value={String(productionRuntimeHealth.latestFrameId ?? '—')} />
