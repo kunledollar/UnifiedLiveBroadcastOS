@@ -1174,3 +1174,7 @@ export type { AudioBus as RuntimeAudioBus, AudioChannel as RuntimeAudioChannel, 
 export * from './broadcast-orchestrator/index.js';
 
 export * from './hardware-runtime/index.js';
+export * from './high-availability/index.js';
+
+export { ProductionEngine, PipelineScheduler as ProductionPipelineScheduler, SynchronizationManager, ResourceAllocator as ProductionResourceAllocator, ProductionRecovery, isProductionEngineEnabled, createProductionEngine } from './production-engine/index.js';
+export type { ProductionSession, ExecutionStatistics, ExecutionManifest, ExecutionDiagnostics, ExecutionHistory, ExecutionSnapshot, ExecutionCheckpoint, ProductionHealth, ProductionMetrics, ProductionEngineDashboard, ProductionRuntimeName, ProductionAction, EngineEvent, PipelineDependency, PipelineStep, ScheduledFrame, ClockSample, SynchronizationReport } from './production-engine/index.js';

@@ -201,6 +201,9 @@ import {
   RecoveryPlanner,
   tripCircuitBreaker,
   isHighAvailabilityEnabled,
+  ProductionEngine,
+  ProductionPipelineScheduler,
+  isProductionEngineEnabled,
 } from './index.js';
 
 const command = (
@@ -1682,3 +1685,33 @@ assert.equal(audioRuntime.start().success, true, 'audio runtime supervisor start
 assert.equal(audioRuntime.health.summarize(audioSession).status, 'healthy', 'audio health summarizes runtime');
 const mockAudio = new AudioRuntime({}).create({ id: 'audio-mock' });
 assert.equal(mockAudio.mode, 'mock', 'audio runtime preserves mock fallback');
+
+
+// Phase 9.9 Production Broadcast Engine validation
+const productionEngine = new ProductionEngine({ UBOS_ENABLE_PRODUCTION_ENGINE: 'true', NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true' });
+productionEngine.register({ id: 'pe-gpu', type: 'gpu', label: 'GPU Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { backend: 'metadata' } });
+productionEngine.register({ id: 'pe-browser', type: 'browser_renderer', label: 'Browser Renderer', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { renderer: 'browser' } });
+productionEngine.register({ id: 'pe-audio', type: 'audio', label: 'Audio Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { sampleRate: 48000 } });
+productionEngine.register({ id: 'pe-encoder', type: 'encoder', label: 'Encoder Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { codec: 'h264' } });
+productionEngine.register({ id: 'pe-ffmpeg', type: 'ffmpeg', label: 'FFmpeg Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { executable: 'ffmpeg' } });
+productionEngine.register({ id: 'pe-recording', type: 'recording', label: 'Recording Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { destination: 'file' } });
+productionEngine.register({ id: 'pe-streaming', type: 'streaming', label: 'Streaming Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { protocol: 'rtmp' } });
+productionEngine.register({ id: 'pe-webrtc', type: 'webrtc', label: 'WebRTC Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { peers: 0 } });
+assert.equal(productionEngine.start({ graphRevision: 99 }).success, true, 'production engine starts through orchestrator and supervisor');
+const scheduledFrame = productionEngine.scheduleFrame(100);
+assert.equal(scheduledFrame.metadataOnly, true, 'production engine frame schedule is metadata-only');
+assert.equal(productionEngine.health().summary.includes('runtimes coordinated'), true, 'production engine coordinates all runtimes');
+assert.equal(productionEngine.snapshot().containsRuntimeHandles, false, 'production engine snapshot is metadata-only');
+assert.equal(productionEngine.snapshot().history.containsRuntimeHandles, false, 'production engine replay history is metadata-only');
+assert.equal(productionEngine.checkpoint().replaySafe, true, 'production engine checkpoints are replay safe');
+assert.equal(productionEngine.recover('validation recovery').action, 'recover', 'production engine recovery records recovery history');
+assert.equal(productionEngine.dashboard().sessionInspector.metadataOnly, true, 'production engine dashboard exposes metadata-only session inspector');
+assert.equal(productionEngine.pause().success, true, 'production engine pause lifecycle works');
+assert.equal(productionEngine.resume().success, true, 'production engine resume lifecycle works');
+assert.equal(productionEngine.stop().runtimeState, 'stopped', 'production engine stop lifecycle works');
+const productionSteps = new ProductionPipelineScheduler().schedule(['gpu', 'audio', 'encoder']);
+assert.equal(productionSteps[0]?.subsystem, 'gpu', 'production engine scheduler orders pipeline deterministically');
+const invalidManifest = { ...productionEngine.snapshot().manifest, steps: productionEngine.snapshot().manifest.steps.map((step) => step.subsystem === 'audio' ? { ...step, order: 0 } : step) };
+assert.equal(new (await import('./production-engine/index.js')).ExecutionValidator().validateManifest(invalidManifest).length > 0, true, 'production engine rejects unsafe execution order');
+assert.equal(new (await import('./production-engine/index.js')).ExecutionValidator().validateClock([{ timestamp: '2026-07-01T00:00:00.000Z', frameId: 1, clockMs: 1, driftMs: 101, source: 'audio' }]).length > 0, true, 'production engine rejects clock conflicts');
+assert.equal(isProductionEngineEnabled({ UBOS_ENABLE_PRODUCTION_ENGINE: 'true', NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true' }), true, 'production engine feature flags enable runtime');
