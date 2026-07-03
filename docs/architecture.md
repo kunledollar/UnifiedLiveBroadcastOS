@@ -8,5 +8,6 @@ The scaffold separates product surfaces, integration contracts, and persistence 
 - [UBOS Failure & Recovery Model v1](architecture/ubos-failure-recovery-model-v1.md)
 - [UBOS Execution Contract v1](architecture/ubos-execution-contract-v1.md)
 - [UBOS Timing, Clock & Frame Determinism v1](architecture/ubos-timing-clock-frame-determinism-v1.md)
+- [Production Media Runtime](architecture/production-media-runtime.md)
 
 - [UBOS Deterministic Replay & Time-Travel Architecture v1](./architecture/ubos-deterministic-replay-time-travel-v1.md)

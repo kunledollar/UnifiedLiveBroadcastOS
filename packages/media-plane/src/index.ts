@@ -151,7 +151,15 @@ export type MediaExecutionIntentType =
   | 'REMOVE_RENDER_LAYER'
   | 'REQUEST_BROWSER_FRAME'
   | 'REPORT_RENDERER_HEALTH'
-  | 'FAIL_BROWSER_RENDERER';
+  | 'FAIL_BROWSER_RENDERER'
+  | 'BUILD_PRODUCTION_RUNTIME'
+  | 'START_PRODUCTION_RUNTIME'
+  | 'STOP_PRODUCTION_RUNTIME'
+  | 'PAUSE_PRODUCTION_RUNTIME'
+  | 'RESUME_PRODUCTION_RUNTIME'
+  | 'RESTART_RUNTIME_SUBSYSTEM'
+  | 'REPORT_PRODUCTION_RUNTIME_HEALTH'
+  | 'FAIL_PRODUCTION_RUNTIME';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -178,10 +186,11 @@ const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_P
 const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
 const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_MULTIVIEW_PLAN','UPDATE_MULTIVIEW','RENDER_MULTIVIEW','VALIDATE_MULTIVIEW','CREATE_CONFIDENCE_MONITOR','UPDATE_CONFIDENCE_STATUS','BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','BUILD_BROWSER_RENDER_PLAN','PREPARE_BROWSER_RENDERER','UPDATE_RENDER_SURFACE','UPDATE_RENDER_LAYER','REMOVE_RENDER_LAYER','REQUEST_BROWSER_FRAME','REPORT_RENDERER_HEALTH','FAIL_BROWSER_RENDERER','APPLY_LAYOUT']);
 const webrtcIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_WEBRTC_TRANSPORT_PLAN','PREPARE_WEBRTC_SESSION','START_WEBRTC_SESSION','STOP_WEBRTC_SESSION','ADD_WEBRTC_PEER','REMOVE_WEBRTC_PEER','UPDATE_WEBRTC_PEER','ATTACH_WEBRTC_TRACK','DETACH_WEBRTC_TRACK','HANDLE_WEBRTC_SIGNAL','REPORT_WEBRTC_HEALTH','FAIL_WEBRTC_SESSION']);
+const productionRuntimeIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_PRODUCTION_RUNTIME','START_PRODUCTION_RUNTIME','STOP_PRODUCTION_RUNTIME','PAUSE_PRODUCTION_RUNTIME','RESUME_PRODUCTION_RUNTIME','RESTART_RUNTIME_SUBSYSTEM','REPORT_PRODUCTION_RUNTIME_HEALTH','FAIL_PRODUCTION_RUNTIME']);
 const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION','BUILD_STREAMING_PLAN','PREPARE_STREAMING','CONNECT_STREAM','PAUSE_STREAM','RESUME_STREAM','FAIL_STREAM','VALIDATE_STREAM_PLAN','BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH']);
 const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
 function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
-export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (webrtcIntentTypes.has(type)) return 'sync'; if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
+export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (productionRuntimeIntentTypes.has(type)) return 'sync'; if (webrtcIntentTypes.has(type)) return 'sync'; if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
 export function toMediaIntent(intent: MediaExecutionIntent): MediaIntent { const targetSubsystem = subsystemForExecutionType(intent.type); return { id: intent.id, type: targetSubsystem, executionType: intent.type, sourceGraphRevision: intent.graphRevision, dependencies: (intent.payload.dependencies as string[]|undefined) ?? [], priority: Number(intent.payload.priority ?? defaultOrchestrationPriority(intent.type)), targetSubsystem, payload: intent.payload, timingConstraint: typeof intent.payload.frameTimestamp === 'number' ? { requestedFrameTimestamp: intent.payload.frameTimestamp } : {}, submittedAt: intent.timestamp }; }
 export function toExecutionIntent(intent: MediaIntent, frameTimestamp: number): MediaExecutionIntent { return { id: intent.id, type: intent.executionType as MediaExecutionIntentType, timestamp: new Date(frameTimestamp).toISOString(), graphRevision: intent.sourceGraphRevision, payload: { ...intent.payload, frameTimestamp, orchestrationSubsystem: intent.targetSubsystem } }; }
 
@@ -224,6 +233,7 @@ export * from './streaming/index.js';
 export * from './multiview/index.js';
 export * from './encoder/index.js';
 export * from './webrtc-runtime/index.js';
+export * from './production-runtime/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -736,6 +746,9 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       warnings.push(...validation.warnings, summarizeWebRTCHealth(session).summary, createWebRTCManifest(session).notes[0] ?? 'WebRTC manifest metadata ready');
       if (!validation.valid) warnings.push(...validation.errors);
     }
+
+    const productionRuntimeIntentTypes: MediaExecutionIntentType[] = ['BUILD_PRODUCTION_RUNTIME','START_PRODUCTION_RUNTIME','STOP_PRODUCTION_RUNTIME','PAUSE_PRODUCTION_RUNTIME','RESUME_PRODUCTION_RUNTIME','RESTART_RUNTIME_SUBSYSTEM','REPORT_PRODUCTION_RUNTIME_HEALTH','FAIL_PRODUCTION_RUNTIME'];
+    if (!shouldFail && productionRuntimeIntentTypes.includes(intent.type)) warnings.push(`Production runtime intent ${intent.type} accepted by mock supervisor boundary`);
 
     const encoderIntentTypes: MediaExecutionIntentType[] = [
       'BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH',
