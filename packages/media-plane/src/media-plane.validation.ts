@@ -95,6 +95,10 @@ import {
   scheduleStreamReconnect,
   recordStreamReconnectAttempt,
   resetStreamReconnectState,
+  StreamingPipeline,
+  isRealStreamingEnabled,
+  validateStreamingDestination,
+  createStreamingRuntimeManifest,
   createMultiviewPlan,
   validateMultiviewPlan,
   buildTileLayout,
@@ -482,6 +486,49 @@ assert.equal(resetStreamReconnectState(reconnectState).reconnectAttempts, 0, 'st
 assert.equal(mapFFmpegStreamingErrorToFailure({ message: '403 auth denied', retryable: false }).classification, 'auth', 'ffmpeg streaming failure maps auth errors');
 assert.equal(summarizeStreamingRuntimeHealth(runtimePrepared.session.healthDetails).includes('rtmp'), true, 'ffmpeg streaming health summary includes protocol');
 assert.equal(JSON.stringify(runtimePrepared.session).includes('ChildProcess'), false, 'ffmpeg streaming session stores no process handles');
+
+
+const realStreamingEnv = { UBOS_ENABLE_REAL_STREAMING: 'true', NEXT_PUBLIC_UBOS_REAL_STREAMING: 'true' };
+assert.equal(isRealStreamingEnabled(realStreamingEnv), true, 'real streaming feature flags enable runtime');
+assert.equal(validateStreamingDestination({ name: 'Twitch', platform: 'twitch', url: 'rtmps://live.twitch.tv/app/SUPER_STREAM_KEY' }).sanitizedUrl.includes('SUPER_STREAM_KEY'), false, 'streaming runtime destination redacts stream key');
+let rejectedRuntimeUrl = false;
+try { validateStreamingDestination({ name: 'Bad', platform: 'custom_rtmp', url: 'rtmp://live.example/app/key;cat /etc/passwd' }); } catch { rejectedRuntimeUrl = true; }
+assert.equal(rejectedRuntimeUrl, true, 'streaming runtime rejects shell injection URLs');
+const streamingRuntime = new StreamingPipeline({ UBOS_ENABLE_REAL_STREAMING: 'false', NEXT_PUBLIC_UBOS_REAL_STREAMING: 'false' }, 1);
+const runtimeJob = streamingRuntime.create({ graphRevision: streamingGraph.metadata.revision, destination: { id: 'yt', name: 'YouTube Live', platform: 'youtube_live', url: 'rtmps://a.rtmps.youtube.com/live2/SUPER_STREAM_KEY' } });
+assert.equal(runtimeJob.runtime, 'mock', 'streaming runtime preserves mock fallback when feature flags disabled');
+assert.equal(JSON.stringify(runtimeJob).includes('SUPER_STREAM_KEY'), false, 'streaming runtime job never stores stream key');
+streamingRuntime.validate(runtimeJob.id);
+streamingRuntime.prepare(runtimeJob.id);
+streamingRuntime.connect(runtimeJob.id);
+const publishingJob = await streamingRuntime.startPublishing(runtimeJob.id);
+assert.equal(publishingJob.lifecycle, 'publishing', 'streaming runtime publishes through lifecycle');
+assert.equal(streamingRuntime.diagnostics(runtimeJob.id).protocol, 'rtmps', 'streaming runtime diagnostics expose protocol');
+const reconnectingJob = streamingRuntime.reconnect(runtimeJob.id);
+assert.equal(reconnectingJob.lifecycle, 'reconnecting', 'streaming runtime reconnects with policy');
+assert.equal(reconnectingJob.statistics.reconnectCount, 1, 'streaming runtime increments reconnect count');
+const manifest93 = createStreamingRuntimeManifest(reconnectingJob);
+assert.equal(manifest93.containsProcessHandles, false, 'streaming runtime manifest contains no process handles');
+assert.equal(manifest93.containsStreamKeys, false, 'streaming runtime manifest contains no stream keys');
+assert.equal(JSON.stringify(manifest93).includes('SUPER_STREAM_KEY'), false, 'streaming runtime manifest redacts secrets');
+streamingRuntime.pause(runtimeJob.id);
+streamingRuntime.resume(runtimeJob.id);
+await streamingRuntime.stop(runtimeJob.id);
+streamingRuntime.disconnect(runtimeJob.id);
+streamingRuntime.cleanup(runtimeJob.id);
+const backpressureRuntime = new StreamingPipeline({}, 1);
+const firstQueued = backpressureRuntime.create({ destination: { name: 'Kick', platform: 'kick', url: 'rtmp://kick.example/live/KICK_SECRET' } });
+const secondQueued = backpressureRuntime.create({ destination: { name: 'Facebook Live', platform: 'facebook_live', url: 'rtmp://facebook.example/live/FB_SECRET' } });
+await backpressureRuntime.startPublishing(firstQueued.id);
+const queuedJob = await backpressureRuntime.startPublishing(secondQueued.id);
+assert.equal(queuedJob.lifecycle, 'queued', 'streaming runtime queues startup under backpressure');
+const failingRuntime = new StreamingPipeline({}, 1);
+const failingJob = failingRuntime.create({ destination: { name: 'Custom', platform: 'custom_rtmp', url: 'rtmp://live.example/app/SECRET' }, reconnectPolicy: { maxRetries: 1 } });
+failingRuntime.reconnect(failingJob.id);
+const exhaustedJob = failingRuntime.reconnect(failingJob.id);
+assert.equal(exhaustedJob.lifecycle, 'failed', 'streaming runtime exhausts reconnect policy');
+assert.equal(exhaustedJob.latestFailure?.ubosFailure.category, 'STREAMING_FAILURE', 'streaming runtime maps failures to UBOS model');
+assert.equal(JSON.stringify(exhaustedJob.replay).includes('SECRET'), false, 'streaming runtime replay stores no runtime secrets');
 
 
 const multiviewPlan = createMultiviewPlan({ graph: streamingGraph, preset: 'quad', videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, frameId: 82 });

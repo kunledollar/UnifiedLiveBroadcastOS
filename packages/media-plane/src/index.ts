@@ -1163,4 +1163,6 @@ export function summarizeExecutionHealth(health: MediaExecutionHealth) {
 }
 
 export * from './ffmpeg-runtime/index.js';
-export * from './gpu-runtime/index.js';
+
+export { StreamingPipeline, StreamingSessionManager, StreamingScheduler, StreamingRecovery, StreamingValidator, createStreamingRuntimeManifest, isRealStreamingEnabled, validateStreamingDestination } from './streaming-runtime/index.js';
+export type { StreamingJob as RuntimeStreamingJob, StreamingDestination as RuntimeStreamingDestination, StreamingStatistics as RuntimeStreamingStatistics, StreamingHealth as RuntimeStreamingHealth, StreamingManifest as RuntimeStreamingManifest } from './streaming-runtime/index.js';
