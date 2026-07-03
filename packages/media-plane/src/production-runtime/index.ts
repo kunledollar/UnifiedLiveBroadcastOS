@@ -1,7 +1,7 @@
 import { createFailureRecord, type UBOSFailure, type DegradedMode } from '../../../shared/src/failure-recovery.js';
 import type { MediaExecutionIntent, MediaExecutionResult } from '../index.js';
 
-export type RuntimeSubsystemType = 'recording'|'streaming'|'encoder'|'ffmpeg'|'webrtc'|'browser_renderer'|'gpu'|'output'|'routing'|'compositor';
+export type RuntimeSubsystemType = 'recording'|'streaming'|'encoder'|'ffmpeg'|'webrtc'|'browser_renderer'|'gpu'|'output'|'routing'|'compositor'|'audio';
 export type RuntimeProcessState = 'unregistered'|'idle'|'preparing'|'ready'|'running'|'paused'|'degraded'|'recovering'|'stopping'|'stopped'|'failed'|'unavailable';
 export type ProductionRuntimeState = 'idle'|'preparing'|'ready'|'running'|'degraded'|'recovering'|'stopping'|'stopped'|'failed'|'unavailable';
 export type RuntimeHealth = 'healthy'|'degraded'|'failed'|'unavailable';
