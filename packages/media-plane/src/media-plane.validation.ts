@@ -177,6 +177,10 @@ import {
   createGpuRuntime,
   createGpuContext,
   allocateTexture,
+  AudioRuntime,
+  createAudioChannel,
+  MixMinusManager,
+  AudioValidator,
 } from './index.js';
 
 const command = (
@@ -1566,3 +1570,24 @@ assert.equal(
   'failed',
   'failed GPU runtime reports failed health',
 );
+
+const audioChannel = createAudioChannel({ id: 'ch-host', sourceId: 'host-mic', routes: ['bus:program'] });
+const audioRuntime = new AudioRuntime({ UBOS_ENABLE_REAL_AUDIO: 'true', NEXT_PUBLIC_UBOS_REAL_AUDIO: 'true' });
+let audioSession = audioRuntime.create({ id: 'audio-test', graphRevision: 95, channels: [audioChannel] });
+assert.equal(audioSession.mode, 'real', 'real audio feature flag enables runtime mode');
+assert.equal(audioSession.containsRuntimeHandles, false, 'audio session remains metadata-only');
+assert.equal(audioSession.buses.length, 9, 'professional audio buses are created');
+audioSession = audioRuntime.mixer.setGain(audioSession, 'ch-host', 1.25);
+audioSession = audioRuntime.mixer.setMute(audioSession, 'ch-host', true);
+audioSession = audioRuntime.mixer.setSolo(audioSession, 'ch-host', true);
+audioSession = audioRuntime.mixer.setDelay(audioSession, 'ch-host', 80);
+audioSession = audioRuntime.mixer.addEffect(audioSession, 'ch-host', { id: 'fx-limit', kind: 'limiter', enabled: true, order: 1, parameters: { ceilingDb: -1 }, containsRuntimeHandles: false });
+assert.equal(audioSession.replay.length, 5, 'audio replay captures metadata control changes');
+const mixMinus = new MixMinusManager().create({ id: 'mm-host', role: 'host', sourceChannelId: 'ch-host', busId: 'bus:guest', allSourceIds: ['ch-host', 'ch-guest'] });
+assert.equal(mixMinus.noEcho, true, 'mix-minus enforces no echo');
+const invalidRoute = new AudioValidator().validateRouting(audioSession.buses, audioSession.channels, { routes: [{ from: 'bus:program', to: 'bus:master', gain: 9, enabled: true }], containsRuntimeHandles: false });
+assert.equal(invalidRoute.valid, false, 'audio validator rejects invalid gain and protected loops');
+assert.equal(audioRuntime.start().success, true, 'audio runtime supervisor starts');
+assert.equal(audioRuntime.health.summarize(audioSession).status, 'healthy', 'audio health summarizes runtime');
+const mockAudio = new AudioRuntime({}).create({ id: 'audio-mock' });
+assert.equal(mockAudio.mode, 'mock', 'audio runtime preserves mock fallback');
