@@ -79,6 +79,14 @@ import {
   summarizeFFmpegHealth,
   mapEncoderPlanToFFmpegCommand,
   createFFmpegLogEvent,
+  createFFmpegRecordingPlan,
+  validateFFmpegRecordingPlan,
+  mapRecordingPlanToFFmpegCommand,
+  sanitizeRecordingPath,
+  createRecordingFileName,
+  createSegmentPattern,
+  redactRecordingDiagnostics,
+  FFmpegRecordingRuntime,
   createMultiviewPlan,
   validateMultiviewPlan,
   buildTileLayout,
@@ -386,6 +394,35 @@ const ffmpegHealth = createFFmpegHealth({ enabled: true, available: false, proce
 assert.equal(summarizeFFmpegHealth(ffmpegHealth).includes('unavailable'), true, 'ffmpeg health summary works');
 assert.equal(createFFmpegLogEvent({ message: 'stream_key=secret' }).message.includes('secret'), false, 'ffmpeg log event redacts secrets');
 assert.equal(JSON.stringify(ffmpegPlan).includes('ChildProcess'), false, 'production graph-safe encoder plan stores no ffmpeg process handles');
+
+const recordingFfmpegPlan = createEncoderPlan({ graph: streamingGraph, videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, outputId: 'output:recording', recordingId: 'rec-safe', mediaClock: createClock({ frameRate: 30 }), frameId: 85, backend: 'ffmpeg' });
+const recordingPlan = await createFFmpegRecordingPlan({ encoderPlan: recordingFfmpegPlan, recordingId: 'rec-safe', target: { format: 'mkv', directory: './recordings-test' }, dryRun: true });
+assert.equal(createRecordingFileName({ recordingId: 'rec safe', format: 'mkv', timestamp: '2026-07-01T00:00:00.000Z' }).endsWith('.mkv'), true, 'recording filename generation adds format extension');
+let rejectedTraversal = false;
+try { sanitizeRecordingPath('../secret'); } catch { rejectedTraversal = true; }
+assert.equal(rejectedTraversal, true, 'recording path traversal is rejected');
+assert.equal(recordingPlan.outputPath.includes('recordings-test'), true, 'recording output path resolves inside configured directory');
+const segmentPattern = await createSegmentPattern({ format: 'segment_sequence', directory: './recordings-test', allowOverwrite: true, segmentTimeSeconds: 6 }, 'seg-safe');
+assert.equal(segmentPattern.includes('%03d'), true, 'segment pattern includes deterministic counter');
+assert.equal(validateFFmpegRecordingPlan(recordingPlan).valid, true, 'recording plan validation passes for mkv dry-run');
+const recordingCommand = mapRecordingPlanToFFmpegCommand(recordingPlan);
+assert.equal(recordingCommand.args.includes('-f'), true, 'recording plan maps to ffmpeg args array');
+assert.equal(recordingCommand.args.some((arg) => arg.includes(';')), false, 'ffmpeg args remain shell-safe');
+const dryRuntime = new FFmpegRecordingRuntime();
+await dryRuntime.prepareRecordingRuntime(recordingPlan);
+const dryStarted = await dryRuntime.startRecordingRuntime();
+assert.equal(dryStarted.health.processPid, undefined, 'dry-run recording does not spawn ffmpeg');
+const disabledPlan = await createFFmpegRecordingPlan({ encoderPlan: recordingFfmpegPlan, recordingId: 'rec-disabled', target: { format: 'null', directory: './recordings-test', allowOverwrite: true }, dryRun: true });
+const disabledRuntime = new FFmpegRecordingRuntime();
+await disabledRuntime.prepareRecordingRuntime(disabledPlan);
+const disabledStarted = await disabledRuntime.startRecordingRuntime();
+assert.equal(disabledStarted.health.processPid, undefined, 'disabled/dry mode does not spawn ffmpeg');
+assert.equal(disabledStarted.manifest.containsProcessHandles, false, 'recording manifest excludes process handles');
+assert.equal(disabledStarted.manifest.containsEncodedPackets, false, 'recording manifest excludes encoded packets');
+assert.equal(redactRecordingDiagnostics('/tmp/recordings/foo.mkv').includes('<recording-path>'), true, 'recording diagnostics redact file paths');
+const recordingStopped = dryRuntime.stopRecordingRuntime();
+assert.equal(recordingStopped.manifest.outputFiles.length, 1, 'recording manifest includes output metadata');
+
 
 
 const multiviewPlan = createMultiviewPlan({ graph: streamingGraph, preset: 'quad', videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, frameId: 82 });

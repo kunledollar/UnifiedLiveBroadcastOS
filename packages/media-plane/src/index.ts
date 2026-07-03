@@ -189,6 +189,7 @@ export * from './orchestration.js';
 export * from './streaming/index.js';
 export * from './multiview/index.js';
 export * from './encoder/index.js';
+export * from './recording/ffmpeg/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}

@@ -837,6 +837,17 @@ function ProductionGraphInspector({
   const latestEvent = latestEvents.at(-1);
   const latestCommandSequence = latestEvent?.metadata?.commandSequence;
   const latestEventRevision = latestEvent?.graphRevision;
+  const realRecordingEnabled = process.env.UBOS_ENABLE_REAL_RECORDING === 'true';
+  const recordingFormat = String(recording.metadata.format ?? recording.metadata.outputFormat ?? 'mkv');
+  const recordingPath = String(recording.metadata.outputPath ?? recording.metadata.manifestPath ?? 'recordings/');
+  const segmentCount = String(recording.metadata.segmentCount ?? 0);
+  const ffmpegAvailable = String(recording.metadata.ffmpegAvailable ?? 'unknown');
+  const processState = String(recording.metadata.processState ?? recording.status);
+  const lastExitCode = String(recording.metadata.lastExitCode ?? '—');
+  const lastLogSummary = String(recording.metadata.lastLogSummary ?? '—');
+  const manifestStatus = String(recording.metadata.manifestStatus ?? 'metadata-only');
+  const runtimeHealth = String(recording.metadata.health ?? health.status);
+  const runtimeWarning = String(recording.metadata.warning ?? recording.metadata.failure ?? '—');
   return (
     <details className="mb-2 rounded-xl border border-cyan-300/20 bg-slate-950/80 p-3 text-xs text-slate-300">
       <summary className="cursor-pointer font-black uppercase tracking-[0.18em] text-cyan-200">
@@ -860,6 +871,17 @@ function ProductionGraphInspector({
         />
         <InspectorMetric label="Audio" value={String(Object.keys(graph.audioChannels).length)} />
         <InspectorMetric label="Recording" value={recording.status} />
+        <InspectorMetric label="Real Rec" value={realRecordingEnabled ? 'enabled' : 'disabled'} />
+        <InspectorMetric label="Rec Format" value={recordingFormat} />
+        <InspectorMetric label="Rec Path" value={recordingPath} />
+        <InspectorMetric label="Segments" value={segmentCount} />
+        <InspectorMetric label="FFmpeg" value={ffmpegAvailable} />
+        <InspectorMetric label="Process" value={processState} />
+        <InspectorMetric label="Exit Code" value={lastExitCode} />
+        <InspectorMetric label="Last Log" value={lastLogSummary} />
+        <InspectorMetric label="Manifest" value={manifestStatus} />
+        <InspectorMetric label="Rec Health" value={runtimeHealth} />
+        <InspectorMetric label="Rec Warn" value={runtimeWarning} />
         <InspectorMetric label="Health" value={health.status} />
         <InspectorMetric label="Accepted" value={String(session.commandLog.length)} />
         <InspectorMetric label="Rejected" value={String(rejectedCommands)} />
