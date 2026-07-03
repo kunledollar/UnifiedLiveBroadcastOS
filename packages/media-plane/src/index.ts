@@ -48,6 +48,19 @@ import {
   summarizeEncoderHealth,
   type EncoderSession,
 } from './encoder/index.js';
+import {
+  createWebRTCTransportPlan,
+  validateWebRTCTransportPlan,
+  createWebRTCSession,
+  addWebRTCPeer,
+  removeWebRTCPeer,
+  updateWebRTCPeerState,
+  createWebRTCPeer,
+  createWebRTCMediaTrackRef,
+  summarizeWebRTCHealth,
+  createWebRTCManifest,
+  type WebRTCSession,
+} from './webrtc-runtime/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -118,7 +131,19 @@ export type MediaExecutionIntentType =
   | 'STOP_ENCODER'
   | 'FAIL_ENCODER'
   | 'VALIDATE_ENCODER_PLAN'
-  | 'REPORT_ENCODER_HEALTH';
+  | 'REPORT_ENCODER_HEALTH'
+  | 'BUILD_WEBRTC_TRANSPORT_PLAN'
+  | 'PREPARE_WEBRTC_SESSION'
+  | 'START_WEBRTC_SESSION'
+  | 'STOP_WEBRTC_SESSION'
+  | 'ADD_WEBRTC_PEER'
+  | 'REMOVE_WEBRTC_PEER'
+  | 'UPDATE_WEBRTC_PEER'
+  | 'ATTACH_WEBRTC_TRACK'
+  | 'DETACH_WEBRTC_TRACK'
+  | 'HANDLE_WEBRTC_SIGNAL'
+  | 'REPORT_WEBRTC_HEALTH'
+  | 'FAIL_WEBRTC_SESSION';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -144,10 +169,11 @@ export interface MediaExecutionIntent<TPayload = Record<string, unknown>> {
 const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_PLAN','UPDATE_VIDEO_ROUTE','ACTIVATE_VIDEO_ROUTE','DEACTIVATE_VIDEO_ROUTE','ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','ROUTE_MULTIVIEW_VIDEO','ROUTE_RECORDING_VIDEO','ROUTE_STREAM_VIDEO']);
 const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
 const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_MULTIVIEW_PLAN','UPDATE_MULTIVIEW','RENDER_MULTIVIEW','VALIDATE_MULTIVIEW','CREATE_CONFIDENCE_MONITOR','UPDATE_CONFIDENCE_STATUS','BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','APPLY_LAYOUT']);
+const webrtcIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_WEBRTC_TRANSPORT_PLAN','PREPARE_WEBRTC_SESSION','START_WEBRTC_SESSION','STOP_WEBRTC_SESSION','ADD_WEBRTC_PEER','REMOVE_WEBRTC_PEER','UPDATE_WEBRTC_PEER','ATTACH_WEBRTC_TRACK','DETACH_WEBRTC_TRACK','HANDLE_WEBRTC_SIGNAL','REPORT_WEBRTC_HEALTH','FAIL_WEBRTC_SESSION']);
 const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION','BUILD_STREAMING_PLAN','PREPARE_STREAMING','CONNECT_STREAM','PAUSE_STREAM','RESUME_STREAM','FAIL_STREAM','VALIDATE_STREAM_PLAN','BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH']);
 const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
 function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
-export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
+export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (webrtcIntentTypes.has(type)) return 'sync'; if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
 export function toMediaIntent(intent: MediaExecutionIntent): MediaIntent { const targetSubsystem = subsystemForExecutionType(intent.type); return { id: intent.id, type: targetSubsystem, executionType: intent.type, sourceGraphRevision: intent.graphRevision, dependencies: (intent.payload.dependencies as string[]|undefined) ?? [], priority: Number(intent.payload.priority ?? defaultOrchestrationPriority(intent.type)), targetSubsystem, payload: intent.payload, timingConstraint: typeof intent.payload.frameTimestamp === 'number' ? { requestedFrameTimestamp: intent.payload.frameTimestamp } : {}, submittedAt: intent.timestamp }; }
 export function toExecutionIntent(intent: MediaIntent, frameTimestamp: number): MediaExecutionIntent { return { id: intent.id, type: intent.executionType as MediaExecutionIntentType, timestamp: new Date(frameTimestamp).toISOString(), graphRevision: intent.sourceGraphRevision, payload: { ...intent.payload, frameTimestamp, orchestrationSubsystem: intent.targetSubsystem } }; }
 
@@ -189,6 +215,7 @@ export * from './orchestration.js';
 export * from './streaming/index.js';
 export * from './multiview/index.js';
 export * from './encoder/index.js';
+export * from './webrtc-runtime/index.js';
 export interface RtmpMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface FfmpegMediaExecutionAdapter extends MediaExecutionAdapter {}
 export interface ObsMediaExecutionAdapter extends MediaExecutionAdapter {}
@@ -503,6 +530,7 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   private readonly multiviewStore = new MultiviewStore();
   private readonly encoderStore = new EncoderStore();
   private encoderSession?: EncoderSession;
+  private webrtcSession?: WebRTCSession;
   getVideoRouteStore() {
     return this.videoRouteStore;
   }
@@ -517,6 +545,9 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   }
   getEncoderSession() {
     return this.encoderSession;
+  }
+  getWebRTCSession() {
+    return this.webrtcSession;
   }
   getLatestAudioRouteGraph() {
     const plan = this.audioRouteStore.getRoutePlan();
@@ -679,6 +710,22 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
         if (result.monitor) this.multiviewStore.setConfidenceMonitor(result.monitor);
       }
       warnings.push(...validation.warnings, ...plan.warnings);
+      if (!validation.valid) warnings.push(...validation.errors);
+    }
+
+    const webRTCIntentTypes: MediaExecutionIntentType[] = ['BUILD_WEBRTC_TRANSPORT_PLAN','PREPARE_WEBRTC_SESSION','START_WEBRTC_SESSION','STOP_WEBRTC_SESSION','ADD_WEBRTC_PEER','REMOVE_WEBRTC_PEER','UPDATE_WEBRTC_PEER','ATTACH_WEBRTC_TRACK','DETACH_WEBRTC_TRACK','HANDLE_WEBRTC_SIGNAL','REPORT_WEBRTC_HEALTH','FAIL_WEBRTC_SESSION'];
+    if (!shouldFail && graph && webRTCIntentTypes.includes(intent.type)) {
+      const plan = createWebRTCTransportPlan({ sessionId: String(intent.payload.sessionId ?? graph.broadcastSessionId), role: (intent.payload.role as never) ?? 'host', graphRevision: graph.metadata.revision, now: intent.timestamp });
+      const validation = validateWebRTCTransportPlan(plan);
+      let session = this.webrtcSession ?? createWebRTCSession(plan);
+      if (intent.type === 'ADD_WEBRTC_PEER') session = addWebRTCPeer(session, createWebRTCPeer({ id: String(intent.payload.peerId ?? 'peer:mock'), role: (intent.payload.peerRole as never) ?? 'guest' }));
+      if (intent.type === 'REMOVE_WEBRTC_PEER') session = removeWebRTCPeer(session, String(intent.payload.peerId ?? 'peer:mock'));
+      if (intent.type === 'UPDATE_WEBRTC_PEER') session = updateWebRTCPeerState(session, String(intent.payload.peerId ?? 'peer:mock'), (intent.payload.connectionState as never) ?? 'connected');
+      if (intent.type === 'ATTACH_WEBRTC_TRACK') session = { ...session, localTrackRefs: [...session.localTrackRefs, createWebRTCMediaTrackRef({ peerId: String(intent.payload.peerId ?? 'local'), trackId: String(intent.payload.trackId ?? 'track:mock'), kind: (intent.payload.kind as never) ?? 'audio', ...(typeof intent.payload.sourceId === 'string' ? { sourceId: intent.payload.sourceId } : {}), ...(typeof intent.payload.guestId === 'string' ? { guestId: intent.payload.guestId } : {}), muted: Boolean(intent.payload.muted), enabled: intent.payload.enabled !== false, connectionState: 'connected', graphRevision: graph.metadata.revision })] };
+      if (intent.type === 'START_WEBRTC_SESSION') session = { ...session, status: plan.enabled ? 'connecting' : 'idle', startedAt: session.startedAt ?? intent.timestamp };
+      if (intent.type === 'STOP_WEBRTC_SESSION') session = { ...session, status: 'closed' };
+      this.webrtcSession = session;
+      warnings.push(...validation.warnings, summarizeWebRTCHealth(session).summary, createWebRTCManifest(session).notes[0] ?? 'WebRTC manifest metadata ready');
       if (!validation.valid) warnings.push(...validation.errors);
     }
 
