@@ -146,6 +146,14 @@ import {
   mapFailure as mapFFmpegRuntimeFailure,
   type RuntimeSubsystem,
   type FrameTickEvent,
+  createGpuPipeline,
+  validateGpuPipeline,
+  createGpuSession,
+  createGpuManifest,
+  summarizeGpuHealth,
+  createGpuRuntime,
+  createGpuContext,
+  allocateTexture,
 } from './index.js';
 
 const command = (
@@ -1428,3 +1436,39 @@ assert.equal(isRealRecordingEnabled({ UBOS_ENABLE_REAL_RECORDING: 'true', NEXT_P
 assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('temporaryPath'), false, 'production graph remains free of recording runtime paths');
 assert.equal(recordingPipeline.archive(recordingJob.id).state, 'archived', 'recording archive lifecycle works');
 assert.equal((await recordingPipeline.delete(recordingJob.id)).state, 'deleted', 'recording delete lifecycle works');
+
+
+const gpuPipeline = createGpuPipeline({ id: 'gpu-pipeline:test', graphRevision: 7 });
+assert.equal(validateGpuPipeline(gpuPipeline).valid, true, 'GPU pipeline metadata validates');
+assert.equal(
+  validateGpuPipeline({ ...gpuPipeline, metadata: { leakedContext: createGpuContext() } }).valid,
+  false,
+  'GPU pipeline rejects runtime-only context placeholders',
+);
+assert.equal(
+  validateGpuPipeline({
+    ...gpuPipeline,
+    metadata: {
+      leakedTexture: allocateTexture({ id: 'texture:test', kind: 'texture', metadata: {} }),
+    },
+  }).valid,
+  false,
+  'GPU pipeline rejects non-serializable texture placeholders',
+);
+const gpuSession = createGpuSession({ pipeline: gpuPipeline }, { UBOS_ENABLE_GPU_RUNTIME: 'true' });
+const gpuManifest = createGpuManifest(gpuSession, { UBOS_ENABLE_GPU_RUNTIME: 'true' });
+assert.equal(gpuManifest.capabilities.metadataOnly, true, 'GPU manifest is metadata-only');
+assert.equal(summarizeGpuHealth(gpuSession).status, 'healthy', 'GPU session starts healthy');
+const failedGpuResult = createGpuRuntime(gpuSession).execute({
+  id: 'intent-gpu-fail',
+  type: 'FAIL_GPU_RUNTIME',
+  graphRevision: 7,
+  timestamp: '2026-07-01T00:00:00.000Z',
+  payload: {},
+});
+assert.equal(failedGpuResult.success, false, 'GPU failure intent fails execution');
+assert.equal(
+  failedGpuResult.manifest.diagnostics.health.status,
+  'failed',
+  'failed GPU runtime reports failed health',
+);
