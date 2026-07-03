@@ -1170,3 +1170,5 @@ export type { StreamingJob as RuntimeStreamingJob, StreamingDestination as Runti
 
 export { AudioRuntime, AudioMixer, AudioMatrix, MixMinusManager, AudioStatisticsRuntime, AudioHealthRuntime, AudioRecovery, AudioValidator, createAudioBus, createAudioChannel, createDefaultBuses, isRealAudioEnabled } from './audio-runtime/index.js';
 export type { AudioBus as RuntimeAudioBus, AudioChannel as RuntimeAudioChannel, AudioGroup as RuntimeAudioGroup, AudioEffect, AudioMeter, AudioSession, AudioStatistics as RuntimeAudioStatistics, AudioHealth as RuntimeAudioHealth, AudioReplayEvent, MixMinusTarget, AudioBusKind, AudioEffectKind } from './audio-runtime/index.js';
+
+export * from './broadcast-orchestrator/index.js';
