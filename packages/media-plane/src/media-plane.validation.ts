@@ -181,6 +181,10 @@ import {
   createAudioChannel,
   MixMinusManager,
   AudioValidator,
+  BroadcastOrchestrator,
+  ExecutionCoordinator,
+  ResourceCoordinator,
+  isBroadcastOrchestratorEnabled,
 } from './index.js';
 
 const command = (
@@ -1503,6 +1507,33 @@ const runtimeMock = new MockMediaExecutionAdapter();
 const runtimeMockResult = runtimeMock.execute({ id: 'runtime-intent-start', type: 'START_PRODUCTION_RUNTIME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: recordingTransition.nextGraph.metadata.revision, payload: {} }, recordingTransition.nextGraph);
 assert.equal(runtimeMockResult.success, true, 'mock adapter accepts production runtime execution intent');
 assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('ffmpegProcess'), false, 'production graph contains no runtime process handles');
+
+const orchestrator = new BroadcastOrchestrator({ UBOS_ENABLE_ORCHESTRATOR: 'true', NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'true' });
+orchestrator.register({ id: 'gpu-runtime', type: 'gpu', label: 'GPU Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { backend: 'mock' } });
+orchestrator.register({ id: 'audio-runtime-validation', type: 'audio', label: 'Audio Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { sampleRate: 48000 } });
+orchestrator.register({ id: 'encoder-runtime', type: 'encoder', label: 'Encoder Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { codec: 'h264' } });
+assert.equal(orchestrator.startProduction({ graphRevision: 55 }).success, true, 'broadcast orchestrator starts production through single authority');
+assert.equal(orchestrator.snapshot().state, 'running', 'broadcast orchestrator lifecycle reaches running');
+assert.equal(orchestrator.pauseProduction().runtimeState, 'ready', 'broadcast orchestrator pauses through supervisor');
+assert.equal(orchestrator.resumeProduction().success, true, 'broadcast orchestrator resumes through supervisor');
+assert.equal(orchestrator.activateScene('scene-live').success, true, 'broadcast orchestrator coordinates scene activation');
+const orchestratorSnapshot = orchestrator.snapshot();
+assert.equal(orchestratorSnapshot.containsRuntimeHandles, false, 'broadcast orchestrator snapshot is metadata-only');
+assert.equal(orchestratorSnapshot.replay.containsRuntimeHandles, false, 'broadcast orchestrator replay is metadata-only');
+assert.equal(orchestratorSnapshot.dashboard.globalHealth, 'healthy', 'broadcast orchestrator control room dashboard reports global health');
+assert.equal(orchestratorSnapshot.plan?.steps[0]?.type, 'gpu', 'broadcast orchestrator schedules dependencies deterministically');
+assert.equal(orchestrator.recoverSubsystem('audio-runtime-validation').runtimeState, 'recovering', 'broadcast orchestrator schedules subsystem recovery');
+assert.equal(orchestrator.stopProduction().runtimeState, 'stopped', 'broadcast orchestrator stops production safely');
+const resourceCoordinator = new ResourceCoordinator({ cpu: 5, gpu: 0, memoryMb: 512, encoders: 0, networkMbps: 10, threads: 1 });
+const resourceAllocation = resourceCoordinator.allocate([{ subsystemId: 'streaming', cpu: 10, networkMbps: 20, priority: 100 }]);
+assert.equal(resourceAllocation[0]?.granted, false, 'broadcast orchestrator rejects over-budget resource allocation');
+const executionCoordinator = new ExecutionCoordinator();
+const unsafePlan = executionCoordinator.createPlan('start', [], { metadata: { processHandle: 'unsafe' } });
+assert.equal(executionCoordinator.validate(unsafePlan).length > 0, true, 'broadcast orchestrator rejects runtime handles in plans');
+assert.equal(isBroadcastOrchestratorEnabled({ UBOS_ENABLE_ORCHESTRATOR: 'true', NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'true' }), true, 'broadcast orchestrator feature flags enable runtime');
+const disabledOrchestrator = new BroadcastOrchestrator({ UBOS_ENABLE_ORCHESTRATOR: 'false', NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'false' });
+disabledOrchestrator.register(encoderSubsystem);
+assert.equal(disabledOrchestrator.startProduction().success, true, 'broadcast orchestrator falls back to supervisor when disabled');
 
 // Phase 9.2 recording pipeline runtime validation
 const recordingPipeline = new RecordingPipeline({ UBOS_ENABLE_REAL_RECORDING: 'false', NEXT_PUBLIC_UBOS_REAL_RECORDING: 'false' });
