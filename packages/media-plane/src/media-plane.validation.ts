@@ -1041,6 +1041,21 @@ import {
   executeRenderPipeline,
   selectRendererBackend,
   summarizeRendererHealth,
+  createBrowserRendererPlan,
+  validateBrowserRendererPlan,
+  createBrowserRendererSession,
+  createRenderSurface,
+  createRenderLayer,
+  createRenderPass,
+  updateRenderLayer,
+  removeRenderLayer,
+  summarizeBrowserRendererHealth,
+  createRendererManifest,
+  redactRendererDiagnostics,
+  mapRendererFailure,
+  createHTMLElement,
+  requestBrowserFrame,
+  cancelBrowserFrame,
 } from './browser-renderer/index.js';
 
 const renderer = new BrowserMediaRenderer({ target: 'preview', debug: true });
@@ -1259,3 +1274,38 @@ const webRTCMock = new MockMediaExecutionAdapter();
 const webRTCMockResult = webRTCMock.execute({ id: 'webrtc-intent', type: 'ADD_WEBRTC_PEER', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: recordingTransition.nextGraph.metadata.revision, payload: { peerId: 'guest-peer', peerRole: 'guest' } }, recordingTransition.nextGraph);
 assert.equal(webRTCMockResult.success, true, 'mock adapter handles WebRTC execution intent');
 assert.equal(webRTCMock.getWebRTCSession()?.peers.length, 1, 'mock WebRTC execution preserves metadata-only session');
+
+const brSurface = createRenderSurface({ id: 'surface-program', target: 'Program', graphRevision: 42 });
+assert.equal(brSurface.status, 'planned', 'browser renderer surface creation is metadata only');
+const brLayer = createRenderLayer({ id: 'layer-logo', kind: 'Logo', surfaceId: brSurface.id, layout: { left: 10, top: 10 } });
+assert.equal(brLayer.kind, 'Logo', 'browser renderer layer creation supports declared layer kinds');
+const brPass = createRenderPass({ id: 'pass-1', sessionId: 'session-1', frameId: 7, graphRevision: 42, executionBatchId: 'batch-1', surfaceIds: [brSurface.id], layerIds: [brLayer.id] });
+assert.equal(brPass.executionBatchId, 'batch-1', 'browser render pass carries timing batch identity');
+const brPlan = createBrowserRendererPlan({ graphRevision: 42, executionBatchId: 'batch-1', frameId: 7, surfaces: [brSurface], layers: [brLayer], passes: [brPass], layoutMetadata: { layoutId: 'layout-main' }, sceneMetadata: { activeSceneId: 'scene-a' } });
+assert.equal(validateBrowserRendererPlan(brPlan).valid, true, 'browser renderer plan validation accepts valid metadata plans');
+assert.equal(brPlan.replayMetadata['storesDom'], false, 'browser renderer replay metadata never stores DOM');
+const badPlan = createBrowserRendererPlan({ graphRevision: 42, executionBatchId: 'batch-1', frameId: 7, surfaces: [brSurface], layers: [createRenderLayer({ id: 'bad-layer', kind: 'Video', surfaceId: 'missing' })] });
+assert.equal(validateBrowserRendererPlan(badPlan).valid, false, 'browser renderer plan validation rejects missing surfaces');
+const unavailableSession = createBrowserRendererSession(brPlan, {});
+assert.equal(unavailableSession.state, 'unavailable', 'browser renderer defaults to metadata mock behavior when disabled');
+const enabledSession = createBrowserRendererSession(brPlan, { NEXT_PUBLIC_UBOS_BROWSER_RENDERER: 'true' });
+assert.equal(enabledSession.state, 'planned', 'browser renderer session enters planned state when enabled');
+const updatedSession = updateRenderLayer(enabledSession, createRenderLayer({ id: 'layer-ticker', kind: 'Ticker', surfaceId: brSurface.id }));
+assert.equal(updatedSession.backpressure.queuedUpdates, 1, 'browser renderer exposes queued update backpressure metadata');
+assert.equal(removeRenderLayer(updatedSession, 'layer-ticker').layers.some((layer) => layer.id === 'layer-ticker'), false, 'browser renderer removes layer metadata only');
+const rendererFailure = mapRendererFailure({ kind: 'render_timeout', message: 'render timed out', frameId: 7, graphRevision: 42 });
+assert.equal(rendererFailure.ubosFailure.category, 'RENDERER_FAILURE', 'browser renderer failure maps into UBOS failure model');
+const brHealth = summarizeBrowserRendererHealth({ ...enabledSession, failures: [rendererFailure], backpressure: { renderLatencyMs: 45, missedFrames: 2, queuedUpdates: 3, renderBacklog: 1, slowLayout: true, degradedRendering: true, degradedModes: ['reduce_preview_updates', 'pause_diagnostics'] } });
+assert.equal(brHealth.status, 'degraded', 'browser renderer health summarizes degraded backpressure');
+assert.equal(summarizeRendererHealth(brHealth).includes('Browser renderer degraded'), true, 'browser renderer compact health summary works');
+const brManifest = createRendererManifest(enabledSession, { UBOS_ENABLE_BROWSER_RENDERER: 'true' });
+assert.equal(brManifest.capabilities.supportsGpu, false, 'browser renderer manifest does not introduce GPU rendering');
+assert.equal(brManifest.diagnostics.featureFlags.UBOS_ENABLE_BROWSER_RENDERER, true, 'browser renderer diagnostics expose feature flags');
+const redactedDiagnostics = redactRendererDiagnostics(brManifest.diagnostics);
+assert.equal(redactedDiagnostics.renderSurfaces[0]?.metadata['redacted'], true, 'browser renderer diagnostics redacts surface metadata');
+assert.equal(createHTMLElement('div'), undefined, 'browser renderer is Node compatible when DOM is unavailable');
+const frameToken = requestBrowserFrame(() => undefined);
+cancelBrowserFrame(frameToken);
+assert.equal(typeof frameToken, 'number', 'browser renderer mock frame request works without browser RAF');
+assert.equal(JSON.stringify(brPlan).includes('HTMLElement'), false, 'browser renderer graph plan stores no DOM elements');
+assert.equal(JSON.stringify(brPlan).includes('MediaStream'), false, 'browser renderer graph plan stores no media streams');
