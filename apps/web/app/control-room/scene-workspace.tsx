@@ -912,6 +912,14 @@ function ProductionGraphInspector({
         />
         <InspectorMetric label="Audio" value={String(Object.keys(graph.audioChannels).length)} />
         <InspectorMetric label="Recording" value={recording.status} />
+        <InspectorMetric label="Recording File" value={String(recording.metadata?.currentFile ?? '—')} />
+        <InspectorMetric label="Recording Folder" value={String(recording.metadata?.outputFolder ?? '—')} />
+        <InspectorMetric label="Recording Bitrate" value={String(recording.metadata?.bitrateKbps ?? '—')} />
+        <InspectorMetric label="Recording FPS" value={String(recording.metadata?.fps ?? '—')} />
+        <InspectorMetric label="Recording Size" value={String(recording.metadata?.currentSizeBytes ?? '—')} />
+        <InspectorMetric label="Recording Health" value={String(recording.metadata?.health ?? recording.status)} />
+        <InspectorMetric label="Recording Drops" value={String(recording.metadata?.droppedFrames ?? '—')} />
+        <InspectorMetric label="Recording Disk" value={String(recording.metadata?.diskUsageBytes ?? '—')} />
         <InspectorMetric label="Health" value={health.status} />
         <InspectorMetric label="Accepted" value={String(session.commandLog.length)} />
         <InspectorMetric label="Rejected" value={String(rejectedCommands)} />

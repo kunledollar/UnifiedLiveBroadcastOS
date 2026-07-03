@@ -1,3 +1,4 @@
+import { RecordingPipeline, isRealRecordingEnabled, safeRecordingFilename } from './recording-runtime/index.js';
 const assert = {
   equal(actual: unknown, expected: unknown, message: string) {
     if (actual !== expected)
@@ -1396,3 +1397,34 @@ const runtimeMock = new MockMediaExecutionAdapter();
 const runtimeMockResult = runtimeMock.execute({ id: 'runtime-intent-start', type: 'START_PRODUCTION_RUNTIME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: recordingTransition.nextGraph.metadata.revision, payload: {} }, recordingTransition.nextGraph);
 assert.equal(runtimeMockResult.success, true, 'mock adapter accepts production runtime execution intent');
 assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('ffmpegProcess'), false, 'production graph contains no runtime process handles');
+
+// Phase 9.2 recording pipeline runtime validation
+const recordingPipeline = new RecordingPipeline({ UBOS_ENABLE_REAL_RECORDING: 'false', NEXT_PUBLIC_UBOS_REAL_RECORDING: 'false' });
+const recordingJob = await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'phase-9-2-validation', format: 'mp4', overwrite: true, graphRevision: recordingTransition.nextGraph.metadata.revision, tracks: ['program-video', 'program-audio'], segment: true });
+assert.equal(recordingJob.containsRuntimeHandles, false, 'recording job is metadata-only');
+assert.equal(recordingPipeline.prepare(recordingJob.id).state, 'prepared', 'recording prepare lifecycle works');
+const startedRecording = await recordingPipeline.start(recordingJob.id);
+assert.equal(startedRecording.state, 'recording', 'recording start lifecycle works');
+assert.equal(recordingPipeline.health(recordingJob.id).currentFile.endsWith('.mp4'), true, 'recording progress reports current file');
+assert.equal(recordingPipeline.pause(recordingJob.id).state, 'paused', 'recording pause lifecycle works');
+assert.equal(recordingPipeline.resume(recordingJob.id).state, 'recording', 'recording resume lifecycle works');
+assert.equal(recordingPipeline.split(recordingJob.id).segmentIndex, 1, 'recording split increments segment index');
+assert.equal((await recordingPipeline.stop(recordingJob.id)).state, 'stopped', 'recording stop lifecycle works');
+const finalizedRecording = await recordingPipeline.finalize(recordingJob.id);
+assert.equal(finalizedRecording.state, 'finalized', 'recording finalize lifecycle works');
+assert.equal(recordingPipeline.manifest(recordingJob.id).containsFileHandles, false, 'recording manifest excludes file handles');
+assert.equal(recordingPipeline.manifest(recordingJob.id).containsProcessHandles, false, 'recording manifest excludes process handles');
+{ let rejected = false; try { safeRecordingFilename('../evil', 'mp4'); } catch { rejected = true; } assert.equal(rejected, true, 'recording filename validation rejects traversal'); }
+{ let rejected = false; try { await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'bad/evil', format: 'mp4' }); } catch { rejected = true; } assert.equal(rejected, true, 'recording validator rejects unsafe extension or name'); }
+const queuedA = await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'queued-a', format: 'mkv', overwrite: true });
+const queuedB = await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'queued-b', format: 'mov', overwrite: true });
+recordingPipeline.scheduler.markStarted('synthetic-1');
+recordingPipeline.scheduler.markStarted('synthetic-2');
+await recordingPipeline.start(queuedA.id);
+assert.equal(recordingPipeline.scheduler.queue.length >= 1, true, 'recording scheduler queues over concurrency limit');
+recordingPipeline.scheduler.markStopped('synthetic-1');
+recordingPipeline.scheduler.markStopped('synthetic-2');
+assert.equal(isRealRecordingEnabled({ UBOS_ENABLE_REAL_RECORDING: 'true', NEXT_PUBLIC_UBOS_REAL_RECORDING: 'true' }), true, 'recording feature flags enable real runtime');
+assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('temporaryPath'), false, 'production graph remains free of recording runtime paths');
+assert.equal(recordingPipeline.archive(recordingJob.id).state, 'archived', 'recording archive lifecycle works');
+assert.equal((await recordingPipeline.delete(recordingJob.id)).state, 'deleted', 'recording delete lifecycle works');
