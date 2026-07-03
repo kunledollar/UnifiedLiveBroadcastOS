@@ -119,6 +119,23 @@ import {
   redactWebRTCDiagnostics,
   createPeerConnection,
   mapWebRTCErrorToFailure,
+  createGpuRuntime,
+  createGpuSession,
+  createGpuPipeline,
+  createGpuSurface,
+  createGpuRenderPass,
+  createGpuManifest,
+  validateGpuPipeline,
+  validateGpuCapabilities,
+  mapGpuFailure,
+  summarizeGpuHealth,
+  summarizeGpuStatistics,
+  redactGpuDiagnostics,
+  createGpuContext,
+  allocateTexture,
+  allocateBuffer,
+  cleanupGpu,
+  type GpuFrame,
   type FrameTickEvent,
 } from './index.js';
 
@@ -1309,3 +1326,36 @@ cancelBrowserFrame(frameToken);
 assert.equal(typeof frameToken, 'number', 'browser renderer mock frame request works without browser RAF');
 assert.equal(JSON.stringify(brPlan).includes('HTMLElement'), false, 'browser renderer graph plan stores no DOM elements');
 assert.equal(JSON.stringify(brPlan).includes('MediaStream'), false, 'browser renderer graph plan stores no media streams');
+
+
+const gpuSurface = createGpuSurface({ id: 'gpu-surface:test', target: 'Program', graphRevision: 42 });
+const gpuPipeline = createGpuPipeline({ id: 'gpu-pipeline:test', backendType: 'WebGPU', surfaceId: gpuSurface.id, graphRevision: 42 });
+assert.equal(validateGpuPipeline(gpuPipeline).valid, true, 'GPU pipeline validates metadata-only plan');
+const gpuSession = createGpuSession({ id: 'gpu-session:test', pipeline: gpuPipeline, surfaces: [gpuSurface] }, { NEXT_PUBLIC_UBOS_GPU_RUNTIME: 'true' });
+assert.equal(gpuSession.metadata.runtimeOnlyObjectsInGraph, false, 'GPU session keeps runtime objects out of graph metadata');
+const gpuFrame: GpuFrame = { frameId: 7, graphRevision: 42, executionBatchId: 'batch-7', mediaClockTimestamp: 1234, compositionPlanId: 'composition-7', resources: [{ id: 'texture-ref:1', kind: 'texture', width: 1920, height: 1080, format: 'rgba8unorm-metadata', metadata: {} }], metadata: { replaySafe: true } };
+const gpuPass = createGpuRenderPass({ id: 'gpu-pass:test', pipelineId: gpuPipeline.id, surfaceId: gpuSurface.id, frame: gpuFrame });
+assert.equal(gpuPass.frame.frameId, 7, 'GPU render pass preserves frame identity');
+assert.equal(gpuPass.frame.graphRevision, 42, 'GPU render pass preserves graph revision timing compatibility');
+assert.equal(gpuPass.frame.executionBatchId, 'batch-7', 'GPU render pass preserves execution batch timing compatibility');
+const gpuManifest = createGpuManifest({ ...gpuSession, state: 'ready', frame: gpuFrame, statistics: { queueDepth: 3, pendingFrames: 2, resourcePressure: 'high', frameLatencyMs: 12, presentationLatencyMs: 5, uploadLatencyMs: 4, pipelineBacklog: 1, renderedFrames: 10, droppedFrames: 1 } }, { NEXT_PUBLIC_UBOS_GPU_RUNTIME: 'true' });
+assert.equal(gpuManifest.diagnostics.gpuEnabled, true, 'GPU manifest reports feature flag enabled');
+assert.equal(gpuManifest.diagnostics.health.status, 'degraded', 'GPU health summarizes backpressure degraded mode');
+assert.equal(summarizeGpuStatistics(gpuManifest.diagnostics.health.latestFailure ? gpuSession.statistics : { queueDepth: 1, pendingFrames: 1, resourcePressure: 'low', frameLatencyMs: 1, presentationLatencyMs: 1, uploadLatencyMs: 1, pipelineBacklog: 0, renderedFrames: 1, droppedFrames: 0 }).includes('queue='), true, 'GPU statistics summary includes queue depth');
+assert.equal(validateGpuCapabilities(gpuManifest.capabilities).valid, true, 'GPU capabilities validate metadata-only contract');
+const gpuFailure = mapGpuFailure({ kind: 'surface lost', frameId: 7, graphRevision: 42 });
+assert.equal(gpuFailure.retryable, true, 'GPU failure mapping marks surface lost retryable');
+assert.equal(summarizeGpuHealth({ ...gpuSession, failures: [gpuFailure] }).status, 'degraded', 'GPU health includes latest retryable failure');
+const redactedGpu = redactGpuDiagnostics(gpuManifest.diagnostics);
+assert.equal(redactedGpu.pipeline.metadata.redacted, true, 'GPU diagnostics redact pipeline metadata');
+const disabledGpu = createGpuSession({}, {});
+assert.equal(disabledGpu.backend.type, 'Mock', 'GPU runtime defaults to mock mode when disabled');
+const gpuRuntime = createGpuRuntime(gpuSession, { NEXT_PUBLIC_UBOS_GPU_RUNTIME: 'true' });
+const gpuResult = gpuRuntime.execute({ id: 'gpu-intent:start', type: 'START_GPU_RUNTIME', timestamp: '2026-07-03T00:00:00.000Z', graphRevision: 42, payload: { frameId: 7, executionBatchId: 'batch-7' } }, gpuFrame);
+assert.equal(gpuResult.success, true, 'GPU mock execution succeeds');
+assert.equal(gpuResult.renderPass?.frame.resources[0]?.kind, 'texture', 'GPU replay metadata stores resource references only');
+assert.equal(JSON.stringify(gpuResult.manifest).includes('GPUTexture'), false, 'GPU manifest does not serialize real GPU texture objects');
+assert.equal(createGpuContext().serializable, false, 'GPU context helper is runtime-only');
+assert.equal(allocateTexture({ id: 'texture-runtime', kind: 'texture', metadata: {} }).serializable, false, 'GPU texture allocation helper is runtime-only');
+assert.equal(allocateBuffer({ id: 'buffer-runtime', kind: 'buffer', metadata: {} }).serializable, false, 'GPU buffer allocation helper is runtime-only');
+assert.equal(cleanupGpu(gpuSession).state, 'shutdown', 'GPU cleanup shuts down runtime session');
