@@ -54,6 +54,8 @@ import {
   FFmpegStreamingRuntime,
   RuntimeSupervisor,
   summarizeProductionRuntimeHealth,
+  HardwareRuntime,
+  isHardwareRuntimeEnabled,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -194,6 +196,9 @@ function MediaExecutionInspector({
     return supervisor.getRuntime();
   }, [graph]);
   const productionRuntimeHealth = summarizeProductionRuntimeHealth(productionRuntime);
+  const hardwareRuntime = useMemo(() => new HardwareRuntime(process.env), []);
+  const hardwareDashboard = useMemo(() => hardwareRuntime.manifest(), [hardwareRuntime]);
+  const hardwareEnabled = isHardwareRuntimeEnabled(process.env);
   const orchestration = state.orchestrationDiagnostics;
   const programComposition = graph.program.sceneId
     ? createSceneCompositionFromGraph(graph, graph.program.sceneId, { target: 'program' })
@@ -433,6 +438,12 @@ function MediaExecutionInspector({
         <InspectorMetric label="WebRTC Runtime" value={String(productionRuntimeHealth.subsystemHealth.webrtc ?? '—')} />
         <InspectorMetric label="Browser Runtime" value={String(productionRuntimeHealth.subsystemHealth.browser_renderer ?? '—')} />
         <InspectorMetric label="GPU Runtime" value={String(productionRuntimeHealth.subsystemHealth.gpu ?? '—')} />
+        <InspectorMetric label="Hardware Runtime" value={hardwareEnabled ? hardwareDashboard.diagnostics.health.status : 'software fallback'} />
+        <InspectorMetric label="Hardware GPUs" value={String(hardwareDashboard.diagnostics.devices.length)} />
+        <InspectorMetric label="Hardware Encoders" value={hardwareDashboard.diagnostics.devices.map((device) => `${device.api}:${device.capabilities.encoderCount}`).join(', ') || '—'} />
+        <InspectorMetric label="Hardware Temp" value={hardwareDashboard.diagnostics.devices.map((device) => device.temperatureC ?? '—').join(', ')} />
+        <InspectorMetric label="Hardware Util" value={hardwareDashboard.diagnostics.devices.map((device) => `${Math.round(device.utilization * 100)}%`).join(', ') || '—'} />
+        <InspectorMetric label="Hardware Caps" value={hardwareDashboard.capabilities.map((capability) => capability.apis.join('/')).join(', ') || 'software'} />
         <InspectorMetric label="Runtime Degraded" value={productionRuntimeHealth.degradedModes.join(', ') || '—'} />
         <InspectorMetric label="Runtime Failure" value={productionRuntimeHealth.latestFailure?.code ?? '—'} />
         <InspectorMetric label="Runtime Frame" value={String(productionRuntimeHealth.latestFrameId ?? '—')} />
