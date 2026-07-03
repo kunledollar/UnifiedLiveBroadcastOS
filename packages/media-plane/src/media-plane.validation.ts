@@ -124,6 +124,25 @@ import {
   redactWebRTCDiagnostics,
   createPeerConnection,
   mapWebRTCErrorToFailure,
+  isRealWebRTCEnabled,
+  createOfferMetadata,
+  createAnswerMetadata,
+  createIceMetadata,
+  validateWebRTCSignalingMetadata,
+  calculateBackpressure,
+  collectWebRTCStatistics,
+  summarizeConnectionQuality,
+  planWebRTCRecovery,
+  RealWebRTCRuntime,
+  WebRTCSessionManager,
+  PeerConnectionManager,
+  MediaTrackManager,
+  ICEManager,
+  SignalingManager,
+  ConnectionHealth,
+  WebRTCStatistics,
+  WebRTCRecovery,
+  WebRTCValidator,
   createProductionRuntime,
   createProductionRuntimeSession,
   registerRuntimeSubsystem,
@@ -1348,6 +1367,34 @@ assert.equal(validateWebRTCSignalMessage({ id: 'sig-1', type: 'offer', sessionId
 assert.equal(JSON.stringify(redactWebRTCDiagnostics(webRTCPlan)).includes('super-secret'), false, 'WebRTC TURN credentials are redacted');
 assert.equal(createPeerConnection({ env: { UBOS_ENABLE_WEBRTC_RUNTIME: 'true' } }).errors[0], 'RTCPeerConnection unavailable', 'WebRTC browser API unavailable returns structured error');
 assert.equal(mapWebRTCErrorToFailure({ message: 'ICE disconnected' }).classification, 'ice', 'WebRTC failure mapping classifies ICE errors');
+assert.equal(isRealWebRTCEnabled({ UBOS_ENABLE_REAL_WEBRTC: 'true' }), true, 'Phase 9.4 real WebRTC flag enables runtime');
+assert.equal(isRealWebRTCEnabled({ NEXT_PUBLIC_UBOS_REAL_WEBRTC: 'true' }), true, 'Phase 9.4 public real WebRTC flag enables browser runtime');
+assert.equal(createOfferMetadata({ sessionId: 'test-session', peerId: 'peer-1', revision: 8 }).redacted, true, 'WebRTC offer metadata is redacted');
+assert.equal(createAnswerMetadata({ sessionId: 'test-session', peerId: 'peer-1', revision: 8 }).description?.type, 'answer', 'WebRTC answer metadata is metadata-only');
+assert.equal(createIceMetadata({ sessionId: 'test-session', peerId: 'peer-1', protocol: 'udp' }).redacted, true, 'WebRTC ICE metadata redacts candidates');
+assert.equal(validateWebRTCSignalingMetadata({ id: 'bad-sdp', type: 'offer', sessionId: 'test-session', peerId: 'peer-1', timestamp: '2026-07-01T00:00:00.000Z', payload: { description: 'v=0\r\na=sendrecv' } }, ['peer-1']).valid, false, 'WebRTC signaling validator rejects raw SDP injection');
+assert.equal(validateWebRTCSignalingMetadata({ id: 'bad-peer', type: 'peer_joined', sessionId: 'test-session', peerId: '../../bad', timestamp: '2026-07-01T00:00:00.000Z', payload: {} }).valid, false, 'WebRTC signaling validator rejects invalid peer IDs');
+assert.equal(calculateBackpressure({ activeNegotiations: 2, maxConcurrentNegotiations: 2 }).throttled, true, 'WebRTC backpressure limits concurrent negotiations');
+assert.equal(summarizeConnectionQuality(collectWebRTCStatistics({ bitrateKbps: 2500, latencyMs: 50, packetLossRatio: 0.01 })), 'healthy', 'WebRTC statistics summarize healthy connection quality');
+assert.equal(planWebRTCRecovery({ sessionId: 'test-session', peerId: 'peer-1', reason: 'ICE disconnected', attempt: 2 }).action, 'ice_restart', 'WebRTC recovery maps ICE failures to ICE restart');
+const pcManager = new PeerConnectionManager();
+pcManager.create('peer-1', { env: {} });
+assert.equal(pcManager.close('peer-1').success, true, 'PeerConnectionManager owns and disposes runtime handles');
+const trackManager = new MediaTrackManager();
+const mutedSession = trackManager.mute({ ...webRTCSession, localTrackRefs: [trackRef] }, 'track-audio', true);
+assert.equal(mutedSession.localTrackRefs[0]?.muted, true, 'MediaTrackManager supports mute lifecycle');
+const iceManager = new ICEManager();
+assert.equal(iceManager.queueRestart('peer-1').queuedIceRestarts, 1, 'ICEManager queues ICE restarts for backpressure');
+const signalingManager = new SignalingManager();
+assert.equal(signalingManager.validate(signalingManager.createMessage({ type: 'peer_joined', sessionId: 'test-session', peerId: 'peer-1', payload: {} }), ['peer-1']).valid, true, 'SignalingManager validates session-owned metadata signals');
+assert.equal(new ConnectionHealth().summarize(webRTCSession, collectWebRTCStatistics({ latencyMs: 400 })).status, 'degraded', 'ConnectionHealth includes connection quality degradation');
+assert.equal(new WebRTCStatistics().collect({ reconnects: 2 }).reconnects, 2, 'WebRTCStatistics tracks reconnect counts');
+assert.equal(new WebRTCRecovery().plan({ sessionId: 'test-session', peerId: 'peer-1', reason: 'peer disconnected' }).notifySupervisor, true, 'WebRTCRecovery plans supervisor notification');
+assert.equal(new WebRTCValidator().validateSignal({ id: 'sig-owned', type: 'peer_joined', sessionId: 'test-session', peerId: 'peer-1', timestamp: '2026-07-01T00:00:00.000Z', payload: {} }, ['peer-1']).valid, true, 'WebRTCValidator validates peer ownership');
+const sessionManager = new WebRTCSessionManager(webRTCPlan);
+assert.equal(sessionManager.addPeer(createWebRTCPeer({ id: 'producer-1', role: 'producer' })).peers[0]?.role, 'producer', 'WebRTCSessionManager supports producer peers');
+const realRuntime = new RealWebRTCRuntime();
+assert.equal(realRuntime.offer('test-session', 'peer-1').type, 'offer', 'RealWebRTCRuntime creates offer metadata without storing SDP');
 assert.equal(JSON.stringify(createWebRTCManifest(webRTCSession)).includes('RTCPeerConnection'), false, 'WebRTC graph/replay metadata excludes peer connections');
 webRTCSession = removeWebRTCPeer(webRTCSession, 'peer-1');
 assert.equal(webRTCSession.peers.length, 0, 'WebRTC peer remove works');
