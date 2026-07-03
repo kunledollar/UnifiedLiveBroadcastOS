@@ -68,6 +68,17 @@ import {
   createEncoderManifest,
   summarizeEncoderHealth,
   EncoderStore,
+  FFmpegEncoderBackend,
+  createFFmpegCommandPlan,
+  validateFFmpegCommandPlan,
+  buildFFmpegArgs,
+  sanitizeFFmpegArgs,
+  detectFFmpegAvailability,
+  parseFFmpegVersion,
+  createFFmpegHealth,
+  summarizeFFmpegHealth,
+  mapEncoderPlanToFFmpegCommand,
+  createFFmpegLogEvent,
   createMultiviewPlan,
   validateMultiviewPlan,
   buildTileLayout,
@@ -346,6 +357,36 @@ assert.equal(encoderIntentResponse.success, true, 'mock execution handles encode
 assert.equal(encoderAdapter.getEncoderStore().listEncoders().length, 1, 'mock encoder execution stores encoder plan');
 encoderStore.clearEncoders();
 assert.equal(encoderStore.listEncoders().length, 0, 'encoder store clears encoders');
+
+const ffmpegPlan = createEncoderPlan({ graph: streamingGraph, videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, outputId: streamingPlan.broadcastOutputPlanId, ...(encoderStreamId ? { streamId: encoderStreamId } : {}), mediaClock: createClock({ frameRate: 30 }), frameId: 84, backend: 'ffmpeg', metadata: { url: 'rtmp://live.example/app?key=super-secret' } });
+const ffmpegBackend = new FFmpegEncoderBackend({ enabled: true, runtimeMode: 'dry_run', ffmpegPath: 'ffmpeg' });
+assert.equal(ffmpegBackend.validate(ffmpegPlan).valid, true, 'ffmpeg backend validates placeholder encoder plan');
+const ffmpegCommandPlan = createFFmpegCommandPlan(ffmpegPlan, { runtimeMode: 'dry_run', ffmpegPath: 'ffmpeg' });
+assert.equal(ffmpegCommandPlan.output.kind, 'rtmp', 'ffmpeg command planner maps streaming plan to RTMP placeholder');
+assert.equal(ffmpegCommandPlan.output.planOnly, true, 'ffmpeg RTMP output remains plan-only');
+assert.equal(validateFFmpegCommandPlan(ffmpegCommandPlan).valid, true, 'ffmpeg command plan validates');
+assert.deepEqual(buildFFmpegArgs(ffmpegCommandPlan), ffmpegCommandPlan.args, 'ffmpeg args are built as safe array');
+let rejectedDangerousArg = false;
+try { sanitizeFFmpegArgs(['-i', 'safe', 'bad;rm -rf']); } catch { rejectedDangerousArg = true; }
+assert.equal(rejectedDangerousArg, true, 'ffmpeg sanitizer rejects shell metacharacters');
+assert.equal(ffmpegCommandPlan.redactedPreview.includes('super-secret'), false, 'ffmpeg command preview redacts secrets');
+const preparedFFmpeg = await ffmpegBackend.prepare(ffmpegPlan);
+assert.equal(preparedFFmpeg.success, true, 'ffmpeg dry-run prepare succeeds without spawning');
+const startedFFmpeg = await ffmpegBackend.start(preparedFFmpeg.session);
+assert.equal(JSON.stringify(startedFFmpeg.warnings).includes('did not spawn'), true, 'ffmpeg dry-run start does not spawn process');
+const disabledFFmpeg = new FFmpegEncoderBackend({ enabled: false, runtimeMode: 'disabled' });
+const disabledPrepared = await disabledFFmpeg.prepare(ffmpegPlan);
+assert.equal(disabledPrepared.session.status, 'unavailable', 'ffmpeg disabled mode reports unavailable and does not spawn');
+const missingFFmpeg = await detectFFmpegAvailability('__ubos_missing_ffmpeg_binary__');
+assert.equal(missingFFmpeg.available, false, 'ffmpeg availability handles missing binary');
+assert.equal(parseFFmpegVersion('ffmpeg version 6.1.1 Copyright'), '6.1.1', 'ffmpeg version parser handles sample output');
+const mappedFFmpegCommand = mapEncoderPlanToFFmpegCommand(ffmpegPlan, { runtimeMode: 'dry_run' });
+assert.equal(mappedFFmpegCommand.encoderPlanId, ffmpegPlan.id, 'encoder plan maps to ffmpeg command plan');
+const ffmpegHealth = createFFmpegHealth({ enabled: true, available: false, processState: 'unavailable' });
+assert.equal(summarizeFFmpegHealth(ffmpegHealth).includes('unavailable'), true, 'ffmpeg health summary works');
+assert.equal(createFFmpegLogEvent({ message: 'stream_key=secret' }).message.includes('secret'), false, 'ffmpeg log event redacts secrets');
+assert.equal(JSON.stringify(ffmpegPlan).includes('ChildProcess'), false, 'production graph-safe encoder plan stores no ffmpeg process handles');
+
 
 const multiviewPlan = createMultiviewPlan({ graph: streamingGraph, preset: 'quad', videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, frameId: 82 });
 assert.equal(multiviewPlan.tiles.length, 4, 'multiview plan creation uses quad preset');
