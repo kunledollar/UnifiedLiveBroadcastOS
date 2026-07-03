@@ -105,6 +105,20 @@ import {
   summarizeConfidenceStatus,
   validateConfidenceSignals,
   MultiviewStore,
+  createWebRTCTransportPlan,
+  validateWebRTCTransportPlan,
+  createWebRTCSession,
+  createWebRTCPeer,
+  addWebRTCPeer,
+  removeWebRTCPeer,
+  updateWebRTCPeerState,
+  createWebRTCMediaTrackRef,
+  summarizeWebRTCHealth,
+  createWebRTCManifest,
+  validateWebRTCSignalMessage,
+  redactWebRTCDiagnostics,
+  createPeerConnection,
+  mapWebRTCErrorToFailure,
   type FrameTickEvent,
 } from './index.js';
 
@@ -1218,3 +1232,30 @@ assert.equal(
   true,
   'orchestration detects circular dependencies',
 );
+
+
+const webRTCPlan = createWebRTCTransportPlan({ sessionId: 'test-session', role: 'host', graphRevision: 8, env: {}, iceServers: [{ kind: 'turn', urls: ['turn:turn.example.invalid'], username: 'placeholder-user', credential: 'super-secret' }] });
+assert.equal(webRTCPlan.enabled, false, 'disabled WebRTC runtime creates metadata-only plan');
+assert.equal(validateWebRTCTransportPlan(webRTCPlan).valid, true, 'WebRTC transport plan validates');
+let webRTCSession = createWebRTCSession(webRTCPlan);
+assert.equal(webRTCSession.status, 'idle', 'disabled WebRTC session remains idle');
+const webRTCPeer = createWebRTCPeer({ id: 'peer-1', role: 'guest' });
+webRTCSession = addWebRTCPeer(webRTCSession, webRTCPeer);
+assert.equal(webRTCSession.peers.length, 1, 'WebRTC peer add works');
+webRTCSession = updateWebRTCPeerState(webRTCSession, 'peer-1', 'connected', { iceState: 'connected', signalingState: 'stable' });
+assert.equal(webRTCSession.peers[0]?.connectionState, 'connected', 'WebRTC peer update works');
+const trackRef = createWebRTCMediaTrackRef({ peerId: 'peer-1', trackId: 'track-audio', kind: 'audio', sourceId: 'guest-source', guestId: 'guest-1', muted: false, enabled: true, connectionState: 'connected', frameId: 1, graphRevision: 8 });
+webRTCSession = { ...webRTCSession, remoteTrackRefs: [trackRef] };
+assert.equal(summarizeWebRTCHealth(webRTCSession).connectedPeers, 1, 'WebRTC health summary counts connected peers');
+assert.equal(createWebRTCManifest(webRTCSession).trackRefs[0]?.trackId, 'track-audio', 'WebRTC manifest stores track metadata refs');
+assert.equal(validateWebRTCSignalMessage({ id: 'sig-1', type: 'offer', sessionId: 'test-session', peerId: 'peer-1', timestamp: '2026-07-01T00:00:00.000Z', payload: { description: { type: 'offer' } } }).valid, true, 'WebRTC signal message validates');
+assert.equal(JSON.stringify(redactWebRTCDiagnostics(webRTCPlan)).includes('super-secret'), false, 'WebRTC TURN credentials are redacted');
+assert.equal(createPeerConnection({ env: { UBOS_ENABLE_WEBRTC_RUNTIME: 'true' } }).errors[0], 'RTCPeerConnection unavailable', 'WebRTC browser API unavailable returns structured error');
+assert.equal(mapWebRTCErrorToFailure({ message: 'ICE disconnected' }).classification, 'ice', 'WebRTC failure mapping classifies ICE errors');
+assert.equal(JSON.stringify(createWebRTCManifest(webRTCSession)).includes('RTCPeerConnection'), false, 'WebRTC graph/replay metadata excludes peer connections');
+webRTCSession = removeWebRTCPeer(webRTCSession, 'peer-1');
+assert.equal(webRTCSession.peers.length, 0, 'WebRTC peer remove works');
+const webRTCMock = new MockMediaExecutionAdapter();
+const webRTCMockResult = webRTCMock.execute({ id: 'webrtc-intent', type: 'ADD_WEBRTC_PEER', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: recordingTransition.nextGraph.metadata.revision, payload: { peerId: 'guest-peer', peerRole: 'guest' } }, recordingTransition.nextGraph);
+assert.equal(webRTCMockResult.success, true, 'mock adapter handles WebRTC execution intent');
+assert.equal(webRTCMock.getWebRTCSession()?.peers.length, 1, 'mock WebRTC execution preserves metadata-only session');
