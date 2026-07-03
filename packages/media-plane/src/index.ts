@@ -1162,6 +1162,7 @@ export function summarizeExecutionHealth(health: MediaExecutionHealth) {
   return `${health.runtimeMode}: ${health.executedIntentCount} executed, ${health.skippedIntentCount} skipped, ${health.failedIntentCount} failed, avg ${health.averageExecutionMs}ms`;
 }
 
+export * from './gpu-runtime/index.js';
 export * from './ffmpeg-runtime/index.js';
 
 export { StreamingPipeline, StreamingSessionManager, StreamingScheduler, StreamingRecovery, StreamingValidator, createStreamingRuntimeManifest, isRealStreamingEnabled, validateStreamingDestination } from './streaming-runtime/index.js';
