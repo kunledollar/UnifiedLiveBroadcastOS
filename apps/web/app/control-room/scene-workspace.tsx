@@ -1550,12 +1550,12 @@ export function SceneWorkspace({
   );
 
   const safeHealthMetrics = useMemo(() => {
-    const visibleRoutes = activeRouteCount;
+    void activeRouteCount;
     return {
-      fps: '60',
-      cpu: `${Math.min(72, 18 + visibleRoutes * 4)}%`,
-      dropped: '0',
-      upload: `${(6.2 + visibleRoutes * 0.4).toFixed(1)} Mbps`,
+      fps: 'unavailable',
+      cpu: 'unavailable',
+      dropped: 'unavailable',
+      upload: 'unavailable',
     };
   }, [activeRouteCount]);
 
@@ -1569,8 +1569,8 @@ export function SceneWorkspace({
         value: safeHealthMetrics.dropped,
         status: 'good' as const,
       },
-      { id: 'recording', label: 'Recording', value: 'UI', status: 'good' as const },
-      { id: 'rtmp', label: 'RTMP', value: 'Ready', status: 'good' as const },
+      { id: 'recording', label: 'Recording', value: 'idle', status: 'warning' as const },
+      { id: 'streaming', label: 'Streaming', value: activeRouteCount > 0 ? 'routes active' : 'not configured', status: 'warning' as const },
       {
         id: 'webrtc',
         label: 'WebRTC',
@@ -1578,7 +1578,7 @@ export function SceneWorkspace({
         status: 'good' as const,
       },
     ],
-    [multiviewActiveRouteCount, safeHealthMetrics],
+    [activeRouteCount, multiviewActiveRouteCount, safeHealthMetrics],
   );
 
   const rightSidebarVisible =
@@ -1869,8 +1869,8 @@ export function SceneWorkspace({
               Launch Day
             </span>
             <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
-              <OperatorStatusBadge label="LIVE" tone="live" pulse />
-              <OperatorStatusBadge label="REC" tone="recording" pulse />
+              <OperatorStatusBadge label={activeRouteCount > 0 ? "LIVE" : "LIVE idle"} tone={activeRouteCount > 0 ? "live" : "neutral"} pulse={activeRouteCount > 0} />
+              <OperatorStatusBadge label="REC idle" tone="neutral" />
             </div>
             <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
               <OperatorMetric label="RUN" value={formatElapsed(elapsedSeconds)} />

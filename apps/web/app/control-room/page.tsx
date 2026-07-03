@@ -10,10 +10,6 @@ import { ProductionTeamPanel } from './_components/production-team-panel';
 
 import { CrossFollowPanel, DestinationPanel, StreamHealthPanel, UnifiedChatPanel } from '@ubos/ui';
 import {
-  ChatModerationStatus,
-  ChatPlatform,
-  DestinationPlatform,
-  DestinationStatus,
   type AudioChannel,
   type ChatMessage,
   type Destination,
@@ -37,84 +33,10 @@ const layouts: SceneLayout[] = [
   'picture_in_picture',
 ];
 
-const destinations: Destination[] = [
-  {
-    id: 'youtube',
-    workspaceId: 'w1',
-    platform: DestinationPlatform.YouTube,
-    label: 'YouTube Main',
-    enabled: true,
-    status: DestinationStatus.Connected,
-  },
-  {
-    id: 'facebook',
-    workspaceId: 'w1',
-    platform: DestinationPlatform.Facebook,
-    label: 'Facebook Page',
-    enabled: true,
-    status: DestinationStatus.Connected,
-  },
-  {
-    id: 'tiktok',
-    workspaceId: 'w1',
-    platform: DestinationPlatform.TikTok,
-    label: 'TikTok Vertical',
-    enabled: false,
-    status: DestinationStatus.Disconnected,
-  },
-  {
-    id: 'rtmp',
-    workspaceId: 'w1',
-    platform: DestinationPlatform.CustomRtmp,
-    label: 'Custom RTMP',
-    enabled: false,
-    status: DestinationStatus.Disconnected,
-  },
-];
-
-const messages: ChatMessage[] = [
-  {
-    id: 'm1',
-    sessionId: 's1',
-    authorName: 'Sam',
-    body: 'Audio sounds clean from here.',
-    platform: ChatPlatform.YouTube,
-    moderationStatus: ChatModerationStatus.Visible,
-    createdAt: '2026-06-29T12:00:00.000Z',
-  },
-  {
-    id: 'm2',
-    sessionId: 's1',
-    authorName: 'Nia',
-    body: 'Vertical crop looks good on mobile.',
-    platform: ChatPlatform.TikTok,
-    moderationStatus: ChatModerationStatus.Visible,
-    createdAt: '2026-06-29T12:01:00.000Z',
-  },
-  {
-    id: 'm3',
-    sessionId: 's1',
-    authorName: 'Leo',
-    body: 'Can you show the dashboard next?',
-    platform: ChatPlatform.Facebook,
-    moderationStatus: ChatModerationStatus.Visible,
-    createdAt: '2026-06-29T12:02:00.000Z',
-  },
-];
-
-const healthMetrics: StreamHealthMetric[] = [
-  { id: 'bitrate', label: 'Bitrate', value: '6,200 kbps', status: 'good', helperText: 'Stable' },
-  { id: 'latency', label: 'Latency', value: '2.4s', status: 'good', helperText: 'Low latency' },
-  { id: 'frames', label: 'Dropped', value: '0', status: 'good', helperText: 'No drops' },
-  { id: 'cpu', label: 'CPU', value: '38%', status: 'warning', helperText: 'Monitor under load' },
-];
-
-const audioChannels: AudioChannel[] = [
-  { id: 'host-mic', label: 'Host Mic', level: 72, muted: false, kind: 'mic' },
-  { id: 'guest-mic', label: 'Guest Mic', level: 64, muted: false, kind: 'guest' },
-  { id: 'system', label: 'System Audio', level: 28, muted: false, kind: 'system' },
-  { id: 'music', label: 'Music Bed', level: 0, muted: true, kind: 'media' },
-];
+const destinations: Destination[] = [];
+const messages: ChatMessage[] = [];
+const healthMetrics: StreamHealthMetric[] = [];
+const audioChannels: AudioChannel[] = [];
 
 const assets: ProductionAsset[] = [
   { id: 'asset-intro', name: 'Intro Sting', type: 'video', status: 'ready' },
@@ -191,7 +113,7 @@ export default async function ControlRoomPage() {
               broadcastId="demo-broadcast"
             />
             <HostDeviceControls />
-            <ProductionTeamPanel />
+            <ProductionTeamPanel currentGraphRevision={persistenceDiagnostics.currentGraphRevision} />
             <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
               <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
                 Destinations
@@ -206,7 +128,7 @@ export default async function ControlRoomPage() {
               </summary>
               <div className="space-y-3 p-3">
                 <UnifiedChatPanel messages={messages} />
-                <CrossFollowPanel platforms={['YouTube', 'TikTok', 'Instagram', 'Facebook']} />
+                <CrossFollowPanel platforms={[]} />
               </div>
             </details>
 

@@ -23,15 +23,14 @@ const presenceTone: Record<string, string> = {
   online: 'bg-emerald-400', active: 'bg-emerald-400', editing: 'bg-cyan-300', reviewing: 'bg-violet-300', presenting: 'bg-rose-300', idle: 'bg-amber-300', disconnected: 'bg-slate-500', offline: 'bg-slate-600', away: 'bg-amber-300', reconnecting: 'bg-amber-300 animate-pulse',
 };
 
-const commandActivity = [
-  'Director CUT to Scene 2',
-  'Producer renamed Scene 3',
-  'Audio muted Music Bed',
-  'Graphics published Lower Third',
-  'Guest Manager admitted Guest 4',
-  'Recording started',
-  'YouTube Main destination enabled',
-];
+type ProductionTeamPanelProps = {
+  currentGraphRevision: number;
+};
+
+function demoModeEnabled() {
+  return process.env.NEXT_PUBLIC_UBOS_DEMO_MODE === 'true' ||
+    process.env.NEXT_PUBLIC_UBOS_SHOW_MOCK_OPERATORS === 'true';
+}
 
 function mockSession() {
   const production = createBroadcastSession({ id: 'demo-broadcast', name: 'UBOS Demo Broadcast', operatorId: 'director', timestamp: '2026-07-01T00:00:00.000Z' });
@@ -93,19 +92,20 @@ function OperatorRow({ operator, session }: { operator: CollaborationOperator; s
   );
 }
 
-export function ProductionTeamPanel() {
-  const session = mockSession();
-  const operators = Object.values(session.operators);
-  const events = mockEvents(session);
+export function ProductionTeamPanel({ currentGraphRevision }: ProductionTeamPanelProps) {
+  const showMockOperators = demoModeEnabled();
+  const session = showMockOperators ? mockSession() : undefined;
+  const operators = session ? Object.values(session.operators) : [];
+  const events = session ? mockEvents(session) : [];
   const connected = operators.filter((operator) => operator.connectionState === 'connected').length;
   const disconnected = operators.length - connected;
-  const highestLag = Math.max(...operators.map((operator) => getRevisionLag(operator, session)));
+  const highestLag = session && operators.length ? Math.max(...operators.map((operator) => getRevisionLag(operator, session))) : 0;
   const activeLocks = operators.reduce((sum, operator) => sum + (operator.lockCount ?? 0), 0);
 
   return (
     <details className="group rounded-2xl border border-cyan-400/20 bg-slate-900/70 shadow-2xl shadow-cyan-950/20" open>
       <summary className="flex cursor-pointer items-center justify-between px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-200 group-open:border-b group-open:border-white/10">
-        <span>Production Team</span><span className="rounded-full bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-200">rev {session.currentGraphRevision}</span>
+        <span>Production Team</span><span className="rounded-full bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-200">rev {session?.currentGraphRevision ?? currentGraphRevision}</span>
       </summary>
       <div className="space-y-3 p-3">
         <div className="grid grid-cols-3 gap-2 text-center text-[10px]">
@@ -113,30 +113,30 @@ export function ProductionTeamPanel() {
           <div className="rounded-lg bg-white/[0.04] p-2"><b className="block text-sm text-emerald-300">{connected}</b>Connected</div>
           <div className="rounded-lg bg-white/[0.04] p-2"><b className="block text-sm text-amber-300">{highestLag}</b>Max Lag</div>
         </div>
-        <div className="space-y-2">{operators.map((operator) => <OperatorRow key={operator.id} operator={operator} session={session} />)}</div>
+        <div className="space-y-2">{session && operators.length ? operators.map((operator) => <OperatorRow key={operator.id} operator={operator} session={session} />) : <p className="rounded-xl border border-dashed border-white/10 p-3 text-sm text-slate-400">No collaboration operators connected. Enable NEXT_PUBLIC_UBOS_SHOW_MOCK_OPERATORS=true or NEXT_PUBLIC_UBOS_DEMO_MODE=true to view local simulation data.</p>}</div>
         <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-1">
           <section className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
             <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Session Dashboard</div>
             <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] text-slate-300">
-              <span>Disconnected</span><b className="text-right">{disconnected}</b><span>Commands</span><b className="text-right">{commandActivity.length}</b><span>Conflicts</span><b className="text-right text-rose-300">1</b><span>Active locks</span><b className="text-right">{activeLocks}</b><span>Pending commands</span><b className="text-right">2</b><span>Uptime</span><b className="text-right">01:00:00</b>
+              <span>Disconnected</span><b className="text-right">{disconnected}</b><span>Commands</span><b className="text-right">{events.filter((event) => event.type === 'COMMAND_BROADCAST').length}</b><span>Conflicts</span><b className="text-right text-rose-300">{events.filter((event) => event.type === 'COMMAND_CONFLICT_CREATED').length}</b><span>Active locks</span><b className="text-right">{activeLocks}</b><span>Pending commands</span><b className="text-right">0</b><span>Uptime</span><b className="text-right">unavailable</b>
             </div>
           </section>
           <section className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
             <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Activity Feed</div>
-            <div className="space-y-1.5">{commandActivity.slice(0, 5).map((item) => <div key={item} className="rounded bg-white/[0.03] px-2 py-1 text-xs text-slate-300">{item}</div>)}</div>
+            <div className="space-y-1.5">{events.length ? events.filter((event) => event.type === 'COMMAND_BROADCAST').slice(0, 5).map((event) => <div key={event.id} className="rounded bg-white/[0.03] px-2 py-1 text-xs text-slate-300">{String(event.payload.message)}</div>) : <p className="text-xs text-slate-500">No collaboration activity recorded.</p>}</div>
           </section>
           <section className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
             <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Collaboration Timeline</div>
-            <div className="space-y-1.5">{events.map((event) => <div key={event.id} className="flex gap-2 text-[11px] text-slate-300"><span className="w-16 shrink-0 text-slate-500">rev {event.graphRevision}</span><span>{String(event.payload.message)}</span></div>)}</div>
+            <div className="space-y-1.5">{events.length ? events.map((event) => <div key={event.id} className="flex gap-2 text-[11px] text-slate-300"><span className="w-16 shrink-0 text-slate-500">rev {event.graphRevision}</span><span>{String(event.payload.message)}</span></div>) : <p className="text-xs text-slate-500">No collaboration timeline events.</p>}</div>
           </section>
           <section className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
             <div className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Notifications</div>
-            <div className="space-y-1.5">{events.slice(0, 4).map((event) => <div key={`note-${event.id}`} className="rounded-lg border border-cyan-300/10 bg-cyan-300/5 px-2 py-1 text-[11px] text-cyan-50">{String(event.payload.message)}</div>)}</div>
+            <div className="space-y-1.5">{events.length ? events.slice(0, 4).map((event) => <div key={`note-${event.id}`} className="rounded-lg border border-cyan-300/10 bg-cyan-300/5 px-2 py-1 text-[11px] text-cyan-50">{String(event.payload.message)}</div>) : <p className="text-xs text-slate-500">No notifications.</p>}</div>
           </section>
           <details className="rounded-xl border border-white/10 bg-slate-950/40 p-3">
             <summary className="cursor-pointer text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">Collaboration Inspector</summary>
             <div className="mt-2 grid gap-1 font-mono text-[10px] text-slate-400">
-              {['Presence', 'Authority', 'Locks', 'Revisions', 'Transport', 'Pending Commands', 'Sync', 'Latest Commands', 'Latest Events', 'Latest Conflicts', 'Recent Activity', 'Connection State'].map((label) => <details key={label} className="rounded bg-white/[0.03] p-1"><summary>{label}</summary><div className="pt-1 text-slate-500">local simulated collaboration diagnostics</div></details>)}
+              {['Presence', 'Authority', 'Locks', 'Revisions', 'Transport', 'Pending Commands', 'Sync', 'Latest Commands', 'Latest Events', 'Latest Conflicts', 'Recent Activity', 'Connection State'].map((label) => <details key={label} className="rounded bg-white/[0.03] p-1"><summary>{label}</summary><div className="pt-1 text-slate-500">No live collaboration diagnostics available</div></details>)}
             </div>
           </details>
         </div>
