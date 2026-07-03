@@ -50,6 +50,8 @@ import {
   prepareEncoder,
   startEncoder,
   summarizeEncoderHealth,
+  createFFmpegStreamingPlan,
+  FFmpegStreamingRuntime,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -277,6 +279,18 @@ function MediaExecutionInspector({
     mediaClock,
     frameId: mediaClock.getCurrentFrame(),
   });
+  const ffmpegStreamingPlan = createFFmpegStreamingPlan({
+    streamingPlan,
+    encoderPlan,
+    enabled: false,
+    runtimeMode: 'dry_run',
+    dryRun: true,
+  });
+  const ffmpegStreamingDiagnostics = new FFmpegStreamingRuntime({
+    enabled: false,
+    runtimeMode: 'dry_run',
+    dryRun: true,
+  }).getDiagnostics();
   const encoderSession = startEncoder(prepareEncoder(encoderPlan).session).session;
   const encoderHealth = summarizeEncoderHealth(encoderSession);
   const latestResult = state.lastResults.at(-1);
@@ -477,9 +491,16 @@ function MediaExecutionInspector({
           <InspectorMetric label="Health" value={streamingHealth.health} />
           <InspectorMetric label="Warnings" value={String(streamingHealth.warnings.length)} />
           <InspectorMetric label="Active Streams" value={String(streamingHealth.activeTargets)} />
+          <InspectorMetric label="Real Output" value={ffmpegStreamingPlan.enabled ? 'enabled' : 'disabled'} />
+          <InspectorMetric label="Destination URL" value={ffmpegStreamingPlan.targets[0]?.sanitizedUrl ?? '—'} />
+          <InspectorMetric label="FFmpeg" value={ffmpegStreamingPlan.ffmpegPath} />
+          <InspectorMetric label="Process" value={String(ffmpegStreamingDiagnostics.processState)} />
+          <InspectorMetric label="Reconnects" value={String(ffmpegStreamingDiagnostics.reconnectAttempts)} />
+          <InspectorMetric label="Manifest" value={ffmpegStreamingDiagnostics.manifestStatus} />
+          <InspectorMetric label="Runtime Health" value={String(ffmpegStreamingDiagnostics.health)} />
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-sky-300/80">
-          Transport-neutral diagnostics only; no sockets, FFmpeg, encoders, packets, HLS, DASH, CDN, or publishing are started.
+          FFmpeg live output diagnostics are sanitized and feature-flagged; dry-run/mock defaults do not publish or retain process handles.
         </p>
       </div>
 

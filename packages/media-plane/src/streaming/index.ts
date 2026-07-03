@@ -46,3 +46,5 @@ export function simulateStreamingHealthChange(s: StreamingSession, destinationId
 export function simulateTransportSwitch(s: StreamingSession, destinationId: string, protocol: StreamingProtocol): StreamingSession { return { ...s, targets: s.targets.map((t)=>t.destinationId === destinationId ? { ...t, transport: { ...t.transport, id: `${t.transport.id}->${protocol}`, switchedFromProtocol: t.transport.protocol, protocol, diagnostics: [...t.transport.diagnostics, `mock transport switch to ${protocol}`] } } : t), updatedAt: now() }; }
 export function simulateDisconnect(s: StreamingSession, destinationId: string) { return failStreaming(s, { code: 'MOCK_DISCONNECT', message: 'Mock destination disconnect', retryable: true, occurredAt: now(), destinationId }); }
 export function simulateDestinationFailure(s: StreamingSession, destinationId: string) { return failStreaming(s, { code: 'MOCK_DESTINATION_FAILURE', message: 'Mock destination failure', retryable: false, occurredAt: now(), destinationId }); }
+
+export * from './ffmpeg/index.js';

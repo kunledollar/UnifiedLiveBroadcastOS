@@ -79,6 +79,21 @@ import {
   summarizeFFmpegHealth,
   mapEncoderPlanToFFmpegCommand,
   createFFmpegLogEvent,
+  FFmpegStreamingRuntime,
+  createFFmpegStreamingPlan,
+  validateFFmpegStreamingPlan,
+  mapStreamingPlanToFFmpegCommand,
+  buildStreamingInputArgs,
+  buildStreamingOutputArgs,
+  sanitizeStreamingUrl,
+  redactStreamingDiagnostics,
+  createFFmpegStreamingManifest,
+  summarizeStreamingRuntimeHealth,
+  mapFFmpegStreamingErrorToFailure,
+  shouldReconnectStream,
+  scheduleStreamReconnect,
+  recordStreamReconnectAttempt,
+  resetStreamReconnectState,
   createMultiviewPlan,
   validateMultiviewPlan,
   buildTileLayout,
@@ -386,6 +401,39 @@ const ffmpegHealth = createFFmpegHealth({ enabled: true, available: false, proce
 assert.equal(summarizeFFmpegHealth(ffmpegHealth).includes('unavailable'), true, 'ffmpeg health summary works');
 assert.equal(createFFmpegLogEvent({ message: 'stream_key=secret' }).message.includes('secret'), false, 'ffmpeg log event redacts secrets');
 assert.equal(JSON.stringify(ffmpegPlan).includes('ChildProcess'), false, 'production graph-safe encoder plan stores no ffmpeg process handles');
+
+const liveStreamingPlan = createFFmpegStreamingPlan({ streamingPlan, encoderPlan: ffmpegPlan, runtimeMode: 'dry_run', dryRun: true, enabled: true, destinationUrls: { streamA: 'rtmp://live.example/app/SUPER_STREAM_KEY' } });
+assert.equal(liveStreamingPlan.targets[0]?.protocol, 'rtmp', 'ffmpeg streaming plan creates RTMP target');
+assert.equal(liveStreamingPlan.redactedPreview.includes('SUPER_STREAM_KEY'), false, 'ffmpeg streaming command preview redacts RTMP stream key');
+assert.equal(sanitizeStreamingUrl('rtmps://live.example/app/SUPER_STREAM_KEY').includes('SUPER_STREAM_KEY'), false, 'RTMPS URL redaction removes stream key');
+assert.equal(sanitizeStreamingUrl('srt://host.example:9000?passphrase=secret').includes('secret'), false, 'SRT passphrase redaction removes secret');
+let rejectedUnsafeStreamingUrl = false;
+try { sanitizeStreamingUrl('rtmp://live.example/app/key;rm -rf'); } catch { rejectedUnsafeStreamingUrl = true; }
+assert.equal(rejectedUnsafeStreamingUrl, true, 'streaming URL sanitizer rejects shell metacharacters');
+assert.equal(validateFFmpegStreamingPlan(liveStreamingPlan).valid, true, 'ffmpeg streaming plan validates');
+assert.equal(mapStreamingPlanToFFmpegCommand(liveStreamingPlan).args.includes('-nostdin'), true, 'streaming command mapping uses safe ffmpeg args array');
+assert.equal(buildStreamingInputArgs(liveStreamingPlan).includes('-i'), true, 'streaming input args include placeholder input');
+assert.equal(buildStreamingOutputArgs(liveStreamingPlan.targets[0]!).includes('flv'), true, 'RTMP output args use flv muxer');
+assert.equal(redactStreamingDiagnostics('publishing rtmp://live.example/app/SUPER_STREAM_KEY').includes('SUPER_STREAM_KEY'), false, 'streaming diagnostics redact URL keys');
+const ffmpegStreamingManifest = createFFmpegStreamingManifest(streamingPlan, liveStreamingPlan);
+assert.equal(ffmpegStreamingManifest.containsStreamKeys, false, 'ffmpeg streaming manifest declares no stream keys');
+assert.equal(JSON.stringify(ffmpegStreamingManifest).includes('SUPER_STREAM_KEY'), false, 'ffmpeg streaming manifest stores no raw stream key');
+const runtime = new FFmpegStreamingRuntime({ enabled: true, runtimeMode: 'dry_run', dryRun: true, ffmpegPath: 'ffmpeg' });
+const runtimePrepared = await runtime.prepareStreamingRuntime(streamingPlan, ffmpegPlan);
+assert.equal(runtimePrepared.success, true, 'ffmpeg streaming runtime prepares in dry-run');
+const runtimeStarted = await runtime.startStreamingRuntime(runtimePrepared.session);
+assert.equal(JSON.stringify(runtimeStarted.warnings).includes('did not spawn'), true, 'ffmpeg streaming dry-run start does not spawn');
+const disabledRuntime = new FFmpegStreamingRuntime({ enabled: false, runtimeMode: 'disabled', dryRun: true });
+const disabledRuntimePrepared = await disabledRuntime.prepareStreamingRuntime(streamingPlan, ffmpegPlan);
+assert.equal(disabledRuntimePrepared.session.transport.processState, 'disabled', 'disabled streaming runtime does not spawn');
+let reconnectState = scheduleStreamReconnect(runtimePrepared.session.transport);
+assert.equal(shouldReconnectStream(reconnectState), true, 'stream reconnect helper permits attempts below max');
+reconnectState = recordStreamReconnectAttempt({ ...reconnectState, reconnectAttempts: 2, maxReconnectAttempts: 3 });
+assert.equal(reconnectState.reconnectState, 'exhausted', 'stream reconnect helper records exhaustion');
+assert.equal(resetStreamReconnectState(reconnectState).reconnectAttempts, 0, 'stream reconnect reset clears attempts');
+assert.equal(mapFFmpegStreamingErrorToFailure({ message: '403 auth denied', retryable: false }).classification, 'auth', 'ffmpeg streaming failure maps auth errors');
+assert.equal(summarizeStreamingRuntimeHealth(runtimePrepared.session.healthDetails).includes('rtmp'), true, 'ffmpeg streaming health summary includes protocol');
+assert.equal(JSON.stringify(runtimePrepared.session).includes('ChildProcess'), false, 'ffmpeg streaming session stores no process handles');
 
 
 const multiviewPlan = createMultiviewPlan({ graph: streamingGraph, preset: 'quad', videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, frameId: 82 });
