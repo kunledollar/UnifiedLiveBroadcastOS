@@ -1173,4 +1173,4 @@ export type { AudioBus as RuntimeAudioBus, AudioChannel as RuntimeAudioChannel, 
 
 export * from './broadcast-orchestrator/index.js';
 
-export * from './high-availability/index.js';
+export * from './hardware-runtime/index.js';

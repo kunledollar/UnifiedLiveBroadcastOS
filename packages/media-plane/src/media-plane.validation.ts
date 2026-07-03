@@ -177,6 +177,15 @@ import {
   createGpuRuntime,
   createGpuContext,
   allocateTexture,
+  HardwareRuntime,
+  DeviceManager,
+  EncoderManager,
+  HardwareValidator,
+  HardwareRecovery,
+  createHardwareDevice,
+  createHardwareFailure,
+  defaultHardwareCapabilities as defaultHardwareCapabilitiesForValidation,
+  isHardwareRuntimeEnabled,
   AudioRuntime,
   createAudioChannel,
   MixMinusManager,
@@ -1629,6 +1638,29 @@ assert.equal(
   'failed',
   'failed GPU runtime reports failed health',
 );
+
+
+const hardwareRuntime = new HardwareRuntime({ UBOS_ENABLE_HARDWARE_RUNTIME: 'true', NEXT_PUBLIC_UBOS_HARDWARE_RUNTIME: 'true' });
+const hardwareDevices = hardwareRuntime.detect();
+assert.equal(hardwareDevices.some((device) => device.api === 'NVENC'), true, 'hardware runtime detects metadata NVENC support');
+assert.equal(hardwareDevices.every((device) => device.capabilities.metadataOnly), true, 'hardware capabilities are metadata-only');
+const hardwareSchedule = hardwareRuntime.schedule(encoderPlan);
+assert.equal(hardwareSchedule.success, true, 'hardware scheduler allocates an encoder session');
+assert.equal(hardwareRuntime.manifest().containsRuntimeHandles, false, 'hardware manifest never serializes runtime handles');
+assert.equal(hardwareRuntime.manifest().replay.some((event) => event.type === 'capability_snapshot'), true, 'hardware replay captures capability snapshots');
+assert.equal(new EncoderManager().selectEncoder(createHardwareDevice({ id: 'nvenc-test', api: 'NVENC' })), 'nvenc', 'hardware encoder manager maps NVENC metadata to encoder runtime');
+const hardwareValidator = new HardwareValidator();
+assert.equal(hardwareValidator.validateDevice(createHardwareDevice({ id: 'bad', vendor: 'Unknown' })).valid, false, 'hardware validator rejects unknown devices');
+assert.equal(hardwareValidator.assertMetadataOnly({ leaked: { runtimeOnly: true, serializable: false } }).valid, false, 'hardware validator rejects serialized runtime handle markers');
+const overloadedDevice = createHardwareDevice({ id: 'overload', api: 'QuickSync', activeEncoders: 3, capabilities: { ...defaultHardwareCapabilitiesForValidation('QuickSync'), encoderCount: 3 } });
+assert.equal(hardwareValidator.validateReservation({ id: 'reservation-over', deviceId: overloadedDevice.id, encoderApi: 'QuickSync', codec: 'h264', priority: 1, budget: { memoryMb: 128, bitrateKbps: 4500, fps: 30 }, createdAt: '2026-07-01T00:00:00.000Z', metadataOnly: true }, overloadedDevice).valid, false, 'hardware validator rejects encoder over allocation');
+const recoveryPlan = new HardwareRecovery().plan(createHardwareFailure({ code: 'DRIVER_RESTART', message: 'driver restarted', ...(hardwareDevices[0]?.id ? { deviceId: hardwareDevices[0].id } : {}) }));
+assert.equal(recoveryPlan.metadataOnly, true, 'hardware recovery plan is metadata-only');
+assert.equal(hardwareRuntime.recover(createHardwareFailure({ code: 'ENCODER_RESTART', message: 'encoder restart', ...(hardwareDevices[0]?.id ? { deviceId: hardwareDevices[0].id } : {}) })).replaySafe, true, 'hardware recovery is replay-safe');
+assert.equal(isHardwareRuntimeEnabled({ UBOS_ENABLE_HARDWARE_RUNTIME: 'true' }), true, 'hardware feature flag enables runtime');
+assert.equal(new DeviceManager().detect({}).some((device) => device.api === 'Software'), true, 'hardware runtime falls back to software encoder when disabled');
+assert.equal(hardwareRuntime.integrateGpu(gpuSession).gpuRuntimeIntegrated, true, 'hardware runtime integrates GPU runtime metadata');
+assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('hardware-device'), false, 'production graph remains free of hardware runtime devices');
 
 const audioChannel = createAudioChannel({ id: 'ch-host', sourceId: 'host-mic', routes: ['bus:program'] });
 const audioRuntime = new AudioRuntime({ UBOS_ENABLE_REAL_AUDIO: 'true', NEXT_PUBLIC_UBOS_REAL_AUDIO: 'true' });
