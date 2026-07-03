@@ -119,6 +119,22 @@ import {
   redactWebRTCDiagnostics,
   createPeerConnection,
   mapWebRTCErrorToFailure,
+  createProductionRuntime,
+  createProductionRuntimeSession,
+  registerRuntimeSubsystem,
+  unregisterRuntimeSubsystem,
+  startProductionRuntime,
+  stopProductionRuntime,
+  pauseProductionRuntime,
+  resumeProductionRuntime,
+  restartRuntimeSubsystem,
+  failRuntimeSubsystem,
+  summarizeProductionRuntimeHealth,
+  createProductionRuntimeManifest,
+  mapRuntimeFailure,
+  redactRuntimeDiagnostics,
+  RuntimeSupervisor,
+  type RuntimeSubsystem,
   type FrameTickEvent,
 } from './index.js';
 
@@ -1309,3 +1325,39 @@ cancelBrowserFrame(frameToken);
 assert.equal(typeof frameToken, 'number', 'browser renderer mock frame request works without browser RAF');
 assert.equal(JSON.stringify(brPlan).includes('HTMLElement'), false, 'browser renderer graph plan stores no DOM elements');
 assert.equal(JSON.stringify(brPlan).includes('MediaStream'), false, 'browser renderer graph plan stores no media streams');
+
+
+const productionRuntimeValidation = createProductionRuntime({ id: 'runtime-validation', latestFrameId: 101, latestGraphRevision: 55 });
+const runtimeSession = createProductionRuntimeSession({ runtimeId: productionRuntimeValidation.id, broadcastSessionId: 'test-session' });
+assert.equal(runtimeSession.state, 'idle', 'production runtime session defaults to idle');
+const encoderSubsystem: RuntimeSubsystem = { id: 'encoder-subsystem', type: 'encoder', label: 'Encoder', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { pid: 10, safe: 'ok', ffmpegProcess: { unsafe: true } }, latestFrameId: 101, latestGraphRevision: 55 };
+let supervisedRuntime = registerRuntimeSubsystem(productionRuntimeValidation, encoderSubsystem);
+assert.equal(supervisedRuntime.subsystems.length, 1, 'runtime subsystem registration works');
+assert.equal(JSON.stringify(supervisedRuntime.subsystems[0]?.diagnostics).includes('ffmpegProcess'), false, 'runtime diagnostics redacts process handles');
+assert.equal(startProductionRuntime(supervisedRuntime).runtimeState, 'running', 'production runtime starts');
+assert.equal(pauseProductionRuntime(supervisedRuntime).runtimeState, 'ready', 'production runtime pauses to ready');
+assert.equal(resumeProductionRuntime(supervisedRuntime).runtimeState, 'running', 'production runtime resumes');
+assert.equal(stopProductionRuntime(supervisedRuntime).runtimeState, 'stopped', 'production runtime stops');
+const optionalStreaming: RuntimeSubsystem = { id: 'streaming-subsystem', type: 'streaming', label: 'Streaming', required: false, state: 'degraded', health: 'degraded', degradedModes: ['output_disabled_mode'], diagnostics: { status: 'offline', streamHandle: 'unsafe' } };
+supervisedRuntime = registerRuntimeSubsystem(supervisedRuntime, optionalStreaming);
+assert.equal(summarizeProductionRuntimeHealth(supervisedRuntime).health, 'degraded', 'optional degraded subsystem degrades runtime health');
+assert.equal(summarizeProductionRuntimeHealth(supervisedRuntime).degradedModes[0], 'output_disabled_mode', 'runtime health reports degraded modes');
+const runtimeFailure = mapRuntimeFailure({ subsystem: optionalStreaming, message: 'stream offline', graphRevision: 55, frameId: 101 });
+assert.equal(runtimeFailure.ubosFailure.category, 'STREAMING_FAILURE', 'runtime failure maps to UBOS failure model');
+assert.equal(failRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem', 'stream offline').runtimeState, 'degraded', 'optional runtime subsystem failure is degraded');
+assert.equal(restartRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem').runtimeState, 'recovering', 'runtime subsystem restart enters recovering');
+const productionRuntimeManifest = createProductionRuntimeManifest(supervisedRuntime);
+assert.equal(productionRuntimeManifest.containsRuntimeHandles, false, 'production runtime manifest declares no runtime handles');
+assert.equal(JSON.stringify(productionRuntimeManifest).includes('streamHandle'), false, 'production runtime manifest excludes handles');
+assert.equal(JSON.stringify(redactRuntimeDiagnostics({ mediaStream: 'unsafe', latestGraphRevision: 55, status: 'ok' })).includes('unsafe'), false, 'runtime diagnostics redaction removes media handles');
+supervisedRuntime = unregisterRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem');
+assert.equal(supervisedRuntime.subsystems.some((subsystem) => subsystem.id === 'streaming-subsystem'), false, 'runtime subsystem unregister works');
+const supervisor = new RuntimeSupervisor(supervisedRuntime);
+const buildRuntimeResult = supervisor.handleIntent({ id: 'runtime-intent-build', type: 'BUILD_PRODUCTION_RUNTIME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 55, payload: {} });
+assert.equal(buildRuntimeResult.success, true, 'mock production runtime build intent handled');
+const reportRuntimeResult = supervisor.handleIntent({ id: 'runtime-intent-report', type: 'REPORT_PRODUCTION_RUNTIME_HEALTH', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 55, payload: {} });
+assert.equal(reportRuntimeResult.errors.length, 0, 'mock runtime health intent handled');
+const runtimeMock = new MockMediaExecutionAdapter();
+const runtimeMockResult = runtimeMock.execute({ id: 'runtime-intent-start', type: 'START_PRODUCTION_RUNTIME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: recordingTransition.nextGraph.metadata.revision, payload: {} }, recordingTransition.nextGraph);
+assert.equal(runtimeMockResult.success, true, 'mock adapter accepts production runtime execution intent');
+assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('ffmpegProcess'), false, 'production graph contains no runtime process handles');

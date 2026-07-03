@@ -52,6 +52,8 @@ import {
   summarizeEncoderHealth,
   createFFmpegStreamingPlan,
   FFmpegStreamingRuntime,
+  RuntimeSupervisor,
+  summarizeProductionRuntimeHealth,
 } from '@ubos/media-plane';
 import {
   SceneType,
@@ -177,6 +179,21 @@ function MediaExecutionInspector({
   const webRTC = webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
   const webRTCDiagnostics = webRTC?.getDiagnostics();
   const state = engine.getExecutionState();
+  const productionRuntime = useMemo(() => {
+    const supervisor = new RuntimeSupervisor();
+    const base = { required: false, state: 'ready' as const, health: 'healthy' as const, degradedModes: [], diagnostics: {} };
+    supervisor.register({ ...base, id: 'recording-runtime', type: 'recording', label: 'Recording Runtime', health: graph.recording.status === 'recording' ? 'healthy' : 'degraded', degradedModes: graph.recording.status === 'recording' ? [] : ['diagnostics_only_mode'] });
+    supervisor.register({ ...base, id: 'streaming-runtime', type: 'streaming', label: 'Streaming Runtime', health: Object.values(graph.destinations).some((destination) => destination.enabled) ? 'healthy' : 'degraded', degradedModes: Object.values(graph.destinations).some((destination) => destination.enabled) ? [] : ['output_disabled_mode'] });
+    supervisor.register({ ...base, id: 'encoder-runtime', type: 'encoder', label: 'Encoder Layer' });
+    supervisor.register({ ...base, id: 'ffmpeg-runtime', type: 'ffmpeg', label: 'FFmpeg Runtime' });
+    supervisor.register({ ...base, id: 'webrtc-runtime', type: 'webrtc', label: 'WebRTC Runtime' });
+    supervisor.register({ ...base, id: 'browser-renderer-runtime', type: 'browser_renderer', label: 'Browser Renderer Runtime' });
+    supervisor.register({ ...base, id: 'gpu-runtime', type: 'gpu', label: 'GPU Runtime' });
+    supervisor.register({ ...base, id: 'output-runtime', type: 'output', label: 'Output Engine' });
+    supervisor.start();
+    return supervisor.getRuntime();
+  }, [graph]);
+  const productionRuntimeHealth = summarizeProductionRuntimeHealth(productionRuntime);
   const orchestration = state.orchestrationDiagnostics;
   const programComposition = graph.program.sceneId
     ? createSceneCompositionFromGraph(graph, graph.program.sceneId, { target: 'program' })
@@ -406,6 +423,20 @@ function MediaExecutionInspector({
         <InspectorMetric label="Dry Runs" value={String(dryRunCount)} />
         <InspectorMetric label="Avg Latency" value={`${health.averageExecutionMs}ms`} />
         <InspectorMetric label="Latest Intent" value={state.lastIntents.at(-1)?.type ?? '—'} />
+        <InspectorMetric label="Runtime State" value={productionRuntime.state} />
+        <InspectorMetric label="Runtime Active" value={String(productionRuntimeHealth.activeSubsystems)} />
+        <InspectorMetric label="Runtime Health" value={productionRuntimeHealth.health} />
+        <InspectorMetric label="Recording Runtime" value={String(productionRuntimeHealth.subsystemHealth.recording ?? '—')} />
+        <InspectorMetric label="Streaming Runtime" value={String(productionRuntimeHealth.subsystemHealth.streaming ?? '—')} />
+        <InspectorMetric label="Encoder Runtime" value={String(productionRuntimeHealth.subsystemHealth.encoder ?? '—')} />
+        <InspectorMetric label="FFmpeg Runtime" value={String(productionRuntimeHealth.subsystemHealth.ffmpeg ?? '—')} />
+        <InspectorMetric label="WebRTC Runtime" value={String(productionRuntimeHealth.subsystemHealth.webrtc ?? '—')} />
+        <InspectorMetric label="Browser Runtime" value={String(productionRuntimeHealth.subsystemHealth.browser_renderer ?? '—')} />
+        <InspectorMetric label="GPU Runtime" value={String(productionRuntimeHealth.subsystemHealth.gpu ?? '—')} />
+        <InspectorMetric label="Runtime Degraded" value={productionRuntimeHealth.degradedModes.join(', ') || '—'} />
+        <InspectorMetric label="Runtime Failure" value={productionRuntimeHealth.latestFailure?.code ?? '—'} />
+        <InspectorMetric label="Runtime Frame" value={String(productionRuntimeHealth.latestFrameId ?? '—')} />
+        <InspectorMetric label="Runtime Graph Rev" value={String(productionRuntimeHealth.latestGraphRevision ?? state.currentGraphRevision)} />
         <InspectorMetric
           label="Program Composition"
           value={
