@@ -61,6 +61,15 @@ import {
   createWebRTCManifest,
   type WebRTCSession,
 } from './webrtc-runtime/index.js';
+import {
+  createGpuRuntime,
+  createGpuSession,
+  createGpuPipeline,
+  createGpuSurface,
+  createGpuManifest,
+  summarizeGpuHealth,
+  type GpuSession,
+} from './gpu-runtime/index.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
@@ -173,7 +182,12 @@ export type MediaExecutionIntentType =
   | 'FINALIZE_RECORDING'
   | 'ARCHIVE_RECORDING'
   | 'DELETE_RECORDING'
-  | 'REPORT_RECORDING_HEALTH';
+  | 'REPORT_RECORDING_HEALTH'
+  | 'START_GPU_RUNTIME'
+  | 'STOP_GPU_RUNTIME'
+  | 'RESTART_GPU_RUNTIME'
+  | 'REPORT_GPU_RUNTIME'
+  | 'FAIL_GPU_RUNTIME';
 
 export type ExecutionRuntimeMode = 'disabled' | 'dry_run' | 'mock_live' | 'live_ready';
 export type AdapterStatus = 'enabled' | 'disabled' | 'healthy' | 'unhealthy' | 'unavailable';
@@ -200,7 +214,7 @@ const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_P
 const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
 const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_MULTIVIEW_PLAN','UPDATE_MULTIVIEW','RENDER_MULTIVIEW','VALIDATE_MULTIVIEW','CREATE_CONFIDENCE_MONITOR','UPDATE_CONFIDENCE_STATUS','BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','BUILD_BROWSER_RENDER_PLAN','PREPARE_BROWSER_RENDERER','UPDATE_RENDER_SURFACE','UPDATE_RENDER_LAYER','REMOVE_RENDER_LAYER','REQUEST_BROWSER_FRAME','REPORT_RENDERER_HEALTH','FAIL_BROWSER_RENDERER','APPLY_LAYOUT']);
 const webrtcIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_WEBRTC_TRANSPORT_PLAN','PREPARE_WEBRTC_SESSION','START_WEBRTC_SESSION','STOP_WEBRTC_SESSION','ADD_WEBRTC_PEER','REMOVE_WEBRTC_PEER','UPDATE_WEBRTC_PEER','ATTACH_WEBRTC_TRACK','DETACH_WEBRTC_TRACK','HANDLE_WEBRTC_SIGNAL','REPORT_WEBRTC_HEALTH','FAIL_WEBRTC_SESSION']);
-const productionRuntimeIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_PRODUCTION_RUNTIME','START_PRODUCTION_RUNTIME','STOP_PRODUCTION_RUNTIME','PAUSE_PRODUCTION_RUNTIME','RESUME_PRODUCTION_RUNTIME','RESTART_RUNTIME_SUBSYSTEM','REPORT_PRODUCTION_RUNTIME_HEALTH','FAIL_PRODUCTION_RUNTIME','START_FFMPEG_RUNTIME','STOP_FFMPEG_RUNTIME','RESTART_FFMPEG_RUNTIME','REPORT_FFMPEG_RUNTIME','FAIL_FFMPEG_RUNTIME']);
+const productionRuntimeIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_PRODUCTION_RUNTIME','START_PRODUCTION_RUNTIME','STOP_PRODUCTION_RUNTIME','PAUSE_PRODUCTION_RUNTIME','RESUME_PRODUCTION_RUNTIME','RESTART_RUNTIME_SUBSYSTEM','REPORT_PRODUCTION_RUNTIME_HEALTH','FAIL_PRODUCTION_RUNTIME','START_FFMPEG_RUNTIME','STOP_FFMPEG_RUNTIME','RESTART_FFMPEG_RUNTIME','REPORT_FFMPEG_RUNTIME','FAIL_FFMPEG_RUNTIME','START_GPU_RUNTIME','STOP_GPU_RUNTIME','RESTART_GPU_RUNTIME','REPORT_GPU_RUNTIME','FAIL_GPU_RUNTIME']);
 const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION','BUILD_STREAMING_PLAN','PREPARE_STREAMING','CONNECT_STREAM','PAUSE_STREAM','RESUME_STREAM','FAIL_STREAM','VALIDATE_STREAM_PLAN','BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH','CREATE_RECORDING','PREPARE_RECORDING','PAUSE_RECORDING','RESUME_RECORDING','SPLIT_RECORDING','FINALIZE_RECORDING','ARCHIVE_RECORDING','DELETE_RECORDING','REPORT_RECORDING_HEALTH']);
 const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
 function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
@@ -564,6 +578,7 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   private readonly encoderStore = new EncoderStore();
   private encoderSession?: EncoderSession;
   private webrtcSession?: WebRTCSession;
+  private gpuSession?: GpuSession;
   getVideoRouteStore() {
     return this.videoRouteStore;
   }
@@ -581,6 +596,9 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
   }
   getWebRTCSession() {
     return this.webrtcSession;
+  }
+  getGpuSession() {
+    return this.gpuSession;
   }
   getLatestAudioRouteGraph() {
     const plan = this.audioRouteStore.getRoutePlan();
@@ -764,6 +782,18 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
 
     const productionRuntimeIntentTypes: MediaExecutionIntentType[] = ['BUILD_PRODUCTION_RUNTIME','START_PRODUCTION_RUNTIME','STOP_PRODUCTION_RUNTIME','PAUSE_PRODUCTION_RUNTIME','RESUME_PRODUCTION_RUNTIME','RESTART_RUNTIME_SUBSYSTEM','REPORT_PRODUCTION_RUNTIME_HEALTH','FAIL_PRODUCTION_RUNTIME'];
     if (!shouldFail && productionRuntimeIntentTypes.includes(intent.type)) warnings.push(`Production runtime intent ${intent.type} accepted by mock supervisor boundary`);
+
+    const gpuRuntimeIntentTypes: MediaExecutionIntentType[] = ['START_GPU_RUNTIME','STOP_GPU_RUNTIME','RESTART_GPU_RUNTIME','REPORT_GPU_RUNTIME','FAIL_GPU_RUNTIME'];
+    if (!shouldFail && gpuRuntimeIntentTypes.includes(intent.type)) {
+      const pipeline = createGpuPipeline({ id: String(intent.payload.pipelineId ?? 'gpu-pipeline:mock'), graphRevision: graph?.metadata.revision ?? intent.graphRevision });
+      const surface = createGpuSurface({ id: String(intent.payload.surfaceId ?? 'gpu-surface:preview'), graphRevision: graph?.metadata.revision ?? intent.graphRevision });
+      const session = this.gpuSession ?? createGpuSession({ pipeline, surfaces: [surface] });
+      const result = createGpuRuntime(session).execute(intent);
+      this.gpuSession = result.manifest.diagnostics.health.state === 'shutdown' ? { ...session, state: 'shutdown' } : { ...session, state: result.state };
+      const manifest = createGpuManifest(this.gpuSession);
+      warnings.push(summarizeGpuHealth(this.gpuSession).warnings[0] ?? `GPU runtime ${manifest.diagnostics.runtimeState} (${manifest.diagnostics.backend})`);
+      if (!result.success) warnings.push(...result.errors);
+    }
 
     const encoderIntentTypes: MediaExecutionIntentType[] = [
       'BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH',
