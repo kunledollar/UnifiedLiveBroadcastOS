@@ -6,6 +6,7 @@ export type NavItemId =
   | 'layouts'
   | 'replay'
   | 'outputs'
+  | 'devices'
   | 'settings';
 
 export type DockTabId =
@@ -28,4 +29,5 @@ export type OperationsTabId =
   | 'logs'
   | 'ai'
   | 'team'
-  | 'automation';
+  | 'automation'
+  | 'devices';

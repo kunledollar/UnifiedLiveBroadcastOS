@@ -166,6 +166,17 @@ export const workspaceProfiles: Record<WorkspaceProfile['id'], WorkspaceProfile>
     defaultNavItem: 'outputs',
     programFlexWeight: 45,
   },
+  'device-operator': {
+    id: 'device-operator',
+    label: 'Device Manager',
+    description: 'Broadcast devices, protocols, routing matrix, and plugin integrations',
+    centerLayout: 'devices-focus',
+    defaultViewMode: 'program',
+    defaultOperationsTab: 'devices',
+    defaultDockTab: 'audio',
+    defaultNavItem: 'devices',
+    programFlexWeight: 45,
+  },
   custom: {
     id: 'custom',
     label: 'Custom Workspace',

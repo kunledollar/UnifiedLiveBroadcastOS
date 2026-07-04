@@ -12,6 +12,7 @@ const navItems: Array<{ id: NavItemId; label: string; icon: string }> = [
   { id: 'layouts', label: 'Layouts', icon: '▤' },
   { id: 'replay', label: 'Replay', icon: '↺' },
   { id: 'outputs', label: 'Outputs', icon: '⇪' },
+  { id: 'devices', label: 'Devices', icon: '⎈' },
   { id: 'settings', label: 'Settings', icon: '⚙' },
 ];
 
