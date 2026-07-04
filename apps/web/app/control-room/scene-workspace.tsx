@@ -1040,7 +1040,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     description: 'Balanced control room',
     selectedPreset: 'default',
     panelState: allExpanded(),
-    sizes: { left: 288, center: 720, right: 352, dock: 176 },
+    sizes: { left: 288, center: 640, right: 352, dock: 220 },
     viewMode: 'dual',
   },
   broadcast: {
@@ -1049,7 +1049,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     description: 'Program emphasis',
     selectedPreset: 'broadcast',
     panelState: { ...allExpanded(), chat: 'collapsed' },
-    sizes: { left: 304, center: 900, right: 384, dock: 184 },
+    sizes: { left: 304, center: 720, right: 384, dock: 240 },
     viewMode: 'program',
   },
   compact: {
@@ -1058,7 +1058,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     description: 'Laptop friendly',
     selectedPreset: 'compact',
     panelState: { ...allExpanded(), sources: 'collapsed', chat: 'hidden', outputs: 'hidden' },
-    sizes: { left: 232, center: 620, right: 280, dock: 132 },
+    sizes: { left: 232, center: 560, right: 280, dock: 180 },
     viewMode: 'compact',
   },
   interview: {
@@ -1067,7 +1067,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     description: 'Guest manager focus',
     selectedPreset: 'interview',
     panelState: { ...allExpanded(), broadcastHealth: 'collapsed', outputs: 'hidden' },
-    sizes: { left: 272, center: 760, right: 420, dock: 160 },
+    sizes: { left: 272, center: 640, right: 420, dock: 220 },
     viewMode: 'dual',
   },
   streaming: {
@@ -1076,7 +1076,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     description: 'Chat and health focus',
     selectedPreset: 'streaming',
     panelState: { ...allExpanded(), outputs: 'collapsed' },
-    sizes: { left: 260, center: 780, right: 400, dock: 168 },
+    sizes: { left: 260, center: 640, right: 400, dock: 220 },
     viewMode: 'vertical',
   },
 };
@@ -1331,11 +1331,11 @@ function createProductionGraphSessionFromScenes(input: {
 }
 
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-1 lg:grid-cols-[minmax(0,3fr)_minmax(13rem,1fr)] xl:grid-cols-[minmax(0,3fr)_minmax(14rem,1fr)]',
-  program: 'grid min-h-0 gap-1 lg:grid-cols-[minmax(0,3.4fr)_minmax(12rem,0.9fr)]',
-  vertical: 'grid min-h-0 gap-1 md:grid-cols-1 lg:grid-cols-[minmax(0,3fr)_minmax(13rem,1fr)]',
-  compact: 'grid min-h-0 gap-1 md:grid-cols-[minmax(0,3fr)_minmax(12rem,1fr)]',
-  multiview: 'grid min-h-0 gap-1.5',
+  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]',
+  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.12fr)]',
+  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]',
+  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]',
+  multiview: 'grid min-h-0 gap-3',
 };
 
 function ViewModeSelector({
@@ -1747,7 +1747,7 @@ export function SceneWorkspace({
       className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
       style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
-      <aside className="min-h-0 space-y-3 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
+      <aside className="min-h-0 space-y-4 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
         <div className="rounded-xl border border-white/10 bg-slate-900/75 p-2">
           <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
             Panel Visibility
@@ -2004,12 +2004,10 @@ export function SceneWorkspace({
           onChange={(e) => resizeWorkspace('left', Number(e.target.value))}
         />
       </aside>
-      <section className="flex min-h-0 flex-col gap-1 overflow-hidden">
-        <div className="shrink-0 border-b border-white/10 bg-slate-950/95 px-2 py-1 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
+      <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
+        <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/95 px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
           <div className="flex min-h-8 items-center gap-1 overflow-x-auto whitespace-nowrap">
-            <span className="hidden max-w-[10rem] truncate text-xs font-bold text-white md:inline">
-              Launch Day
-            </span>
+            <span className="inline-flex items-center gap-2 pr-2 text-sm font-black uppercase tracking-[0.18em] text-white"><span className="grid h-7 w-7 place-items-center rounded-lg bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25">UB</span><span className="hidden max-w-[12rem] truncate md:inline">Launch Day</span></span>
             <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
               <OperatorStatusBadge label={activeRouteCount > 0 ? "LIVE" : "LIVE idle"} tone={activeRouteCount > 0 ? "live" : "neutral"} pulse={activeRouteCount > 0} />
               <OperatorStatusBadge label="REC idle" tone="neutral" />
@@ -2218,6 +2216,39 @@ export function SceneWorkspace({
             />
           </label>
         </div>
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {viewMode === 'multiview' ? (
+            <ProductionMultiview
+              programScene={programScene}
+              previewScene={previewScene}
+              routes={mediaRoutes}
+              layoutPreset={layoutPreset}
+              channels={channels}
+              healthMetrics={multiviewHealthMetrics}
+              guests={guests}
+              preset="broadcast"
+            />
+          ) : (
+            <div className={`min-h-[22rem] flex-1 ${monitorDeckClasses[viewMode]}`}>
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-emerald-300/20">
+                <PreviewMonitor
+                  scene={previewScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                />
+              </div>
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-red-400/25">
+                <ProgramPreview
+                  scene={programScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                />
+              </div>
+            </div>
+          )}
+        </div>
         <ProductionSwitcher
           productionState={productionState}
           programSceneName={programScene.name}
@@ -2258,39 +2289,6 @@ export function SceneWorkspace({
           engine={mediaExecutionEngine}
           graph={productionGraphSession.graph}
         />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          {viewMode === 'multiview' ? (
-            <ProductionMultiview
-              programScene={programScene}
-              previewScene={previewScene}
-              routes={mediaRoutes}
-              layoutPreset={layoutPreset}
-              channels={channels}
-              healthMetrics={multiviewHealthMetrics}
-              guests={guests}
-              preset="broadcast"
-            />
-          ) : (
-            <div className={`min-h-0 flex-1 ${monitorDeckClasses[viewMode]}`}>
-              <div className="flex min-h-0 min-w-0 flex-col">
-                <ProgramPreview
-                  scene={programScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                />
-              </div>
-              <div className="flex min-h-0 min-w-0 flex-col">
-                <PreviewMonitor
-                  scene={previewScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                />
-              </div>
-            </div>
-          )}
-        </div>
         {isPanelVisible('productionDock') ? (
           <div className="shrink-0 overflow-y-auto" style={{ maxHeight: workspace.sizes.dock }}>
             {isPanelExpanded('productionDock') ? (
