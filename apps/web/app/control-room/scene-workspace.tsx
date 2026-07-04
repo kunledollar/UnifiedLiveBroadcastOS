@@ -208,6 +208,16 @@ import {
   getProductionSummaryLines,
   getSuggestedRecommendations,
 } from './ai';
+import {
+  DistributionWorkspace,
+  createInitialDistributionState,
+  distributionReducer,
+  outputHealthSummaryLabel,
+} from './distribution';
+import {
+  createDistributionManifest,
+  createSampleOutputHealth,
+} from '@ubos/shared';
 
 function MediaStreamPreview({
   stream,
@@ -2117,6 +2127,16 @@ export function SceneWorkspace({
       riskSignals: createSampleAIRiskSignals(),
     }),
   );
+  const distributionManifest = useMemo(() => createDistributionManifest(), []);
+  const [distributionState, dispatchDistribution] = useReducer(
+    distributionReducer,
+    createInitialDistributionState({
+      destinations: distributionManifest.destinations,
+      streamProfiles: distributionManifest.streamProfiles,
+      outputRoutes: distributionManifest.outputRoutes,
+      outputHealth: createSampleOutputHealth(distributionManifest.destinations),
+    }),
+  );
   const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
   ]);
@@ -2299,6 +2319,10 @@ export function SceneWorkspace({
     />
   );
 
+  const distributionWorkspaceContent = (
+    <DistributionWorkspace state={distributionState} dispatch={dispatchDistribution} />
+  );
+
   const replayWorkspacePanels = useMemo(
     () => ({
       clipBrowser: (
@@ -2417,6 +2441,8 @@ export function SceneWorkspace({
         aiState,
         onAIDispatch: dispatchAI,
         aiSummaryLines,
+        distributionState,
+        onDistributionDispatch: dispatchDistribution,
       }),
     [
       broadcastId,
@@ -2444,6 +2470,7 @@ export function SceneWorkspace({
       automationState,
       aiState,
       aiSummaryLines,
+      distributionState,
     ],
   );
 
@@ -3062,6 +3089,10 @@ export function SceneWorkspace({
         upload={safeHealthMetrics.upload}
         automationModeLabel={automationModeLabel(automationState.automationMode)}
         aiStatusLabel={aiStatusLabel(aiState.assistant)}
+        outputHealthLabel={outputHealthSummaryLabel({
+          destinations: distributionState.destinations,
+          health: distributionState.outputHealth,
+        })}
         toolsMenu={toolsMenu}
       />
 
@@ -3119,6 +3150,7 @@ export function SceneWorkspace({
               collaborationContent={collaborationWorkspaceContent}
               automationContent={automationWorkspaceContent}
               aiContent={aiWorkspaceContent}
+              distributionContent={distributionWorkspaceContent}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>
