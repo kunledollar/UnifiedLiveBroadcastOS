@@ -7,6 +7,7 @@ import { MediaRoutingPanel } from './media-routing-panel';
 import { ControlRoomRealtime } from './_components/control-room-realtime';
 import { HostDeviceControls } from './_components/host-device-controls';
 import { ProductionTeamPanel } from './_components/production-team-panel';
+import { RightSidebarTabs } from './right-sidebar-tabs';
 
 import { CrossFollowPanel, DestinationPanel, StreamHealthPanel, UnifiedChatPanel } from '@ubos/ui';
 import {
@@ -45,7 +46,6 @@ const assets: ProductionAsset[] = [
   { id: 'asset-logo', name: 'Sponsor Bug', type: 'overlay', status: 'queued' },
 ];
 
-
 function loadPersistenceDiagnostics() {
   const graph = createInitialProductionGraph({
     broadcastSessionId: 'demo-broadcast',
@@ -55,9 +55,15 @@ function loadPersistenceDiagnostics() {
   });
   const repositories = createInMemoryPersistentBroadcastRepositories();
   const session = repositories.sessions.upsert(
-    createBroadcastSessionRecord({ graph, ownerOperatorId: 'director', activeOperatorIds: ['director'] }),
+    createBroadcastSessionRecord({
+      graph,
+      ownerOperatorId: 'director',
+      activeOperatorIds: ['director'],
+    }),
   );
-  const latestSnapshot = repositories.snapshots.append(createGraphSnapshot(graph, { reason: 'manual' }));
+  const latestSnapshot = repositories.snapshots.append(
+    createGraphSnapshot(graph, { reason: 'manual' }),
+  );
   const recoveryPlan = getRecoveryPlan({
     sessionId: session.id,
     currentRevision: session.currentGraphRevision,
@@ -94,68 +100,107 @@ export default async function ControlRoomPage() {
   return (
     <main className="min-h-screen overflow-y-auto xl:h-screen xl:overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-1.5 text-slate-100 md:p-2">
       <div className="h-full min-h-0 w-full">
-        <div className="grid min-h-0 gap-2 xl:h-full xl:grid-cols-[18rem_minmax(0,1fr)_21rem] 2xl:grid-cols-[20rem_minmax(0,1fr)_24rem]">
-          <SceneWorkspace
-            initialScenes={scenes}
-            initialProductionState={productionState}
-            layouts={layouts}
-            channels={audioChannels}
-            assets={assets}
-            mediaRoutes={mediaRoutes}
-            guests={guests}
-          />
-          <aside className="min-h-0 space-y-3 overflow-y-auto pr-1 max-xl:max-h-[42rem]">
-            <GuestManagement guests={guests} invites={invites} broadcastId="demo-broadcast" />
-            <MediaRoutingPanel
-              guests={guests}
-              routes={mediaRoutes}
-              scenes={scenes}
-              broadcastId="demo-broadcast"
+        <SceneWorkspace
+          initialScenes={scenes}
+          initialProductionState={productionState}
+          layouts={layouts}
+          channels={audioChannels}
+          assets={assets}
+          mediaRoutes={mediaRoutes}
+          guests={guests}
+          rightSidebar={
+            <RightSidebarTabs
+              tabs={[
+                {
+                  id: 'guests',
+                  label: 'Guests',
+                  content: (
+                    <GuestManagement
+                      guests={guests}
+                      invites={invites}
+                      broadcastId="demo-broadcast"
+                    />
+                  ),
+                },
+                {
+                  id: 'outputs',
+                  label: 'Outputs',
+                  content: (
+                    <div className="space-y-3">
+                      <MediaRoutingPanel
+                        guests={guests}
+                        routes={mediaRoutes}
+                        scenes={scenes}
+                        broadcastId="demo-broadcast"
+                      />
+                      <DestinationPanel destinations={destinations} />
+                    </div>
+                  ),
+                },
+                {
+                  id: 'chat',
+                  label: 'Chat',
+                  content: (
+                    <div className="space-y-3">
+                      <UnifiedChatPanel messages={messages} />
+                      <CrossFollowPanel platforms={[]} />
+                    </div>
+                  ),
+                },
+                { id: 'audio', label: 'Audio', content: <HostDeviceControls /> },
+                {
+                  id: 'health',
+                  label: 'Health',
+                  content: (
+                    <div className="space-y-3">
+                      <ControlRoomRealtime
+                        workspaceId="demo-workspace"
+                        broadcastId="demo-broadcast"
+                      />
+                      <StreamHealthPanel metrics={healthMetrics} />
+                    </div>
+                  ),
+                },
+                {
+                  id: 'logs',
+                  label: 'Logs',
+                  content: (
+                    <div className="space-y-3">
+                      <ProductionTeamPanel
+                        currentGraphRevision={persistenceDiagnostics.currentGraphRevision}
+                      />
+                      <dl className="grid grid-cols-2 gap-2 text-xs text-slate-300">
+                        {Object.entries(persistenceDiagnostics).map(([label, value]) => (
+                          <div
+                            key={label}
+                            className="rounded-xl border border-white/10 bg-slate-950/50 p-2"
+                          >
+                            <dt className="font-bold uppercase tracking-[0.12em] text-slate-500">
+                              {label}
+                            </dt>
+                            <dd className="mt-1 truncate font-mono text-cyan-200">
+                              {String(value ?? 'none')}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    </div>
+                  ),
+                },
+                {
+                  id: 'ai',
+                  label: 'AI',
+                  content: (
+                    <div className="rounded-2xl border border-dashed border-cyan-300/20 bg-cyan-300/5 p-4 text-sm text-slate-300">
+                      AI operator assist workspace ready. Automation cards stay hidden until
+                      configured.
+                    </div>
+                  ),
+                },
+              ]}
             />
-            <HostDeviceControls />
-            <ProductionTeamPanel currentGraphRevision={persistenceDiagnostics.currentGraphRevision} />
-            <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
-              <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
-                Destinations
-              </summary>
-              <div className="p-3">
-                <DestinationPanel destinations={destinations} />
-              </div>
-            </details>
-            <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
-              <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
-                Chat / Follow
-              </summary>
-              <div className="space-y-3 p-3">
-                <UnifiedChatPanel messages={messages} />
-                <CrossFollowPanel platforms={[]} />
-              </div>
-            </details>
-
-            <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
-              <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
-                Persistence / Recovery
-              </summary>
-              <dl className="grid grid-cols-2 gap-2 p-3 text-xs text-slate-300">
-                {Object.entries(persistenceDiagnostics).map(([label, value]) => (
-                  <div key={label} className="rounded-xl border border-white/10 bg-slate-950/50 p-2">
-                    <dt className="font-bold uppercase tracking-[0.12em] text-slate-500">{label}</dt>
-                    <dd className="mt-1 truncate font-mono text-cyan-200">{String(value ?? 'none')}</dd>
-                  </div>
-                ))}
-              </dl>
-            </details>
-            <details className="group rounded-2xl border border-white/10 bg-slate-900/55">
-              <summary className="cursor-pointer px-4 py-3 text-xs font-black uppercase tracking-[0.18em] text-slate-300 group-open:border-b group-open:border-white/10">
-                Sync / Stream Health
-              </summary>
-              <div className="space-y-3 p-3">
-                <ControlRoomRealtime workspaceId="demo-workspace" broadcastId="demo-broadcast" />
-                <StreamHealthPanel metrics={healthMetrics} />
-              </div>
-            </details>
-          </aside>
-        </div>
+          }
+        />
       </div>
     </main>
   );
