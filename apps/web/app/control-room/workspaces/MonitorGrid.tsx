@@ -23,6 +23,7 @@ const gridLayouts: Record<
   'media-focus': { columns: 1, rows: 1 },
   'collaboration-focus': { columns: 1, rows: 1 },
   'automation-focus': { columns: 1, rows: 1 },
+  'ai-focus': { columns: 1, rows: 1 },
 };
 
 export function MonitorGrid({
@@ -44,7 +45,8 @@ export function MonitorGrid({
     mode === 'graphics-focus' ||
     mode === 'media-focus' ||
     mode === 'collaboration-focus' ||
-    mode === 'automation-focus'
+    mode === 'automation-focus' ||
+    mode === 'ai-focus'
   ) {
     return <div className={cn('h-full min-h-0 overflow-hidden', className)}>{children[0]}</div>;
   }

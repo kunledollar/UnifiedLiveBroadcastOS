@@ -10,7 +10,10 @@ import type {
   Scene,
   StreamHealthMetric,
 } from '@ubos/shared';
-import { AIPanel } from './AIPanel';
+import { AIAssistantPanel } from '../ai/AIAssistantPanel';
+import type { AIAction, AIState } from '../ai/ai-state';
+import { createDefaultAIAssistantState } from '@ubos/shared';
+import { createInitialAIState } from '../ai/ai-state';
 import { GuestsPanel } from './GuestsPanel';
 import { HealthPanel } from './HealthPanel';
 import { InspectorPanel, deriveInspectorRoutes } from './InspectorPanel';
@@ -53,6 +56,9 @@ export function OperationsConsoleContent({
   onCollaborationDispatch,
   automationState,
   onAutomationDispatch,
+  aiState,
+  onAIDispatch,
+  aiSummaryLines,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -82,6 +88,9 @@ export function OperationsConsoleContent({
   onCollaborationDispatch?: (action: CollaborationAction) => void;
   automationState?: AutomationState;
   onAutomationDispatch?: (action: AutomationAction) => void;
+  aiState?: AIState;
+  onAIDispatch?: (action: AIAction) => void;
+  aiSummaryLines?: string[];
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -141,7 +150,23 @@ export function OperationsConsoleContent({
         messages={messages}
       />
     ),
-    ai: <AIPanel />,
+    ai:
+      aiState && onAIDispatch ? (
+        <AIAssistantPanel
+          state={aiState}
+          dispatch={onAIDispatch}
+          {...(aiSummaryLines ? { summaryLines: aiSummaryLines } : {})}
+        />
+      ) : (
+        <AIAssistantPanel
+          state={createInitialAIState({
+            assistant: { ...createDefaultAIAssistantState(), status: 'disabled' },
+            recommendations: [],
+            riskSignals: [],
+          })}
+          dispatch={() => undefined}
+        />
+      ),
     automation:
       automationState && onAutomationDispatch ? (
         <AutomationPanel state={automationState} dispatch={onAutomationDispatch} />

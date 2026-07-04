@@ -336,6 +336,7 @@ export function WorkspaceCenterLayout({
   replayPanels,
   collaborationContent,
   automationContent,
+  aiContent,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
@@ -346,6 +347,7 @@ export function WorkspaceCenterLayout({
   replayPanels?: WorkspaceReplayPanels;
   collaborationContent?: ReactNode;
   automationContent?: ReactNode;
+  aiContent?: ReactNode;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -374,6 +376,8 @@ export function WorkspaceCenterLayout({
       return mediaContent ?? <DirectorWorkspace context={context} />;
     case 'automation-operator':
       return automationContent ?? <DirectorWorkspace context={context} />;
+    case 'ai-operator':
+      return aiContent ?? <DirectorWorkspace context={context} />;
     case 'custom':
       return <CustomWorkspace context={context} viewMode={viewMode} />;
     default:

@@ -144,6 +144,17 @@ export const workspaceProfiles: Record<WorkspaceProfile['id'], WorkspaceProfile>
     defaultNavItem: 'scenes',
     programFlexWeight: 45,
   },
+  'ai-operator': {
+    id: 'ai-operator',
+    label: 'AI Assistant',
+    description: 'Production summaries, risks, and advisory recommendations',
+    centerLayout: 'ai-focus',
+    defaultViewMode: 'program',
+    defaultOperationsTab: 'ai',
+    defaultDockTab: 'audio',
+    defaultNavItem: 'scenes',
+    programFlexWeight: 45,
+  },
   custom: {
     id: 'custom',
     label: 'Custom Workspace',

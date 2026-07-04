@@ -183,6 +183,11 @@ import {
   mapCollaborationOperatorToPresence,
 } from './collaboration';
 import { createMockCollaborationOperators, createDefaultRunOfShow } from '@ubos/shared';
+import {
+  createDefaultAIAssistantState,
+  createSampleAIRecommendations,
+  createSampleAIRiskSignals,
+} from '@ubos/shared';
 import type { LowerThirdTemplate } from '@ubos/shared';
 import {
   AutomationPanel,
@@ -195,6 +200,14 @@ import {
   getCurrentSegment,
   getNextSegment,
 } from './automation';
+import {
+  AIAssistantWorkspace,
+  aiReducer,
+  aiStatusLabel,
+  createInitialAIState,
+  getProductionSummaryLines,
+  getSuggestedRecommendations,
+} from './ai';
 
 function MediaStreamPreview({
   stream,
@@ -2096,6 +2109,14 @@ export function SceneWorkspace({
       createSampleMacros(),
     ),
   );
+  const [aiState, dispatchAI] = useReducer(
+    aiReducer,
+    createInitialAIState({
+      assistant: createDefaultAIAssistantState(),
+      recommendations: createSampleAIRecommendations(),
+      riskSignals: createSampleAIRiskSignals(),
+    }),
+  );
   const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
   ]);
@@ -2248,6 +2269,36 @@ export function SceneWorkspace({
     <AutomationWorkspace state={automationState} dispatch={dispatchAutomation} />
   );
 
+  const aiSummaryLines = useMemo(
+    () =>
+      getProductionSummaryLines({
+        programSceneName: programScene.name,
+        previewSceneName: previewScene.name,
+        guestCount: guests.length,
+        ...(getCurrentSegment(automationState.runOfShow)?.name
+          ? { automationSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
+          : {}),
+        riskCount: aiState.riskSignals.length,
+        recommendationCount: getSuggestedRecommendations(aiState.recommendations).length,
+      }),
+    [
+      programScene.name,
+      previewScene.name,
+      guests.length,
+      automationState.runOfShow,
+      aiState.riskSignals.length,
+      aiState.recommendations,
+    ],
+  );
+
+  const aiWorkspaceContent = (
+    <AIAssistantWorkspace
+      state={aiState}
+      dispatch={dispatchAI}
+      summaryLines={aiSummaryLines}
+    />
+  );
+
   const replayWorkspacePanels = useMemo(
     () => ({
       clipBrowser: (
@@ -2363,6 +2414,9 @@ export function SceneWorkspace({
         onCollaborationDispatch: dispatchCollaboration,
         automationState,
         onAutomationDispatch: dispatchAutomation,
+        aiState,
+        onAIDispatch: dispatchAI,
+        aiSummaryLines,
       }),
     [
       broadcastId,
@@ -2388,6 +2442,8 @@ export function SceneWorkspace({
       showSafeAreas,
       collaborationState,
       automationState,
+      aiState,
+      aiSummaryLines,
     ],
   );
 
@@ -3005,6 +3061,7 @@ export function SceneWorkspace({
         dropped={safeHealthMetrics.dropped}
         upload={safeHealthMetrics.upload}
         automationModeLabel={automationModeLabel(automationState.automationMode)}
+        aiStatusLabel={aiStatusLabel(aiState.assistant)}
         toolsMenu={toolsMenu}
       />
 
@@ -3061,6 +3118,7 @@ export function SceneWorkspace({
               replayPanels={replayWorkspacePanels}
               collaborationContent={collaborationWorkspaceContent}
               automationContent={automationWorkspaceContent}
+              aiContent={aiWorkspaceContent}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>
