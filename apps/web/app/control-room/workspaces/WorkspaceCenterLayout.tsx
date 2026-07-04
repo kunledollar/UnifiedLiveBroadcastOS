@@ -41,6 +41,18 @@ function DirectorWorkspace({ context }: { context: WorkspaceMonitorContext }) {
           previewGraphicsLayers={context.previewGraphicsLayers ?? []}
           programMediaOverlayItems={context.programMediaOverlayItems ?? []}
           previewMediaOverlayItems={context.previewMediaOverlayItems ?? []}
+          {...(context.collaborationDirectorName
+            ? { collaborationDirectorName: context.collaborationDirectorName }
+            : {})}
+          {...(context.collaborationLockCount !== undefined
+            ? { collaborationLockCount: context.collaborationLockCount }
+            : {})}
+          {...(context.collaborationOpenNoteCount !== undefined
+            ? { collaborationOpenNoteCount: context.collaborationOpenNoteCount }
+            : {})}
+          {...(context.collaborationPreviewChangedBy
+            ? { collaborationPreviewChangedBy: context.collaborationPreviewChangedBy }
+            : {})}
         />
       }
       secondary={
@@ -313,6 +325,7 @@ export function WorkspaceCenterLayout({
   graphicsContent,
   mediaContent,
   replayPanels,
+  collaborationContent,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
@@ -321,6 +334,7 @@ export function WorkspaceCenterLayout({
   graphicsContent?: ReactNode;
   mediaContent?: ReactNode;
   replayPanels?: WorkspaceReplayPanels;
+  collaborationContent?: ReactNode;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -342,7 +356,7 @@ export function WorkspaceCenterLayout({
     case 'audio-engineer':
       return <AudioWorkspace context={context} graphChannels={graphChannels} />;
     case 'remote-production':
-      return <RemoteProductionWorkspace context={context} />;
+      return collaborationContent ?? <RemoteProductionWorkspace context={context} />;
     case 'graphics-operator':
       return graphicsContent ?? <DirectorWorkspace context={context} />;
     case 'media-operator':

@@ -472,3 +472,4 @@ export * from './backpressure.js';
 export * from './replay.js';
 export * from './graphics/index.js';
 export * from './media-replay/index.js';
+export * from './collaboration-remote/index.js';

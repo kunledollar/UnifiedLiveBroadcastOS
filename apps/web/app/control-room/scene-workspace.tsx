@@ -170,6 +170,19 @@ import {
   mediaCompositionReducer,
   productionAssetToMediaAsset,
 } from './media';
+import {
+  CollaborationWorkspace,
+  TeamPanel,
+  buildRemoteProductionState,
+  collaborationReducer,
+  conflictsToEvents,
+  createLocalOperatorPresence,
+  initialCollaborationState,
+  isCollaborationDemoEnabled,
+  mapAuthorityLockToProductionLock,
+  mapCollaborationOperatorToPresence,
+} from './collaboration';
+import { createMockCollaborationOperators } from '@ubos/shared';
 import type { LowerThirdTemplate } from '@ubos/shared';
 
 function MediaStreamPreview({
@@ -2061,6 +2074,10 @@ export function SceneWorkspace({
   const [selectedMediaAssetId, setSelectedMediaAssetId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedReplayClipId, setSelectedReplayClipId] = useState<string | null>(null);
+  const [collaborationState, dispatchCollaboration] = useReducer(
+    collaborationReducer,
+    initialCollaborationState,
+  );
   const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
   ]);
@@ -2105,6 +2122,54 @@ export function SceneWorkspace({
     dispatchMedia({ type: 'REGISTER_ASSETS', sceneId: previewScene.id, assets: registered });
   }, [binMediaAssets, previewScene.id]);
 
+  const collaborationDemoEnabled = isCollaborationDemoEnabled();
+  const remoteProductionOperators = useMemo(() => {
+    if (collaborationDemoEnabled) {
+      return createMockCollaborationOperators(
+        productionGraphSession.graph.metadata.revision,
+      ).map((operator) => mapCollaborationOperatorToPresence(operator, true));
+    }
+    return [
+      createLocalOperatorPresence({
+        workspaceId: selectedWorkspace,
+        currentPanel: activeOperationsTab,
+      }),
+    ];
+  }, [
+    collaborationDemoEnabled,
+    productionGraphSession.graph.metadata.revision,
+    selectedWorkspace,
+    activeOperationsTab,
+  ]);
+
+  const remoteProductionLocks = useMemo(
+    () => authorityDiagnostics.activeLocks.map(mapAuthorityLockToProductionLock),
+    [authorityDiagnostics.activeLocks],
+  );
+
+  const remoteProductionEvents = useMemo(
+    () => conflictsToEvents(authorityDiagnostics.conflicts),
+    [authorityDiagnostics.conflicts],
+  );
+
+  useEffect(() => {
+    dispatchCollaboration({
+      type: 'SET_REMOTE_PRODUCTION',
+      state: buildRemoteProductionState({
+        operators: remoteProductionOperators,
+        locks: remoteProductionLocks,
+        notes: collaborationState.remoteProduction.notes,
+        events: remoteProductionEvents,
+        collaborationEnabled: collaborationDemoEnabled || remoteProductionOperators.length > 0,
+      }),
+    });
+  }, [
+    remoteProductionOperators,
+    remoteProductionLocks,
+    remoteProductionEvents,
+    collaborationDemoEnabled,
+  ]);
+
   const programMediaOverlayItems = useMemo(
     () => getProgramMediaOverlayItems(previewSceneMediaComposition),
     [previewSceneMediaComposition],
@@ -2142,6 +2207,22 @@ export function SceneWorkspace({
       onSelectClip={setSelectedClipId}
       onSelectReplayClip={setSelectedReplayClipId}
       dispatch={dispatchMedia}
+    />
+  );
+
+  const collaborationWorkspaceContent = (
+    <CollaborationWorkspace
+      state={collaborationState.remoteProduction}
+      guests={guests}
+      invites={invites}
+      routes={mediaRoutes}
+      messages={messages}
+      activeRouteCount={activeRouteCount}
+      outputHealth={safeHealthMetrics.upload}
+      productionStatus={productionGraphSession.status}
+      recoveryStatus={selectHealthSummary(productionGraphSession.graph).status}
+      conflictCount={authorityDiagnostics.conflicts.length}
+      dispatch={dispatchCollaboration}
     />
   );
 
@@ -2255,6 +2336,9 @@ export function SceneWorkspace({
             showSafeAreas={showSafeAreas}
           />
         ),
+        collaborationState,
+        collaborationConflictCount: authorityDiagnostics.conflicts.length,
+        onCollaborationDispatch: dispatchCollaboration,
       }),
     [
       broadcastId,
@@ -2278,6 +2362,7 @@ export function SceneWorkspace({
       safeHealthMetrics,
       layoutPreset,
       showSafeAreas,
+      collaborationState,
     ],
   );
 
@@ -2285,6 +2370,7 @@ export function SceneWorkspace({
     if (operationsTabs?.length) return operationsTabs;
     const panelIds: OperationsTabId[] = [
       'guests',
+      'team',
       'inspector',
       'routing',
       'outputs',
@@ -2588,6 +2674,29 @@ export function SceneWorkspace({
       programMediaOverlayItems,
       previewMediaOverlayItems,
       replayBuffer: previewSceneMediaComposition.replayBuffer,
+      ...(collaborationState.remoteProduction.operators.find((operator) => operator.role === 'director')
+        ?.name
+        ? {
+            collaborationDirectorName: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.role === 'director',
+            )!.name,
+          }
+        : {}),
+      collaborationLockCount: collaborationState.remoteProduction.locks.filter(
+        (lock) => Date.parse(lock.expiresAt) > Date.now(),
+      ).length,
+      collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
+        (note) => note.status === 'open',
+      ).length,
+      ...(collaborationState.remoteProduction.operators.find((operator) =>
+        operator.currentPanel?.toLowerCase().includes('preview'),
+      )?.name
+        ? {
+            collaborationPreviewChangedBy: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.currentPanel?.toLowerCase().includes('preview'),
+            )!.name,
+          }
+        : {}),
     }),
     [
       programScene,
@@ -2605,6 +2714,7 @@ export function SceneWorkspace({
       programMediaOverlayItems,
       previewMediaOverlayItems,
       previewSceneMediaComposition.replayBuffer,
+      collaborationState.remoteProduction,
     ],
   );
 
@@ -2814,6 +2924,16 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
+      {activeBottomDock === 'collaboration' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <TeamPanel
+            state={collaborationState.remoteProduction}
+            conflictCount={authorityDiagnostics.conflicts.length}
+            dispatch={dispatchCollaboration}
+            className="h-full"
+          />
+        </div>
+      ) : null}
       {activeBottomDock === 'logs' ? (
         <div className="space-y-2 px-ubos-2 py-ubos-2">
           <ProductionGraphInspector session={productionGraphSession} />
@@ -2895,6 +3015,7 @@ export function SceneWorkspace({
               graphicsContent={graphicsWorkspaceContent}
               mediaContent={mediaWorkspaceContent}
               replayPanels={replayWorkspacePanels}
+              collaborationContent={collaborationWorkspaceContent}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>

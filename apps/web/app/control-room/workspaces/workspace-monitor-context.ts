@@ -33,6 +33,10 @@ export type WorkspaceMonitorContext = {
   programMediaOverlayItems?: MediaMetadataOverlayItem[];
   previewMediaOverlayItems?: MediaMetadataOverlayItem[];
   replayBuffer?: ReplayBufferMetadata;
+  collaborationDirectorName?: string;
+  collaborationLockCount?: number;
+  collaborationOpenNoteCount?: number;
+  collaborationPreviewChangedBy?: string;
 };
 
 export function monitorSafeAreaProps(context: WorkspaceMonitorContext) {

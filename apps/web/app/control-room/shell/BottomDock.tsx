@@ -10,6 +10,7 @@ const dockTabs: Array<{ id: DockTabId; label: string }> = [
   { id: 'graphics', label: 'Graphics' },
   { id: 'replay', label: 'Replay' },
   { id: 'media', label: 'Media' },
+  { id: 'collaboration', label: 'Team' },
   { id: 'logs', label: 'Logs' },
 ];
 

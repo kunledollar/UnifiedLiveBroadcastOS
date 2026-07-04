@@ -18,6 +18,8 @@ import { LogsPanelContainer } from './LogsPanelContainer';
 import { OutputsPanel } from './OutputsPanel';
 import { PreviewPanel } from './PreviewPanel';
 import { RoutingPanel } from './RoutingPanel';
+import { TeamPanel } from '../collaboration/TeamPanel';
+import type { CollaborationAction, CollaborationState } from '../collaboration/collaboration-state';
 import { HostDevicesSection } from './HostDevicesSection';
 
 export function OperationsConsoleContent({
@@ -44,6 +46,9 @@ export function OperationsConsoleContent({
   conflicts,
   unavailableSubsystems,
   previewMonitor,
+  collaborationState,
+  collaborationConflictCount,
+  onCollaborationDispatch,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -68,6 +73,9 @@ export function OperationsConsoleContent({
   conflicts: number;
   unavailableSubsystems: string[];
   previewMonitor: ReactNode;
+  collaborationState?: CollaborationState;
+  collaborationConflictCount?: number;
+  onCollaborationDispatch?: (action: CollaborationAction) => void;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -128,5 +136,26 @@ export function OperationsConsoleContent({
       />
     ),
     ai: <AIPanel />,
+    team:
+      collaborationState && onCollaborationDispatch ? (
+        <TeamPanel
+          state={collaborationState.remoteProduction}
+          conflictCount={collaborationConflictCount ?? 0}
+          dispatch={onCollaborationDispatch}
+        />
+      ) : (
+        <TeamPanel
+          state={{
+            operators: [],
+            locks: [],
+            notes: [],
+            events: [],
+            collaborationEnabled: false,
+            containsRuntimeHandles: false,
+          }}
+          conflictCount={0}
+          dispatch={() => undefined}
+        />
+      ),
   };
 }

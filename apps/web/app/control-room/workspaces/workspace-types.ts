@@ -29,7 +29,8 @@ export type MultiviewLayoutMode =
   | 'audio-focus'
   | 'replay-focus'
   | 'graphics-focus'
-  | 'media-focus';
+  | 'media-focus'
+  | 'collaboration-focus';
 
 export type WorkspaceProfile = {
   id: ProfessionalWorkspaceId;

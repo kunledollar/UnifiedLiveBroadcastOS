@@ -20,6 +20,7 @@ import type {
 } from '@ubos/shared';
 import { GraphicsMetadataOverlay } from '../graphics/GraphicsMetadataOverlay';
 import { MediaMetadataOverlay } from '../media/MediaMetadataOverlay';
+import { CollaborationMetadataOverlay } from '../collaboration/CollaborationMetadataOverlay';
 import {
   deriveEmptyStateMessage,
   deriveMonitorTelemetry,
@@ -47,6 +48,10 @@ type OutputViewRendererProps = {
   previewGraphicsLayers?: GraphicsLayer[];
   programMediaOverlayItems?: Array<{ id: string; name: string }>;
   previewMediaOverlayItems?: Array<{ id: string; name: string }>;
+  collaborationDirectorName?: string;
+  collaborationLockCount?: number;
+  collaborationOpenNoteCount?: number;
+  collaborationPreviewChangedBy?: string;
 };
 
 function MonitorCompositor({
@@ -91,6 +96,10 @@ export function ProgramMonitor({
   showPlatformCrop,
   graphicsLayers = [],
   mediaOverlayItems = [],
+  collaborationDirectorName,
+  collaborationLockCount,
+  collaborationOpenNoteCount,
+  collaborationPreviewChangedBy,
   role = 'program',
   compact = false,
 }: {
@@ -109,6 +118,10 @@ export function ProgramMonitor({
   showPlatformCrop?: boolean;
   graphicsLayers?: GraphicsLayer[];
   mediaOverlayItems?: Array<{ id: string; name: string }>;
+  collaborationDirectorName?: string;
+  collaborationLockCount?: number;
+  collaborationOpenNoteCount?: number;
+  collaborationPreviewChangedBy?: string;
   role?: 'program' | 'preview';
   compact?: boolean;
 }) {
@@ -183,6 +196,12 @@ export function ProgramMonitor({
           {mediaOverlayItems.length ? (
             <MediaMetadataOverlay items={mediaOverlayItems} mode={role === 'preview' ? 'preview' : 'program'} />
           ) : null}
+          <CollaborationMetadataOverlay
+            {...(collaborationDirectorName ? { directorName: collaborationDirectorName } : {})}
+            {...(collaborationLockCount !== undefined ? { activeLockCount: collaborationLockCount } : {})}
+            {...(collaborationOpenNoteCount !== undefined ? { openNoteCount: collaborationOpenNoteCount } : {})}
+            {...(collaborationPreviewChangedBy ? { previewChangedBy: collaborationPreviewChangedBy } : {})}
+          />
         </>
       ) : null}
     </MonitorFrame>
@@ -211,6 +230,10 @@ export function OutputViewRenderer({
   previewGraphicsLayers = [],
   programMediaOverlayItems = [],
   previewMediaOverlayItems = [],
+  collaborationDirectorName,
+  collaborationLockCount,
+  collaborationOpenNoteCount,
+  collaborationPreviewChangedBy,
 }: OutputViewRendererProps) {
   const graphProps = graph ? { graph } : {};
 
@@ -227,6 +250,10 @@ export function OutputViewRenderer({
           showSafeAreas={showSafeAreas}
           graphicsLayers={programGraphicsLayers}
           mediaOverlayItems={programMediaOverlayItems}
+          {...(collaborationDirectorName ? { collaborationDirectorName } : {})}
+          {...(collaborationLockCount !== undefined ? { collaborationLockCount } : {})}
+          {...(collaborationOpenNoteCount !== undefined ? { collaborationOpenNoteCount } : {})}
+          {...(collaborationPreviewChangedBy ? { collaborationPreviewChangedBy } : {})}
         />
       );
     case 'horizontal':
@@ -241,6 +268,10 @@ export function OutputViewRenderer({
           showSafeAreas={showSafeAreas}
           graphicsLayers={programGraphicsLayers}
           mediaOverlayItems={programMediaOverlayItems}
+          {...(collaborationDirectorName ? { collaborationDirectorName } : {})}
+          {...(collaborationLockCount !== undefined ? { collaborationLockCount } : {})}
+          {...(collaborationOpenNoteCount !== undefined ? { collaborationOpenNoteCount } : {})}
+          {...(collaborationPreviewChangedBy ? { collaborationPreviewChangedBy } : {})}
         />
       );
     case 'multiview': {
