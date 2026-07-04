@@ -5,10 +5,16 @@ import type {
   MediaLayoutPreset,
   MediaRoute,
   ProductionGraph,
+  ReplayBufferMetadata,
   Scene,
   StreamHealthMetric,
 } from '@ubos/shared';
 import type { SafeAreaToggles } from './workspace-types';
+
+export type MediaMetadataOverlayItem = {
+  id: string;
+  name: string;
+};
 
 export type WorkspaceMonitorContext = {
   programScene: Scene;
@@ -24,6 +30,9 @@ export type WorkspaceMonitorContext = {
   safeAreaToggles: SafeAreaToggles;
   programGraphicsLayers?: GraphicsLayer[];
   previewGraphicsLayers?: GraphicsLayer[];
+  programMediaOverlayItems?: MediaMetadataOverlayItem[];
+  previewMediaOverlayItems?: MediaMetadataOverlayItem[];
+  replayBuffer?: ReplayBufferMetadata;
 };
 
 export function monitorSafeAreaProps(context: WorkspaceMonitorContext) {

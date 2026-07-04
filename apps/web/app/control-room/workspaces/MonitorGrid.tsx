@@ -20,6 +20,7 @@ const gridLayouts: Record<
   'audio-focus': { columns: 1, rows: 1 },
   'replay-focus': { columns: 2, rows: 2 },
   'graphics-focus': { columns: 1, rows: 1 },
+  'media-focus': { columns: 1, rows: 1 },
 };
 
 export function MonitorGrid({
@@ -35,7 +36,12 @@ export function MonitorGrid({
 }) {
   const layout = gridLayouts[mode];
 
-  if (mode === 'program-focus' || mode === 'audio-focus' || mode === 'graphics-focus') {
+  if (
+    mode === 'program-focus' ||
+    mode === 'audio-focus' ||
+    mode === 'graphics-focus' ||
+    mode === 'media-focus'
+  ) {
     return <div className={cn('h-full min-h-0 overflow-hidden', className)}>{children[0]}</div>;
   }
 

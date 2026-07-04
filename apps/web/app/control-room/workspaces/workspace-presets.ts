@@ -122,6 +122,17 @@ export const workspaceProfiles: Record<WorkspaceProfile['id'], WorkspaceProfile>
     defaultNavItem: 'graphics',
     programFlexWeight: 45,
   },
+  'media-operator': {
+    id: 'media-operator',
+    label: 'Media Operator',
+    description: 'Media bin, playlists, clips, and replay',
+    centerLayout: 'media-focus',
+    defaultViewMode: 'program',
+    defaultOperationsTab: 'inspector',
+    defaultDockTab: 'media',
+    defaultNavItem: 'media',
+    programFlexWeight: 45,
+  },
   custom: {
     id: 'custom',
     label: 'Custom Workspace',

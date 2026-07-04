@@ -7,6 +7,7 @@ import {
   PreviewMonitorCompact,
   ProgramMonitor,
 } from '../workspace/OutputViewRenderer';
+import { MediaMetadataOverlay } from '../media/MediaMetadataOverlay';
 import { monitorSafeAreaProps, type WorkspaceMonitorContext } from './workspace-monitor-context';
 
 export type MonitorCellKind =
@@ -89,6 +90,8 @@ export function MultiViewRenderer({
           {...graphProps}
           healthFps={healthFps}
           {...safeAreas}
+          graphicsLayers={context.programGraphicsLayers ?? []}
+          mediaOverlayItems={context.programMediaOverlayItems ?? []}
           {...(cell.compact ? { compact: true } : {})}
         />
       );
@@ -102,6 +105,8 @@ export function MultiViewRenderer({
           {...graphProps}
           healthFps={healthFps}
           {...safeAreas}
+          graphicsLayers={context.previewGraphicsLayers ?? []}
+          mediaOverlayItems={context.previewMediaOverlayItems ?? []}
         />
       );
     case 'guest': {
@@ -120,8 +125,60 @@ export function MultiViewRenderer({
         />
       );
     }
-    case 'media':
-    case 'replay':
+    case 'media': {
+      const mediaItems = context.programMediaOverlayItems ?? [];
+      const hasMedia = mediaItems.length > 0;
+      return (
+        <MonitorFrame
+          fill
+          {...(cell.compact ? { compact: true } : {})}
+          tally={hasMedia ? 'program' : 'offline'}
+          label={cell.label ?? 'Media'}
+          aspectRatio={cell.aspectRatio ?? '16/9'}
+          {...(hasMedia ? {} : { emptyMessage: placeholderMessages.media })}
+          metadata={[
+            {
+              label: 'Status',
+              value: hasMedia ? 'metadata staged' : 'not configured',
+            },
+          ]}
+          {...safeAreas}
+        >
+          {hasMedia ? (
+            <MediaMetadataOverlay items={mediaItems} mode="program" className="relative" />
+          ) : null}
+        </MonitorFrame>
+      );
+    }
+    case 'replay': {
+      const replayBuffer = context.replayBuffer;
+      const replayActive = replayBuffer?.active ?? false;
+      const replayItems = context.programMediaOverlayItems?.filter((item) =>
+        item.name.toLowerCase().includes('replay'),
+      );
+      const hasReplayMetadata = replayActive || (replayItems?.length ?? 0) > 0;
+      return (
+        <MonitorFrame
+          fill
+          {...(cell.compact ? { compact: true } : {})}
+          tally={replayActive ? 'preview' : 'offline'}
+          label={cell.label ?? 'Replay'}
+          aspectRatio={cell.aspectRatio ?? '16/9'}
+          {...(hasReplayMetadata ? {} : { emptyMessage: placeholderMessages.replay })}
+          metadata={[
+            {
+              label: 'Buffer',
+              value: replayBuffer?.status ?? 'inactive',
+            },
+          ]}
+          {...safeAreas}
+        >
+          {replayItems?.length ? (
+            <MediaMetadataOverlay items={replayItems} mode="preview" className="relative" />
+          ) : null}
+        </MonitorFrame>
+      );
+    }
     case 'graphics':
     case 'aux':
     case 'outputs':

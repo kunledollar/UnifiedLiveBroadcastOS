@@ -1,16 +1,23 @@
 'use client';
 
-import type { GraphicsAsset, Guest, LowerThirdTemplate, ProductionAsset, Scene, SceneLayout, SceneSourceType, SceneType } from '@ubos/shared';
+import type {
+  GraphicsAsset,
+  Guest,
+  LowerThirdTemplate,
+  MediaAsset,
+  ProductionAsset,
+  Scene,
+  SceneLayout,
+  SceneMediaComposition,
+  SceneSourceType,
+  SceneType,
+} from '@ubos/shared';
 import type { TallyState } from '@ubos/ui';
 import type { NavItemId } from '../shell/types';
 import { LayoutBrowser } from './LayoutBrowser';
 import { GraphicsBrowser as GraphicsBrowserPanel } from '../graphics/GraphicsBrowser';
-import {
-  MediaBrowser,
-  OutputsBrowser,
-  ReplayBrowser,
-  SettingsBrowser,
-} from './PlaceholderBrowsers';
+import { MediaBrowserPanel, ReplayBrowserPanel } from '../media/MediaBrowserPanels';
+import { OutputsBrowser, SettingsBrowser } from './PlaceholderBrowsers';
 import { SceneBrowser } from './SceneBrowser';
 import { SourceBrowser } from './SourceBrowser';
 
@@ -42,6 +49,12 @@ export function LeftNavPanel({
   onSourceToggleLock,
   onGraphicsAddToScene,
   graphicsTemplates = [],
+  mediaAssets = [],
+  mediaComposition,
+  selectedMediaAssetId,
+  selectedReplayClipId,
+  onSelectMediaAsset,
+  onSelectReplayClip,
 }: {
   activeNav: NavItemId;
   scenes: Scene[];
@@ -75,6 +88,12 @@ export function LeftNavPanel({
   onSourceToggleLock: (sourceId: string) => void;
   onGraphicsAddToScene?: (asset: GraphicsAsset) => void;
   graphicsTemplates?: LowerThirdTemplate[];
+  mediaAssets?: MediaAsset[];
+  mediaComposition?: SceneMediaComposition;
+  selectedMediaAssetId?: string | null;
+  selectedReplayClipId?: string | null;
+  onSelectMediaAsset?: (assetId: string) => void;
+  onSelectReplayClip?: (clipId: string) => void;
 }) {
   switch (activeNav) {
     case 'scenes':
@@ -111,7 +130,13 @@ export function LeftNavPanel({
         />
       );
     case 'media':
-      return <MediaBrowser assets={assets} />;
+      return (
+        <MediaBrowserPanel
+          assets={mediaAssets}
+          {...(selectedMediaAssetId !== undefined ? { selectedAssetId: selectedMediaAssetId } : {})}
+          {...(onSelectMediaAsset ? { onSelectAsset: onSelectMediaAsset } : {})}
+        />
+      );
     case 'graphics':
       return (
         <GraphicsBrowserPanel
@@ -123,7 +148,29 @@ export function LeftNavPanel({
     case 'layouts':
       return <LayoutBrowser layouts={layouts} activeLayout={previewScene.layout ?? null} />;
     case 'replay':
-      return <ReplayBrowser />;
+      return mediaComposition ? (
+        <ReplayBrowserPanel
+          composition={mediaComposition}
+          {...(selectedReplayClipId !== undefined ? { selectedReplayClipId } : {})}
+          {...(onSelectReplayClip ? { onSelectReplayClip } : {})}
+        />
+      ) : (
+        <ReplayBrowserPanel
+          composition={{
+            sceneId: previewScene.id,
+            assets: [],
+            clips: [],
+            playlists: [],
+            replayClips: [],
+            replayBuffer: { active: false, status: 'inactive' },
+            programAssetIds: [],
+            programClipIds: [],
+            previewAssetIds: [],
+            previewClipIds: [],
+            updatedAt: new Date().toISOString(),
+          }}
+        />
+      );
     case 'outputs':
       return <OutputsBrowser routeCount={mediaRouteCount} />;
     case 'settings':

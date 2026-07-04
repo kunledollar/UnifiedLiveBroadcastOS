@@ -19,6 +19,7 @@ import type {
   StreamHealthMetric,
 } from '@ubos/shared';
 import { GraphicsMetadataOverlay } from '../graphics/GraphicsMetadataOverlay';
+import { MediaMetadataOverlay } from '../media/MediaMetadataOverlay';
 import {
   deriveEmptyStateMessage,
   deriveMonitorTelemetry,
@@ -44,6 +45,8 @@ type OutputViewRendererProps = {
   showSafeAreas: boolean;
   programGraphicsLayers?: GraphicsLayer[];
   previewGraphicsLayers?: GraphicsLayer[];
+  programMediaOverlayItems?: Array<{ id: string; name: string }>;
+  previewMediaOverlayItems?: Array<{ id: string; name: string }>;
 };
 
 function MonitorCompositor({
@@ -87,6 +90,7 @@ export function ProgramMonitor({
   showFourThreeGuide,
   showPlatformCrop,
   graphicsLayers = [],
+  mediaOverlayItems = [],
   role = 'program',
   compact = false,
 }: {
@@ -104,6 +108,7 @@ export function ProgramMonitor({
   showFourThreeGuide?: boolean;
   showPlatformCrop?: boolean;
   graphicsLayers?: GraphicsLayer[];
+  mediaOverlayItems?: Array<{ id: string; name: string }>;
   role?: 'program' | 'preview';
   compact?: boolean;
 }) {
@@ -175,6 +180,9 @@ export function ProgramMonitor({
           {graphicsLayers.length ? (
             <GraphicsMetadataOverlay layers={graphicsLayers} mode={role === 'preview' ? 'preview' : 'program'} />
           ) : null}
+          {mediaOverlayItems.length ? (
+            <MediaMetadataOverlay items={mediaOverlayItems} mode={role === 'preview' ? 'preview' : 'program'} />
+          ) : null}
         </>
       ) : null}
     </MonitorFrame>
@@ -201,6 +209,8 @@ export function OutputViewRenderer({
   showSafeAreas,
   programGraphicsLayers = [],
   previewGraphicsLayers = [],
+  programMediaOverlayItems = [],
+  previewMediaOverlayItems = [],
 }: OutputViewRendererProps) {
   const graphProps = graph ? { graph } : {};
 
@@ -216,6 +226,7 @@ export function OutputViewRenderer({
           healthFps={healthFps}
           showSafeAreas={showSafeAreas}
           graphicsLayers={programGraphicsLayers}
+          mediaOverlayItems={programMediaOverlayItems}
         />
       );
     case 'horizontal':
@@ -229,6 +240,7 @@ export function OutputViewRenderer({
           healthFps={healthFps}
           showSafeAreas={showSafeAreas}
           graphicsLayers={programGraphicsLayers}
+          mediaOverlayItems={programMediaOverlayItems}
         />
       );
     case 'multiview': {
