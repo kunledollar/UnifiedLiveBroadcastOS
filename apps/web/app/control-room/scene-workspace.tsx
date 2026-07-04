@@ -1,7 +1,6 @@
 'use client';
 
 import {
-  ProductionDock,
   getTallyState,
 } from '@ubos/ui';
 import {
@@ -76,6 +75,7 @@ import {
   selectBroadcastStatus,
   selectHealthSummary,
   selectRecordingState,
+  selectAudioChannels,
   type ProductionCommandType,
   type ProductionBroadcastSession,
   type SceneNode,
@@ -123,6 +123,7 @@ import { RightOperationsConsole } from './shell/RightOperationsConsole';
 import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
 import { BottomDock } from './shell/BottomDock';
 import { LeftNavPanel } from './browsers';
+import { DigitalAudioConsole, DockPanelEmpty, DockPanelTags } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
 import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
@@ -2450,12 +2451,28 @@ export function SceneWorkspace({
     />
   );
 
+  const graphAudioChannels = useMemo(
+    () => selectAudioChannels(productionGraphSession.graph),
+    [productionGraphSession.graph],
+  );
+
+  const recordingActive = useMemo(
+    () => selectRecordingState(productionGraphSession.graph).status === 'recording',
+    [productionGraphSession.graph],
+  );
+
   const bottomDockContent = (
     <>
-      {activeBottomDock === 'audio' ? <ProductionDock channels={channels} assets={[]} /> : null}
+      {activeBottomDock === 'audio' ? (
+        <DigitalAudioConsole
+          channels={channels}
+          graphChannels={graphAudioChannels}
+          recordingActive={recordingActive}
+        />
+      ) : null}
       {activeBottomDock === 'layers' ? (
         activeScene.sources.length ? (
-          <div className="grid gap-1 text-ubos-caption text-ubos-fg-secondary">
+          <div className="grid gap-1 px-ubos-2 py-ubos-2 text-ubos-caption text-ubos-fg-secondary">
             {activeScene.sources.map((source) => (
               <div
                 key={source.id}
@@ -2469,60 +2486,36 @@ export function SceneWorkspace({
             ))}
           </div>
         ) : (
-          <p className="text-ubos-caption text-ubos-fg-muted">No layers in preview scene.</p>
+          <div className="px-ubos-2 py-ubos-2">
+            <DockPanelEmpty message="No layers in preview scene." />
+          </div>
         )
       ) : null}
       {activeBottomDock === 'graphics' ? (
-        graphicsAssets.length ? (
-          <div className="flex flex-wrap gap-2">
-            {graphicsAssets.map((asset) => (
-              <span
-                key={asset.id}
-                className="rounded-ubos-sm border border-ubos-border-subtle px-2 py-1 text-ubos-metadata text-ubos-fg-secondary"
-              >
-                {asset.name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-ubos-caption text-ubos-fg-muted">No graphics in production.</p>
-        )
+        <div className="px-ubos-2 py-ubos-2">
+          {graphicsAssets.length ? (
+            <DockPanelTags items={graphicsAssets.map((asset) => asset.name)} />
+          ) : (
+            <DockPanelEmpty message="No graphics in production." />
+          )}
+        </div>
       ) : null}
       {activeBottomDock === 'media' ? (
-        assets.length ? (
-          <div className="flex flex-wrap gap-2">
-            {assets.map((asset) => (
-              <span
-                key={asset.id}
-                className="rounded-ubos-sm border border-ubos-border-subtle px-2 py-1 text-ubos-metadata text-ubos-fg-secondary"
-              >
-                {asset.name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-ubos-caption text-ubos-fg-muted">No media assets loaded.</p>
-        )
+        <div className="px-ubos-2 py-ubos-2">
+          {assets.length ? (
+            <DockPanelTags items={assets.map((asset) => asset.name)} />
+          ) : (
+            <DockPanelEmpty message="No media assets loaded." />
+          )}
+        </div>
       ) : null}
       {activeBottomDock === 'replay' ? (
-        <p className="text-ubos-caption text-ubos-fg-muted">Replay not active.</p>
-      ) : null}
-      {activeBottomDock === 'timeline' ? (
-        <p className="text-ubos-caption text-ubos-fg-muted">Timeline not configured.</p>
-      ) : null}
-      {activeBottomDock === 'automation' ? (
-        <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
-          <span>History: {lastTransitionLabel}</span>
-          <span>·</span>
-          <span>Program: {programScene.name}</span>
-          <span>·</span>
-          <span className={transitionActive ? 'text-ubos-warning-text' : 'text-ubos-success-text'}>
-            {transitionActive ? 'Transition active' : 'Manual mode'}
-          </span>
+        <div className="px-ubos-2 py-ubos-2">
+          <DockPanelEmpty message="Replay not active." />
         </div>
       ) : null}
       {activeBottomDock === 'logs' ? (
-        <div className="space-y-2">
+        <div className="space-y-2 px-ubos-2 py-ubos-2">
           <ProductionGraphInspector session={productionGraphSession} />
           <MediaExecutionInspector
             engine={mediaExecutionEngine}
