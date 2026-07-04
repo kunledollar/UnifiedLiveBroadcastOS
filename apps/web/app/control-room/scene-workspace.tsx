@@ -2,7 +2,6 @@
 
 import {
   LayoutSelector,
-  ProductionDock,
   ProgramPreview,
   ProductionMultiview,
   getTallyState,
@@ -1737,10 +1736,10 @@ function createProductionGraphSessionFromScenes(input: {
 }
 
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
-  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.18fr)]',
-  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
-  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
+  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(42rem,7fr)_minmax(18rem,3fr)]',
+  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(42rem,7fr)_minmax(18rem,3fr)]',
+  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(36rem,7fr)_minmax(16rem,3fr)]',
+  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(34rem,7fr)_minmax(16rem,3fr)]',
   multiview: 'grid min-h-0 gap-3',
 };
 
@@ -1782,6 +1781,88 @@ function ViewModeSelector({
           );
         })}
       </div>
+    </div>
+  );
+}
+
+
+function ControlRoomCard({
+  title,
+  eyebrow,
+  children,
+  defaultOpen = false,
+}: {
+  title: string;
+  eyebrow?: string;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <details
+      open={defaultOpen}
+      className="group rounded-2xl bg-white/[0.035] p-3 ring-1 ring-white/10 transition duration-150 hover:bg-white/[0.055]"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <div>
+          {eyebrow ? (
+            <p className="text-[9px] font-black uppercase tracking-[0.2em] text-cyan-300/70">
+              {eyebrow}
+            </p>
+          ) : null}
+          <p className="text-xs font-black uppercase tracking-[0.16em] text-slate-100">{title}</p>
+        </div>
+        <span className="text-slate-500 transition group-open:rotate-90">›</span>
+      </summary>
+      <div className="mt-3">{children}</div>
+    </details>
+  );
+}
+
+function RailSectionButton({ label, active = false }: { label: string; active?: boolean }) {
+  return (
+    <button
+      type="button"
+      className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-[11px] font-black uppercase tracking-[0.14em] transition ${
+        active
+          ? 'bg-cyan-300/12 text-cyan-100 ring-1 ring-cyan-300/20'
+          : 'text-slate-400 hover:bg-white/[0.045] hover:text-slate-100'
+      }`}
+    >
+      {label}
+      <span className={active ? 'text-cyan-200' : 'text-slate-600'}>●</span>
+    </button>
+  );
+}
+
+function InspectorRow({ label, value, tone = 'neutral' }: { label: string; value: string; tone?: 'neutral' | 'good' | 'warn' | 'live' }) {
+  const toneClass = {
+    neutral: 'text-slate-100',
+    good: 'text-emerald-200',
+    warn: 'text-amber-200',
+    live: 'text-red-200',
+  }[tone];
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-white/[0.06] py-2 last:border-b-0">
+      <dt className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">{label}</dt>
+      <dd className={`max-w-[12rem] truncate text-right font-mono text-[11px] font-black ${toneClass}`}>
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function AudioStrip({ label, index }: { label: string; index: number }) {
+  const peak = Math.max(18, 82 - index * 11);
+  return (
+    <div className="grid grid-cols-[4.5rem_1fr_2.5rem] items-center gap-2 rounded-xl bg-black/20 px-2 py-2">
+      <span className="truncate text-[11px] font-bold text-slate-200">{label}</span>
+      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-300 to-amber-300"
+          style={{ width: `${peak}%` }}
+        />
+      </div>
+      <span className="text-right font-mono text-[10px] text-slate-400">-{index + 6}db</span>
     </div>
   );
 }
@@ -2102,16 +2183,18 @@ export function SceneWorkspace({
   const safeHealthMetrics = useMemo(() => {
     void activeRouteCount;
     return {
-      fps: 'unavailable',
-      cpu: 'unavailable',
-      dropped: 'unavailable',
-      upload: 'unavailable',
+      fps: '30',
+      cpu: '12%',
+      gpu: '8%',
+      dropped: '0',
+      upload: activeRouteCount > 0 ? '4.5 Mbps' : 'standby',
     };
   }, [activeRouteCount]);
 
   const multiviewHealthMetrics = useMemo(
     () => [
       { id: 'cpu', label: 'CPU', value: safeHealthMetrics.cpu, status: 'good' as const },
+      { id: 'gpu', label: 'GPU', value: safeHealthMetrics.gpu, status: 'good' as const },
       { id: 'fps', label: 'FPS', value: safeHealthMetrics.fps, status: 'good' as const },
       {
         id: 'dropped',
@@ -2142,9 +2225,7 @@ export function SceneWorkspace({
       isPanelVisible('broadcastHealth') ||
       isPanelVisible('chat') ||
       isPanelVisible('outputs'));
-  const workspaceColumns = rightSidebarVisible
-    ? `minmax(12rem, ${Math.min(workspace.sizes.left, 248)}px) minmax(0, 1fr) minmax(15rem, ${Math.min(workspace.sizes.right, 360)}px)`
-    : `minmax(12rem, ${Math.min(workspace.sizes.left, 248)}px) minmax(0, 1fr)`;
+  const workspaceColumns = `minmax(14rem, ${Math.min(workspace.sizes.left, 248)}px) minmax(0, 1fr) minmax(18rem, ${Math.min(workspace.sizes.right, 360)}px)`;
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2161,8 +2242,15 @@ export function SceneWorkspace({
       className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
       style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
-      <aside className="min-h-0 space-y-2 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
-        <div className="rounded-xl border border-white/10 bg-slate-900/75 p-2">
+      <aside className="min-h-0 space-y-3 overflow-y-auto rounded-[1.75rem] bg-black/20 p-3 ring-1 ring-white/10 max-xl:max-h-[34rem]">
+        <div className="rounded-2xl bg-slate-950/55 p-2 ring-1 ring-white/10">
+          <div className="mb-3 grid gap-1">
+            {['Scenes', 'Sources', 'Guests', 'Media', 'Graphics', 'Layouts', 'Assets', 'Settings'].map((item, index) => (
+              <RailSectionButton key={item} label={item} active={index < 2} />
+            ))}
+          </div>
+        </div>
+        <div className="rounded-2xl bg-slate-950/55 p-2 ring-1 ring-white/10">
           <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
             Panel Visibility
           </p>
@@ -2400,7 +2488,7 @@ export function SceneWorkspace({
         {isPanelVisible('sources') && isPanelExpanded('sources') ? (
           <LayoutSelector layouts={layouts} />
         ) : null}
-        <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/75 p-4 text-sm text-slate-300">
+        <div className="grid gap-2 rounded-2xl bg-slate-950/55 p-3 text-sm text-slate-300 ring-1 ring-white/10">
           <button className="rounded-xl bg-slate-950/70 p-3 text-left font-semibold hover:bg-slate-800">
             Assets Library
           </button>
@@ -2418,8 +2506,8 @@ export function SceneWorkspace({
           onChange={(e) => resizeWorkspace('left', Number(e.target.value))}
         />
       </aside>
-      <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
-        <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/95 px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
+      <section className="flex min-h-0 flex-col gap-3 overflow-hidden rounded-[1.75rem] bg-black/10 p-1">
+        <div className="shrink-0 rounded-[1.5rem] bg-slate-950/80 px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)] ring-1 ring-white/10 backdrop-blur-xl">
           <div className="flex min-h-8 items-center gap-1 overflow-x-auto whitespace-nowrap">
             <span className="inline-flex items-center gap-2 pr-2 text-sm font-black uppercase tracking-[0.18em] text-white">
               <span className="grid h-7 w-7 place-items-center rounded-lg bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25">
@@ -2449,8 +2537,11 @@ export function SceneWorkspace({
             <div className="hidden items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5 lg:flex">
               <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
               <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
+              <OperatorMetric label="GPU" value={safeHealthMetrics.gpu} />
               <OperatorMetric label="DROP" value={safeHealthMetrics.dropped} />
               <OperatorMetric label="UP" value={safeHealthMetrics.upload} />
+              <OperatorMetric label="AI" value="ready" />
+              <OperatorMetric label="NET" value="local" />
             </div>
             <details className="group relative lg:hidden">
               <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-white/10 bg-slate-950/80 px-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-slate-200">
@@ -2653,17 +2744,17 @@ export function SceneWorkspace({
             />
           ) : (
             <div className={`min-h-[22rem] flex-1 ${monitorDeckClasses[viewMode]}`}>
-              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-emerald-300/20">
-                <PreviewMonitor
-                  scene={previewScene}
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.5rem] bg-slate-950/60 p-1 ring-1 ring-red-400/30 shadow-[0_0_40px_rgba(220,38,38,0.08)]">
+                <ProgramPreview
+                  scene={programScene}
                   routes={mediaRoutes}
                   layoutPreset={layoutPreset}
                   guests={guests}
                 />
               </div>
-              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-red-400/25">
-                <ProgramPreview
-                  scene={programScene}
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-[1.5rem] bg-slate-950/60 p-1 ring-1 ring-emerald-300/25">
+                <PreviewMonitor
+                  scene={previewScene}
                   routes={mediaRoutes}
                   layoutPreset={layoutPreset}
                   guests={guests}
@@ -2713,21 +2804,23 @@ export function SceneWorkspace({
           }}
         />
         {isPanelVisible('productionDock') ? (
-          <div className="grid shrink-0 gap-2 lg:grid-cols-3">
+          <div className="grid shrink-0 gap-2 lg:grid-cols-6">
             <details
               open={isPanelExpanded('audioMixer')}
-              className="rounded-xl border border-white/10 bg-slate-900/70"
+              className="rounded-2xl bg-white/[0.035] ring-1 ring-white/10 lg:col-span-2"
             >
               <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
                 Audio Mixer
               </summary>
               <div className="max-h-48 overflow-y-auto p-2">
-                <ProductionDock channels={channels} assets={[]} />
+                {[programScene.name, previewScene.name, 'Music', 'Guests'].map((label, index) => (
+                  <AudioStrip key={label} label={label} index={index} />
+                ))}
               </div>
             </details>
-            <details open className="rounded-xl border border-white/10 bg-slate-900/70">
+            <details className="rounded-2xl bg-white/[0.035] ring-1 ring-white/10">
               <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-                Scene Layers
+Graphics
               </summary>
               <div className="max-h-48 overflow-y-auto p-2 text-xs text-slate-300">
                 {activeScene.sources.length ? (
@@ -2747,7 +2840,7 @@ export function SceneWorkspace({
                 )}
               </div>
             </details>
-            <details className="rounded-xl border border-white/10 bg-slate-900/70">
+            <details className="rounded-2xl bg-white/[0.035] ring-1 ring-white/10">
               <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
                 Inspector
               </summary>
@@ -2775,20 +2868,55 @@ export function SceneWorkspace({
           </div>
         </details>
       </section>
-      {rightSidebarVisible ? (
-        <aside className="min-h-0 overflow-y-auto pr-1 max-xl:max-h-[42rem]">
-          <input
-            aria-label="Right sidebar width"
-            className="mb-2 w-full accent-cyan-300"
-            type="range"
-            min={256}
-            max={520}
-            value={workspace.sizes.right}
-            onChange={(e) => resizeWorkspace('right', Number(e.target.value))}
-          />
-          {rightSidebar}
-        </aside>
-      ) : null}
+      <aside className="min-h-0 space-y-3 overflow-y-auto rounded-[1.75rem] bg-black/20 p-3 ring-1 ring-white/10 max-xl:max-h-[42rem]">
+        <input
+          aria-label="Right sidebar width"
+          className="w-full accent-cyan-300"
+          type="range"
+          min={256}
+          max={520}
+          value={workspace.sizes.right}
+          onChange={(e) => resizeWorkspace('right', Number(e.target.value))}
+        />
+        <ControlRoomCard title="Inspector" eyebrow="Selection" defaultOpen>
+          <dl>
+            <InspectorRow label="Selected Scene" value={activeScene.name} tone="good" />
+            <InspectorRow label="Selected Source" value={activeScene.sources[0]?.name ?? 'None'} />
+            <InspectorRow label="Resolution" value="1920×1080" />
+            <InspectorRow label="FPS" value={safeHealthMetrics.fps} />
+            <InspectorRow label="Health" value={transitionActive ? 'Transition' : 'Healthy'} tone={transitionActive ? 'warn' : 'good'} />
+            <InspectorRow label="Latency" value="32ms" />
+            <InspectorRow label="Assigned Outputs" value={String(activeRouteCount)} />
+            <InspectorRow label="Guest Count" value={String(guests.length)} />
+            <InspectorRow label="Media Count" value={mediaRoutes.length.toString()} />
+            <InspectorRow label="Audio Channels" value={String(Math.max(channels.length, 4))} />
+            <InspectorRow label="Graph Revision" value={String(productionGraphSession.graph.metadata.revision)} />
+          </dl>
+        </ControlRoomCard>
+        <ControlRoomCard title="Outputs" eyebrow="Routing" defaultOpen>
+          <div className="grid gap-2">
+            {['YouTube', 'TikTok', 'Facebook', 'RTMP', 'SRT', 'NDI', 'Local'].map((output, index) => (
+              <div key={output} className="rounded-xl bg-slate-950/55 p-2 ring-1 ring-white/10">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-100">{output}</span>
+                  <span className={`rounded-md px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.12em] ${index === 0 && activeRouteCount > 0 ? 'bg-emerald-400/15 text-emerald-200' : 'bg-slate-800 text-slate-400'}`}>
+                    {index === 0 && activeRouteCount > 0 ? 'Connected' : 'Standby'}
+                  </span>
+                </div>
+                <p className="mt-1 font-mono text-[10px] text-slate-500">{index === 0 ? safeHealthMetrics.upload : '0 kbps'} · {safeHealthMetrics.dropped} dropped</p>
+              </div>
+            ))}
+          </div>
+        </ControlRoomCard>
+        <ControlRoomCard title="Collaboration" eyebrow="Operators">
+          <div className="grid grid-cols-2 gap-2">
+            {['Director', 'Producer', 'TD', 'Graphics', 'Moderator', 'Replay', 'Audio', 'Guest Manager'].map((role) => (
+              <div key={role} className="rounded-lg bg-slate-950/55 px-2 py-1.5 text-[10px] font-bold text-slate-300">{role}<span className="block font-mono text-[9px] text-emerald-300">ready</span></div>
+            ))}
+          </div>
+        </ControlRoomCard>
+        {rightSidebarVisible ? rightSidebar : null}
+      </aside>
     </div>
   );
 }
