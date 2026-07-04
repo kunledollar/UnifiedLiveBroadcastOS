@@ -13,8 +13,8 @@ export function ProfessionalSwitcherBar({
   return (
     <section
       className={cn(
-        'shrink-0 border-t border-ubos-border-subtle bg-ubos-graphite px-ubos-3 py-ubos-2',
-        'h-[var(--ubos-switcher-height)] min-h-[var(--ubos-switcher-height)] overflow-hidden',
+        'shrink-0 border-t border-ubos-border-subtle bg-ubos-graphite',
+        'h-[var(--ubos-switcher-height)] min-h-[var(--ubos-switcher-height)] max-h-[var(--ubos-switcher-height)] overflow-hidden',
         className,
       )}
       aria-label="Production switcher"

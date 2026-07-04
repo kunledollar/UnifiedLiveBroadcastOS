@@ -115,7 +115,7 @@ import {
   resetDemoProductionState,
   setRouteMuted,
 } from './media-route-actions';
-import { ProductionSwitcher } from './production-switcher';
+import { ProfessionalSwitcher } from './switcher';
 import { BroadcastStatusBar } from './shell/BroadcastStatusBar';
 import { LeftNavigationRail } from './shell/LeftNavigationRail';
 import { CenterProgramWorkspace } from './shell/CenterProgramWorkspace';
@@ -1741,6 +1741,7 @@ export function SceneWorkspace({
   const [productionState, setProductionState] = useState(initialProductionState);
   const [transitionActive, setTransitionActive] = useState(false);
   const [lastTransitionLabel, setLastTransitionLabel] = useState('None');
+  const [transitionHistory, setTransitionHistory] = useState<string[]>([]);
   const [switcherFeedback, setSwitcherFeedback] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -1971,7 +1972,10 @@ export function SceneWorkspace({
         : type === 'fade'
           ? 'Fade Executed'
           : `${type.toUpperCase()} Executed`;
+    const historyLabel =
+      type === 'cut' ? 'CUT' : type === 'fade' ? 'AUTO' : type.toUpperCase();
     setLastTransitionLabel(label);
+    setTransitionHistory((current) => [historyLabel, ...current].slice(0, 8));
     setSwitcherFeedback(type === 'cut' ? 'Cut Complete' : 'Transition Complete');
     window.setTimeout(() => setSwitcherFeedback(null), 1600);
     const next = {
@@ -2597,12 +2601,22 @@ export function SceneWorkspace({
       </div>
 
       <ProfessionalSwitcherBar>
-        <ProductionSwitcher
+        <ProfessionalSwitcher
           productionState={productionState}
           programSceneName={programScene.name}
           previewSceneName={previewScene.name}
           lastTransitionLabel={lastTransitionLabel}
           feedbackLabel={switcherFeedback}
+          transitionActive={transitionActive}
+          transitionHistory={transitionHistory}
+          switcherReady={!isPending && !transitionActive}
+          transitionReady={!transitionActive}
+          programLocked={authorityDiagnostics.activeLocks.some(
+            (lock) => lock.scope === 'program',
+          )}
+          automationMode={
+            productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'
+          }
           onTake={() => switchProgram(productionState.transitionType)}
           onCut={() => switchProgram('cut')}
           onAuto={() => switchProgram('fade')}
