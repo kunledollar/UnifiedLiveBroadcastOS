@@ -477,3 +477,8 @@ export * from './broadcast-automation/index.js';
 export * from './broadcast-ai/index.js';
 export * from './broadcast-distribution/index.js';
 export * from './broadcast-devices/index.js';
+export { PRODUCTION_ENGINE_SCHEMA_VERSION } from './production-engine/types.js';
+export type { EngineSubsystem, EngineActionStatus, ResourceLockState, ResourceType, HistoryKind, VersionedEngineMetadata, EngineAction, EngineTransaction, DependencyNode, DependencyGraph, ResourceLock, EventSubscription, ExecutionQueue, EngineTimeline, EngineSnapshot, EngineHistoryItem, EngineState, EngineManifest } from './production-engine/types.js';
+export { sanitizeEngineId, sanitizeEngineText, validateNoRuntimeHandles, validateVersionedMetadata, serializeEngineMetadata } from './production-engine/validation.js';
+export type { EngineValidationIssue } from './production-engine/validation.js';
+export { createProductionEngineManifest } from './production-engine/manifest.js';

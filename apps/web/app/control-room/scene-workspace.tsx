@@ -3114,6 +3114,7 @@ export function SceneWorkspace({
           health: distributionState.outputHealth,
         })}
         deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
+        engineStatusLabel="Unavailable"
         toolsMenu={toolsMenu}
       />
 

@@ -26,6 +26,7 @@ const gridLayouts: Record<
   'ai-focus': { columns: 1, rows: 1 },
   'distribution-focus': { columns: 1, rows: 1 },
   'devices-focus': { columns: 1, rows: 1 },
+  'engine-focus': { columns: 1, rows: 1 },
 };
 
 export function MonitorGrid({
@@ -50,7 +51,8 @@ export function MonitorGrid({
     mode === 'automation-focus' ||
     mode === 'ai-focus' ||
     mode === 'distribution-focus' ||
-    mode === 'devices-focus'
+    mode === 'devices-focus' ||
+    mode === 'engine-focus'
   ) {
     return <div className={cn('h-full min-h-0 overflow-hidden', className)}>{children[0]}</div>;
   }

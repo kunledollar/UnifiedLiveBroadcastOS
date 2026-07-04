@@ -9,6 +9,7 @@ import { MonitorGrid } from './MonitorGrid';
 import { WorkspacePanel, WorkspacePanelEmpty } from './WorkspacePanel';
 import type { ProfessionalWorkspaceId } from './workspace-types';
 import { DigitalAudioConsole } from '../audio-console/DigitalAudioConsole';
+import { EngineWorkspace } from '../engine';
 import type { AudioNode } from '@ubos/shared';
 import type { OutputViewMode } from '../workspace/monitor-state';
 
@@ -339,6 +340,7 @@ export function WorkspaceCenterLayout({
   aiContent,
   distributionContent,
   deviceContent,
+  engineContent,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
@@ -352,6 +354,7 @@ export function WorkspaceCenterLayout({
   aiContent?: ReactNode;
   distributionContent?: ReactNode;
   deviceContent?: ReactNode;
+  engineContent?: ReactNode;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -386,6 +389,8 @@ export function WorkspaceCenterLayout({
       return distributionContent ?? <DirectorWorkspace context={context} />;
     case 'device-operator':
       return deviceContent ?? <DirectorWorkspace context={context} />;
+    case 'engine-operator':
+      return engineContent ?? <EngineWorkspace />;
     case 'custom':
       return <CustomWorkspace context={context} viewMode={viewMode} />;
     default:

@@ -1,0 +1,24 @@
+/** UBOS Production Engine metadata contracts. Phase 16 defines shapes only; no runtime execution. */
+export const PRODUCTION_ENGINE_SCHEMA_VERSION = '16.0.0' as const;
+export type EngineSubsystem = 'switching' | 'graphics' | 'media' | 'replay' | 'automation' | 'ai' | 'distribution' | 'devices' | 'audio' | 'routing' | 'collaboration' | 'engine';
+export type ProductionCommandType = 'CUT' | 'AUTO' | 'TAKE' | 'LOAD_SCENE' | 'SHOW_GRAPHIC' | 'HIDE_GRAPHIC' | 'PLAY_MEDIA' | 'STOP_MEDIA' | 'START_RECORDING' | 'STOP_RECORDING' | 'ROUTE_OUTPUT' | 'CHANGE_LAYOUT' | 'EXECUTE_MACRO' | 'ENABLE_OUTPUT' | 'DISABLE_OUTPUT';
+export type ProductionEventType = 'SceneLoaded' | 'GraphicShown' | 'MediaStarted' | 'GuestJoined' | 'OutputEnabled' | 'AutomationStarted' | 'RecordingStarted' | 'TransitionFinished' | 'ReplayLoaded' | 'DeviceConnected' | 'TimelineAdvanced';
+export type EngineActionStatus = 'waiting' | 'queued' | 'executing' | 'completed' | 'failed' | 'cancelled' | 'blocked';
+export type ResourceLockState = 'available' | 'locked' | 'busy' | 'reserved' | 'offline';
+export type ResourceType = 'program_output' | 'preview_output' | 'audio_bus' | 'graphic_layer' | 'replay_channel' | 'recording_encoder' | 'media_player' | 'camera_input';
+export type HistoryKind = 'undo' | 'redo' | 'action_history' | 'rollback_point' | 'checkpoint';
+export interface VersionedEngineMetadata { id: string; schemaVersion: typeof PRODUCTION_ENGINE_SCHEMA_VERSION; label: string; description: string; createdAt: string; updatedAt: string; containsRuntimeHandles: false; }
+export interface ProductionCommand extends VersionedEngineMetadata { type: ProductionCommandType; subsystem: EngineSubsystem; operator?: string; payloadSchema: Record<string, string>; safeDefaultPayload: Record<string, unknown>; dependencies: string[]; rollbackAvailable: boolean; metadataOnly: true; }
+export interface ProductionEvent extends VersionedEngineMetadata { type: ProductionEventType; subsystem: EngineSubsystem; sourceCommandId?: string; payloadSchema: Record<string, string>; severity: 'info' | 'warning' | 'critical'; descriptiveOnly: true; }
+export interface EngineAction extends VersionedEngineMetadata { commandId: string; subsystem: EngineSubsystem; status: EngineActionStatus; dependencies: string[]; rollbackAvailable: boolean; notes: string; notExecuting: true; }
+export interface EngineTransaction extends VersionedEngineMetadata { transactionId: string; timestamp: string; operator: string; subsystem: EngineSubsystem; action: string; dependencies: string[]; rollbackAvailable: boolean; status: EngineActionStatus; notes: string; }
+export interface DependencyNode extends VersionedEngineMetadata { dependencies: string[]; priority: number; executionOrder: number; locked: boolean; validationStatus: 'valid' | 'warning' | 'invalid' | 'unknown'; }
+export interface DependencyGraph extends VersionedEngineMetadata { nodes: DependencyNode[]; edges: Array<{ from: string; to: string; label: string }>; schedulingEnabled: false; }
+export interface ResourceLock extends VersionedEngineMetadata { resourceType: ResourceType; owner: string; state: ResourceLockState; lockedByTransactionId?: string; expiresAt?: string; metadataOnly: true; }
+export interface EventSubscription extends VersionedEngineMetadata { eventTypes: ProductionEventType[]; subscriber: string; filters: Record<string, string>; dispatchEnabled: false; }
+export interface ExecutionQueue extends VersionedEngineMetadata { state: EngineActionStatus; actions: EngineAction[]; blockedReason: string; executing: false; }
+export interface EngineTimeline extends VersionedEngineMetadata { currentTime: string; currentSegment: string; upcomingSegment: string; completedSegments: string[]; cueMarkers: string[]; transitionMarkers: string[]; breakpoints: string[]; playbackEnabled: false; }
+export interface EngineSnapshot extends VersionedEngineMetadata { currentScene: string; graphicsState: string; mediaState: string; replayState: string; outputs: string; audio: string; automation: string; timeline: string; guests: string; devices: string; persistenceEnabled: false; }
+export interface EngineHistoryItem extends VersionedEngineMetadata { kind: HistoryKind; transactionId?: string; rollbackAvailable: boolean; metadataOnly: true; }
+export interface EngineState extends VersionedEngineMetadata { status: 'unavailable' | 'ready'; commandBusStatus: string; eventBusStatus: string; queueStatus: string; lockStatus: string; timelineStatus: string; conflictStatus: string; runtimeConnected: false; productionGraphIntegrated: false; }
+export interface EngineManifest extends VersionedEngineMetadata { commands: ProductionCommand[]; events: ProductionEvent[]; dependencyGraph: DependencyGraph; resourceLocks: ResourceLock[]; executionQueue: ExecutionQueue; timeline: EngineTimeline; snapshots: EngineSnapshot[]; transactions: EngineTransaction[]; history: EngineHistoryItem[]; subscriptions: EventSubscription[]; state: EngineState; }
