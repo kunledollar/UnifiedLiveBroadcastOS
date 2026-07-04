@@ -53,6 +53,7 @@ import {
   shouldRetryFailure,
   summarizeFailureState,
 } from './failure-recovery.js';
+import { nextDuplicateName } from './index.js';
 import {
   appendReplayTimelineEvent,
   compareFramePlans,
@@ -77,6 +78,26 @@ import {
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
 }
+assert(
+  nextDuplicateName('Host + Guest Interview', ['Host + Guest Interview']) ===
+    'Host + Guest Interview Copy',
+  'first duplicate appends Copy',
+);
+assert(
+  nextDuplicateName('Host + Guest Interview', [
+    'Host + Guest Interview',
+    'Host + Guest Interview Copy',
+  ]) === 'Host + Guest Interview Copy 2',
+  'second duplicate appends Copy 2',
+);
+assert(
+  nextDuplicateName('Host + Guest Interview Copy', [
+    'Host + Guest Interview',
+    'Host + Guest Interview Copy',
+    'Host + Guest Interview Copy 2',
+  ]) === 'Host + Guest Interview Copy 3',
+  'duplicate names avoid Copy Copy',
+);
 const command = (
   type: ProductionCommand['type'],
   payload: Record<string, unknown> = {},
@@ -182,6 +203,28 @@ const auto = applyProductionCommand(
 assert(auto.accepted, 'AUTO_TRANSITION is accepted for known scene');
 assert(auto.nextGraph.program.sceneId === 'scene-a', 'AUTO_TRANSITION promotes preview target');
 assert(auto.nextGraph.program.transitionDurationMs === 750, 'AUTO_TRANSITION stores duration');
+const normalizedAuto = applyProductionCommand(
+  graph,
+  command('AUTO_TRANSITION', { sceneId: 'scene-a', transitionType: 'fade', durationMs: 0 }),
+);
+assert(
+  normalizedAuto.nextGraph.program.transitionDurationMs === 100,
+  'AUTO_TRANSITION normalizes zero duration to minimum',
+);
+const fadeGraph = { ...graph, program: { ...graph.program, transitionType: 'fade' as const } };
+const normalizedSetDuration = applyProductionCommand(
+  fadeGraph,
+  command('SET_TRANSITION_DURATION', { durationMs: Number.NaN }),
+);
+assert(
+  normalizedSetDuration.nextGraph.program.transitionDurationMs >= 100,
+  'SET_TRANSITION_DURATION normalizes invalid duration',
+);
+const cutDuration = applyProductionCommand(
+  graph,
+  command('CUT_TO_PROGRAM', { sceneId: 'scene-a', durationMs: 500 }),
+);
+assert(cutDuration.nextGraph.program.transitionDurationMs === 0, 'CUT_TO_PROGRAM allows zero duration');
 assert(
   !applyProductionCommand(graph, command('SET_TRANSITION', { transitionType: 'invalid' })).accepted,
   'invalid transition is rejected',

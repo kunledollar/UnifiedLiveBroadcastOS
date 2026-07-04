@@ -1196,6 +1196,17 @@ function OperatorMetric({ label, value }: { label: string; value: string }) {
 
 
 
+
+const MIN_AUTO_TRANSITION_DURATION_MS = 100;
+const DEFAULT_TRANSITION_DURATION_MS = 500;
+
+function normalizeTransitionDuration(transitionType: TransitionType, value: unknown, fallback = DEFAULT_TRANSITION_DURATION_MS) {
+  const raw = typeof value === 'string' && value.trim() === '' ? Number.NaN : Number(value);
+  if (transitionType === 'cut') return 0;
+  const normalizedFallback = Number.isFinite(fallback) && fallback >= MIN_AUTO_TRANSITION_DURATION_MS ? fallback : DEFAULT_TRANSITION_DURATION_MS;
+  if (!Number.isFinite(raw)) return normalizedFallback;
+  return Math.min(Math.max(Math.round(raw), MIN_AUTO_TRANSITION_DURATION_MS), 5000);
+}
 interface CurrentProgramState {
   sceneId: string;
   transitionType: TransitionType;
@@ -1593,9 +1604,9 @@ export function SceneWorkspace({
     new TransitionController(dispatchProductionGraphCommand).execute(
       type,
       productionState.previewSceneId,
-      productionState.transitionDuration,
+      normalizeTransitionDuration(type, productionState.transitionDuration),
     );
-    const duration = type === 'cut' ? 0 : productionState.transitionDuration;
+    const duration = normalizeTransitionDuration(type, productionState.transitionDuration);
     const label =
       type === 'cut'
         ? 'Cut Executed'
@@ -2201,14 +2212,27 @@ export function SceneWorkspace({
           onPrevious={() => stageAdjacentScene('previous')}
           onNext={() => stageAdjacentScene('next')}
           onTransitionChange={(transitionType) => {
+            const transitionDuration = normalizeTransitionDuration(
+              transitionType,
+              productionState.transitionDuration,
+            );
             dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
-            persistProductionState({ ...productionState, transitionType }, 'stage');
+            dispatchProductionGraphCommand('SET_TRANSITION_DURATION', { durationMs: transitionDuration });
+            persistProductionState({ ...productionState, transitionType, transitionDuration }, 'stage');
           }}
           onDurationChange={(transitionDuration) => {
+            const normalizedDuration = normalizeTransitionDuration(
+              productionState.transitionType,
+              transitionDuration,
+              productionState.transitionDuration,
+            );
             dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-              durationMs: transitionDuration,
+              durationMs: normalizedDuration,
             });
-            persistProductionState({ ...productionState, transitionDuration }, 'stage');
+            persistProductionState(
+              { ...productionState, transitionDuration: normalizedDuration },
+              'stage',
+            );
           }}
         />
         <ProductionGraphInspector session={productionGraphSession} />
