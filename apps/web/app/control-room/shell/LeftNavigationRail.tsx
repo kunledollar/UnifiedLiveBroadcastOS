@@ -7,8 +7,8 @@ import type { NavItemId } from './types';
 const navItems: Array<{ id: NavItemId; label: string; icon: string }> = [
   { id: 'scenes', label: 'Scenes', icon: '▦' },
   { id: 'sources', label: 'Sources', icon: '◫' },
-  { id: 'graphics', label: 'Graphics', icon: '◈' },
   { id: 'media', label: 'Media', icon: '▣' },
+  { id: 'graphics', label: 'Graphics', icon: '◈' },
   { id: 'layouts', label: 'Layouts', icon: '▤' },
   { id: 'replay', label: 'Replay', icon: '↺' },
   { id: 'outputs', label: 'Outputs', icon: '⇪' },
