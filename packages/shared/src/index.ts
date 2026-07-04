@@ -475,3 +475,4 @@ export * from './media-replay/index.js';
 export * from './collaboration-remote/index.js';
 export * from './broadcast-automation/index.js';
 export * from './broadcast-ai/index.js';
+export * from './broadcast-distribution/index.js';

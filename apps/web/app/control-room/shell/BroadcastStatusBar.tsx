@@ -18,6 +18,7 @@ export function BroadcastStatusBar({
   upload,
   automationModeLabel,
   aiStatusLabel,
+  outputHealthLabel,
   toolsMenu,
   className,
 }: {
@@ -35,6 +36,7 @@ export function BroadcastStatusBar({
   upload: string;
   automationModeLabel?: string;
   aiStatusLabel?: string;
+  outputHealthLabel?: string;
   toolsMenu?: ReactNode;
   className?: string;
 }) {
@@ -75,6 +77,10 @@ export function BroadcastStatusBar({
 
       {aiStatusLabel ? (
         <StatusBadge variant="neutral">{aiStatusLabel}</StatusBadge>
+      ) : null}
+
+      {outputHealthLabel ? (
+        <StatusBadge variant="neutral">{outputHealthLabel}</StatusBadge>
       ) : null}
 
       <div className="hidden min-w-0 items-center gap-1 lg:flex">

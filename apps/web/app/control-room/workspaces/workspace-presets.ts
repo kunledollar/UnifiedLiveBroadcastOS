@@ -155,6 +155,17 @@ export const workspaceProfiles: Record<WorkspaceProfile['id'], WorkspaceProfile>
     defaultNavItem: 'scenes',
     programFlexWeight: 45,
   },
+  'distribution-operator': {
+    id: 'distribution-operator',
+    label: 'Distribution Operator',
+    description: 'Destinations, routing matrix, stream profiles, and output health',
+    centerLayout: 'distribution-focus',
+    defaultViewMode: 'program',
+    defaultOperationsTab: 'outputs',
+    defaultDockTab: 'audio',
+    defaultNavItem: 'outputs',
+    programFlexWeight: 45,
+  },
   custom: {
     id: 'custom',
     label: 'Custom Workspace',

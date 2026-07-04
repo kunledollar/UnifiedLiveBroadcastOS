@@ -26,6 +26,9 @@ import type { CollaborationAction, CollaborationState } from '../collaboration/c
 import { AutomationPanel } from '../automation/AutomationPanel';
 import type { AutomationAction, AutomationState } from '../automation/automation-state';
 import { HostDevicesSection } from './HostDevicesSection';
+import type { DistributionAction, DistributionState } from '../distribution/distribution-state';
+import { createDistributionManifest } from '@ubos/shared';
+import { createInitialDistributionState } from '../distribution/distribution-state';
 
 export function OperationsConsoleContent({
   broadcastId,
@@ -59,6 +62,8 @@ export function OperationsConsoleContent({
   aiState,
   onAIDispatch,
   aiSummaryLines,
+  distributionState,
+  onDistributionDispatch,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -91,6 +96,8 @@ export function OperationsConsoleContent({
   aiState?: AIState;
   onAIDispatch?: (action: AIAction) => void;
   aiSummaryLines?: string[];
+  distributionState?: DistributionState;
+  onDistributionDispatch?: (action: DistributionAction) => void;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -128,7 +135,20 @@ export function OperationsConsoleContent({
         broadcastId={broadcastId}
       />
     ),
-    outputs: <OutputsPanel destinations={destinations} />,
+    outputs:
+      distributionState && onDistributionDispatch ? (
+        <OutputsPanel state={distributionState} dispatch={onDistributionDispatch} />
+      ) : (
+        <OutputsPanel
+          state={createInitialDistributionState({
+            destinations: [],
+            streamProfiles: createDistributionManifest().streamProfiles,
+            outputRoutes: [],
+            outputHealth: [],
+          })}
+          dispatch={() => undefined}
+        />
+      ),
     health: (
       <HealthPanel
         streamMetrics={streamHealthMetrics}
