@@ -126,8 +126,21 @@ import { LeftNavPanel } from './browsers';
 import { DigitalAudioConsole, DockPanelEmpty, DockPanelTags } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
+import {
+  applyWorkspaceProfile,
+  defaultSafeAreaToggles,
+  defaultWorkspaceId,
+  normalizeWorkspaceId,
+  SafeAreaControls,
+  WorkspaceCenterLayout,
+  WorkspaceLayout,
+  WorkspaceSelector,
+  workspaceProfiles,
+  type ProfessionalWorkspaceId,
+  type SafeAreaToggles,
+} from './workspaces';
 import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
-import { OutputViewRenderer, PreviewMonitorCompact } from './workspace/OutputViewRenderer';
+import { PreviewMonitorCompact } from './workspace/OutputViewRenderer';
 import {
   normalizeOutputViewMode,
   outputViewModes,
@@ -1377,124 +1390,42 @@ function ProductionGraphInspector({
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
 
-type WorkspacePresetId = 'default' | 'broadcast' | 'compact' | 'interview' | 'streaming';
-type PanelId =
-  | 'scenes'
-  | 'sources'
-  | 'guestManager'
-  | 'programPreview'
-  | 'audioMixer'
-  | 'productionDock'
-  | 'broadcastHealth'
-  | 'chat'
-  | 'outputs';
-type PanelStatus = 'expanded' | 'collapsed' | 'hidden';
-type WorkspaceLayout = {
-  selectedPreset: WorkspacePresetId;
-  panelState: Record<PanelId, PanelStatus>;
-  sizes: { left: number; center: number; right: number; dock: number };
+type ControlRoomWorkspaceState = {
+  selectedWorkspace: ProfessionalWorkspaceId;
   viewMode: OutputViewMode;
-};
-type WorkspacePreset = WorkspaceLayout & {
-  id: WorkspacePresetId;
-  label: string;
-  description: string;
+  splitRatio: number;
+  sizes: { left: number; center: number; right: number; dock: number; operations: number };
+  safeAreaToggles: SafeAreaToggles;
 };
 
 const controlRoomViewStorageKey = 'ubos.controlRoom.viewMode';
-const workspaceStorageKey = 'ubos.controlRoom.workspace.v1';
-const panelIds: PanelId[] = [
-  'scenes',
-  'sources',
-  'guestManager',
-  'programPreview',
-  'audioMixer',
-  'productionDock',
-  'broadcastHealth',
-  'chat',
-  'outputs',
-];
-const panelLabels: Record<PanelId, string> = {
-  scenes: 'Scenes',
-  sources: 'Sources',
-  guestManager: 'Guest Manager',
-  programPreview: 'Program/Preview',
-  audioMixer: 'Audio',
-  productionDock: 'Production Dock',
-  broadcastHealth: 'Broadcast Health',
-  chat: 'Chat',
-  outputs: 'Outputs',
-};
-const allExpanded = (): Record<PanelId, PanelStatus> =>
-  Object.fromEntries(panelIds.map((id) => [id, 'expanded'])) as Record<PanelId, PanelStatus>;
-const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
-  default: {
-    id: 'default',
-    label: 'Default',
-    description: 'Balanced control room',
-    selectedPreset: 'default',
-    panelState: allExpanded(),
-    sizes: { left: 288, center: 640, right: 352, dock: 220 },
-    viewMode: 'program',
-  },
-  broadcast: {
-    id: 'broadcast',
-    label: 'Broadcast',
-    description: 'Program emphasis',
-    selectedPreset: 'broadcast',
-    panelState: { ...allExpanded(), chat: 'collapsed' },
-    sizes: { left: 304, center: 720, right: 384, dock: 240 },
-    viewMode: 'program',
-  },
-  compact: {
-    id: 'compact',
-    label: 'Compact',
-    description: 'Laptop friendly',
-    selectedPreset: 'compact',
-    panelState: { ...allExpanded(), sources: 'collapsed', chat: 'hidden', outputs: 'hidden' },
-    sizes: { left: 232, center: 560, right: 280, dock: 180 },
-    viewMode: 'program',
-  },
-  interview: {
-    id: 'interview',
-    label: 'Interview',
-    description: 'Guest manager focus',
-    selectedPreset: 'interview',
-    panelState: { ...allExpanded(), broadcastHealth: 'collapsed', outputs: 'hidden' },
-    sizes: { left: 272, center: 640, right: 420, dock: 220 },
-    viewMode: 'program',
-  },
-  streaming: {
-    id: 'streaming',
-    label: 'Streaming',
-    description: 'Chat and health focus',
-    selectedPreset: 'streaming',
-    panelState: { ...allExpanded(), outputs: 'collapsed' },
-    sizes: { left: 260, center: 640, right: 400, dock: 220 },
-    viewMode: 'vertical',
-  },
-};
-const factoryWorkspace = workspacePresets.default;
+const workspaceStorageKey = 'ubos.controlRoom.workspace.v2';
 
-function normalizeWorkspaceLayout(
-  value: Partial<WorkspaceLayout> | null | undefined,
-): WorkspaceLayout {
-  const selectedPreset = value?.selectedPreset;
-  const preset: WorkspacePresetId =
-    selectedPreset && selectedPreset in workspacePresets
-      ? (selectedPreset as WorkspacePresetId)
-      : factoryWorkspace.selectedPreset;
-  const storedViewMode = value?.viewMode ?? null;
-  const viewMode = normalizeOutputViewMode(
-    typeof storedViewMode === 'string' ? storedViewMode : null,
+const factoryWorkspace: ControlRoomWorkspaceState = {
+  selectedWorkspace: defaultWorkspaceId,
+  viewMode: workspaceProfiles.director.defaultViewMode,
+  splitRatio: 0.72,
+  sizes: { left: 288, center: 640, right: 352, dock: 220, operations: 288 },
+  safeAreaToggles: defaultSafeAreaToggles,
+};
+
+function normalizeControlRoomWorkspace(
+  value: Partial<ControlRoomWorkspaceState> & { selectedPreset?: string } | null | undefined,
+): ControlRoomWorkspaceState {
+  const selectedWorkspace = normalizeWorkspaceId(
+    value?.selectedWorkspace ?? value?.selectedPreset ?? null,
   );
+  const profile = workspaceProfiles[selectedWorkspace];
+  const storedViewMode = value?.viewMode ?? null;
 
   return {
-    ...workspacePresets[preset],
+    ...factoryWorkspace,
     ...value,
-    selectedPreset: preset,
-    viewMode,
-    panelState: { ...factoryWorkspace.panelState, ...value?.panelState },
+    selectedWorkspace,
+    viewMode: normalizeOutputViewMode(
+      typeof storedViewMode === 'string' ? storedViewMode : profile.defaultViewMode,
+    ),
+    safeAreaToggles: { ...defaultSafeAreaToggles, ...value?.safeAreaToggles },
     sizes: { ...factoryWorkspace.sizes, ...value?.sizes },
   };
 }
@@ -1736,8 +1667,9 @@ export function SceneWorkspace({
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [workspace, setWorkspace] = useState<WorkspaceLayout>(factoryWorkspace);
+  const [workspace, setWorkspace] = useState<ControlRoomWorkspaceState>(factoryWorkspace);
   const viewMode = workspace.viewMode;
+  const selectedWorkspace = workspace.selectedWorkspace;
   const [scenes, setScenes] = useOptimistic(initialScenes, (_current, next: Scene[]) => next);
   const [productionState, setProductionState] = useState(initialProductionState);
   const [transitionActive, setTransitionActive] = useState(false);
@@ -1751,22 +1683,27 @@ export function SceneWorkspace({
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
     const storedWorkspace = window.localStorage.getItem(workspaceStorageKey);
-    if (storedWorkspace) {
+    const legacyWorkspace = window.localStorage.getItem('ubos.controlRoom.workspace.v1');
+    const rawWorkspace = storedWorkspace ?? legacyWorkspace;
+    if (rawWorkspace) {
       try {
-        const parsed = JSON.parse(storedWorkspace) as WorkspaceLayout;
-        if (parsed?.selectedPreset && parsed?.panelState && parsed?.sizes) {
-          setWorkspace(normalizeWorkspaceLayout(parsed));
+        const parsed = JSON.parse(rawWorkspace) as Partial<ControlRoomWorkspaceState> & {
+          selectedPreset?: string;
+        };
+        if (parsed) {
+          setWorkspace(normalizeControlRoomWorkspace(parsed));
           return;
         }
       } catch {
         window.localStorage.removeItem(workspaceStorageKey);
       }
     }
-    if (storedViewMode)
+    if (storedViewMode) {
       setWorkspace((current) => ({
         ...current,
         viewMode: normalizeOutputViewMode(storedViewMode),
       }));
+    }
   }, []);
 
   useEffect(() => {
@@ -1789,37 +1726,46 @@ export function SceneWorkspace({
     window.localStorage.setItem(controlRoomViewStorageKey, mode);
   };
 
-  const applyWorkspace = (next: WorkspaceLayout) => {
+  const applyWorkspace = (next: ControlRoomWorkspaceState) => {
     setWorkspace(next);
     window.localStorage.setItem(controlRoomViewStorageKey, next.viewMode);
   };
+
+  const selectProfessionalWorkspace = (id: ProfessionalWorkspaceId) => {
+    const profile = applyWorkspaceProfile(id);
+    setActiveNav(profile.activeNav);
+    setActiveOperationsTab(profile.activeOperationsTab);
+    setActiveBottomDock(profile.activeBottomDock);
+    setWorkspace((current) => ({
+      ...current,
+      selectedWorkspace: profile.selectedWorkspace,
+      viewMode: profile.viewMode,
+    }));
+    window.localStorage.setItem(controlRoomViewStorageKey, profile.viewMode);
+  };
+
   const saveWorkspace = () =>
     window.localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
+
   const restoreWorkspace = () => {
     const storedWorkspace = window.localStorage.getItem(workspaceStorageKey);
     if (!storedWorkspace) return applyWorkspace(factoryWorkspace);
     try {
       applyWorkspace(
-        normalizeWorkspaceLayout(JSON.parse(storedWorkspace) as Partial<WorkspaceLayout>),
+        normalizeControlRoomWorkspace(
+          JSON.parse(storedWorkspace) as Partial<ControlRoomWorkspaceState>,
+        ),
       );
     } catch {
       applyWorkspace(factoryWorkspace);
     }
   };
-  const applyPreset = (id: WorkspacePresetId) => applyWorkspace(workspacePresets[id]);
+
   const resetWorkspace = () => {
     window.localStorage.removeItem(workspaceStorageKey);
+    selectProfessionalWorkspace(defaultWorkspaceId);
     applyWorkspace(factoryWorkspace);
   };
-  const setPanelStatus = (panel: PanelId, status: PanelStatus) =>
-    setWorkspace((current) => ({
-      ...current,
-      panelState: { ...current.panelState, [panel]: status },
-    }));
-  const resizeWorkspace = (key: keyof WorkspaceLayout['sizes'], value: number) =>
-    setWorkspace((current) => ({ ...current, sizes: { ...current.sizes, [key]: value } }));
-  const isPanelVisible = (panel: PanelId) => workspace.panelState[panel] !== 'hidden';
-  const isPanelExpanded = (panel: PanelId) => workspace.panelState[panel] === 'expanded';
 
   const refresh = useCallback(
     (next: Scene[]) => startTransition(() => setScenes(next)),
@@ -2077,6 +2023,7 @@ export function SceneWorkspace({
   const [activeBottomDock, setActiveBottomDock] = useState<DockTabId>('audio');
   const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
   const [showSafeAreas, setShowSafeAreas] = useState(false);
+  const safeAreaToggles = workspace.safeAreaToggles;
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2205,47 +2152,7 @@ export function SceneWorkspace({
 
   const toolsMenu = (
     <div className="flex items-center gap-1">
-      <details className="group relative">
-        <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
-          Workspace
-        </summary>
-        <div className="absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-2 text-ubos-caption text-ubos-fg-secondary shadow-ubos-raised">
-          {Object.values(workspacePresets).map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => applyPreset(preset.id)}
-            >
-              {preset.label}
-              <span className="block text-ubos-metadata text-ubos-fg-muted">{preset.description}</span>
-            </button>
-          ))}
-          <div className="border-t border-ubos-border-subtle pt-1">
-            <button
-              type="button"
-              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={saveWorkspace}
-            >
-              Save Current
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={restoreWorkspace}
-            >
-              Restore Last Workspace
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={resetWorkspace}
-            >
-              Reset Workspace
-            </button>
-          </div>
-        </div>
-      </details>
+      <WorkspaceSelector selected={selectedWorkspace} onSelect={selectProfessionalWorkspace} />
       <details className="group relative">
         <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
           Tools
@@ -2254,24 +2161,47 @@ export function SceneWorkspace({
           <button
             type="button"
             className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={() => startTransition(async () => seedDemoProductionState())}
+            onClick={saveWorkspace}
           >
-            Seed demo
+            Save Workspace
           </button>
           <button
             type="button"
             className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={() => startTransition(async () => simulateDemoProduction())}
+            onClick={restoreWorkspace}
           >
-            Simulate
+            Restore Workspace
           </button>
           <button
             type="button"
             className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={() => startTransition(async () => resetDemoProductionState())}
+            onClick={resetWorkspace}
           >
-            Reset
+            Reset Workspace
           </button>
+          <div className="border-t border-ubos-border-subtle pt-1">
+            <button
+              type="button"
+              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={() => startTransition(async () => seedDemoProductionState())}
+            >
+              Seed demo
+            </button>
+            <button
+              type="button"
+              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={() => startTransition(async () => simulateDemoProduction())}
+            >
+              Simulate
+            </button>
+            <button
+              type="button"
+              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={() => startTransition(async () => resetDemoProductionState())}
+            >
+              Reset
+            </button>
+          </div>
         </div>
       </details>
     </div>
@@ -2461,6 +2391,35 @@ export function SceneWorkspace({
     [productionGraphSession.graph],
   );
 
+  const workspaceMonitorContext = useMemo(
+    () => ({
+      programScene,
+      previewScene,
+      routes: mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      healthMetrics: multiviewHealthMetrics,
+      graph: productionGraphSession.graph,
+      healthFps: safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+    }),
+    [
+      programScene,
+      previewScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      multiviewHealthMetrics,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+    ],
+  );
+
   const bottomDockContent = (
     <>
       {activeBottomDock === 'audio' ? (
@@ -2551,15 +2510,31 @@ export function SceneWorkspace({
 
         <CenterProgramWorkspace
           viewModeSelector={
-            <OutputViewModeSelector
-              selected={viewMode}
-              onSelect={selectViewMode}
-              showSafeAreas={showSafeAreas}
-              onToggleSafeAreas={() => setShowSafeAreas((current) => !current)}
-            />
+            <div className="flex flex-wrap items-center gap-ubos-2">
+              <OutputViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+              <SafeAreaControls
+                enabled={showSafeAreas}
+                toggles={safeAreaToggles}
+                onToggleEnabled={() => setShowSafeAreas((current) => !current)}
+                onToggleGuide={(key) =>
+                  setWorkspace((current) => ({
+                    ...current,
+                    safeAreaToggles: {
+                      ...current.safeAreaToggles,
+                      [key]: !current.safeAreaToggles[key],
+                    },
+                  }))
+                }
+                className="ml-auto"
+              />
+            </div>
           }
           statusFooter={
             <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
+              <span className="ubos-truncate">
+                Workspace: {workspaceProfiles[selectedWorkspace].label}
+              </span>
+              <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
               <span className="ubos-truncate">History: {lastTransitionLabel}</span>
               <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
               <span className="ubos-truncate">Program: {programScene.name}</span>
@@ -2570,19 +2545,14 @@ export function SceneWorkspace({
             </div>
           }
         >
-          <OutputViewRenderer
-            mode={viewMode}
-            programScene={programScene}
-            previewScene={previewScene}
-            routes={mediaRoutes}
-            layoutPreset={layoutPreset}
-            guests={guests}
-            channels={channels}
-            healthMetrics={multiviewHealthMetrics}
-            graph={productionGraphSession.graph}
-            healthFps={safeHealthMetrics.fps}
-            showSafeAreas={showSafeAreas}
-          />
+          <WorkspaceLayout workspaceId={selectedWorkspace}>
+            <WorkspaceCenterLayout
+              workspaceId={selectedWorkspace}
+              context={workspaceMonitorContext}
+              viewMode={viewMode}
+              graphChannels={graphAudioChannels}
+            />
+          </WorkspaceLayout>
         </CenterProgramWorkspace>
 
         <RightOperationsConsole

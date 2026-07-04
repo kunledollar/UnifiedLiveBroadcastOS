@@ -9,6 +9,8 @@ export function MonitorSafeAreaGuides({
   showTitleSafe = true,
   showActionSafe = true,
   showCrosshair = true,
+  showVerticalGuide = false,
+  showFourThreeGuide = false,
   showPlatformCrop = false,
   className,
 }: {
@@ -16,6 +18,8 @@ export function MonitorSafeAreaGuides({
   showTitleSafe?: boolean;
   showActionSafe?: boolean;
   showCrosshair?: boolean;
+  showVerticalGuide?: boolean;
+  showFourThreeGuide?: boolean;
   showPlatformCrop?: boolean;
   className?: string;
 }) {
@@ -39,8 +43,14 @@ export function MonitorSafeAreaGuides({
           )}
         />
       ) : null}
+      {showFourThreeGuide && !isVertical ? (
+        <div className="absolute inset-y-[5%] left-1/2 aspect-[4/3] h-[90%] -translate-x-1/2 border border-cyan-400/20" />
+      ) : null}
       {isVertical && showPlatformCrop ? (
         <div className="absolute inset-x-[6%] inset-y-[12%] border border-fuchsia-400/25" />
+      ) : null}
+      {showVerticalGuide ? (
+        <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-fuchsia-400/30" />
       ) : null}
       {showCrosshair ? (
         <>
