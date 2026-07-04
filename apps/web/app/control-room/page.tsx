@@ -1,15 +1,8 @@
 import { getProductionState, getScenes } from './scene-actions';
-import { SceneWorkspace } from './scene-workspace';
-import { GuestManagement } from './guest-management';
 import { listGuests, listInvites } from './guest-actions';
 import { loadMediaRoutes } from './media-route-actions';
-import { MediaRoutingPanel } from './media-routing-panel';
-import { ControlRoomRealtime } from './_components/control-room-realtime';
-import { HostDeviceControls } from './_components/host-device-controls';
-import { ProductionTeamPanel } from './_components/production-team-panel';
-import { RightSidebarTabs } from './right-sidebar-tabs';
+import { ControlRoomShell } from './shell/ControlRoomShell';
 
-import { CrossFollowPanel, DestinationPanel, StreamHealthPanel, UnifiedChatPanel } from '@ubos/ui';
 import {
   type AudioChannel,
   type ChatMessage,
@@ -98,110 +91,19 @@ export default async function ControlRoomPage() {
   ]);
 
   return (
-    <main className="min-h-screen overflow-y-auto xl:h-screen xl:overflow-hidden bg-[radial-gradient(circle_at_top_left,rgba(8,145,178,.28),transparent_32%),radial-gradient(circle_at_top_right,rgba(79,70,229,.18),transparent_30%),#020617] p-1.5 text-slate-100 md:p-2">
-      <div className="h-full min-h-0 w-full">
-        <SceneWorkspace
-          initialScenes={scenes}
-          initialProductionState={productionState}
-          layouts={layouts}
-          channels={audioChannels}
-          assets={assets}
-          mediaRoutes={mediaRoutes}
-          guests={guests}
-          rightSidebar={
-            <RightSidebarTabs
-              tabs={[
-                {
-                  id: 'guests',
-                  label: 'Guests',
-                  content: (
-                    <GuestManagement
-                      guests={guests}
-                      invites={invites}
-                      broadcastId="demo-broadcast"
-                    />
-                  ),
-                },
-                {
-                  id: 'outputs',
-                  label: 'Outputs',
-                  content: (
-                    <div className="space-y-3">
-                      <MediaRoutingPanel
-                        guests={guests}
-                        routes={mediaRoutes}
-                        scenes={scenes}
-                        broadcastId="demo-broadcast"
-                      />
-                      <DestinationPanel destinations={destinations} />
-                    </div>
-                  ),
-                },
-                {
-                  id: 'chat',
-                  label: 'Chat',
-                  content: (
-                    <div className="space-y-3">
-                      <UnifiedChatPanel messages={messages} />
-                      <CrossFollowPanel platforms={[]} />
-                    </div>
-                  ),
-                },
-                { id: 'audio', label: 'Audio', content: <HostDeviceControls /> },
-                {
-                  id: 'health',
-                  label: 'Health',
-                  content: (
-                    <div className="space-y-3">
-                      <ControlRoomRealtime
-                        workspaceId="demo-workspace"
-                        broadcastId="demo-broadcast"
-                      />
-                      <StreamHealthPanel metrics={healthMetrics} />
-                    </div>
-                  ),
-                },
-                {
-                  id: 'logs',
-                  label: 'Logs',
-                  content: (
-                    <div className="space-y-3">
-                      <ProductionTeamPanel
-                        currentGraphRevision={persistenceDiagnostics.currentGraphRevision}
-                      />
-                      <dl className="grid grid-cols-2 gap-2 text-xs text-slate-300">
-                        {Object.entries(persistenceDiagnostics).map(([label, value]) => (
-                          <div
-                            key={label}
-                            className="rounded-xl border border-white/10 bg-slate-950/50 p-2"
-                          >
-                            <dt className="font-bold uppercase tracking-[0.12em] text-slate-500">
-                              {label}
-                            </dt>
-                            <dd className="mt-1 truncate font-mono text-cyan-200">
-                              {String(value ?? 'none')}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
-                    </div>
-                  ),
-                },
-                {
-                  id: 'ai',
-                  label: 'AI',
-                  content: (
-                    <div className="rounded-2xl border border-dashed border-cyan-300/20 bg-cyan-300/5 p-4 text-sm text-slate-300">
-                      AI operator assist workspace ready. Automation cards stay hidden until
-                      configured.
-                    </div>
-                  ),
-                },
-              ]}
-            />
-          }
-        />
-      </div>
-    </main>
+    <ControlRoomShell
+      scenes={scenes}
+      productionState={productionState}
+      layouts={layouts}
+      channels={audioChannels}
+      assets={assets}
+      mediaRoutes={mediaRoutes}
+      guests={guests}
+      invites={invites}
+      persistenceDiagnostics={persistenceDiagnostics}
+      destinations={destinations}
+      messages={messages}
+      healthMetrics={healthMetrics}
+    />
   );
 }

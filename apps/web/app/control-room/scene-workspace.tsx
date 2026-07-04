@@ -1407,7 +1407,7 @@ const panelLabels: Record<PanelId, string> = {
   sources: 'Sources',
   guestManager: 'Guest Manager',
   programPreview: 'Program/Preview',
-  audioMixer: 'Audio Mixer',
+  audioMixer: 'Audio',
   productionDock: 'Production Dock',
   broadcastHealth: 'Broadcast Health',
   chat: 'Chat',
@@ -1737,10 +1737,10 @@ function createProductionGraphSessionFromScenes(input: {
 }
 
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
-  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.18fr)]',
-  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
-  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
+  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
+  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
+  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
+  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
   multiview: 'grid min-h-0 gap-3',
 };
 
@@ -2136,15 +2136,10 @@ export function SceneWorkspace({
     [activeRouteCount, multiviewActiveRouteCount, safeHealthMetrics],
   );
 
-  const rightSidebarVisible =
-    Boolean(rightSidebar) &&
-    (isPanelVisible('guestManager') ||
-      isPanelVisible('broadcastHealth') ||
-      isPanelVisible('chat') ||
-      isPanelVisible('outputs'));
+  const rightSidebarVisible = Boolean(rightSidebar);
   const workspaceColumns = rightSidebarVisible
-    ? `minmax(12rem, ${Math.min(workspace.sizes.left, 248)}px) minmax(0, 1fr) minmax(15rem, ${Math.min(workspace.sizes.right, 360)}px)`
-    : `minmax(12rem, ${Math.min(workspace.sizes.left, 248)}px) minmax(0, 1fr)`;
+    ? 'minmax(16rem, 18rem) minmax(0, 1fr) minmax(19rem, 23rem)'
+    : 'minmax(16rem, 18rem) minmax(0, 1fr)';
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2162,45 +2157,7 @@ export function SceneWorkspace({
       style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
       <aside className="min-h-0 space-y-2 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
-        <div className="rounded-xl border border-white/10 bg-slate-900/75 p-2">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
-            Panel Visibility
-          </p>
-          <div className="grid grid-cols-2 gap-1">
-            {(
-              [
-                'scenes',
-                'sources',
-                'guestManager',
-                'programPreview',
-                'audioMixer',
-                'productionDock',
-                'broadcastHealth',
-                'chat',
-                'outputs',
-              ] as PanelId[]
-            ).map((panel) => (
-              <button
-                key={panel}
-                type="button"
-                onClick={() =>
-                  setPanelStatus(
-                    panel,
-                    workspace.panelState[panel] === 'hidden'
-                      ? 'expanded'
-                      : workspace.panelState[panel] === 'collapsed'
-                        ? 'hidden'
-                        : 'collapsed',
-                  )
-                }
-                className={`rounded px-2 py-1 text-left text-[10px] font-bold ${workspace.panelState[panel] === 'hidden' ? 'bg-slate-950 text-slate-500' : workspace.panelState[panel] === 'collapsed' ? 'bg-amber-400/10 text-amber-200' : 'bg-cyan-400/10 text-cyan-100'}`}
-              >
-                {panelLabels[panel]}
-              </button>
-            ))}
-          </div>
-        </div>
-        {isPanelVisible('scenes') && isPanelExpanded('scenes') ? (
+        {
           <SceneList
             scenes={sorted}
             sceneTypes={sceneTypes}
@@ -2285,8 +2242,8 @@ export function SceneWorkspace({
               });
             }}
           />
-        ) : null}
-        {isPanelVisible('sources') && isPanelExpanded('sources') ? (
+        }
+        {
           <SourceManager
             scene={activeScene}
             sourceTypes={sourceTypes}
@@ -2396,27 +2353,25 @@ export function SceneWorkspace({
               });
             }}
           />
-        ) : null}
-        {isPanelVisible('sources') && isPanelExpanded('sources') ? (
-          <LayoutSelector layouts={layouts} />
-        ) : null}
-        <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-900/75 p-4 text-sm text-slate-300">
-          <button className="rounded-xl bg-slate-950/70 p-3 text-left font-semibold hover:bg-slate-800">
-            Assets Library
-          </button>
-          <button className="rounded-xl bg-slate-950/70 p-3 text-left font-semibold hover:bg-slate-800">
-            Overlay Controls
-          </button>
+        }
+        <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-3">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+            Assets
+          </p>
+          <div className="grid gap-2">
+            {assets.map((asset) => (
+              <div
+                key={asset.id}
+                className="rounded-xl bg-slate-950/70 p-2 text-xs font-semibold text-slate-200"
+              >
+                <span className="block truncate">{asset.name}</span>
+                <span className="font-mono text-[10px] uppercase text-slate-500">
+                  {asset.type} · {asset.status}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
-        <input
-          aria-label="Left sidebar width"
-          className="w-full accent-cyan-300"
-          type="range"
-          min={208}
-          max={360}
-          value={workspace.sizes.left}
-          onChange={(e) => resizeWorkspace('left', Number(e.target.value))}
-        />
       </aside>
       <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
         <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/95 px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
@@ -2624,21 +2579,6 @@ export function SceneWorkspace({
             </button>
           </div>
         </div>
-        <div className="shrink-0">
-          <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
-          <label className="flex items-center gap-2 border-b border-white/5 px-1 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-            Center
-            <input
-              aria-label="Center workspace minimum width"
-              className="min-w-40 flex-1 accent-cyan-300"
-              type="range"
-              min={520}
-              max={1040}
-              value={workspace.sizes.center}
-              onChange={(e) => resizeWorkspace('center', Number(e.target.value))}
-            />
-          </label>
-        </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {viewMode === 'multiview' ? (
             <ProductionMultiview
@@ -2653,17 +2593,17 @@ export function SceneWorkspace({
             />
           ) : (
             <div className={`min-h-[22rem] flex-1 ${monitorDeckClasses[viewMode]}`}>
-              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-emerald-300/20">
-                <PreviewMonitor
-                  scene={previewScene}
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-red-400/25">
+                <ProgramPreview
+                  scene={programScene}
                   routes={mediaRoutes}
                   layoutPreset={layoutPreset}
                   guests={guests}
                 />
               </div>
-              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-red-400/25">
-                <ProgramPreview
-                  scene={programScene}
+              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-emerald-300/20">
+                <PreviewMonitor
+                  scene={previewScene}
                   routes={mediaRoutes}
                   layoutPreset={layoutPreset}
                   guests={guests}
@@ -2712,55 +2652,62 @@ export function SceneWorkspace({
             );
           }}
         />
-        {isPanelVisible('productionDock') ? (
-          <div className="grid shrink-0 gap-2 lg:grid-cols-3">
-            <details
-              open={isPanelExpanded('audioMixer')}
-              className="rounded-xl border border-white/10 bg-slate-900/70"
-            >
-              <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-                Audio Mixer
-              </summary>
-              <div className="max-h-48 overflow-y-auto p-2">
-                <ProductionDock channels={channels} assets={[]} />
-              </div>
-            </details>
-            <details open className="rounded-xl border border-white/10 bg-slate-900/70">
-              <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-                Scene Layers
-              </summary>
-              <div className="max-h-48 overflow-y-auto p-2 text-xs text-slate-300">
-                {activeScene.sources.length ? (
-                  activeScene.sources.map((source) => (
-                    <div
-                      key={source.id}
-                      className="mb-1 flex items-center justify-between rounded-lg bg-slate-950/70 px-2 py-1"
-                    >
-                      <span className="truncate">{source.name}</span>
-                      <span className="font-mono text-[10px] text-slate-500">
-                        {source.isVisible ? 'READY' : 'OFF'}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-slate-500">No layers in preview scene.</p>
-                )}
-              </div>
-            </details>
-            <details className="rounded-xl border border-white/10 bg-slate-900/70">
-              <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-                Inspector
-              </summary>
-              <div className="max-h-48 overflow-y-auto p-2">
-                <ProductionGraphInspector session={productionGraphSession} />
-                <MediaExecutionInspector
-                  engine={mediaExecutionEngine}
-                  graph={productionGraphSession.graph}
-                />
-              </div>
-            </details>
-          </div>
-        ) : null}
+        <div className="grid shrink-0 gap-2 lg:grid-cols-5">
+          <details open className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              Audio
+            </summary>
+            <div className="max-h-48 overflow-y-auto p-2">
+              <ProductionDock channels={channels} assets={[]} />
+            </div>
+          </details>
+          <details open className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              Layers
+            </summary>
+            <div className="max-h-48 overflow-y-auto p-2 text-xs text-slate-300">
+              {activeScene.sources.length ? (
+                activeScene.sources.map((source) => (
+                  <div
+                    key={source.id}
+                    className="mb-1 flex items-center justify-between rounded-lg bg-slate-950/70 px-2 py-1"
+                  >
+                    <span className="truncate">{source.name}</span>
+                    <span className="font-mono text-[10px] text-slate-500">
+                      {source.isVisible ? 'READY' : 'OFF'}
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-500">No layers in preview scene.</p>
+              )}
+            </div>
+          </details>
+          <details className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              Inspector
+            </summary>
+            <div className="max-h-48 overflow-y-auto p-2">
+              <ProductionGraphInspector session={productionGraphSession} />
+              <MediaExecutionInspector
+                engine={mediaExecutionEngine}
+                graph={productionGraphSession.graph}
+              />
+            </div>
+          </details>
+          <details className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              Media
+            </summary>
+            <div className="p-2 text-xs text-slate-400">Media bins ready.</div>
+          </details>
+          <details className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              Replay
+            </summary>
+            <div className="p-2 text-xs text-slate-400">Replay placeholder.</div>
+          </details>
+        </div>
         <details className="shrink-0 rounded-xl border border-white/10 bg-slate-950/80">
           <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
             Timeline / Recent Events / Warnings / Automation
@@ -2776,18 +2723,7 @@ export function SceneWorkspace({
         </details>
       </section>
       {rightSidebarVisible ? (
-        <aside className="min-h-0 overflow-y-auto pr-1 max-xl:max-h-[42rem]">
-          <input
-            aria-label="Right sidebar width"
-            className="mb-2 w-full accent-cyan-300"
-            type="range"
-            min={256}
-            max={520}
-            value={workspace.sizes.right}
-            onChange={(e) => resizeWorkspace('right', Number(e.target.value))}
-          />
-          {rightSidebar}
-        </aside>
+        <aside className="min-h-0 overflow-y-auto pr-1 max-xl:max-h-[42rem]">{rightSidebar}</aside>
       ) : null}
     </div>
   );

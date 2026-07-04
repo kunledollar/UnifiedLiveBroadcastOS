@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from 'react';
 
 export type RightSidebarTab = {
-  id: 'guests' | 'outputs' | 'chat' | 'audio' | 'health' | 'logs' | 'ai';
+  id: 'guests' | 'outputs' | 'chat' | 'routing' | 'inspector' | 'health' | 'audio' | 'logs' | 'ai';
   label: string;
   content: ReactNode;
 };
