@@ -98,12 +98,6 @@ importers:
         specifier: ^3.4.17
         version: 3.4.19(tsx@4.22.4)
 
-  packages/media-plane:
-    dependencies:
-      '@ubos/shared':
-        specifier: workspace:*
-        version: link:../shared
-
   packages/config:
     devDependencies:
       '@types/node':
@@ -119,6 +113,12 @@ importers:
       prisma:
         specifier: ^6.1.0
         version: 6.19.3(typescript@5.9.3)
+
+  packages/media-plane:
+    dependencies:
+      '@ubos/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   packages/shared:
     dependencies:
@@ -138,6 +138,9 @@ importers:
       '@types/react':
         specifier: ^19.0.2
         version: 19.2.17
+      tailwindcss:
+        specifier: ^3.4.17
+        version: 3.4.19(tsx@4.22.4)
 
 packages:
 

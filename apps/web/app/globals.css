@@ -1,10 +1,12 @@
+@import '../../../packages/ui/design-system/theme/css-variables.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  background: #020617;
-  color: #e2e8f0;
+  background: var(--ubos-bg-carbon);
+  color: var(--ubos-fg-primary);
 }
 
 * {
