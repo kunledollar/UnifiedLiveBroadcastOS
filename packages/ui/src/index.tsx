@@ -666,7 +666,7 @@ function sourceMonitorState(source: SceneSource) {
         title: 'No Screen Share',
         subtitle: 'Screen share will appear when available.',
         badge: 'SCREEN',
-        tone: 'neutral' as const,
+        tone: 'danger' as const,
       };
     case 'media':
       return {
@@ -980,6 +980,7 @@ const sourceThemes: Record<SceneSourceType, SourceTheme> = {
 type TileSize = 'lg' | 'md' | 'sm';
 
 type ConnectionMeta = { label: string; dot: string; pulse: boolean };
+type AudioRuntimeState = 'enabled' | 'disabled' | 'unavailable';
 
 function humanizeState(state: string): string {
   return (
@@ -1055,7 +1056,7 @@ function dedupeById(routes: MediaRoute[]) {
 // program come first, then any other active routes back-fill the remaining
 // slots so a multi-slot layout is not left mostly empty when live sources exist.
 function programRoutes(routes: MediaRoute[], capacity: number) {
-  const active = sortedRoutes(routes);
+  const active = sortedRoutes(routes).filter((route) => !isRouteUnavailable(route));
   const onProgram = active.filter((route) => route.isOnProgram);
   const ordered = dedupeById([...onProgram, ...active]);
   return ordered.slice(0, Math.max(capacity, 1));
@@ -1064,16 +1065,33 @@ function programRoutes(routes: MediaRoute[], capacity: number) {
 // Vertical mirrors program, but any route flagged for vertical takes priority so
 // the 9:16 output can diverge from the horizontal program when desired.
 function verticalRoutes(routes: MediaRoute[], capacity: number) {
-  const active = sortedRoutes(routes);
+  const active = sortedRoutes(routes).filter((route) => !isRouteUnavailable(route));
   const onVertical = active.filter((route) => route.metadata?.onVertical === true);
   const ordered = dedupeById([...onVertical, ...programRoutes(routes, capacity)]);
   return ordered.slice(0, Math.max(capacity, 1));
 }
 
 function routeConnectionState(route: MediaRoute) {
+  const guestState = route.guest?.status;
+  if (guestState === 'removed' || guestState === 'disconnected' || guestState === 'rejected') {
+    return guestState;
+  }
   const metadataState = route.metadata?.connectionState;
   if (typeof metadataState === 'string') return metadataState;
-  return route.guest?.status ?? (route.isActive ? 'ready' : 'inactive');
+  return guestState ?? (route.isActive ? 'ready' : 'inactive');
+}
+
+function isRouteUnavailable(route: MediaRoute) {
+  return ['removed', 'disconnected', 'rejected', 'inactive'].includes(routeConnectionState(route));
+}
+
+function routeHealthLabel(route: MediaRoute) {
+  const state = routeConnectionState(route);
+  if (state === 'removed') return 'Route stale — guest removed';
+  if (state === 'disconnected' || state === 'rejected' || state === 'inactive') {
+    return 'Route unavailable — guest disconnected';
+  }
+  return null;
 }
 
 // The canvas reserves a top band for the HUD and a bottom band for the scene
@@ -1231,7 +1249,7 @@ function routeMonitorState(route: MediaRoute) {
   ) {
     return {
       title: state === 'inactive' ? 'Offline' : 'Disconnected',
-      subtitle: 'Source is not currently available.',
+      subtitle: state === 'removed' ? 'Route stale — guest removed' : 'Route unavailable — guest disconnected',
       badge: 'OFFLINE',
       tone: 'danger' as const,
     };
@@ -1262,10 +1280,10 @@ function routeMonitorState(route: MediaRoute) {
   }
   if (route.routeType === 'placeholder') {
     return {
-      title: 'Waiting for Source',
-      subtitle: 'Assign live media to this slot.',
-      badge: 'READY',
-      tone: 'neutral' as const,
+      title: 'Source offline',
+      subtitle: 'Assign an online source to this slot.',
+      badge: 'OFFLINE',
+      tone: 'danger' as const,
     };
   }
   return {
@@ -1348,20 +1366,19 @@ function CanvasHud({
         ) : undefined
       }
       metrics={[
-        ...(isPreview ? [{ value: scene.name, label: 'Scene' }] : []),
         {
           value: output === 'program' ? '1920×1080' : '1080×1920',
           label: isPreview ? 'Raster' : 'Format',
         },
         { value: output === 'program' ? '16:9' : '9:16', label: 'Aspect' },
-        { value: 'Unavailable', label: 'FPS' },
+        { value: 'N/A', label: 'FPS' },
       ]}
       badges={
         isProgram
           ? [
               <OutputBadge key="rec" label="REC idle" tone="neutral" />,
-              <OutputBadge key="stream" label="Stream unavailable" tone="neutral" />,
-              <OutputBadge key="metrics" label="Metrics unavailable" tone="neutral" />,
+              <OutputBadge key="stream" label="Stream N/A" tone="neutral" />,
+              <OutputBadge key="metrics" label="Metrics N/A" tone="neutral" />,
             ]
           : [<OutputBadge key="layout" label={mediaLayoutLabels[layoutPreset]} tone="neutral" />]
       }
@@ -1390,7 +1407,10 @@ export function RoutedMediaTile({
     );
   }
   const theme = routeThemes[route.routeType];
-  const conn = connectionMeta(routeConnectionState(route));
+  const routeState = routeConnectionState(route);
+  const conn = connectionMeta(routeState);
+  const unavailable = isRouteUnavailable(route);
+  const staleLabel = routeHealthLabel(route);
   const onVertical = route.metadata?.onVertical === true;
   const big = size === 'lg';
   const small = size === 'sm';
@@ -1440,9 +1460,13 @@ export function RoutedMediaTile({
           />
           {conn.label}
         </span>
-        {output === 'program' && route.isOnProgram ? (
+        {output === 'program' && route.isOnProgram && !unavailable ? (
           <span className="rounded-md bg-red-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white shadow-lg shadow-red-950/40">
             ● Program
+          </span>
+        ) : staleLabel ? (
+          <span className="max-w-40 rounded-md bg-amber-400/20 px-1.5 py-0.5 text-right text-[9px] font-black uppercase tracking-wide text-amber-100 ring-1 ring-amber-300/25">
+            {staleLabel}
           </span>
         ) : null}
         {output === 'vertical' ? (
@@ -1598,6 +1622,7 @@ function BaseCompositor({
   const slots = Array.from({ length: capacity }, (_, index) => selectedRoutes[index]);
   const hasGuests = guests.length > 0;
   const activeRouteCount = selectedRoutes.filter(Boolean).length;
+  const hasOfflineProgramSource = output === 'program' && routes.some((route) => route.isOnProgram && isRouteUnavailable(route));
   return (
     <BroadcastCanvas aspect={output === 'vertical' ? 'vertical' : 'video'}>
       <CanvasHud
@@ -1620,6 +1645,11 @@ function BaseCompositor({
           zIndex={10 + index}
         />
       ))}
+      {hasOfflineProgramSource ? (
+        <div className="absolute left-4 top-4 z-[60] rounded-md border border-amber-300/30 bg-amber-400/15 px-2 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-amber-100">
+          Program scene contains offline source
+        </div>
+      ) : null}
       <SourceLayers sources={scene.sources} output={output} />
       <SafeAreaOverlay output={output} guides={safeAreaGuides} />
       <SceneFooter
@@ -2143,12 +2173,26 @@ export function AudioMeter({
   );
 }
 
-export function AudioMixer({ channels }: { channels: AudioChannel[] }) {
+export function audioRuntimeEmptyMessage(state: AudioRuntimeState, channelCount: number) {
+  if (channelCount > 0) return null;
+  if (state === 'disabled') return 'Audio runtime disabled';
+  if (state === 'unavailable') return 'Audio runtime unavailable';
+  return 'No audio channels configured';
+}
+
+export function AudioMixer({
+  channels,
+  runtimeState = 'enabled',
+}: {
+  channels: AudioChannel[];
+  runtimeState?: AudioRuntimeState;
+}) {
+  const emptyMessage = audioRuntimeEmptyMessage(runtimeState, channels.length);
   return (
     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
-      {channels.length === 0 ? (
+      {emptyMessage ? (
         <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400 sm:col-span-2 xl:col-span-4">
-          No audio runtime channels available.
+          {emptyMessage}
         </p>
       ) : null}
       {channels.map((channel) => (

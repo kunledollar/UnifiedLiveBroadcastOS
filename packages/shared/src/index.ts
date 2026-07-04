@@ -1,5 +1,18 @@
 import { z } from 'zod';
 
+
+export function nextDuplicateName(originalName: string, existingNames: Iterable<string>) {
+  const base = originalName.replace(/(?: Copy(?: \d+)?)$/u, '');
+  const names = new Set(existingNames);
+  const first = `${base} Copy`;
+  if (!names.has(first)) return first;
+  for (let copyNumber = 2; copyNumber < 10000; copyNumber += 1) {
+    const candidate = `${first} ${copyNumber}`;
+    if (!names.has(candidate)) return candidate;
+  }
+  return `${first} ${Date.now()}`;
+}
+
 export enum BroadcastSessionStatus {
   Draft = 'draft',
   Live = 'live',
@@ -440,11 +453,11 @@ export function broadcastRealtimeRoom({ workspaceId, broadcastId }: BroadcastRea
   return `workspace:${workspaceId}:broadcast:${broadcastId}`;
 }
 
-export * from './production-graph';
+export * from './production-graph.js';
 
-export * from './collaboration';
+export * from './collaboration.js';
 
-export * from './authority';
+export * from './authority.js';
 
 export * from './sync.js';
 

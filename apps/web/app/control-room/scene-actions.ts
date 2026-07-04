@@ -15,6 +15,7 @@ import {
   type SceneSourceType,
   type ProductionSwitchingState,
   type TransitionType,
+  nextDuplicateName,
 } from '@ubos/shared';
 import { revalidatePath } from 'next/cache';
 import { emitRealtimeEvent } from './realtime-actions';
@@ -126,6 +127,23 @@ function toJsonArray(value: unknown): SceneSource[] {
 }
 
 const transitionTypes: TransitionType[] = ['cut', 'fade', 'dip', 'wipe'];
+const MIN_AUTO_TRANSITION_DURATION_MS = 100;
+const DEFAULT_TRANSITION_DURATION_MS = 500;
+
+function normalizeTransitionDuration(
+  transitionType: TransitionType,
+  value: unknown,
+  fallback = DEFAULT_TRANSITION_DURATION_MS,
+) {
+  const raw = typeof value === 'string' && value.trim() === '' ? Number.NaN : Number(value);
+  if (transitionType === 'cut') return 0;
+  const normalizedFallback = Number.isFinite(fallback) && fallback >= MIN_AUTO_TRANSITION_DURATION_MS
+    ? fallback
+    : DEFAULT_TRANSITION_DURATION_MS;
+  if (!Number.isFinite(raw)) return normalizedFallback;
+  return Math.min(Math.max(Math.round(raw), MIN_AUTO_TRANSITION_DURATION_MS), 5000);
+}
+
 
 function productionConfig(
   value: unknown,
@@ -146,10 +164,7 @@ function productionConfig(
   const transitionType = transitionTypes.includes(config.transitionType as TransitionType)
     ? (config.transitionType as TransitionType)
     : 'cut';
-  const rawDuration = Number(config.transitionDuration);
-  const transitionDuration = Number.isFinite(rawDuration)
-    ? Math.min(Math.max(Math.round(rawDuration), 0), 5000)
-    : 500;
+  const transitionDuration = normalizeTransitionDuration(transitionType, config.transitionDuration);
   return { previewSceneId, programSceneId, transitionType, transitionDuration };
 }
 
@@ -315,10 +330,13 @@ export async function updateProductionState(
     transitionType: transitionTypes.includes(input.transitionType as TransitionType)
       ? (input.transitionType as TransitionType)
       : current.transitionType,
-    transitionDuration:
-      typeof input.transitionDuration === 'number'
-        ? Math.min(Math.max(Math.round(input.transitionDuration), 0), 5000)
-        : current.transitionDuration,
+    transitionDuration: normalizeTransitionDuration(
+      transitionTypes.includes(input.transitionType as TransitionType)
+        ? (input.transitionType as TransitionType)
+        : current.transitionType,
+      input.transitionDuration,
+      current.transitionDuration,
+    ),
   };
   const programChanged = next.programSceneId !== current.programSceneId;
   await prisma.$transaction([
@@ -423,10 +441,16 @@ export async function duplicateScene(sceneId: string) {
   const scene = await prisma.scene.findUnique({ where: { id: sceneId } });
   if (!scene) throw new Error('Scene not found.');
   await assertWorkspaceAccess(scene.broadcastId);
-  const nextOrder = await prisma.scene.count({ where: { broadcastId: scene.broadcastId } });
+  const [nextOrder, existingScenes] = await Promise.all([
+    prisma.scene.count({ where: { broadcastId: scene.broadcastId } }),
+    prisma.scene.findMany({
+      where: { broadcastId: scene.broadcastId },
+      select: { name: true },
+    }),
+  ]);
   const sceneCopyData = {
     broadcastId: scene.broadcastId,
-    name: `${scene.name} Copy`,
+    name: nextDuplicateName(scene.name, existingScenes.map((existing) => existing.name)),
     type: scene.type,
     order: nextOrder,
     layout: scene.layout,

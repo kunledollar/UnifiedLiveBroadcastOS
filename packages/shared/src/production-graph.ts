@@ -14,6 +14,22 @@ export type OperatorRole =
   | 'AI_AGENT';
 export type GraphTransitionType = 'cut' | 'fade' | 'dip' | 'wipe';
 export const PRODUCTION_GRAPH_SCHEMA_VERSION = '1.0.0';
+export const MIN_AUTO_TRANSITION_DURATION_MS = 100;
+export const DEFAULT_TRANSITION_DURATION_MS = 500;
+
+export function normalizeGraphTransitionDuration(
+  transitionType: GraphTransitionType,
+  value: unknown,
+  fallback = DEFAULT_TRANSITION_DURATION_MS,
+) {
+  const raw = typeof value === 'string' && value.trim() === '' ? Number.NaN : Number(value);
+  if (transitionType === 'cut') return 0;
+  const safeFallback = Number.isFinite(fallback) && fallback >= MIN_AUTO_TRANSITION_DURATION_MS
+    ? fallback
+    : DEFAULT_TRANSITION_DURATION_MS;
+  if (!Number.isFinite(raw)) return safeFallback;
+  return Math.min(Math.max(Math.round(raw), MIN_AUTO_TRANSITION_DURATION_MS), 5000);
+}
 
 export interface BroadcastSessionNode {
   id: StableId;
@@ -652,10 +668,13 @@ export function applyProductionCommand(
               command.type === 'CUT_TO_PROGRAM'
                 ? 'cut'
                 : ((p.transitionType as GraphTransitionType | undefined) ?? graph.program.transitionType),
-            transitionDurationMs:
+            transitionDurationMs: normalizeGraphTransitionDuration(
               command.type === 'CUT_TO_PROGRAM'
-                ? 0
-                : Number(p.durationMs ?? p.transitionDuration ?? graph.program.transitionDurationMs),
+                ? 'cut'
+                : ((p.transitionType as GraphTransitionType | undefined) ?? graph.program.transitionType),
+              p.durationMs ?? p.transitionDuration,
+              graph.program.transitionDurationMs,
+            ),
           },
         },
         command.timestamp,
@@ -679,7 +698,11 @@ export function applyProductionCommand(
           ...graph,
           program: {
             ...graph.program,
-            transitionDurationMs: Number(p.durationMs ?? p.transitionDuration ?? 0),
+            transitionDurationMs: normalizeGraphTransitionDuration(
+              graph.program.transitionType,
+              p.durationMs ?? p.transitionDuration,
+              graph.program.transitionDurationMs,
+            ),
           },
         },
         command.timestamp,
