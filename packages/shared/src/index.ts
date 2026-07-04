@@ -111,7 +111,7 @@ export enum MediaRouteType {
 }
 export type MediaLayoutPreset =
   'full_screen' | 'side_by_side' | 'picture_in_picture' | '2x2_grid' | 'speaker_focus';
-export type SceneSourceType = 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio';
+export type SceneSourceType = 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio' | 'guest';
 export type BroadcastCanvas = {
   id: string;
   label: string;
@@ -326,6 +326,7 @@ export const sourceTypeSchema = z.enum([
   'overlay',
   'browser',
   'audio',
+  'guest',
 ] as const);
 export const sourceSettingsSchema = z.record(z.string(), z.unknown()).default({});
 export const sourceTransformSchema = z.record(z.string(), z.unknown()).default({});

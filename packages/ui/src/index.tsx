@@ -634,6 +634,7 @@ const sourceTypeLabels: Record<SceneSourceType, string> = {
   overlay: 'Overlay',
   browser: 'Browser',
   audio: 'Audio',
+  guest: 'Guest',
 };
 
 function sourceMonitorState(source: SceneSource) {
@@ -690,6 +691,13 @@ function sourceMonitorState(source: SceneSource) {
           : 'No video preview for this source.',
         badge: 'AUDIO ONLY',
         tone: source.muted ? ('danger' as const) : ('success' as const),
+      };
+    case 'guest':
+      return {
+        title: 'Guest offline',
+        subtitle: 'Guest source is attached but not connected.',
+        badge: 'OFFLINE',
+        tone: 'danger' as const,
       };
     case 'overlay':
       return {
@@ -751,7 +759,7 @@ export function SourceManager({
   scene: Scene;
   sourceTypes: SceneSourceType[];
   isPending?: boolean;
-  onAdd: ((input: { sceneId: string; name: string; type: SceneSourceType }) => void) | undefined;
+  onAdd: ((input: { sceneId: string; name: string; type: SceneSourceType; url?: string }) => void) | undefined;
   onRename: (sourceId: string, name: string) => void;
   onDuplicate: (sourceId: string) => void;
   onDelete: (sourceId: string) => void;
@@ -785,7 +793,10 @@ export function SourceManager({
             key={type}
             className="rounded-lg bg-slate-950/70 px-2 py-2 hover:bg-slate-800"
             onClick={() =>
-              onAdd?.({ sceneId: scene.id, name: `${sourceTypeLabels[type]} Source`, type })
+              {
+                const url = type === 'browser' ? window.prompt('Browser source URL', 'https://example.com') : null;
+                onAdd?.({ sceneId: scene.id, name: `${sourceTypeLabels[type]} Source`, type, ...(url ? { url } : {}) });
+              }
             }
             type="button"
           >
@@ -796,7 +807,7 @@ export function SourceManager({
       <div className="space-y-2">
         {sources.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
-            No sources configured. Add camera, screen, media, overlay, browser, or audio metadata; real capture starts only when a runtime is available.
+            No sources assigned to this scene. Add camera, screen, media, overlay, browser, audio, or guest metadata; real capture starts only when a runtime is available.
           </p>
         ) : null}
         {sources.map((source, index) => (
@@ -815,6 +826,10 @@ export function SourceManager({
                 <TallyBadge state={source.isVisible ? tallyState : 'offline'} />
                 <Badge tone={source.isVisible ? 'success' : 'neutral'}>
                   {source.isVisible ? 'Shown' : 'Hidden'}
+                </Badge>
+                {source.settings?.runtimeStatus === 'mock' ? <Badge tone="warning">MOCK</Badge> : null}
+                <Badge tone={source.settings?.runtimeStatus === 'unavailable' ? 'danger' : source.settings?.runtimeStatus === 'permission_required' ? 'warning' : 'neutral'}>
+                  {String(source.settings?.runtimeStatus ?? (source.isVisible ? 'ready' : 'disabled')).replaceAll('_', ' ')}
                 </Badge>
                 {source.isLocked ? <Badge tone="warning">Locked</Badge> : null}
               </div>
@@ -975,6 +990,7 @@ const sourceThemes: Record<SceneSourceType, SourceTheme> = {
   overlay: { glyph: '✨', ring: 'border-fuchsia-300/45', accent: 'text-fuchsia-100' },
   browser: { glyph: '🌐', ring: 'border-amber-300/45', accent: 'text-amber-100' },
   audio: { glyph: '🎧', ring: 'border-rose-300/45', accent: 'text-rose-100' },
+  guest: { glyph: '👤', ring: 'border-cyan-300/45', accent: 'text-cyan-100' },
 };
 
 type TileSize = 'lg' | 'md' | 'sm';

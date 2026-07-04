@@ -81,6 +81,7 @@ import {
   type ProductionCommandType,
   type ProductionBroadcastSession,
   type SceneNode,
+  type SourceNode,
   createMockSyncScenario,
   createSyncSession,
   getStaleClients,
@@ -1284,6 +1285,21 @@ function createProductionGraphSessionFromScenes(input: {
       },
     ]),
   );
+  const sourcesById: Record<string, SourceNode> = Object.fromEntries(
+    input.scenes.flatMap((scene) =>
+      scene.sources.map((source) => [
+        source.id,
+        {
+          id: source.id,
+          name: source.name,
+          type: source.type,
+          enabled: source.isVisible,
+          ...(source.muted === undefined ? {} : { muted: source.muted }),
+          metadata: { ...source.settings, sceneId: scene.id, transform: source.transform },
+        } satisfies SourceNode,
+      ]),
+    ),
+  );
   const fallbackSceneId = input.scenes.find((scene) => scene.isActive)?.id ?? input.scenes[0]?.id ?? 'scene-empty';
   const programSceneId = scenesById[input.productionState.programSceneId]
     ? input.productionState.programSceneId
@@ -1302,6 +1318,7 @@ function createProductionGraphSessionFromScenes(input: {
     graph: {
       ...graph,
       scenes: scenesById,
+      sources: sourcesById,
       program: {
         ...graph.program,
         sceneId: programSceneId,
@@ -1881,6 +1898,7 @@ export function SceneWorkspace({
               formData.set('sceneId', input.sceneId);
               formData.set('name', input.name);
               formData.set('type', input.type);
+              if (input.url) formData.set('url', input.url);
               startTransition(async () => {
                 await addSource(formData);
               });
