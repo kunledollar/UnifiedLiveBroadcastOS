@@ -1749,6 +1749,35 @@ export function VerticalCompositor({
   );
 }
 
+function LayoutGlyph({ layout }: { layout: SceneLayout }) {
+  const cells: Record<SceneLayout, string> = {
+    solo: 'grid-cols-1',
+    interview: 'grid-cols-2',
+    grid: 'grid-cols-2',
+    screen_share: 'grid-cols-[1.6fr_.7fr]',
+    vertical_split: 'grid-cols-2',
+    picture_in_picture: 'grid-cols-1',
+  };
+  return (
+    <div className="relative aspect-video overflow-hidden rounded-lg border border-cyan-200/15 bg-black p-1 shadow-inner">
+      <div className={`grid h-full gap-1 ${cells[layout] ?? 'grid-cols-2'}`}>
+        {(layout === 'grid' ? [0, 1, 2, 3] : layout === 'solo' ? [0] : [0, 1]).map((cell) => (
+          <div
+            key={cell}
+            className="rounded bg-gradient-to-br from-slate-500/70 to-slate-900 ring-1 ring-white/10"
+          />
+        ))}
+      </div>
+      {layout === 'picture_in_picture' ? (
+        <div className="absolute bottom-2 right-2 h-1/3 w-1/3 rounded bg-cyan-300/70 ring-1 ring-white/30" />
+      ) : null}
+      {layout === 'screen_share' ? (
+        <div className="absolute left-2 top-2 h-3 w-10 rounded bg-cyan-300/50" />
+      ) : null}
+    </div>
+  );
+}
+
 export function LayoutSelector({ layouts }: { layouts: SceneLayout[] }) {
   return (
     <Panel title="Layout Templates">
@@ -1756,10 +1785,12 @@ export function LayoutSelector({ layouts }: { layouts: SceneLayout[] }) {
         {layouts.map((layout) => (
           <button
             key={layout}
-            className="rounded-xl border border-white/10 bg-slate-950/60 p-3 text-left text-xs font-semibold text-slate-200 hover:border-cyan-300/50"
+            className="rounded-xl border border-white/10 bg-slate-950/70 p-2 text-left text-xs font-semibold text-slate-200 transition hover:border-cyan-300/60 hover:bg-cyan-300/10"
           >
-            <div className="mb-2 h-10 rounded-lg bg-gradient-to-br from-slate-700 to-slate-950 ring-1 ring-white/10" />
-            {layoutLabels[layout]}
+            <LayoutGlyph layout={layout} />
+            <span className="mt-2 block truncate font-mono text-[10px] uppercase tracking-[0.12em] text-cyan-100">
+              {layoutLabels[layout]}
+            </span>
           </button>
         ))}
       </div>
@@ -1804,7 +1835,17 @@ function BroadcastMonitorFrame({
           {meta ? <p className="truncate text-[10px] text-slate-500">{meta}</p> : null}
         </div>
       </div>
-      <div className="min-h-0 flex-1 bg-black">{children}</div>
+      <div className="relative min-h-0 flex-1 bg-black">
+        {children}
+        <div className="pointer-events-none absolute inset-[5%] border border-white/15" />
+        <div className="pointer-events-none absolute inset-[10%] border border-white/10 border-dashed" />
+        <div className="pointer-events-none absolute left-3 top-3 rounded bg-black/55 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-white/75">
+          L1 CAM · L2 GFX · L3 BUG
+        </div>
+        <div className="pointer-events-none absolute bottom-3 right-3 rounded bg-black/60 px-2 py-1 font-mono text-[10px] text-cyan-100">
+          1080p · 16:9 · 60fps · -12dB
+        </div>
+      </div>
     </section>
   );
 }
@@ -2257,34 +2298,56 @@ export function ProductionDock({
   channels: AudioChannel[];
   assets: ProductionAsset[];
 }) {
-  const assetGroups = ['media', 'lower_third', 'background', 'overlay'] as const;
-
+  const fallback = ['Host', 'Guest', 'Media', 'Desktop', 'System', 'Master'];
+  const mixerChannels = channels.length ? channels.map((channel) => channel.label) : fallback;
   return (
-    <Panel title="Production Dock">
-      <div className="grid gap-3 xl:grid-cols-[1.65fr_1fr]">
-        <div>
-          <p className="mb-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
-            Audio Mixer
-          </p>
-          <AudioMixer channels={channels} />
-        </div>
-        <div className="grid gap-2 sm:grid-cols-2">
-          {assetGroups.map((group) => (
-            <div key={group} className="rounded-lg border border-white/10 bg-slate-950/70 p-2">
-              <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
-                {group.replace('_', ' ')}s
+    <Panel title="Digital Audio Console">
+      <div className="grid grid-cols-6 gap-2 overflow-x-auto">
+        {mixerChannels.map((name, index) => {
+          const level = [72, 58, 44, 36, 28, 82][index % 6] ?? 50;
+          return (
+            <div
+              key={name}
+              className="min-w-20 rounded-xl border border-white/10 bg-slate-950/80 p-2 text-center shadow-inner"
+            >
+              <p className="truncate text-[10px] font-black uppercase tracking-[0.14em] text-slate-300">
+                {name}
               </p>
-              <p className="mt-1 text-xl font-black text-white">
-                {assets.filter((asset) => getAssetDockGroup(asset) === group).length}
-              </p>
-              <div className="mt-1 flex items-center justify-between gap-2">
-                <p className="text-xs text-slate-500">asset metadata</p>
-                <TallyBadge state="idle" />
+              <div className="mt-2 grid h-20 grid-cols-[.55rem_1fr] gap-2">
+                <div className="flex items-end overflow-hidden rounded bg-black ring-1 ring-white/10">
+                  <div
+                    className="w-full bg-gradient-to-t from-emerald-400 via-lime-300 to-red-500"
+                    style={{ height: `${level}%` }}
+                  />
+                </div>
+                <div className="relative rounded bg-slate-900 ring-1 ring-white/10">
+                  <div className="absolute left-1/2 top-3 h-14 w-1 -translate-x-1/2 rounded bg-slate-700" />
+                  <div
+                    className="absolute left-1/2 h-3 w-7 -translate-x-1/2 rounded bg-cyan-200 shadow"
+                    style={{ bottom: `${Math.max(8, level - 12)}%` }}
+                  />
+                </div>
               </div>
+              <div className="mt-2 grid grid-cols-2 gap-1 font-mono text-[9px] font-black uppercase">
+                <button className="rounded bg-red-500/15 py-1 text-red-100 ring-1 ring-red-400/20">
+                  Mute
+                </button>
+                <button className="rounded bg-amber-300/15 py-1 text-amber-100 ring-1 ring-amber-300/20">
+                  Solo
+                </button>
+              </div>
+              <p className="mt-1 font-mono text-[9px] text-slate-500">
+                Peak -{Math.max(3, 24 - index * 3)}dB
+              </p>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
+      {assets.length ? null : (
+        <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-slate-600">
+          Mixer values are placeholder console telemetry.
+        </p>
+      )}
     </Panel>
   );
 }
