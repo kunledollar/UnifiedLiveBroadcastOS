@@ -186,28 +186,39 @@ export function ProductionSwitcher({
   onTransitionChange: (value: TransitionType) => void;
   onDurationChange: (value: number) => void;
 }) {
-  const current = `${transitionLabel(productionState.transitionType)} · ${productionState.transitionDuration} ms`;
-
   return (
-    <section className="shrink-0 rounded-lg border border-slate-800 bg-[linear-gradient(180deg,#0f172a,#020617)] p-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
-      <div className="mb-2 flex items-center justify-between gap-2 border-b border-white/5 pb-1">
-        <div>
-          <h2 className="font-mono text-xs font-black uppercase tracking-[0.22em] text-cyan-100">
-            Production Switcher
-          </h2>
-          <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
-            PGM {programSceneName} ↓ PVW {previewSceneName}
-          </p>
+    <section className="shrink-0 rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,.96),rgba(2,6,23,.96))] p-2 shadow-[0_10px_28px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.05)]">
+      <div className="grid items-end gap-2 xl:grid-cols-[minmax(15rem,1.15fr)_minmax(18rem,1.35fr)_minmax(15rem,1fr)]">
+        <div className="min-w-0">
+          <div className="mb-1 flex items-center justify-between gap-2">
+            <h2 className="font-mono text-xs font-black uppercase tracking-[0.18em] text-cyan-100">
+              Switcher
+            </h2>
+            <div
+              className={`rounded-md border px-2 py-1 font-mono text-[10px] font-black uppercase tracking-[0.12em] transition ${feedbackLabel ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-slate-800 bg-slate-950 text-slate-600'}`}
+            >
+              {feedbackLabel ?? 'Ready'}
+            </div>
+          </div>
+          <div className="grid grid-cols-3 gap-1">
+            <div className="rounded-md bg-black/30 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
+              Program{' '}
+              <span className="block truncate font-black text-red-100">{programSceneName}</span>
+            </div>
+            <div className="rounded-md bg-black/30 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
+              Preview{' '}
+              <span className="block truncate font-black text-cyan-100">{previewSceneName}</span>
+            </div>
+            <div className="rounded-md bg-black/30 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
+              History{' '}
+              <span className="block truncate font-black text-slate-200">
+                {lastTransitionLabel}
+              </span>
+            </div>
+          </div>
         </div>
-        <div
-          className={`rounded-md border px-2 py-1 font-mono text-[10px] font-black uppercase tracking-[0.14em] transition ${feedbackLabel ? 'border-cyan-300/40 bg-cyan-300/10 text-cyan-100' : 'border-slate-800 bg-slate-950 text-slate-600'}`}
-        >
-          {feedbackLabel ?? 'Switcher Ready'}
-        </div>
-      </div>
 
-      <div className="grid gap-2 xl:grid-cols-[1.25fr_1fr_1fr]">
-        <div className="grid grid-cols-[1fr_1fr_1.35fr] gap-1">
+        <div className="grid grid-cols-[1fr_1fr_1.25fr] gap-1">
           <SwitcherButton tone="program" onClick={onCut}>
             CUT
           </SwitcherButton>
@@ -219,7 +230,7 @@ export function ProductionSwitcher({
           </SwitcherButton>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-end gap-2">
           <TransitionSelector
             value={productionState.transitionType}
             onChange={onTransitionChange}
@@ -228,42 +239,9 @@ export function ProductionSwitcher({
             value={productionState.transitionDuration}
             onChange={onDurationChange}
           />
+          <SwitcherButton onClick={onPrevious}>Prev</SwitcherButton>
+          <SwitcherButton onClick={onNext}>Next</SwitcherButton>
         </div>
-
-        <div className="grid gap-2">
-          <div className="grid grid-cols-3 gap-1 opacity-85">
-            <SwitcherButton onClick={onPrevious}>Previous</SwitcherButton>
-            <SwitcherButton
-              disabled
-              title="Preview ↔ Program swap is planned; current routing does not expose a swap handler."
-            >
-              Swap
-            </SwitcherButton>
-            <SwitcherButton onClick={onNext}>Next</SwitcherButton>
-          </div>
-          <TransitionQueue current={current} next={current} last={lastTransitionLabel} />
-        </div>
-      </div>
-
-      <div className="mt-2 grid gap-2 md:grid-cols-[12rem_1fr]">
-        <div className="flex items-center justify-center gap-2 rounded-lg border border-white/5 bg-slate-950/70 px-3 py-2 font-mono text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-          <span>AUTO</span>
-          <span className="text-slate-700">3</span>
-          <span className="text-slate-700">2</span>
-          <span className="text-slate-700">1</span>
-          <span className="text-cyan-200">TAKE</span>
-        </div>
-        <details className="rounded-lg border border-white/5 bg-slate-950/70 px-3 py-2 font-mono text-[10px] uppercase tracking-[0.12em] text-slate-400">
-          <summary className="cursor-pointer font-black text-slate-300">Keyboard Shortcuts</summary>
-          <div className="mt-2 grid gap-1 sm:grid-cols-6">
-            <span>Space → TAKE</span>
-            <span>C → CUT</span>
-            <span>A → AUTO</span>
-            <span>1–9 → Scene</span>
-            <span>F → Fade</span>
-            <span>M → Mute route</span>
-          </div>
-        </details>
       </div>
     </section>
   );
