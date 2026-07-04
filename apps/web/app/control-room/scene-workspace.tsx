@@ -56,7 +56,10 @@ import {
 import {
   SceneType,
   type AudioChannel,
+  type ChatMessage,
+  type Destination,
   type Guest,
+  type GuestInvite,
   type ProductionAsset,
   type Scene,
   type SceneLayout,
@@ -65,6 +68,7 @@ import {
   type MediaRoute,
   type MediaLayoutPreset,
   type ProductionSwitchingState,
+  type StreamHealthMetric,
   type TransitionType,
   LocalProductionCommandDispatcher,
   createBroadcastSession,
@@ -119,11 +123,13 @@ import { RightOperationsConsole } from './shell/RightOperationsConsole';
 import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
 import { BottomDock } from './shell/BottomDock';
 import { LeftNavPanel } from './browsers';
+import { OperationsConsoleContent } from './operations';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
 import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
 import { OutputViewRenderer, PreviewMonitorCompact } from './workspace/OutputViewRenderer';
 import {
   normalizeOutputViewMode,
+  outputViewModes,
   type OutputViewMode,
 } from './workspace/monitor-state';
 
@@ -1702,8 +1708,15 @@ export function SceneWorkspace({
   assets,
   mediaRoutes = [],
   guests = [],
+  invites = [],
+  destinations = [],
+  messages = [],
+  streamHealthMetrics = [],
+  persistenceDiagnostics = {},
+  broadcastId = 'demo-broadcast',
+  workspaceId = 'demo-workspace',
   initialProductionState,
-  operationsTabs = [],
+  operationsTabs,
 }: {
   initialScenes: Scene[];
   initialProductionState: ProductionSwitchingState;
@@ -1712,6 +1725,13 @@ export function SceneWorkspace({
   assets: ProductionAsset[];
   mediaRoutes?: MediaRoute[];
   guests?: Guest[];
+  invites?: GuestInvite[];
+  destinations?: Destination[];
+  messages?: ChatMessage[];
+  streamHealthMetrics?: StreamHealthMetric[];
+  persistenceDiagnostics?: Record<string, unknown> & { currentGraphRevision?: number };
+  broadcastId?: string;
+  workspaceId?: string;
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
   const [isPending, startTransition] = useTransition();
@@ -2071,12 +2091,47 @@ export function SceneWorkspace({
     [assets],
   );
 
-  const operationsTabsWithPreview = useMemo(
-    () => [
-      ...operationsTabs,
-      {
-        id: 'preview' as const,
-        content: (
+  const outputViewModeLabel =
+    outputViewModes.find((mode) => mode.value === viewMode)?.label ?? viewMode;
+
+  const graphHealth = useMemo(
+    () => selectHealthSummary(productionGraphSession.graph),
+    [productionGraphSession.graph],
+  );
+
+  const operationsPanels = useMemo(
+    () =>
+      OperationsConsoleContent({
+        broadcastId,
+        workspaceId,
+        guests,
+        invites,
+        scenes: sorted,
+        routes: mediaRoutes,
+        destinations,
+        messages,
+        streamHealthMetrics: streamHealthMetrics.length
+          ? streamHealthMetrics
+          : multiviewHealthMetrics,
+        programScene,
+        previewScene,
+        graphRevision:
+          persistenceDiagnostics.currentGraphRevision ??
+          productionGraphSession.graph.metadata.revision,
+        outputViewMode: outputViewModeLabel,
+        sourceCount: previewScene.sources.length,
+        warnings: transitionActive ? ['Transition active'] : [],
+        runtimeStatus: productionGraphSession.status,
+        recoveryStatus: graphHealth.status,
+        commandCount: productionGraphSession.commandLog.length,
+        eventCount: productionGraphSession.eventLog.length,
+        activeLocks: authorityDiagnostics.activeLocks.length,
+        conflicts: authorityDiagnostics.conflicts.length,
+        unavailableSubsystems: [
+          safeHealthMetrics.fps === 'unavailable' ? 'FPS telemetry' : null,
+          safeHealthMetrics.cpu === 'unavailable' ? 'CPU telemetry' : null,
+        ].filter((item): item is string => Boolean(item)),
+        previewMonitor: (
           <PreviewMonitorCompact
             scene={previewScene}
             routes={mediaRoutes}
@@ -2087,19 +2142,49 @@ export function SceneWorkspace({
             showSafeAreas={showSafeAreas}
           />
         ),
-      },
-    ],
+      }),
     [
-      operationsTabs,
-      previewScene,
-      mediaRoutes,
-      layoutPreset,
+      broadcastId,
+      workspaceId,
       guests,
-      productionGraphSession.graph,
-      safeHealthMetrics.fps,
+      invites,
+      sorted,
+      mediaRoutes,
+      destinations,
+      messages,
+      streamHealthMetrics,
+      multiviewHealthMetrics,
+      programScene,
+      previewScene,
+      persistenceDiagnostics.currentGraphRevision,
+      productionGraphSession,
+      outputViewModeLabel,
+      transitionActive,
+      graphHealth.status,
+      authorityDiagnostics,
+      safeHealthMetrics,
+      layoutPreset,
       showSafeAreas,
     ],
   );
+
+  const operationsTabsResolved = useMemo(() => {
+    if (operationsTabs?.length) return operationsTabs;
+    const panelIds: OperationsTabId[] = [
+      'guests',
+      'inspector',
+      'routing',
+      'outputs',
+      'health',
+      'preview',
+      'logs',
+      'ai',
+    ];
+    return panelIds.map((id) => ({
+      id,
+      content: operationsPanels[id],
+    }));
+  }, [operationsTabs, operationsPanels]);
 
   const previewMonitor = (
     <PreviewMonitorCompact
@@ -2504,7 +2589,7 @@ export function SceneWorkspace({
         </CenterProgramWorkspace>
 
         <RightOperationsConsole
-          tabs={operationsTabsWithPreview}
+          tabs={operationsTabsResolved}
           activeTab={activeOperationsTab}
           onTabChange={setActiveOperationsTab}
           previewSlot={previewMonitor}
