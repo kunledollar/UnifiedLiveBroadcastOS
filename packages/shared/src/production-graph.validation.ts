@@ -229,6 +229,23 @@ assert(
   !applyProductionCommand(graph, command('SET_TRANSITION', { transitionType: 'invalid' })).accepted,
   'invalid transition is rejected',
 );
+transition = applyProductionCommand(graph, command('ADD_SOURCE', { id: 'camera-1', name: 'Camera 1', type: 'camera', metadata: { runtimeStatus: 'permission_required' } }));
+assert(transition.accepted, 'camera source creation accepted');
+assert(transition.nextGraph.sources['camera-1']?.metadata.runtimeStatus === 'permission_required', 'source stores honest runtime metadata');
+graph = transition.nextGraph;
+assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'camera-1', name: 'Duplicate', type: 'camera' })).accepted, 'duplicate source IDs rejected');
+assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'bad-source', name: 'Bad', type: 'ndi' })).accepted, 'unknown source type rejected');
+assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'bad-browser', name: 'Bad Browser', type: 'browser', metadata: { url: 'javascript:alert(1)' } })).accepted, 'invalid browser URL rejected');
+assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'bad-handle', name: 'Handle', type: 'camera', metadata: { mediaStream: {} } })).accepted, 'runtime handles rejected from source metadata');
+transition = applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'camera-1', transform: { x: 0, y: 0, width: 1, height: 1, zIndex: 0, opacity: 1, visible: true, locked: false } }));
+assert(transition.accepted, 'source attach to scene accepted');
+assert(transition.nextGraph.scenes['scene-a']?.sourceIds.includes('camera-1'), 'scene records attached source layer');
+assert(transition.events[0]?.type === 'SOURCE_ATTACHED_TO_SCENE', 'source attachment records timeline event');
+graph = transition.nextGraph;
+assert(!applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'missing', sourceId: 'camera-1' })).accepted, 'missing scene attachment rejected');
+assert(!applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'missing-source' })).accepted, 'missing source reference rejected');
+assert(!applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'camera-1' })).accepted, 'duplicate layer reference rejected');
+
 const rejected = applyProductionCommand(
   graph,
   command('STOP_BROADCAST', {}, 'VIEWER', graph.metadata.revision),

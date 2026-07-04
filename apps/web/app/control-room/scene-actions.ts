@@ -78,6 +78,28 @@ function jsonObject(value: unknown) {
   return objectOrEmpty(value) as never;
 }
 
+function defaultSourceSettings(type: SceneSourceType, formData?: FormData): Record<string, unknown> {
+  const base = { runtimeStatus: 'ready', storesRuntimeHandles: false };
+  if (type === 'camera') return { ...base, runtimeStatus: typeof navigator === 'undefined' ? 'permission_required' : 'permission_required', deviceId: null };
+  if (type === 'screen') return { ...base, runtimeStatus: 'permission_required', captureState: 'not_started' };
+  if (type === 'media') return { ...base, runtimeStatus: 'offline', fileName: null, message: 'No media file selected' };
+  if (type === 'browser') {
+    const rawUrl = String(formData?.get('url') ?? '').trim();
+    if (rawUrl) {
+      const url = new URL(rawUrl);
+      if (!['http:', 'https:'].includes(url.protocol)) throw new Error('Invalid browser URL.');
+      return { ...base, runtimeStatus: 'disabled', url: url.toString(), rendererEnabled: false };
+    }
+    return { ...base, runtimeStatus: 'disabled', url: null, rendererEnabled: false, message: 'Browser source unavailable' };
+  }
+  if (type === 'audio') return { ...base, runtimeStatus: 'permission_required', deviceId: null };
+  if (type === 'overlay') return { ...base, runtimeStatus: 'ready', title: 'Lower Third', primaryText: 'Primary text', secondaryText: '', position: 'lower-third', visibility: true };
+  return base;
+}
+function defaultSourceTransform(order: number) {
+  return { x: 0, y: 0, width: 1, height: 1, zIndex: order, opacity: 1, visible: true, locked: false };
+}
+
 function toSource(source: DbSceneSource): SceneSource {
   return {
     id: source.id,
@@ -601,6 +623,8 @@ export async function addSource(formData: FormData) {
       name: input.name,
       type: sourceTypeToDb(input.type),
       order: nextOrder,
+      settings: defaultSourceSettings(input.type, formData) as never,
+      transform: defaultSourceTransform(nextOrder) as never,
     },
   });
   await emitRealtimeEvent({
@@ -641,7 +665,7 @@ export async function duplicateSource(sourceId: string) {
       sceneId: source.sceneId,
     },
   });
-  await prisma.sceneSource.create({
+  const copy = await prisma.sceneSource.create({
     data: {
       workspaceId: source.workspaceId,
       broadcastId: source.broadcastId,
@@ -654,6 +678,14 @@ export async function duplicateSource(sourceId: string) {
       settings: jsonObject(source.settings),
       transform: jsonObject(source.transform),
     },
+  });
+  await emitRealtimeEvent({
+    workspaceId: DEMO_WORKSPACE_ID,
+    broadcastId: source.broadcastId,
+    eventType: 'source:created',
+    entityType: 'source',
+    entityId: copy.id,
+    payload: { sceneId: source.sceneId, duplicatedFrom: source.id },
   });
   revalidatePath('/control-room');
 }

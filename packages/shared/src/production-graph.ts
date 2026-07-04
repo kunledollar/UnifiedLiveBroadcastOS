@@ -221,6 +221,8 @@ export type ProductionCommandType =
   | 'REMOVE_SOURCE'
   | 'UPDATE_SOURCE'
   | 'ASSIGN_SOURCE_TO_SCENE'
+  | 'REMOVE_SOURCE_FROM_SCENE'
+  | 'UPDATE_SCENE_SOURCE_LAYER'
   | 'ADD_GUEST'
   | 'UPDATE_GUEST'
   | 'REMOVE_GUEST'
@@ -270,6 +272,15 @@ export type ProductionEventType =
   | 'SOURCE_ADDED'
   | 'SOURCE_REMOVED'
   | 'SOURCE_UPDATED'
+  | 'SOURCE_CREATED'
+  | 'SOURCE_RENAMED'
+  | 'SOURCE_DUPLICATED'
+  | 'SOURCE_DELETED'
+  | 'SOURCE_ATTACHED_TO_SCENE'
+  | 'SOURCE_REMOVED_FROM_SCENE'
+  | 'SOURCE_VISIBILITY_CHANGED'
+  | 'SOURCE_LOCK_CHANGED'
+  | 'SOURCE_RUNTIME_STATE_CHANGED'
   | 'GUEST_ADDED'
   | 'GUEST_UPDATED'
   | 'GUEST_REMOVED'
@@ -336,8 +347,8 @@ const eventTypeByCommand: Partial<Record<ProductionCommandType, ProductionEventT
   CUT_TO_PROGRAM: 'PROGRAM_SCENE_CHANGED',
   TAKE_PREVIEW: 'PROGRAM_SCENE_CHANGED',
   AUTO_TRANSITION: 'TRANSITION_COMPLETED',
-  ADD_SOURCE: 'SOURCE_ADDED',
-  REMOVE_SOURCE: 'SOURCE_REMOVED',
+  ADD_SOURCE: 'SOURCE_CREATED',
+  REMOVE_SOURCE: 'SOURCE_DELETED',
   UPDATE_SOURCE: 'SOURCE_UPDATED',
   ADD_GUEST: 'GUEST_ADDED',
   UPDATE_GUEST: 'GUEST_UPDATED',
@@ -365,6 +376,8 @@ const allCommandTypes = Object.keys(eventTypeByCommand).concat([
   'SET_TRANSITION_DURATION',
   'UPDATE_DESTINATION_STATUS',
   'ASSIGN_SOURCE_TO_SCENE',
+  'REMOVE_SOURCE_FROM_SCENE',
+  'UPDATE_SCENE_SOURCE_LAYER',
   'PIN_GUEST',
 ]) as ProductionCommandType[];
 const mutationCommands = allCommandTypes.filter((type) => type !== 'ADD_AGENT_SUGGESTION');
@@ -385,12 +398,16 @@ const roleCommands: Record<OperatorRole, ProductionCommandType[]> = {
     'ADD_SOURCE',
     'UPDATE_SOURCE',
     'ASSIGN_SOURCE_TO_SCENE',
+    'REMOVE_SOURCE_FROM_SCENE',
+    'UPDATE_SCENE_SOURCE_LAYER',
   ],
   AUDIO_ENGINEER: ['SET_AUDIO_GAIN', 'MUTE_AUDIO_CHANNEL', 'UNMUTE_AUDIO_CHANNEL'],
   GRAPHICS_OPERATOR: [
     'ADD_SOURCE',
     'UPDATE_SOURCE',
     'ASSIGN_SOURCE_TO_SCENE',
+    'REMOVE_SOURCE_FROM_SCENE',
+    'UPDATE_SCENE_SOURCE_LAYER',
     'SET_PANEL_VISIBILITY',
   ],
   GUEST_MANAGER: [
@@ -569,6 +586,27 @@ function rejected(
     ],
   };
 }
+
+const sourceTypes = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio', 'guest', 'placeholder'] as const;
+const runtimeHandleKeys = ['stream', 'track', 'mediaStream', 'mediaStreamTrack', 'audioContext', 'audioNode', 'file', 'blob', 'buffer', 'handle'];
+function metadataContainsRuntimeHandle(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value as Record<string, unknown>).some(([key, nested]) =>
+    runtimeHandleKeys.includes(key) || metadataContainsRuntimeHandle(nested),
+  );
+}
+function validateSourcePayload(p: Record<string, unknown>) {
+  const type = String(p.type ?? '');
+  if (!sourceTypes.includes(type as (typeof sourceTypes)[number])) return `Unknown source type ${type}`;
+  if (p.metadata && metadataContainsRuntimeHandle(p.metadata)) return 'Source metadata cannot contain runtime handles';
+  if (type === 'browser' && typeof (p.metadata as Record<string, unknown> | undefined)?.url === 'string') {
+    try {
+      const url = new URL(String((p.metadata as Record<string, unknown>).url));
+      if (!['http:', 'https:'].includes(url.protocol)) return 'Invalid browser URL';
+    } catch { return 'Invalid browser URL'; }
+  }
+  return undefined;
+}
 export function applyProductionCommand(
   graph: ProductionGraph,
   command: ProductionCommand,
@@ -615,6 +653,20 @@ export function applyProductionCommand(
     const sceneId = sceneIdFromPayload(graph.preview.sceneId);
     const error = validateSceneReference(sceneId, 'Program');
     if (error) return rejected(graph, command, [error]);
+  }
+  if (command.type === 'ADD_SOURCE') {
+    const error = validateSourcePayload(command.payload as Record<string, unknown>);
+    const id = String((command.payload as Record<string, unknown>).id ?? '');
+    if (error) return rejected(graph, command, [error]);
+    if (id && graph.sources[id]) return rejected(graph, command, [`Duplicate source ID ${id}`]);
+  }
+  if (command.type === 'ASSIGN_SOURCE_TO_SCENE') {
+    const sceneId = sceneIdFromPayload();
+    const sourceId = String((command.payload as Record<string, unknown>).sourceId ?? '');
+    const sceneError = validateSceneReference(sceneId, 'Source attachment');
+    if (sceneError) return rejected(graph, command, [sceneError]);
+    if (!sourceId || !graph.sources[sourceId]) return rejected(graph, command, [`Missing source reference ${sourceId}`]);
+    if (graph.scenes[sceneId]?.sourceIds.includes(sourceId)) return rejected(graph, command, [`Duplicate layer reference ${sourceId}`]);
   }
   if (command.type === 'SET_TRANSITION') {
     const transitionType = String((command.payload as Record<string, unknown>).transitionType ?? '');
@@ -708,6 +760,34 @@ export function applyProductionCommand(
         command.timestamp,
       );
       break;
+    case 'ADD_SOURCE': {
+      const id = String(p.id ?? `${command.id}:source`);
+      next = bump({ ...graph, sources: { ...graph.sources, [id]: { id, name: String(p.name ?? 'New Source'), type: String(p.type) as SourceNode['type'], enabled: p.enabled !== false, muted: Boolean(p.muted), metadata: (p.metadata as Record<string, unknown>) ?? {} } } }, command.timestamp);
+      break;
+    }
+    case 'UPDATE_SOURCE': {
+      const id = String(p.sourceId ?? p.id);
+      const current = graph.sources[id];
+      if (!current) return rejected(graph, command, [`Unknown source ${id}`]);
+      next = bump({ ...graph, sources: { ...graph.sources, [id]: { ...current, name: typeof p.name === 'string' ? p.name : current.name, enabled: typeof p.enabled === 'boolean' ? p.enabled : current.enabled, metadata: { ...current.metadata, ...((p.metadata as Record<string, unknown>) ?? {}) } } } }, command.timestamp);
+      break;
+    }
+    case 'REMOVE_SOURCE': {
+      const id = String(p.sourceId ?? p.id);
+      if (!graph.sources[id]) return rejected(graph, command, [`Unknown source ${id}`]);
+      const { [id]: _removed, ...sources } = graph.sources;
+      next = bump({ ...graph, sources, scenes: Object.fromEntries(Object.entries(graph.scenes).map(([sceneId, scene]) => [sceneId, { ...scene, sourceIds: scene.sourceIds.filter((sourceId) => sourceId !== id) }])) }, command.timestamp);
+      break;
+    }
+    case 'ASSIGN_SOURCE_TO_SCENE': {
+      const sceneId = String(p.sceneId);
+      const sourceId = String(p.sourceId);
+      const scene = graph.scenes[sceneId];
+      if (!scene) return rejected(graph, command, [`Unknown scene ${sceneId}`]);
+      const layers = (Array.isArray(scene.metadata.layers) ? scene.metadata.layers : []) as unknown[];
+      next = bump({ ...graph, scenes: { ...graph.scenes, [sceneId]: { ...scene, sourceIds: [...scene.sourceIds, sourceId], metadata: { ...scene.metadata, layers: [...layers, { sourceId, transform: p.transform ?? { x: 0, y: 0, width: 1, height: 1, zIndex: scene.sourceIds.length, opacity: 1, visible: true, locked: false } }] }, updatedAt: command.timestamp } } }, command.timestamp);
+      break;
+    }
     case 'START_BROADCAST':
       next = bump(
         { ...graph, status: 'live', session: { ...graph.session, status: 'live' } },
@@ -862,8 +942,9 @@ export function applyProductionCommand(
     default:
       next = bump(graph, command.timestamp);
   }
+  const sourceEvent = command.type === 'ASSIGN_SOURCE_TO_SCENE' ? 'SOURCE_ATTACHED_TO_SCENE' : undefined;
   const type =
-    eventTypeByCommand[command.type] ??
+    sourceEvent ?? eventTypeByCommand[command.type] ??
     (command.type === 'SET_TRANSITION' || command.type === 'SET_TRANSITION_DURATION'
       ? 'TRANSITION_COMPLETED'
       : 'SOURCE_UPDATED');
