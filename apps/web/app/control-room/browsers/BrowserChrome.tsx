@@ -112,7 +112,7 @@ export function CompactRowActions({
   className?: string;
 }) {
   return (
-    <div className={cn('flex shrink-0 items-center gap-0.5', className)} onClick={(e) => e.stopPropagation()}>
+    <div className={cn('flex shrink-0 items-center gap-0.5', className)} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
       {children}
     </div>
   );
@@ -135,7 +135,10 @@ export function RowIconButton({
       size="sm"
       variant={variant === 'danger' ? 'danger' : 'ghost'}
       disabled={disabled}
-      onClick={onClick}
+      onClick={(event) => {
+        event.stopPropagation();
+        onClick();
+      }}
       title={label}
       aria-label={label}
       className="min-w-0 px-1.5"

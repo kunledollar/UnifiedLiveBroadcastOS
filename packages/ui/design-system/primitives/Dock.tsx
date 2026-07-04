@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { KeyboardEvent, ReactNode } from 'react';
 import { cn } from '../utils/cn.js';
 import { ubosTypographyClasses } from '../tokens/typography.js';
 
@@ -110,21 +110,28 @@ export function AssetRow({
   action?: ReactNode;
   className?: string;
 }) {
-  const Comp = onClick ? 'button' : 'li';
+  const interactive = Boolean(onClick);
+  const hasNestedActions = Boolean(action);
 
-  return (
-    <Comp
-      type={onClick ? 'button' : undefined}
-      onClick={onClick}
-      className={cn(
-        'flex w-full items-center gap-ubos-3 rounded-ubos-sm px-ubos-2 py-ubos-2 text-left',
-        'transition-colors duration-ubos-fast',
-        selected
-          ? 'bg-ubos-selection-muted border border-ubos-selection-border'
-          : 'border border-transparent hover:bg-ubos-midnight',
-        className,
-      )}
-    >
+  const rowClassName = cn(
+    'flex w-full items-center gap-ubos-3 rounded-ubos-sm px-ubos-2 py-ubos-2 text-left',
+    'transition-colors duration-ubos-fast',
+    selected
+      ? 'bg-ubos-selection-muted border border-ubos-selection-border'
+      : 'border border-transparent hover:bg-ubos-midnight',
+    className,
+  );
+
+  const handleRowKeyDown = (event: KeyboardEvent<HTMLElement>) => {
+    if (!onClick) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onClick();
+    }
+  };
+
+  const rowBody = (
+    <>
       {thumbnail ? (
         <div className="h-9 w-16 shrink-0 overflow-hidden rounded-ubos-sm bg-ubos-carbon">
           {thumbnail}
@@ -139,7 +146,42 @@ export function AssetRow({
         ) : null}
       </div>
       {status ? <div className="shrink-0">{status}</div> : null}
+    </>
+  );
+
+  if (interactive) {
+    return (
+      <li className={rowClassName}>
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={onClick}
+          onKeyDown={handleRowKeyDown}
+          className={cn(
+            'flex min-w-0 items-center gap-ubos-3 outline-none focus-visible:rounded-ubos-sm focus-visible:ring-1 focus-visible:ring-ubos-selection-border',
+            hasNestedActions ? 'flex-1' : 'w-full',
+          )}
+        >
+          {rowBody}
+        </div>
+        {hasNestedActions ? (
+          <div
+            className="shrink-0"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            {action}
+          </div>
+        ) : null}
+      </li>
+    );
+  }
+
+  return (
+    <li className={rowClassName}>
+      {rowBody}
       {action ? <div className="shrink-0">{action}</div> : null}
-    </Comp>
+    </li>
   );
 }
