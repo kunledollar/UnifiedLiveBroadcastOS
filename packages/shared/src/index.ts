@@ -477,6 +477,17 @@ export * from './broadcast-automation/index.js';
 export * from './broadcast-ai/index.js';
 export * from './broadcast-distribution/index.js';
 export * from './broadcast-devices/index.js';
+export type { ProductionExecutionRequest, ProductionExecutionResult, GraphMutationPlan, GraphMutation, ExecutionPolicy, EngineTransactionRecord, EngineSnapshotRecord } from './production-engine/execution-result.js';
+export { dispatchProductionCommand } from './production-engine/command-dispatcher.js';
+export { executeProductionCommand } from './production-engine/executor.js';
+export { createGraphMutationPlan, isPhase17CommandSupported, commandContainsUnsafePayload } from './production-engine/graph-adapter.js';
+export { createEngineSnapshot } from './production-engine/snapshot-manager.js';
+export { createEngineTransaction, InMemoryEngineTransactionLog } from './production-engine/transaction-log.js';
+export { recordExecutionEvents } from './production-engine/event-recorder.js';
+export { resolveExecutionDependencies } from './production-engine/dependency-resolver.js';
+export { resolveResourceLocks } from './production-engine/lock-resolver.js';
+export { reconstructExecutionReplay } from './production-engine/replay-reconstructor.js';
+// Back-compat explicit production engine exports remain available below.
 export { PRODUCTION_ENGINE_SCHEMA_VERSION } from './production-engine/types.js';
 export type { EngineSubsystem, EngineActionStatus, ResourceLockState, ResourceType, HistoryKind, VersionedEngineMetadata, EngineAction, EngineTransaction, DependencyNode, DependencyGraph, ResourceLock, EventSubscription, ExecutionQueue, EngineTimeline, EngineSnapshot, EngineHistoryItem, EngineState, EngineManifest } from './production-engine/types.js';
 export { sanitizeEngineId, sanitizeEngineText, validateNoRuntimeHandles, validateVersionedMetadata, serializeEngineMetadata } from './production-engine/validation.js';

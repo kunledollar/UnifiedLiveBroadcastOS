@@ -1152,3 +1152,80 @@ assert(audit[0]?.actorId === 'director-1' && audit[0]?.status === 'accepted', 'a
 const dryRun = createDryRunReplay({ id: 'dry-run-1', graphRevision: 1, executionMetadata: { planner: 'mock' } });
 assert(dryRun.mode === 'dry_run_execution_replay', 'dry-run replay model is metadata-only');
 console.log('Replay validation passed');
+
+import {
+  createEngineSnapshot,
+  dispatchProductionCommand,
+  reconstructExecutionReplay,
+  type ProductionExecutionRequest,
+} from './production-engine/index.js';
+
+const phase17Request = (
+  type: string,
+  payload: Record<string, unknown> = {},
+  dryRun = false,
+): ProductionExecutionRequest => ({
+  id: `request-${type}-${dryRun}`,
+  command: {
+    id: `phase17-${type}-${dryRun}`,
+    type: type as never,
+    broadcastSessionId: 'test-session',
+    actorId: 'tester',
+    actorRole: 'DIRECTOR',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    payload,
+  },
+  operatorId: 'tester',
+  source: 'operator',
+  timestamp: '2026-07-01T00:00:00.000Z',
+  dryRun,
+  metadata: {},
+});
+
+const executionGraph = graph;
+const acceptedExecution = dispatchProductionCommand({
+  graph: executionGraph,
+  request: phase17Request('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }),
+});
+assert(acceptedExecution.status === 'applied', 'Phase 17 safe command accepted and applied');
+assert(acceptedExecution.graph.metadata.revision === executionGraph.metadata.revision + 1, 'Phase 17 applied command mutates graph revision');
+assert(acceptedExecution.events.some((event) => event.type === 'PREVIEW_SCENE_CHANGED'), 'Phase 17 event recording creates safe command event');
+assert(acceptedExecution.transaction?.status === 'applied', 'Phase 17 transaction log record is created');
+assert(acceptedExecution.snapshot?.containsRuntimeHandles === false, 'Phase 17 snapshot declares no runtime handles');
+
+const unsafeExecution = dispatchProductionCommand({
+  graph: executionGraph,
+  request: phase17Request('ADD_SOURCE', { id: 'unsafe', type: 'camera', metadata: { mediaStream: {} } }),
+});
+assert(unsafeExecution.status === 'rejected', 'Phase 17 unsafe runtime handle rejected');
+
+const unknownExecution = dispatchProductionCommand({ graph: executionGraph, request: phase17Request('UNKNOWN_COMMAND') });
+assert(unknownExecution.status === 'rejected', 'Phase 17 unknown command rejected');
+
+const missingDependency = dispatchProductionCommand({
+  graph: executionGraph,
+  request: phase17Request('SET_PREVIEW_SCENE', { sceneId: 'missing-scene' }),
+});
+assert(missingDependency.status === 'rejected', 'Phase 17 missing dependency rejected');
+
+const blockedExecution = dispatchProductionCommand({
+  graph: executionGraph,
+  request: phase17Request('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }),
+  locks: [{ id: 'lock-preview', schemaVersion: '16.0.0', label: 'Preview lock', description: 'test', createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z', containsRuntimeHandles: false, resourceType: 'preview_output', owner: 'other', state: 'locked', metadataOnly: true }],
+});
+assert(blockedExecution.status === 'blocked', 'Phase 17 locked resource blocked');
+
+const dryRunExecution = dispatchProductionCommand({
+  graph: executionGraph,
+  request: phase17Request('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }, true),
+});
+assert(dryRunExecution.status === 'dry_run', 'Phase 17 dry run returns dry_run');
+assert(dryRunExecution.graph.metadata.revision === executionGraph.metadata.revision, 'Phase 17 dry run does not mutate graph');
+
+const snapshot = createEngineSnapshot(acceptedExecution.graph);
+assert(JSON.stringify(snapshot).toLowerCase().includes('mediastream') === false, 'Phase 17 snapshot contains no runtime handle names');
+
+const replay = reconstructExecutionReplay({ initialSnapshot: snapshot, events: acceptedExecution.events, transactions: acceptedExecution.transaction ? [acceptedExecution.transaction] : [] });
+assert(replay.graphRevision === acceptedExecution.graphRevisionAfter, 'Phase 17 replay reconstruction handles known events');
+const replayWithUnknown = reconstructExecutionReplay({ initialSnapshot: snapshot, events: [{ ...acceptedExecution.events[0]!, type: 'UNKNOWN_EVENT' as never }] });
+assert(replayWithUnknown.warnings.length === 1 && replayWithUnknown.unsupportedEvents.length === 1, 'Phase 17 replay reconstruction warns on unknown events');
