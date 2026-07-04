@@ -83,13 +83,9 @@ export function RightOperationsConsole({
       </div>
 
       {previewSlot && activeTab !== 'preview' ? (
-        <BroadcastPanel
-          variant="inset"
-          padding={false}
-          className="mx-ubos-2 mb-ubos-2 mt-ubos-1 shrink-0 overflow-hidden border-ubos-preview-border shadow-ubos-preview-glow"
-        >
-          <div className="p-ubos-1">{previewSlot}</div>
-        </BroadcastPanel>
+        <div className="mx-ubos-2 mb-ubos-2 mt-ubos-1 h-40 shrink-0 overflow-hidden">
+          {previewSlot}
+        </div>
       ) : null}
     </aside>
   );

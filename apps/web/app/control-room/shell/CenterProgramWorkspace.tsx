@@ -30,7 +30,7 @@ export function CenterProgramWorkspace({
       <BroadcastPanel
         variant="inset"
         padding={false}
-        className="mx-ubos-2 mt-ubos-2 min-h-0 flex-1 overflow-hidden border-ubos-program-border shadow-ubos-program-glow"
+        className="mx-ubos-2 mb-ubos-2 mt-ubos-2 min-h-0 flex-1 overflow-hidden border-ubos-program-border shadow-ubos-program-glow"
       >
         <div className="flex h-full min-h-0 flex-col overflow-hidden p-ubos-1">{children}</div>
       </BroadcastPanel>

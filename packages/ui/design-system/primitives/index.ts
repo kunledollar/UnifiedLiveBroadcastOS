@@ -12,6 +12,14 @@ export {
   type MonitorTally,
 } from './MonitorFrame.js';
 
+export {
+  MonitorSafeAreaGuides,
+  MonitorWarningStrip,
+  MonitorEmptyState,
+  MonitorMetadataRow,
+  type SafeAreaVariant,
+} from './MonitorOverlays.js';
+
 export { StatusBadge, TelemetryBadge } from './StatusBadge.js';
 
 export {

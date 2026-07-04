@@ -3,10 +3,7 @@
 import {
   LayoutSelector,
   ProductionDock,
-  ProgramPreview,
-  ProductionMultiview,
   getTallyState,
-  PreviewMonitor,
   SceneList,
   SourceManager,
 } from '@ubos/ui';
@@ -127,6 +124,12 @@ import { RightOperationsConsole } from './shell/RightOperationsConsole';
 import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
 import { BottomDock } from './shell/BottomDock';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
+import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
+import { OutputViewRenderer, PreviewMonitorCompact } from './workspace/OutputViewRenderer';
+import {
+  normalizeOutputViewMode,
+  type OutputViewMode,
+} from './workspace/monitor-state';
 
 function MediaStreamPreview({
   stream,
@@ -1371,7 +1374,6 @@ function ProductionGraphInspector({
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
 
-type ControlRoomViewMode = 'dual' | 'program' | 'vertical' | 'compact' | 'multiview';
 type WorkspacePresetId = 'default' | 'broadcast' | 'compact' | 'interview' | 'streaming';
 type PanelId =
   | 'scenes'
@@ -1388,7 +1390,7 @@ type WorkspaceLayout = {
   selectedPreset: WorkspacePresetId;
   panelState: Record<PanelId, PanelStatus>;
   sizes: { left: number; center: number; right: number; dock: number };
-  viewMode: ControlRoomViewMode;
+  viewMode: OutputViewMode;
 };
 type WorkspacePreset = WorkspaceLayout & {
   id: WorkspacePresetId;
@@ -1430,7 +1432,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     selectedPreset: 'default',
     panelState: allExpanded(),
     sizes: { left: 288, center: 640, right: 352, dock: 220 },
-    viewMode: 'dual',
+    viewMode: 'program',
   },
   broadcast: {
     id: 'broadcast',
@@ -1448,7 +1450,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     selectedPreset: 'compact',
     panelState: { ...allExpanded(), sources: 'collapsed', chat: 'hidden', outputs: 'hidden' },
     sizes: { left: 232, center: 560, right: 280, dock: 180 },
-    viewMode: 'compact',
+    viewMode: 'program',
   },
   interview: {
     id: 'interview',
@@ -1457,7 +1459,7 @@ const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     selectedPreset: 'interview',
     panelState: { ...allExpanded(), broadcastHealth: 'collapsed', outputs: 'hidden' },
     sizes: { left: 272, center: 640, right: 420, dock: 220 },
-    viewMode: 'dual',
+    viewMode: 'program',
   },
   streaming: {
     id: 'streaming',
@@ -1480,9 +1482,9 @@ function normalizeWorkspaceLayout(
       ? (selectedPreset as WorkspacePresetId)
       : factoryWorkspace.selectedPreset;
   const storedViewMode = value?.viewMode ?? null;
-  const viewMode: ControlRoomViewMode = isControlRoomViewMode(storedViewMode)
-    ? storedViewMode
-    : workspacePresets[preset].viewMode;
+  const viewMode = normalizeOutputViewMode(
+    typeof storedViewMode === 'string' ? storedViewMode : null,
+  );
 
   return {
     ...workspacePresets[preset],
@@ -1493,52 +1495,6 @@ function normalizeWorkspaceLayout(
     sizes: { ...factoryWorkspace.sizes, ...value?.sizes },
   };
 }
-
-const viewModeOptions: Array<{
-  value: ControlRoomViewMode | 'quad';
-  label: string;
-  description: string;
-  disabled?: boolean;
-}> = [
-  {
-    value: 'dual',
-    label: 'Dual View',
-    description: 'Program + vertical',
-  },
-  {
-    value: 'program',
-    label: 'Program Focus',
-    description: 'Large 16:9 preview',
-  },
-  {
-    value: 'vertical',
-    label: 'Vertical Focus',
-    description: 'Large 9:16 preview',
-  },
-  {
-    value: 'compact',
-    label: 'Compact View',
-    description: 'More workspace room',
-  },
-  {
-    value: 'multiview',
-    label: 'Multiview',
-    description: 'Production dashboard',
-  },
-  {
-    value: 'quad',
-    label: 'Quad View',
-    description: 'Coming soon',
-    disabled: true,
-  },
-];
-
-const isControlRoomViewMode = (value: string | null): value is ControlRoomViewMode =>
-  value === 'dual' ||
-  value === 'program' ||
-  value === 'vertical' ||
-  value === 'compact' ||
-  value === 'multiview';
 
 function formatElapsed(totalSeconds: number) {
   const hours = Math.floor(totalSeconds / 3600);
@@ -1743,56 +1699,6 @@ function createProductionGraphSessionFromScenes(input: {
   };
 }
 
-const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
-  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
-  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
-  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
-  multiview: 'grid min-h-0 gap-3',
-};
-
-function ViewModeSelector({
-  selected,
-  onSelect,
-}: {
-  selected: ControlRoomViewMode;
-  onSelect: (mode: ControlRoomViewMode) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-1.5 border-b border-white/5 px-1 py-1">
-      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-        View
-      </span>
-      <div className="flex flex-wrap gap-1">
-        {viewModeOptions.map((option) => {
-          const isSelected = option.value === selected;
-          return (
-            <button
-              key={option.value}
-              type="button"
-              disabled={option.disabled}
-              aria-pressed={!option.disabled && isSelected}
-              title={option.description}
-              onClick={() => {
-                if (!option.disabled && isControlRoomViewMode(option.value)) onSelect(option.value);
-              }}
-              className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.1em] transition ${
-                option.disabled
-                  ? 'cursor-not-allowed text-slate-600'
-                  : isSelected
-                    ? 'bg-cyan-400/20 text-cyan-200'
-                    : 'text-slate-400 hover:bg-slate-800/80 hover:text-slate-200'
-              }`}
-            >
-              {option.label}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 export function SceneWorkspace({
   initialScenes,
   layouts,
@@ -1838,8 +1744,11 @@ export function SceneWorkspace({
         window.localStorage.removeItem(workspaceStorageKey);
       }
     }
-    if (isControlRoomViewMode(storedViewMode))
-      setWorkspace((current) => ({ ...current, viewMode: storedViewMode }));
+    if (storedViewMode)
+      setWorkspace((current) => ({
+        ...current,
+        viewMode: normalizeOutputViewMode(storedViewMode),
+      }));
   }, []);
 
   useEffect(() => {
@@ -1857,7 +1766,7 @@ export function SceneWorkspace({
     return () => window.clearInterval(interval);
   }, []);
 
-  const selectViewMode = (mode: ControlRoomViewMode) => {
+  const selectViewMode = (mode: OutputViewMode) => {
     setWorkspace((current) => ({ ...current, viewMode: mode }));
     window.localStorage.setItem(controlRoomViewStorageKey, mode);
   };
@@ -2146,6 +2055,7 @@ export function SceneWorkspace({
   const [activeNav, setActiveNav] = useState<NavItemId>('scenes');
   const [activeBottomDock, setActiveBottomDock] = useState<DockTabId>('audio');
   const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
+  const [showSafeAreas, setShowSafeAreas] = useState(false);
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2171,24 +2081,39 @@ export function SceneWorkspace({
       {
         id: 'preview' as const,
         content: (
-          <PreviewMonitor
+          <PreviewMonitorCompact
             scene={previewScene}
             routes={mediaRoutes}
             layoutPreset={layoutPreset}
             guests={guests}
+            graph={productionGraphSession.graph}
+            healthFps={safeHealthMetrics.fps}
+            showSafeAreas={showSafeAreas}
           />
         ),
       },
     ],
-    [operationsTabs, previewScene, mediaRoutes, layoutPreset, guests],
+    [
+      operationsTabs,
+      previewScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+    ],
   );
 
   const previewMonitor = (
-    <PreviewMonitor
+    <PreviewMonitorCompact
       scene={previewScene}
       routes={mediaRoutes}
       layoutPreset={layoutPreset}
       guests={guests}
+      graph={productionGraphSession.graph}
+      healthFps={safeHealthMetrics.fps}
+      showSafeAreas={showSafeAreas}
     />
   );
 
@@ -2630,7 +2555,12 @@ export function SceneWorkspace({
 
         <CenterProgramWorkspace
           viewModeSelector={
-            <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+            <OutputViewModeSelector
+              selected={viewMode}
+              onSelect={selectViewMode}
+              showSafeAreas={showSafeAreas}
+              onToggleSafeAreas={() => setShowSafeAreas((current) => !current)}
+            />
           }
           statusFooter={
             <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
@@ -2644,27 +2574,19 @@ export function SceneWorkspace({
             </div>
           }
         >
-          {viewMode === 'multiview' ? (
-            <ProductionMultiview
-              programScene={programScene}
-              previewScene={previewScene}
-              routes={mediaRoutes}
-              layoutPreset={layoutPreset}
-              channels={channels}
-              healthMetrics={multiviewHealthMetrics}
-              guests={guests}
-              preset="broadcast"
-            />
-          ) : (
-            <div className="flex h-full min-h-0 flex-col overflow-hidden">
-              <ProgramPreview
-                scene={programScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-              />
-            </div>
-          )}
+          <OutputViewRenderer
+            mode={viewMode}
+            programScene={programScene}
+            previewScene={previewScene}
+            routes={mediaRoutes}
+            layoutPreset={layoutPreset}
+            guests={guests}
+            channels={channels}
+            healthMetrics={multiviewHealthMetrics}
+            graph={productionGraphSession.graph}
+            healthFps={safeHealthMetrics.fps}
+            showSafeAreas={showSafeAreas}
+          />
         </CenterProgramWorkspace>
 
         <RightOperationsConsole
