@@ -12,6 +12,7 @@ export type ProfessionalWorkspaceId =
   | 'news'
   | 'replay'
   | 'remote-production'
+  | 'graphics-operator'
   | 'custom';
 
 export type MultiviewLayoutMode =
@@ -25,7 +26,8 @@ export type MultiviewLayoutMode =
   | 'podcast-grid'
   | 'producer-dashboard'
   | 'audio-focus'
-  | 'replay-focus';
+  | 'replay-focus'
+  | 'graphics-focus';
 
 export type WorkspaceProfile = {
   id: ProfessionalWorkspaceId;

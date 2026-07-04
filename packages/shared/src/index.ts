@@ -470,3 +470,4 @@ export * from './failure-recovery.js';
 export * from './backpressure.js';
 
 export * from './replay.js';
+export * from './graphics/index.js';

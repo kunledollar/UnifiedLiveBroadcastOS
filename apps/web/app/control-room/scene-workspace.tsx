@@ -92,6 +92,7 @@ import {
   useEffect,
   useMemo,
   useOptimistic,
+  useReducer,
   useRef,
   useState,
   useTransition,
@@ -146,6 +147,16 @@ import {
   outputViewModes,
   type OutputViewMode,
 } from './workspace/monitor-state';
+import {
+  GraphicsLayerStack,
+  GraphicsPreviewControls,
+  GraphicsWorkspace,
+  createDefaultLowerThirdTemplate,
+  ensureSceneComposition,
+  graphicsCompositionReducer,
+  initialGraphicsCompositionState,
+} from './graphics';
+import type { LowerThirdTemplate } from '@ubos/shared';
 
 function MediaStreamPreview({
   stream,
@@ -2024,6 +2035,14 @@ export function SceneWorkspace({
   const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
   const [showSafeAreas, setShowSafeAreas] = useState(false);
   const safeAreaToggles = workspace.safeAreaToggles;
+  const [graphicsState, dispatchGraphics] = useReducer(
+    graphicsCompositionReducer,
+    initialGraphicsCompositionState,
+  );
+  const [selectedGraphicsLayerId, setSelectedGraphicsLayerId] = useState<string | null>(null);
+  const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
+    createDefaultLowerThirdTemplate('Broadcast Lower Third'),
+  ]);
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2041,6 +2060,25 @@ export function SceneWorkspace({
         ['overlay', 'lower_third', 'background'].includes(asset.type),
       ),
     [assets],
+  );
+
+  const previewSceneComposition = useMemo(
+    () => ensureSceneComposition(graphicsState.compositions, previewScene.id),
+    [graphicsState.compositions, previewScene.id],
+  );
+
+  const graphicsWorkspaceContent = (
+    <GraphicsWorkspace
+      sceneId={previewScene.id}
+      sceneName={previewScene.name}
+      composition={previewSceneComposition}
+      assets={assets}
+      templates={lowerThirdTemplates}
+      brandKit={null}
+      selectedLayerId={selectedGraphicsLayerId}
+      onSelectLayer={setSelectedGraphicsLayerId}
+      dispatch={dispatchGraphics}
+    />
   );
 
   const outputViewModeLabel =
@@ -2147,6 +2185,9 @@ export function SceneWorkspace({
       graph={productionGraphSession.graph}
       healthFps={safeHealthMetrics.fps}
       showSafeAreas={showSafeAreas}
+      graphicsLayers={previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview' || layer.programState === 'live',
+      )}
     />
   );
 
@@ -2378,6 +2419,10 @@ export function SceneWorkspace({
           await toggleSourceLock(sourceId);
         });
       }}
+      onGraphicsAddToScene={(asset) =>
+        dispatchGraphics({ type: 'ADD_LAYER', sceneId: previewScene.id, asset })
+      }
+      graphicsTemplates={lowerThirdTemplates}
     />
   );
 
@@ -2404,6 +2449,12 @@ export function SceneWorkspace({
       healthFps: safeHealthMetrics.fps,
       showSafeAreas,
       safeAreaToggles,
+      programGraphicsLayers: previewSceneComposition.layers.filter(
+        (layer) => layer.programState === 'live',
+      ),
+      previewGraphicsLayers: previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview',
+      ),
     }),
     [
       programScene,
@@ -2417,6 +2468,7 @@ export function SceneWorkspace({
       safeHealthMetrics.fps,
       showSafeAreas,
       safeAreaToggles,
+      previewSceneComposition,
     ],
   );
 
@@ -2451,12 +2503,77 @@ export function SceneWorkspace({
         )
       ) : null}
       {activeBottomDock === 'graphics' ? (
-        <div className="px-ubos-2 py-ubos-2">
-          {graphicsAssets.length ? (
-            <DockPanelTags items={graphicsAssets.map((asset) => asset.name)} />
-          ) : (
-            <DockPanelEmpty message="No graphics in production." />
-          )}
+        <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
+          <GraphicsPreviewControls
+            previewCount={previewSceneComposition.previewLayerIds.length}
+            programCount={previewSceneComposition.programLayerIds.length}
+            onSendToPreview={() => {
+              if (selectedGraphicsLayerId) {
+                dispatchGraphics({
+                  type: 'SEND_TO_PREVIEW',
+                  sceneId: previewScene.id,
+                  layerId: selectedGraphicsLayerId,
+                });
+              }
+            }}
+            onTakeLive={() => {
+              if (selectedGraphicsLayerId) {
+                dispatchGraphics({
+                  type: 'TAKE_TO_PROGRAM',
+                  sceneId: previewScene.id,
+                  layerId: selectedGraphicsLayerId,
+                });
+              }
+            }}
+            onRemoveFromProgram={() => {
+              if (selectedGraphicsLayerId) {
+                dispatchGraphics({
+                  type: 'REMOVE_FROM_PROGRAM',
+                  sceneId: previewScene.id,
+                  layerId: selectedGraphicsLayerId,
+                });
+              }
+            }}
+            onClearPreview={() =>
+              dispatchGraphics({ type: 'CLEAR_PREVIEW', sceneId: previewScene.id })
+            }
+            onClearProgram={() =>
+              dispatchGraphics({ type: 'CLEAR_PROGRAM', sceneId: previewScene.id })
+            }
+          />
+          <GraphicsLayerStack
+            layers={previewSceneComposition.layers}
+            assets={graphicsAssets.map((asset) => ({
+              id: asset.id,
+              name: asset.name,
+              type: asset.type === 'lower_third' ? 'lower_third' : asset.type === 'overlay' ? 'text' : 'image',
+              status: asset.status === 'ready' ? 'ready' : asset.status === 'disabled' ? 'disabled' : 'draft',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            }))}
+            selectedLayerId={selectedGraphicsLayerId}
+            onSelectLayer={setSelectedGraphicsLayerId}
+            onToggleVisibility={(layerId) =>
+              dispatchGraphics({ type: 'TOGGLE_VISIBILITY', sceneId: previewScene.id, layerId })
+            }
+            onToggleLock={(layerId) =>
+              dispatchGraphics({ type: 'TOGGLE_LOCK', sceneId: previewScene.id, layerId })
+            }
+            onMoveUp={(layerId) =>
+              dispatchGraphics({ type: 'MOVE_LAYER', sceneId: previewScene.id, layerId, direction: 'up' })
+            }
+            onMoveDown={(layerId) =>
+              dispatchGraphics({ type: 'MOVE_LAYER', sceneId: previewScene.id, layerId, direction: 'down' })
+            }
+            onDuplicate={(layerId) =>
+              dispatchGraphics({ type: 'DUPLICATE_LAYER', sceneId: previewScene.id, layerId })
+            }
+            onRemove={(layerId) => {
+              dispatchGraphics({ type: 'REMOVE_LAYER', sceneId: previewScene.id, layerId });
+              if (selectedGraphicsLayerId === layerId) setSelectedGraphicsLayerId(null);
+            }}
+            className="min-h-0 flex-1"
+          />
         </div>
       ) : null}
       {activeBottomDock === 'media' ? (
@@ -2551,6 +2668,7 @@ export function SceneWorkspace({
               context={workspaceMonitorContext}
               viewMode={viewMode}
               graphChannels={graphAudioChannels}
+              graphicsContent={graphicsWorkspaceContent}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>

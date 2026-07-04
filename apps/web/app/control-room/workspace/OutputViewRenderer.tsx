@@ -11,12 +11,14 @@ import {
 import type {
   AudioChannel,
   Guest,
+  GraphicsLayer,
   MediaLayoutPreset,
   MediaRoute,
   ProductionGraph,
   Scene,
   StreamHealthMetric,
 } from '@ubos/shared';
+import { GraphicsMetadataOverlay } from '../graphics/GraphicsMetadataOverlay';
 import {
   deriveEmptyStateMessage,
   deriveMonitorTelemetry,
@@ -40,6 +42,8 @@ type OutputViewRendererProps = {
   graph?: ProductionGraph;
   healthFps: string;
   showSafeAreas: boolean;
+  programGraphicsLayers?: GraphicsLayer[];
+  previewGraphicsLayers?: GraphicsLayer[];
 };
 
 function MonitorCompositor({
@@ -82,6 +86,7 @@ export function ProgramMonitor({
   showVerticalGuide,
   showFourThreeGuide,
   showPlatformCrop,
+  graphicsLayers = [],
   role = 'program',
   compact = false,
 }: {
@@ -98,6 +103,7 @@ export function ProgramMonitor({
   showVerticalGuide?: boolean;
   showFourThreeGuide?: boolean;
   showPlatformCrop?: boolean;
+  graphicsLayers?: GraphicsLayer[];
   role?: 'program' | 'preview';
   compact?: boolean;
 }) {
@@ -158,13 +164,18 @@ export function ProgramMonitor({
           })}
     >
       {hasSignal ? (
-        <MonitorCompositor
-          scene={scene}
-          routes={routes}
-          layoutPreset={layoutPreset}
-          guests={guests}
-          monitorRole={role}
-        />
+        <>
+          <MonitorCompositor
+            scene={scene}
+            routes={routes}
+            layoutPreset={layoutPreset}
+            guests={guests}
+            monitorRole={role}
+          />
+          {graphicsLayers.length ? (
+            <GraphicsMetadataOverlay layers={graphicsLayers} mode={role === 'preview' ? 'preview' : 'program'} />
+          ) : null}
+        </>
       ) : null}
     </MonitorFrame>
   );
@@ -188,6 +199,8 @@ export function OutputViewRenderer({
   graph,
   healthFps,
   showSafeAreas,
+  programGraphicsLayers = [],
+  previewGraphicsLayers = [],
 }: OutputViewRendererProps) {
   const graphProps = graph ? { graph } : {};
 
@@ -202,6 +215,7 @@ export function OutputViewRenderer({
           {...graphProps}
           healthFps={healthFps}
           showSafeAreas={showSafeAreas}
+          graphicsLayers={programGraphicsLayers}
         />
       );
     case 'horizontal':
@@ -214,6 +228,7 @@ export function OutputViewRenderer({
           {...graphProps}
           healthFps={healthFps}
           showSafeAreas={showSafeAreas}
+          graphicsLayers={programGraphicsLayers}
         />
       );
     case 'multiview': {

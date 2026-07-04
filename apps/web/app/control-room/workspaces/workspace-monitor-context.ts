@@ -1,6 +1,7 @@
 import type {
   AudioChannel,
   Guest,
+  GraphicsLayer,
   MediaLayoutPreset,
   MediaRoute,
   ProductionGraph,
@@ -21,6 +22,8 @@ export type WorkspaceMonitorContext = {
   healthFps: string;
   showSafeAreas: boolean;
   safeAreaToggles: SafeAreaToggles;
+  programGraphicsLayers?: GraphicsLayer[];
+  previewGraphicsLayers?: GraphicsLayer[];
 };
 
 export function monitorSafeAreaProps(context: WorkspaceMonitorContext) {

@@ -1,11 +1,11 @@
 'use client';
 
-import type { Guest, ProductionAsset, Scene, SceneLayout, SceneSourceType, SceneType } from '@ubos/shared';
+import type { GraphicsAsset, Guest, LowerThirdTemplate, ProductionAsset, Scene, SceneLayout, SceneSourceType, SceneType } from '@ubos/shared';
 import type { TallyState } from '@ubos/ui';
 import type { NavItemId } from '../shell/types';
 import { LayoutBrowser } from './LayoutBrowser';
+import { GraphicsBrowser as GraphicsBrowserPanel } from '../graphics/GraphicsBrowser';
 import {
-  GraphicsBrowser,
   MediaBrowser,
   OutputsBrowser,
   ReplayBrowser,
@@ -40,6 +40,8 @@ export function LeftNavPanel({
   onSourceDelete,
   onSourceToggleVisibility,
   onSourceToggleLock,
+  onGraphicsAddToScene,
+  graphicsTemplates = [],
 }: {
   activeNav: NavItemId;
   scenes: Scene[];
@@ -71,6 +73,8 @@ export function LeftNavPanel({
   onSourceDelete: (sourceId: string) => void;
   onSourceToggleVisibility: (sourceId: string) => void;
   onSourceToggleLock: (sourceId: string) => void;
+  onGraphicsAddToScene?: (asset: GraphicsAsset) => void;
+  graphicsTemplates?: LowerThirdTemplate[];
 }) {
   switch (activeNav) {
     case 'scenes':
@@ -109,7 +113,13 @@ export function LeftNavPanel({
     case 'media':
       return <MediaBrowser assets={assets} />;
     case 'graphics':
-      return <GraphicsBrowser assets={assets} />;
+      return (
+        <GraphicsBrowserPanel
+          assets={assets}
+          templates={graphicsTemplates}
+          {...(onGraphicsAddToScene ? { onAddAssetToScene: onGraphicsAddToScene } : {})}
+        />
+      );
     case 'layouts':
       return <LayoutBrowser layouts={layouts} activeLayout={previewScene.layout ?? null} />;
     case 'replay':
