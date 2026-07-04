@@ -569,6 +569,15 @@ export function applyProductionCommand(
         message,
       })),
     );
+  const sceneIdFromPayload = (fallback?: string) =>
+    typeof command.payload === 'object' && command.payload
+      ? String((command.payload as Record<string, unknown>).sceneId ?? fallback ?? '')
+      : String(fallback ?? '');
+  const validateSceneReference = (sceneId: string, label: string) => {
+    if (!sceneId) return `${label} scene is required`;
+    if (!graph.scenes[sceneId]) return `Unknown scene ${sceneId}`;
+    return undefined;
+  };
   if (!isGraphRevisionCurrent(graph, command.expectedRevision)) {
     const error = createRevisionMismatchError(command, graph);
     return rejected(graph, command, [error.code], [error]);
@@ -581,6 +590,21 @@ export function applyProductionCommand(
       [permission.reason],
       [{ code: 'PERMISSION_DENIED', commandId: command.id, message: permission.reason }],
     );
+
+  if (command.type === 'SET_PREVIEW_SCENE') {
+    const error = validateSceneReference(sceneIdFromPayload(), 'Preview');
+    if (error) return rejected(graph, command, [error]);
+  }
+  if (['CUT_TO_PROGRAM', 'TAKE_PREVIEW', 'AUTO_TRANSITION'].includes(command.type)) {
+    const sceneId = sceneIdFromPayload(graph.preview.sceneId);
+    const error = validateSceneReference(sceneId, 'Program');
+    if (error) return rejected(graph, command, [error]);
+  }
+  if (command.type === 'SET_TRANSITION') {
+    const transitionType = String((command.payload as Record<string, unknown>).transitionType ?? '');
+    if (!['cut', 'fade', 'dip', 'wipe'].includes(transitionType))
+      return rejected(graph, command, [`Invalid transition ${transitionType}`]);
+  }
   let next = graph;
   const p = command.payload as Record<string, unknown>;
   switch (command.type) {
@@ -616,6 +640,7 @@ export function applyProductionCommand(
       break;
     case 'CUT_TO_PROGRAM':
     case 'TAKE_PREVIEW':
+    case 'AUTO_TRANSITION':
       next = bump(
         {
           ...graph,
@@ -624,7 +649,13 @@ export function applyProductionCommand(
             sceneId: String(p.sceneId ?? graph.preview.sceneId),
             sourceId: (p.sourceId as string | undefined) ?? graph.preview.sourceId,
             transitionType:
-              command.type === 'CUT_TO_PROGRAM' ? 'cut' : graph.program.transitionType,
+              command.type === 'CUT_TO_PROGRAM'
+                ? 'cut'
+                : ((p.transitionType as GraphTransitionType | undefined) ?? graph.program.transitionType),
+            transitionDurationMs:
+              command.type === 'CUT_TO_PROGRAM'
+                ? 0
+                : Number(p.durationMs ?? p.transitionDuration ?? graph.program.transitionDurationMs),
           },
         },
         command.timestamp,

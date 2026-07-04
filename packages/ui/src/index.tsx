@@ -1307,9 +1307,9 @@ function EmptySlot({
   return (
     <MonitorStateScreen
       label={big ? (output === 'vertical' ? 'VERTICAL' : 'PROGRAM') : undefined}
-      title={output === 'vertical' ? 'Waiting for Source' : 'Waiting for Source'}
+      title={output === 'vertical' ? 'No sources assigned to this scene.' : 'No sources assigned to this scene.'}
       subtitle={
-        hasGuests ? 'Assign a guest, scene or media source.' : 'Route a source to this monitor.'
+        hasGuests ? 'Assign a guest, scene or media source.' : 'Add a source to this scene to render composition.'
       }
       icon={output === 'vertical' ? '▯' : '▣'}
       badge={output === 'vertical' ? 'OFFLINE' : 'READY'}
