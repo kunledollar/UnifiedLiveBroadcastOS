@@ -36,6 +36,8 @@ export function CompactOpsActions({
     <div
       className={cn('flex shrink-0 flex-wrap items-center gap-0.5', className)}
       onClick={(event) => event.stopPropagation()}
+      onKeyDown={(event) => event.stopPropagation()}
+      onMouseDown={(event) => event.stopPropagation()}
     >
       {children}
     </div>
