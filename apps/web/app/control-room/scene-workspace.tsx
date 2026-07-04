@@ -124,7 +124,7 @@ import { RightOperationsConsole } from './shell/RightOperationsConsole';
 import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
 import { BottomDock } from './shell/BottomDock';
 import { LeftNavPanel } from './browsers';
-import { DigitalAudioConsole, DockPanelEmpty, DockPanelTags } from './audio-console';
+import { DigitalAudioConsole, DockPanelEmpty } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
 import {
@@ -156,6 +156,20 @@ import {
   graphicsCompositionReducer,
   initialGraphicsCompositionState,
 } from './graphics';
+import {
+  ClipBrowser,
+  MediaBin,
+  MediaPreviewControls,
+  MediaWorkspace,
+  PlaylistManager,
+  ReplayWorkspace,
+  ensureSceneMediaComposition,
+  getPreviewMediaOverlayItems,
+  getProgramMediaOverlayItems,
+  initialMediaCompositionState,
+  mediaCompositionReducer,
+  productionAssetToMediaAsset,
+} from './media';
 import type { LowerThirdTemplate } from '@ubos/shared';
 
 function MediaStreamPreview({
@@ -2039,7 +2053,14 @@ export function SceneWorkspace({
     graphicsCompositionReducer,
     initialGraphicsCompositionState,
   );
+  const [mediaState, dispatchMedia] = useReducer(
+    mediaCompositionReducer,
+    initialMediaCompositionState,
+  );
   const [selectedGraphicsLayerId, setSelectedGraphicsLayerId] = useState<string | null>(null);
+  const [selectedMediaAssetId, setSelectedMediaAssetId] = useState<string | null>(null);
+  const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
+  const [selectedReplayClipId, setSelectedReplayClipId] = useState<string | null>(null);
   const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
   ]);
@@ -2062,9 +2083,36 @@ export function SceneWorkspace({
     [assets],
   );
 
+  const binMediaAssets = useMemo(
+    () => assets.filter((asset) => ['video', 'image', 'audio'].includes(asset.type)),
+    [assets],
+  );
+
   const previewSceneComposition = useMemo(
     () => ensureSceneComposition(graphicsState.compositions, previewScene.id),
     [graphicsState.compositions, previewScene.id],
+  );
+
+  const previewSceneMediaComposition = useMemo(
+    () => ensureSceneMediaComposition(mediaState.compositions, previewScene.id),
+    [mediaState.compositions, previewScene.id],
+  );
+
+  useEffect(() => {
+    const registered = binMediaAssets.map((asset) =>
+      productionAssetToMediaAsset(asset, previewScene.id),
+    );
+    dispatchMedia({ type: 'REGISTER_ASSETS', sceneId: previewScene.id, assets: registered });
+  }, [binMediaAssets, previewScene.id]);
+
+  const programMediaOverlayItems = useMemo(
+    () => getProgramMediaOverlayItems(previewSceneMediaComposition),
+    [previewSceneMediaComposition],
+  );
+
+  const previewMediaOverlayItems = useMemo(
+    () => getPreviewMediaOverlayItems(previewSceneMediaComposition),
+    [previewSceneMediaComposition],
   );
 
   const graphicsWorkspaceContent = (
@@ -2079,6 +2127,81 @@ export function SceneWorkspace({
       onSelectLayer={setSelectedGraphicsLayerId}
       dispatch={dispatchGraphics}
     />
+  );
+
+  const mediaWorkspaceContent = (
+    <MediaWorkspace
+      sceneId={previewScene.id}
+      sceneName={previewScene.name}
+      composition={previewSceneMediaComposition}
+      assets={binMediaAssets}
+      selectedAssetId={selectedMediaAssetId}
+      selectedClipId={selectedClipId}
+      selectedReplayClipId={selectedReplayClipId}
+      onSelectAsset={setSelectedMediaAssetId}
+      onSelectClip={setSelectedClipId}
+      onSelectReplayClip={setSelectedReplayClipId}
+      dispatch={dispatchMedia}
+    />
+  );
+
+  const replayWorkspacePanels = useMemo(
+    () => ({
+      clipBrowser: (
+        <ClipBrowser
+          clips={previewSceneMediaComposition.clips}
+          assets={previewSceneMediaComposition.assets}
+          selectedClipId={selectedClipId}
+          onSelectClip={setSelectedClipId}
+          onSendToPreview={(clipId) =>
+            dispatchMedia({ type: 'SEND_CLIP_TO_PREVIEW', sceneId: previewScene.id, clipId })
+          }
+          onTakeLive={(clipId) =>
+            dispatchMedia({ type: 'TAKE_CLIP_TO_PROGRAM', sceneId: previewScene.id, clipId })
+          }
+          onDuplicate={(clipId) =>
+            dispatchMedia({ type: 'DUPLICATE_CLIP', sceneId: previewScene.id, clipId })
+          }
+          onRemove={(clipId) => {
+            dispatchMedia({ type: 'REMOVE_CLIP', sceneId: previewScene.id, clipId });
+            if (selectedClipId === clipId) setSelectedClipId(null);
+          }}
+        />
+      ),
+      playlist: (
+        <PlaylistManager
+          playlists={previewSceneMediaComposition.playlists}
+          assets={previewSceneMediaComposition.assets}
+          clips={previewSceneMediaComposition.clips}
+          onCreatePlaylist={() =>
+            dispatchMedia({ type: 'CREATE_PLAYLIST', sceneId: previewScene.id, name: 'Replay Playlist' })
+          }
+          onClearPlaylist={(playlistId) =>
+            dispatchMedia({ type: 'CLEAR_PLAYLIST', sceneId: previewScene.id, playlistId })
+          }
+        />
+      ),
+      replay: (
+        <ReplayWorkspace
+          replayBuffer={previewSceneMediaComposition.replayBuffer}
+          replayClips={previewSceneMediaComposition.replayClips}
+          selectedReplayClipId={selectedReplayClipId}
+          onSelectReplayClip={setSelectedReplayClipId}
+          onSendToPreview={(clipId) =>
+            dispatchMedia({ type: 'SEND_REPLAY_TO_PREVIEW', sceneId: previewScene.id, clipId })
+          }
+          onTakeLive={(clipId) =>
+            dispatchMedia({ type: 'TAKE_REPLAY_TO_PROGRAM', sceneId: previewScene.id, clipId })
+          }
+        />
+      ),
+    }),
+    [
+      previewSceneMediaComposition,
+      previewScene.id,
+      selectedClipId,
+      selectedReplayClipId,
+    ],
   );
 
   const outputViewModeLabel =
@@ -2188,6 +2311,7 @@ export function SceneWorkspace({
       graphicsLayers={previewSceneComposition.layers.filter(
         (layer) => layer.previewState === 'preview' || layer.programState === 'live',
       )}
+      mediaOverlayItems={previewMediaOverlayItems}
     />
   );
 
@@ -2423,6 +2547,12 @@ export function SceneWorkspace({
         dispatchGraphics({ type: 'ADD_LAYER', sceneId: previewScene.id, asset })
       }
       graphicsTemplates={lowerThirdTemplates}
+      mediaAssets={previewSceneMediaComposition.assets}
+      mediaComposition={previewSceneMediaComposition}
+      selectedMediaAssetId={selectedMediaAssetId}
+      selectedReplayClipId={selectedReplayClipId}
+      onSelectMediaAsset={setSelectedMediaAssetId}
+      onSelectReplayClip={setSelectedReplayClipId}
     />
   );
 
@@ -2455,6 +2585,9 @@ export function SceneWorkspace({
       previewGraphicsLayers: previewSceneComposition.layers.filter(
         (layer) => layer.previewState === 'preview',
       ),
+      programMediaOverlayItems,
+      previewMediaOverlayItems,
+      replayBuffer: previewSceneMediaComposition.replayBuffer,
     }),
     [
       programScene,
@@ -2469,6 +2602,9 @@ export function SceneWorkspace({
       showSafeAreas,
       safeAreaToggles,
       previewSceneComposition,
+      programMediaOverlayItems,
+      previewMediaOverlayItems,
+      previewSceneMediaComposition.replayBuffer,
     ],
   );
 
@@ -2577,17 +2713,105 @@ export function SceneWorkspace({
         </div>
       ) : null}
       {activeBottomDock === 'media' ? (
-        <div className="px-ubos-2 py-ubos-2">
-          {assets.length ? (
-            <DockPanelTags items={assets.map((asset) => asset.name)} />
-          ) : (
-            <DockPanelEmpty message="No media assets loaded." />
-          )}
+        <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
+          <MediaPreviewControls
+            previewCount={
+              previewSceneMediaComposition.previewAssetIds.length +
+              previewSceneMediaComposition.previewClipIds.length
+            }
+            programCount={
+              previewSceneMediaComposition.programAssetIds.length +
+              previewSceneMediaComposition.programClipIds.length
+            }
+            onSendToPreview={() => {
+              if (selectedClipId) {
+                dispatchMedia({
+                  type: 'SEND_CLIP_TO_PREVIEW',
+                  sceneId: previewScene.id,
+                  clipId: selectedClipId,
+                });
+              } else if (selectedMediaAssetId) {
+                dispatchMedia({
+                  type: 'SEND_ASSET_TO_PREVIEW',
+                  sceneId: previewScene.id,
+                  assetId: selectedMediaAssetId,
+                });
+              }
+            }}
+            onTakeLive={() => {
+              if (selectedClipId) {
+                dispatchMedia({
+                  type: 'TAKE_CLIP_TO_PROGRAM',
+                  sceneId: previewScene.id,
+                  clipId: selectedClipId,
+                });
+              } else if (selectedMediaAssetId) {
+                dispatchMedia({
+                  type: 'TAKE_ASSET_TO_PROGRAM',
+                  sceneId: previewScene.id,
+                  assetId: selectedMediaAssetId,
+                });
+              }
+            }}
+            onClearPreview={() => dispatchMedia({ type: 'CLEAR_PREVIEW', sceneId: previewScene.id })}
+            onClearProgram={() => dispatchMedia({ type: 'CLEAR_PROGRAM', sceneId: previewScene.id })}
+          />
+          <MediaBin
+            assets={previewSceneMediaComposition.assets}
+            sceneName={previewScene.name}
+            selectedAssetId={selectedMediaAssetId}
+            onSelectAsset={setSelectedMediaAssetId}
+            onAssign={(assetId) =>
+              dispatchMedia({ type: 'ASSIGN_ASSET_TO_SCENE', sceneId: previewScene.id, assetId })
+            }
+            onSendToPreview={(assetId) =>
+              dispatchMedia({ type: 'SEND_ASSET_TO_PREVIEW', sceneId: previewScene.id, assetId })
+            }
+            onTakeLive={(assetId) =>
+              dispatchMedia({ type: 'TAKE_ASSET_TO_PROGRAM', sceneId: previewScene.id, assetId })
+            }
+            onRemove={(assetId) =>
+              dispatchMedia({ type: 'REMOVE_ASSET', sceneId: previewScene.id, assetId })
+            }
+            className="min-h-0 flex-1"
+          />
         </div>
       ) : null}
       {activeBottomDock === 'replay' ? (
-        <div className="px-ubos-2 py-ubos-2">
-          <DockPanelEmpty message="Replay not active." />
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <ReplayWorkspace
+            replayBuffer={previewSceneMediaComposition.replayBuffer}
+            replayClips={previewSceneMediaComposition.replayClips}
+            selectedReplayClipId={selectedReplayClipId}
+            onSelectReplayClip={setSelectedReplayClipId}
+            onSendToPreview={(clipId) =>
+              dispatchMedia({ type: 'SEND_REPLAY_TO_PREVIEW', sceneId: previewScene.id, clipId })
+            }
+            onTakeLive={(clipId) =>
+              dispatchMedia({ type: 'TAKE_REPLAY_TO_PROGRAM', sceneId: previewScene.id, clipId })
+            }
+            onAddSampleClip={() =>
+              dispatchMedia({
+                type: 'ADD_REPLAY_CLIP',
+                sceneId: previewScene.id,
+                clip: {
+                  id: `replay-${Date.now()}`,
+                  sourceId: 'program-feed',
+                  name: 'Sample Replay Clip',
+                  startTimeMs: 0,
+                  endTimeMs: 5000,
+                  durationMs: 5000,
+                  speed: 1,
+                  markers: [],
+                  angle: 'A',
+                  programState: 'idle',
+                  previewState: 'idle',
+                  status: 'ready',
+                },
+              })
+            }
+            className="h-full"
+          />
         </div>
       ) : null}
       {activeBottomDock === 'logs' ? (
@@ -2669,6 +2893,8 @@ export function SceneWorkspace({
               viewMode={viewMode}
               graphChannels={graphAudioChannels}
               graphicsContent={graphicsWorkspaceContent}
+              mediaContent={mediaWorkspaceContent}
+              replayPanels={replayWorkspacePanels}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>

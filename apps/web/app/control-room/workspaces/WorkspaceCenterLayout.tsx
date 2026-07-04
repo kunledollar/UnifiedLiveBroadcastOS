@@ -12,6 +12,12 @@ import { DigitalAudioConsole } from '../audio-console/DigitalAudioConsole';
 import type { AudioNode } from '@ubos/shared';
 import type { OutputViewMode } from '../workspace/monitor-state';
 
+export type WorkspaceReplayPanels = {
+  clipBrowser?: ReactNode;
+  playlist?: ReactNode;
+  replay?: ReactNode;
+};
+
 function DirectorWorkspace({ context }: { context: WorkspaceMonitorContext }) {
   const safeAreas = monitorSafeAreaProps(context);
   const graphProps = context.graph ? { graph: context.graph } : {};
@@ -33,6 +39,8 @@ function DirectorWorkspace({ context }: { context: WorkspaceMonitorContext }) {
           {...safeAreas}
           programGraphicsLayers={context.programGraphicsLayers ?? []}
           previewGraphicsLayers={context.previewGraphicsLayers ?? []}
+          programMediaOverlayItems={context.programMediaOverlayItems ?? []}
+          previewMediaOverlayItems={context.previewMediaOverlayItems ?? []}
         />
       }
       secondary={
@@ -195,23 +203,29 @@ function NewsWorkspace({ context }: { context: WorkspaceMonitorContext }) {
   );
 }
 
-function ReplayWorkspace({ context }: { context: WorkspaceMonitorContext }) {
+function ReplayWorkspaceLayout({
+  context,
+  replayPanels,
+}: {
+  context: WorkspaceMonitorContext;
+  replayPanels?: WorkspaceReplayPanels;
+}) {
   return (
     <MonitorGrid mode="replay-focus" programDominant>
       {[
         <MultiViewRenderer key="program" cell={{ kind: 'program' }} context={context} />,
         <MultiViewRenderer key="replay" cell={{ kind: 'replay', label: 'Replay' }} context={context} />,
         <WorkspacePanel key="clips" title="Clip Browser" compact>
-          <WorkspacePanelEmpty message="Replay not active." />
+          {replayPanels?.clipBrowser ?? <WorkspacePanelEmpty message="Replay not active." />}
         </WorkspacePanel>,
         <WorkspacePanel key="playlist" title="Playlist" compact>
-          <WorkspacePanelEmpty message="Playlist unavailable." />
+          {replayPanels?.playlist ?? <WorkspacePanelEmpty message="Playlist unavailable." />}
         </WorkspacePanel>,
         <WorkspacePanel key="slowmo" title="Slow Motion" compact>
           <WorkspacePanelEmpty message="Slow motion unavailable." />
         </WorkspacePanel>,
         <WorkspacePanel key="markers" title="Markers" compact>
-          <WorkspacePanelEmpty message="Markers unavailable." />
+          {replayPanels?.replay ?? <WorkspacePanelEmpty message="Markers unavailable." />}
         </WorkspacePanel>,
       ]}
     </MonitorGrid>
@@ -297,12 +311,16 @@ export function WorkspaceCenterLayout({
   viewMode,
   graphChannels = [],
   graphicsContent,
+  mediaContent,
+  replayPanels,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
   viewMode: OutputViewMode;
   graphChannels?: AudioNode[];
   graphicsContent?: ReactNode;
+  mediaContent?: ReactNode;
+  replayPanels?: WorkspaceReplayPanels;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -320,13 +338,15 @@ export function WorkspaceCenterLayout({
     case 'news':
       return <NewsWorkspace context={context} />;
     case 'replay':
-      return <ReplayWorkspace context={context} />;
+      return <ReplayWorkspaceLayout context={context} {...(replayPanels ? { replayPanels } : {})} />;
     case 'audio-engineer':
       return <AudioWorkspace context={context} graphChannels={graphChannels} />;
     case 'remote-production':
       return <RemoteProductionWorkspace context={context} />;
     case 'graphics-operator':
       return graphicsContent ?? <DirectorWorkspace context={context} />;
+    case 'media-operator':
+      return mediaContent ?? <DirectorWorkspace context={context} />;
     case 'custom':
       return <CustomWorkspace context={context} viewMode={viewMode} />;
     default:
