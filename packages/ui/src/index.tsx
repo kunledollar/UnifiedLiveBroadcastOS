@@ -2504,3 +2504,6 @@ function Metric({
     </div>
   );
 }
+
+// UBOS Design System v1.0
+export * from './design-system.js';
