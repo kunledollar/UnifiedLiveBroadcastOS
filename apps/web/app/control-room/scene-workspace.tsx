@@ -120,6 +120,13 @@ import {
   setRouteMuted,
 } from './media-route-actions';
 import { ProductionSwitcher } from './production-switcher';
+import { BroadcastStatusBar } from './shell/BroadcastStatusBar';
+import { LeftNavigationRail } from './shell/LeftNavigationRail';
+import { CenterProgramWorkspace } from './shell/CenterProgramWorkspace';
+import { RightOperationsConsole } from './shell/RightOperationsConsole';
+import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
+import { BottomDock } from './shell/BottomDock';
+import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
 
 function MediaStreamPreview({
   stream,
@@ -1794,7 +1801,7 @@ export function SceneWorkspace({
   mediaRoutes = [],
   guests = [],
   initialProductionState,
-  rightSidebar,
+  operationsTabs = [],
 }: {
   initialScenes: Scene[];
   initialProductionState: ProductionSwitchingState;
@@ -1803,7 +1810,7 @@ export function SceneWorkspace({
   assets: ProductionAsset[];
   mediaRoutes?: MediaRoute[];
   guests?: Guest[];
-  rightSidebar?: ReactNode;
+  operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
   const [isPending, startTransition] = useTransition();
   const [workspace, setWorkspace] = useState<WorkspaceLayout>(factoryWorkspace);
@@ -2136,13 +2143,9 @@ export function SceneWorkspace({
     [activeRouteCount, multiviewActiveRouteCount, safeHealthMetrics],
   );
 
-  const rightSidebarVisible = Boolean(rightSidebar);
-  const [activeDock, setActiveDock] = useState<
-    'scenes' | 'sources' | 'media' | 'layouts' | 'outputs' | 'settings'
-  >('scenes');
-  const workspaceColumns = rightSidebarVisible
-    ? 'minmax(12rem,14vw) minmax(0,68vw) minmax(18rem,18vw)'
-    : 'minmax(13rem,15vw) minmax(0,1fr)';
+  const [activeNav, setActiveNav] = useState<NavItemId>('scenes');
+  const [activeBottomDock, setActiveBottomDock] = useState<DockTabId>('audio');
+  const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2154,44 +2157,119 @@ export function SceneWorkspace({
     );
   };
 
-  return (
-    <div
-      className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
-      style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
-    >
-      <aside className="grid min-h-0 grid-cols-[5rem_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20 max-xl:max-h-[34rem]">
-        <nav className="flex min-h-0 flex-col gap-2 border-r border-white/10 bg-black/35 p-2">
-          {[
-            ['scenes', '▦', 'Scenes'],
-            ['sources', '◫', 'Sources'],
-            ['media', '▣', 'Media'],
-            ['layouts', '▤', 'Layouts'],
-            ['outputs', '⇪', 'Outputs'],
-            ['settings', '⚙', 'Settings'],
-          ].map(([id, icon, label]) => (
+  const graphicsAssets = useMemo(
+    () =>
+      assets.filter((asset) =>
+        ['overlay', 'lower_third', 'background'].includes(asset.type),
+      ),
+    [assets],
+  );
+
+  const operationsTabsWithPreview = useMemo(
+    () => [
+      ...operationsTabs,
+      {
+        id: 'preview' as const,
+        content: (
+          <PreviewMonitor
+            scene={previewScene}
+            routes={mediaRoutes}
+            layoutPreset={layoutPreset}
+            guests={guests}
+          />
+        ),
+      },
+    ],
+    [operationsTabs, previewScene, mediaRoutes, layoutPreset, guests],
+  );
+
+  const previewMonitor = (
+    <PreviewMonitor
+      scene={previewScene}
+      routes={mediaRoutes}
+      layoutPreset={layoutPreset}
+      guests={guests}
+    />
+  );
+
+  const toolsMenu = (
+    <div className="flex items-center gap-1">
+      <details className="group relative">
+        <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
+          Workspace
+        </summary>
+        <div className="absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-2 text-ubos-caption text-ubos-fg-secondary shadow-ubos-raised">
+          {Object.values(workspacePresets).map((preset) => (
             <button
-              key={id}
+              key={preset.id}
               type="button"
-              aria-pressed={activeDock === id}
-              onClick={() => setActiveDock(id as typeof activeDock)}
-              className={`grid justify-items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition ${
-                activeDock === id
-                  ? 'bg-cyan-300/15 text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-cyan-300/25'
-                  : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
-              }`}
+              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={() => applyPreset(preset.id)}
             >
-              <span className="text-lg leading-none">{icon}</span>
-              <span>{label}</span>
+              {preset.label}
+              <span className="block text-ubos-metadata text-ubos-fg-muted">{preset.description}</span>
             </button>
           ))}
-          <div className="mt-auto grid justify-items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 px-1 py-2 text-[10px] text-slate-500">
-            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
-            Ready
+          <div className="border-t border-ubos-border-subtle pt-1">
+            <button
+              type="button"
+              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={saveWorkspace}
+            >
+              Save Current
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={restoreWorkspace}
+            >
+              Restore Last Workspace
+            </button>
+            <button
+              type="button"
+              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={resetWorkspace}
+            >
+              Reset Workspace
+            </button>
           </div>
-        </nav>
-        <div className="min-h-0 overflow-y-auto p-2">
-          {activeDock === 'scenes' ? (
-            <SceneList
+        </div>
+      </details>
+      <details className="group relative">
+        <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
+          Tools
+        </summary>
+        <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-2 text-ubos-caption text-ubos-fg-secondary shadow-ubos-raised">
+          <button
+            type="button"
+            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+            onClick={() => startTransition(async () => seedDemoProductionState())}
+          >
+            Seed demo
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+            onClick={() => startTransition(async () => simulateDemoProduction())}
+          >
+            Simulate
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+            onClick={() => startTransition(async () => resetDemoProductionState())}
+          >
+            Reset
+          </button>
+        </div>
+      </details>
+    </div>
+  );
+
+  const leftNavContent = (
+    <>
+      {activeNav === 'scenes' ? (
+        <SceneList
               scenes={sorted}
               sceneTypes={sceneTypes}
               isPending={isPending}
@@ -2276,7 +2354,7 @@ export function SceneWorkspace({
               }}
             />
           ) : null}
-          {activeDock === 'sources' ? (
+      {activeNav === 'sources' ? (
             <SourceManager
               scene={activeScene}
               sourceTypes={sourceTypes}
@@ -2387,277 +2465,185 @@ export function SceneWorkspace({
               }}
             />
           ) : null}
-          {activeDock === 'media' ? (
-            <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-3">
-              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-                Assets
-              </p>
-              <div className="grid gap-2">
-                {assets.map((asset) => (
-                  <div
-                    key={asset.id}
-                    className="rounded-xl bg-slate-950/70 p-2 text-xs font-semibold text-slate-200"
-                  >
-                    <span className="block truncate">{asset.name}</span>
-                    <span className="font-mono text-[10px] uppercase text-slate-500">
-                      {asset.type} · {asset.status}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-          {activeDock === 'layouts' ? <LayoutSelector layouts={layouts} /> : null}
-          {activeDock === 'outputs' ? (
-            <div className="rounded-xl bg-slate-900/70 p-3 text-xs text-slate-400">
-              Output dock ready.
-            </div>
-          ) : null}
-          {activeDock === 'settings' ? (
-            <div className="rounded-xl bg-slate-900/70 p-3 text-xs text-slate-400">
-              Workspace, automation, AI, analytics, and replay docks are reserved.
-            </div>
-          ) : null}
-        </div>
-      </aside>
-      <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
-        <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/95 px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
-          <div className="grid min-h-8 grid-cols-[auto_auto_auto_auto_1fr_auto] items-center gap-2 overflow-x-auto whitespace-nowrap">
-            <span className="inline-flex items-center gap-2 pr-2 text-sm font-black uppercase tracking-[0.18em] text-white">
-              <span className="grid h-7 w-7 place-items-center rounded-lg bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25">
-                UB
-              </span>
-              <span className="hidden max-w-[12rem] truncate md:inline">Launch Day</span>
-            </span>
-            <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
-              <span className="px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
-                Session
-              </span>
-              <OperatorStatusBadge
-                label={activeRouteCount > 0 ? 'LIVE' : 'LIVE idle'}
-                tone={activeRouteCount > 0 ? 'live' : 'neutral'}
-                pulse={activeRouteCount > 0}
-              />
-              <OperatorStatusBadge label="REC idle" tone="neutral" />
-            </div>
-            <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
-              <OperatorMetric label="RUN" value={formatElapsed(elapsedSeconds)} />
-            </div>
-            <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
-              <span className="px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
-                Session
-              </span>
-              <OperatorStatusBadge
-                label={transitionActive ? 'WARN Transition' : 'READY'}
-                tone={transitionActive ? 'warning' : 'ready'}
-              />
-            </div>
-            <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 sm:inline" />
-            <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 md:inline" />
-            <div className="hidden items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5 lg:flex">
-              <span className="px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
-                Performance
-              </span>
-              <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
-              <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
-              <OperatorMetric label="GPU" value="unavailable" />
-              <OperatorMetric label="DROP" value={safeHealthMetrics.dropped} />
-              <OperatorMetric label="LAT" value="unavailable" />
-              <OperatorMetric label="UP" value={safeHealthMetrics.upload} />
-              <OperatorMetric label="AI" value="idle" />
-              <OperatorMetric label="NET" value="local" />
-            </div>
-            <details className="group relative lg:hidden">
-              <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-white/10 bg-slate-950/80 px-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-slate-200">
-                Health
-              </summary>
-              <div className="absolute right-0 z-20 mt-1 grid min-w-36 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 shadow-2xl">
-                <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
-                <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
-                <OperatorMetric label="DROP" value={safeHealthMetrics.dropped} />
-                <OperatorMetric label="UP" value={safeHealthMetrics.upload} />
-              </div>
-            </details>
-            <span className="ml-auto hidden font-mono text-[10px] text-slate-500 xl:inline">
-              {clock} · PGM {programScene.name} · PVW {previewScene.name}
-            </span>
-            <details className="group relative">
-              <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-cyan-400/20 bg-slate-900 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-cyan-100 hover:bg-slate-800">
-                Workspace
-              </summary>
-              <div className="absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 text-[10px] text-slate-300 shadow-2xl">
-                {Object.values(workspacePresets).map((preset) => (
-                  <button
-                    key={preset.id}
-                    className="rounded px-2 py-1 text-left hover:bg-slate-800"
-                    onClick={() => applyPreset(preset.id)}
-                  >
-                    {preset.label}
-                    <span className="block text-[9px] text-slate-500">{preset.description}</span>
-                  </button>
-                ))}
-                <div className="border-t border-white/10 pt-1">
-                  <button
-                    className="w-full rounded px-2 py-1 text-left hover:bg-slate-800"
-                    onClick={saveWorkspace}
-                  >
-                    Save Current
-                  </button>
-                  <button
-                    className="w-full rounded px-2 py-1 text-left hover:bg-slate-800"
-                    onClick={restoreWorkspace}
-                  >
-                    Restore Last Workspace
-                  </button>
-                  <button
-                    className="w-full rounded px-2 py-1 text-left hover:bg-slate-800"
-                    onClick={resetWorkspace}
-                  >
-                    Reset Workspace
-                  </button>
-                </div>
-              </div>
-            </details>
-            <details className="group relative">
-              <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-white/10 bg-slate-900 px-2 text-[10px] font-bold uppercase tracking-[0.12em] text-slate-300 hover:bg-slate-800">
-                Tools
-              </summary>
-              <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-xl border border-white/10 bg-slate-950 p-2 text-[10px] text-slate-300 shadow-2xl">
-                <button
-                  className="rounded px-2 py-1 text-left hover:bg-slate-800"
-                  onClick={() => startTransition(async () => seedDemoProductionState())}
-                >
-                  Seed demo
-                </button>
-                <button
-                  className="rounded px-2 py-1 text-left hover:bg-slate-800"
-                  onClick={() => startTransition(async () => simulateDemoProduction())}
-                >
-                  Simulate
-                </button>
-                <button
-                  className="rounded px-2 py-1 text-left hover:bg-slate-800"
-                  onClick={() => startTransition(async () => resetDemoProductionState())}
-                >
-                  Reset
-                </button>
-                {syncDiagnosticsEnabled ? (
-                  <details className="rounded border border-amber-400/20 bg-amber-400/5 p-2">
-                    <summary className="cursor-pointer font-bold text-amber-100">
-                      Authority diagnostics
-                    </summary>
-                    <div className="mt-2 space-y-2 font-mono text-[9px] text-slate-400">
-                      <div>
-                        scopes {authorityDiagnostics.scopes.length} · active locks{' '}
-                        {authorityDiagnostics.activeLocks.length} · expired{' '}
-                        {authorityDiagnostics.expiredLocks.length}
-                      </div>
-                      <div>
-                        conflicts {authorityDiagnostics.conflicts.length} · recent decisions{' '}
-                        {authorityDiagnostics.decisions.length} · director override{' '}
-                        {authorityDiagnostics.canOverride ? 'yes' : 'no'}
-                      </div>
-                      <div className="grid gap-1">
-                        {authorityDiagnostics.scopes
-                          .filter((node) => node.owner)
-                          .slice(0, 6)
-                          .map((node) => (
-                            <div key={node.scope} className="rounded bg-slate-900 p-1">
-                              {node.scope} → {node.owner?.displayName ?? node.owner?.operatorId} (
-                              {node.owner?.role})
-                            </div>
-                          ))}
-                      </div>
-                      {[
-                        ...authorityDiagnostics.activeLocks,
-                        ...authorityDiagnostics.expiredLocks,
-                      ].map((lock) => (
-                        <div key={lock.id} className="rounded bg-slate-900 p-1">
-                          {lock.scope} lock · {lock.ownerOperatorId} · {lock.status} · expires{' '}
-                          {lock.expiresAt}
-                        </div>
-                      ))}
-                      {authorityDiagnostics.conflicts.map((conflict) => (
-                        <div key={conflict.id} className="rounded bg-slate-900 p-1 text-rose-200">
-                          {conflict.type} · {conflict.scope} · {conflict.message}
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ) : null}
-                {syncDiagnosticsEnabled ? (
-                  <details className="rounded border border-cyan-400/20 bg-cyan-400/5 p-2">
-                    <summary className="cursor-pointer font-bold text-cyan-100">
-                      Sync diagnostics
-                    </summary>
-                    <div className="mt-2 space-y-2 font-mono text-[9px] text-slate-400">
-                      <div>
-                        transport {syncDiagnostics.transport} · state{' '}
-                        {syncDiagnostics.connectionState}
-                      </div>
-                      <div>sync URL {syncDiagnostics.syncUrl}</div>
-                      <div>
-                        clients {syncDiagnostics.connectedClientsCount} · reconnects{' '}
-                        {syncDiagnostics.reconnectAttempts}
-                      </div>
-                      <div>
-                        last rx {syncDiagnostics.lastReceivedMessage} · last tx{' '}
-                        {syncDiagnostics.lastSentMessage}
-                      </div>
-                      <div>heartbeat {syncDiagnostics.lastHeartbeatAt}</div>
-                      <div>session {syncDiagnostics.session.id}</div>
-                      <div>
-                        revision {syncDiagnostics.session.currentGraphRevision} · last{' '}
-                        {syncDiagnostics.lastSyncMessage}
-                      </div>
-                      <div>
-                        accepted {syncDiagnostics.acceptedCommands} · rejected{' '}
-                        {syncDiagnostics.rejectedCommands} · catch-up{' '}
-                        {syncDiagnostics.catchUpRequiredCount}
-                      </div>
-                      <div className="space-y-1">
-                        {syncDiagnostics.clients.map((client) => (
-                          <div key={client.clientId} className="rounded bg-slate-900 p-1">
-                            <span className="text-slate-200">{client.displayName}</span> rev{' '}
-                            {client.observedGraphRevision} lag {client.revisionLag} ·{' '}
-                            {syncDiagnostics.staleClientIds.has(client.clientId)
-                              ? 'stale'
-                              : client.connectionState}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </details>
-                ) : null}
-                <div className="border-t border-white/10 pt-1 font-mono text-[9px] uppercase tracking-[0.08em] text-slate-500">
-                  Space Take · C Cut · A Auto/F Fade · 1-9 PVW · M Mute selected route
-                </div>
-              </div>
-            </details>
-            <button className="h-6 rounded bg-rose-600/90 px-2 text-[10px] font-bold uppercase tracking-wide text-white hover:bg-rose-500">
-              Stop
-            </button>
-          </div>
-        </div>
-        <div className="shrink-0 rounded-xl border border-white/10 bg-slate-950/80 p-2">
-          <div className="flex items-center gap-2 overflow-x-auto font-mono text-[10px] uppercase tracking-[0.12em]">
-            <span className="shrink-0 text-slate-500">Rundown</span>
-            {['Opening', 'Intro', 'Guest 1', 'Video', 'Sponsor', 'Guest 2', 'Closing'].map(
-              (segment, index) => (
-                <span
-                  key={segment}
-                  className={`shrink-0 rounded-lg px-3 py-1.5 ${index === 2 ? 'bg-red-500/20 text-red-100 ring-1 ring-red-400/40' : index === 3 ? 'bg-cyan-300/15 text-cyan-100 ring-1 ring-cyan-300/25' : 'bg-black/25 text-slate-400'}`}
-                >
-                  {segment}
+      {activeNav === 'graphics' ? (
+        graphicsAssets.length ? (
+          <div className="grid gap-2">
+            {graphicsAssets.map((asset) => (
+              <div
+                key={asset.id}
+                className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-2 text-ubos-caption text-ubos-fg-primary"
+              >
+                <span className="block ubos-truncate">{asset.name}</span>
+                <span className="text-ubos-metadata text-ubos-fg-muted">
+                  {asset.type} · {asset.status}
                 </span>
-              ),
-            )}
-            <span className="ml-auto shrink-0 text-slate-500">
-              Next: Video · 04:12 remaining · Automation manual
-            </span>
+              </div>
+            ))}
           </div>
+        ) : (
+          <p className="text-ubos-caption text-ubos-fg-muted">No graphics assets configured.</p>
+        )
+      ) : null}
+      {activeNav === 'media' ? (
+        <div className="grid gap-2">
+          {assets.length ? (
+            assets.map((asset) => (
+              <div
+                key={asset.id}
+                className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-2 text-ubos-caption text-ubos-fg-primary"
+              >
+                <span className="block ubos-truncate">{asset.name}</span>
+                <span className="text-ubos-metadata text-ubos-fg-muted">
+                  {asset.type} · {asset.status}
+                </span>
+              </div>
+            ))
+          ) : (
+            <p className="text-ubos-caption text-ubos-fg-muted">No media assets loaded.</p>
+          )}
         </div>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      ) : null}
+      {activeNav === 'layouts' ? <LayoutSelector layouts={layouts} /> : null}
+      {activeNav === 'replay' ? (
+        <p className="text-ubos-caption text-ubos-fg-muted">Replay not active.</p>
+      ) : null}
+      {activeNav === 'outputs' ? (
+        <p className="text-ubos-caption text-ubos-fg-muted">
+          {mediaRoutes.length
+            ? `${mediaRoutes.length} output route${mediaRoutes.length === 1 ? '' : 's'} configured`
+            : 'No aux output assigned.'}
+        </p>
+      ) : null}
+      {activeNav === 'settings' ? (
+        <p className="text-ubos-caption text-ubos-fg-muted">
+          Workspace, automation, and analytics settings reserved for future release.
+        </p>
+      ) : null}
+    </>
+  );
+
+  const bottomDockContent = (
+    <>
+      {activeBottomDock === 'audio' ? <ProductionDock channels={channels} assets={[]} /> : null}
+      {activeBottomDock === 'layers' ? (
+        activeScene.sources.length ? (
+          <div className="grid gap-1 text-ubos-caption text-ubos-fg-secondary">
+            {activeScene.sources.map((source) => (
+              <div
+                key={source.id}
+                className="flex items-center justify-between rounded-ubos-sm bg-ubos-midnight px-2 py-1"
+              >
+                <span className="ubos-truncate">{source.name}</span>
+                <span className="font-mono text-ubos-metadata text-ubos-fg-muted">
+                  {source.isVisible ? 'READY' : 'OFF'}
+                </span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-ubos-caption text-ubos-fg-muted">No layers in preview scene.</p>
+        )
+      ) : null}
+      {activeBottomDock === 'graphics' ? (
+        graphicsAssets.length ? (
+          <div className="flex flex-wrap gap-2">
+            {graphicsAssets.map((asset) => (
+              <span
+                key={asset.id}
+                className="rounded-ubos-sm border border-ubos-border-subtle px-2 py-1 text-ubos-metadata text-ubos-fg-secondary"
+              >
+                {asset.name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-ubos-caption text-ubos-fg-muted">No graphics in production.</p>
+        )
+      ) : null}
+      {activeBottomDock === 'media' ? (
+        assets.length ? (
+          <div className="flex flex-wrap gap-2">
+            {assets.map((asset) => (
+              <span
+                key={asset.id}
+                className="rounded-ubos-sm border border-ubos-border-subtle px-2 py-1 text-ubos-metadata text-ubos-fg-secondary"
+              >
+                {asset.name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-ubos-caption text-ubos-fg-muted">No media assets loaded.</p>
+        )
+      ) : null}
+      {activeBottomDock === 'replay' ? (
+        <p className="text-ubos-caption text-ubos-fg-muted">Replay not active.</p>
+      ) : null}
+      {activeBottomDock === 'timeline' ? (
+        <p className="text-ubos-caption text-ubos-fg-muted">Timeline not configured.</p>
+      ) : null}
+      {activeBottomDock === 'automation' ? (
+        <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
+          <span>History: {lastTransitionLabel}</span>
+          <span>·</span>
+          <span>Program: {programScene.name}</span>
+          <span>·</span>
+          <span className={transitionActive ? 'text-ubos-warning-text' : 'text-ubos-success-text'}>
+            {transitionActive ? 'Transition active' : 'Manual mode'}
+          </span>
+        </div>
+      ) : null}
+      {activeBottomDock === 'logs' ? (
+        <div className="space-y-2">
+          <ProductionGraphInspector session={productionGraphSession} />
+          <MediaExecutionInspector
+            engine={mediaExecutionEngine}
+            graph={productionGraphSession.graph}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <BroadcastStatusBar
+        sessionName="Launch Day"
+        isLive={activeRouteCount > 0}
+        isRecording={false}
+        runTime={formatElapsed(elapsedSeconds)}
+        programSceneName={programScene.name}
+        previewSceneName={previewScene.name}
+        clock={clock}
+        transitionActive={transitionActive}
+        fps={safeHealthMetrics.fps}
+        cpu={safeHealthMetrics.cpu}
+        dropped={safeHealthMetrics.dropped}
+        upload={safeHealthMetrics.upload}
+        toolsMenu={toolsMenu}
+      />
+
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <LeftNavigationRail activeItem={activeNav} onSelect={setActiveNav}>
+          {leftNavContent}
+        </LeftNavigationRail>
+
+        <CenterProgramWorkspace
+          viewModeSelector={
+            <ViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+          }
+          statusFooter={
+            <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
+              <span className="ubos-truncate">History: {lastTransitionLabel}</span>
+              <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
+              <span className="ubos-truncate">Program: {programScene.name}</span>
+              <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
+              <span className={transitionActive ? 'text-ubos-warning-text' : 'text-ubos-success-text'}>
+                {transitionActive ? 'Transition active' : 'No warnings'}
+              </span>
+            </div>
+          }
+        >
           {viewMode === 'multiview' ? (
             <ProductionMultiview
               programScene={programScene}
@@ -2670,18 +2656,26 @@ export function SceneWorkspace({
               preset="broadcast"
             />
           ) : (
-            <div className="min-h-[28rem] flex-1">
-              <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-red-400/20">
-                <ProgramPreview
-                  scene={programScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                />
-              </div>
+            <div className="flex h-full min-h-0 flex-col overflow-hidden">
+              <ProgramPreview
+                scene={programScene}
+                routes={mediaRoutes}
+                layoutPreset={layoutPreset}
+                guests={guests}
+              />
             </div>
           )}
-        </div>
+        </CenterProgramWorkspace>
+
+        <RightOperationsConsole
+          tabs={operationsTabsWithPreview}
+          activeTab={activeOperationsTab}
+          onTabChange={setActiveOperationsTab}
+          previewSlot={previewMonitor}
+        />
+      </div>
+
+      <ProfessionalSwitcherBar>
         <ProductionSwitcher
           productionState={productionState}
           programSceneName={programScene.name}
@@ -2722,89 +2716,12 @@ export function SceneWorkspace({
             );
           }}
         />
-        <div className="grid h-24 shrink-0 gap-2 overflow-hidden lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
-          <details
-            open
-            className="rounded-xl border border-white/10 bg-slate-950/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
-          >
-            <summary className="cursor-pointer px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-              Audio Dock
-            </summary>
-            <div className="max-h-16 overflow-y-auto px-2 pb-2">
-              <ProductionDock channels={channels} assets={[]} />
-            </div>
-          </details>
-          <details open className="rounded-xl border border-white/10 bg-slate-900/70">
-            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-              Layers
-            </summary>
-            <div className="max-h-48 overflow-y-auto p-2 text-xs text-slate-300">
-              {activeScene.sources.length ? (
-                activeScene.sources.map((source) => (
-                  <div
-                    key={source.id}
-                    className="mb-1 flex items-center justify-between rounded-lg bg-slate-950/70 px-2 py-1"
-                  >
-                    <span className="truncate">{source.name}</span>
-                    <span className="font-mono text-[10px] text-slate-500">
-                      {source.isVisible ? 'READY' : 'OFF'}
-                    </span>
-                  </div>
-                ))
-              ) : (
-                <p className="text-slate-500">No layers in preview scene.</p>
-              )}
-            </div>
-          </details>
-          <details className="rounded-xl border border-white/10 bg-slate-900/70">
-            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-              Inspector
-            </summary>
-            <div className="max-h-48 overflow-y-auto p-2">
-              <ProductionGraphInspector session={productionGraphSession} />
-              <MediaExecutionInspector
-                engine={mediaExecutionEngine}
-                graph={productionGraphSession.graph}
-              />
-            </div>
-          </details>
-          <details className="rounded-xl border border-white/10 bg-slate-900/70">
-            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-              Media
-            </summary>
-            <div className="p-2 text-xs text-slate-400">Media bins ready.</div>
-          </details>
-          <details className="rounded-xl border border-white/10 bg-slate-900/70">
-            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-              Replay
-            </summary>
-            <div className="p-2 text-xs text-slate-400">Replay placeholder.</div>
-          </details>
-        </div>
-        <div className="flex h-8 shrink-0 items-center gap-2 overflow-hidden rounded-lg border border-white/10 bg-slate-950/80 px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
-          <span className="truncate">History: {lastTransitionLabel}</span>
-          <span className="hidden h-4 w-px bg-white/10 sm:block" />
-          <span className="truncate">Program: {programScene.name}</span>
-          <span className="hidden h-4 w-px bg-white/10 sm:block" />
-          <span className={transitionActive ? 'text-amber-200' : 'text-emerald-200'}>
-            {transitionActive ? 'Transition active' : 'No warnings'}
-          </span>
-          <span className="ml-auto hidden text-slate-600 md:block">Automation manual</span>
-        </div>
-      </section>
-      {rightSidebarVisible ? (
-        <aside className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(13rem,0.38fr)] gap-3 overflow-hidden rounded-2xl max-xl:max-h-[52rem]">
-          {rightSidebar}
-          <div className="min-h-0 overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-emerald-300/25">
-            <PreviewMonitor
-              scene={previewScene}
-              routes={mediaRoutes}
-              layoutPreset={layoutPreset}
-              guests={guests}
-            />
-          </div>
-        </aside>
-      ) : null}
+      </ProfessionalSwitcherBar>
+
+      <BottomDock activeTab={activeBottomDock} onTabChange={setActiveBottomDock}>
+        {bottomDockContent}
+      </BottomDock>
     </div>
   );
 }
+
