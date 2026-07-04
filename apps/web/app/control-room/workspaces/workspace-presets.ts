@@ -111,6 +111,17 @@ export const workspaceProfiles: Record<WorkspaceProfile['id'], WorkspaceProfile>
     defaultNavItem: 'outputs',
     programFlexWeight: 55,
   },
+  'graphics-operator': {
+    id: 'graphics-operator',
+    label: 'Graphics Operator',
+    description: 'Layer stack, overlays, and lower thirds',
+    centerLayout: 'graphics-focus',
+    defaultViewMode: 'program',
+    defaultOperationsTab: 'inspector',
+    defaultDockTab: 'graphics',
+    defaultNavItem: 'graphics',
+    programFlexWeight: 45,
+  },
   custom: {
     id: 'custom',
     label: 'Custom Workspace',

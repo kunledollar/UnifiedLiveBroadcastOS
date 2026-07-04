@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { OutputViewRenderer } from '../workspace/OutputViewRenderer';
 import { monitorSafeAreaProps, type WorkspaceMonitorContext } from './workspace-monitor-context';
 import { ResizableSplit } from './ResizableSplit';
@@ -30,6 +31,8 @@ function DirectorWorkspace({ context }: { context: WorkspaceMonitorContext }) {
           {...graphProps}
           healthFps={context.healthFps}
           {...safeAreas}
+          programGraphicsLayers={context.programGraphicsLayers ?? []}
+          previewGraphicsLayers={context.previewGraphicsLayers ?? []}
         />
       }
       secondary={
@@ -293,11 +296,13 @@ export function WorkspaceCenterLayout({
   context,
   viewMode,
   graphChannels = [],
+  graphicsContent,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
   viewMode: OutputViewMode;
   graphChannels?: AudioNode[];
+  graphicsContent?: ReactNode;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -320,6 +325,8 @@ export function WorkspaceCenterLayout({
       return <AudioWorkspace context={context} graphChannels={graphChannels} />;
     case 'remote-production':
       return <RemoteProductionWorkspace context={context} />;
+    case 'graphics-operator':
+      return graphicsContent ?? <DirectorWorkspace context={context} />;
     case 'custom':
       return <CustomWorkspace context={context} viewMode={viewMode} />;
     default:
