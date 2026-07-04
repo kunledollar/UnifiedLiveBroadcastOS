@@ -15,6 +15,7 @@ export type DockTabId =
   | 'media'
   | 'replay'
   | 'collaboration'
+  | 'automation'
   | 'logs';
 
 export type OperationsTabId =
@@ -26,4 +27,5 @@ export type OperationsTabId =
   | 'preview'
   | 'logs'
   | 'ai'
-  | 'team';
+  | 'team'
+  | 'automation';

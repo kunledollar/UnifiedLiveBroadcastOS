@@ -37,6 +37,9 @@ export type WorkspaceMonitorContext = {
   collaborationLockCount?: number;
   collaborationOpenNoteCount?: number;
   collaborationPreviewChangedBy?: string;
+  automationCurrentSegmentName?: string;
+  automationNextSegmentName?: string;
+  automationModeLabel?: string;
 };
 
 export function monitorSafeAreaProps(context: WorkspaceMonitorContext) {

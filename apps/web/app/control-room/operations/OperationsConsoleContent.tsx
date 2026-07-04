@@ -20,6 +20,8 @@ import { PreviewPanel } from './PreviewPanel';
 import { RoutingPanel } from './RoutingPanel';
 import { TeamPanel } from '../collaboration/TeamPanel';
 import type { CollaborationAction, CollaborationState } from '../collaboration/collaboration-state';
+import { AutomationPanel } from '../automation/AutomationPanel';
+import type { AutomationAction, AutomationState } from '../automation/automation-state';
 import { HostDevicesSection } from './HostDevicesSection';
 
 export function OperationsConsoleContent({
@@ -49,6 +51,8 @@ export function OperationsConsoleContent({
   collaborationState,
   collaborationConflictCount,
   onCollaborationDispatch,
+  automationState,
+  onAutomationDispatch,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -76,6 +80,8 @@ export function OperationsConsoleContent({
   collaborationState?: CollaborationState;
   collaborationConflictCount?: number;
   onCollaborationDispatch?: (action: CollaborationAction) => void;
+  automationState?: AutomationState;
+  onAutomationDispatch?: (action: AutomationAction) => void;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -136,6 +142,29 @@ export function OperationsConsoleContent({
       />
     ),
     ai: <AIPanel />,
+    automation:
+      automationState && onAutomationDispatch ? (
+        <AutomationPanel state={automationState} dispatch={onAutomationDispatch} />
+      ) : (
+        <AutomationPanel
+          state={{
+            runOfShow: {
+              id: 'empty',
+              name: 'Run of Show',
+              status: 'draft',
+              segments: [],
+              estimatedDurationMs: 0,
+              updatedAt: new Date().toISOString(),
+            },
+            macros: [],
+            automationMode: 'manual',
+            selectedSegmentId: null,
+            selectedCueId: null,
+            commandLog: [],
+          }}
+          dispatch={() => undefined}
+        />
+      ),
     team:
       collaborationState && onCollaborationDispatch ? (
         <TeamPanel

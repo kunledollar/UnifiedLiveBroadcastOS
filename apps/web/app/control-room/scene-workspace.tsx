@@ -182,8 +182,19 @@ import {
   mapAuthorityLockToProductionLock,
   mapCollaborationOperatorToPresence,
 } from './collaboration';
-import { createMockCollaborationOperators } from '@ubos/shared';
+import { createMockCollaborationOperators, createDefaultRunOfShow } from '@ubos/shared';
 import type { LowerThirdTemplate } from '@ubos/shared';
+import {
+  AutomationPanel,
+  AutomationWorkspace,
+  automationModeLabel,
+  automationReducer,
+  createInitialAutomationState,
+  createSampleMacros,
+  enrichRunOfShowWithSampleCues,
+  getCurrentSegment,
+  getNextSegment,
+} from './automation';
 
 function MediaStreamPreview({
   stream,
@@ -2078,6 +2089,13 @@ export function SceneWorkspace({
     collaborationReducer,
     initialCollaborationState,
   );
+  const [automationState, dispatchAutomation] = useReducer(
+    automationReducer,
+    createInitialAutomationState(
+      enrichRunOfShowWithSampleCues(createDefaultRunOfShow()),
+      createSampleMacros(),
+    ),
+  );
   const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
   ]);
@@ -2226,6 +2244,10 @@ export function SceneWorkspace({
     />
   );
 
+  const automationWorkspaceContent = (
+    <AutomationWorkspace state={automationState} dispatch={dispatchAutomation} />
+  );
+
   const replayWorkspacePanels = useMemo(
     () => ({
       clipBrowser: (
@@ -2339,6 +2361,8 @@ export function SceneWorkspace({
         collaborationState,
         collaborationConflictCount: authorityDiagnostics.conflicts.length,
         onCollaborationDispatch: dispatchCollaboration,
+        automationState,
+        onAutomationDispatch: dispatchAutomation,
       }),
     [
       broadcastId,
@@ -2363,6 +2387,7 @@ export function SceneWorkspace({
       layoutPreset,
       showSafeAreas,
       collaborationState,
+      automationState,
     ],
   );
 
@@ -2371,6 +2396,7 @@ export function SceneWorkspace({
     const panelIds: OperationsTabId[] = [
       'guests',
       'team',
+      'automation',
       'inspector',
       'routing',
       'outputs',
@@ -2697,6 +2723,13 @@ export function SceneWorkspace({
             )!.name,
           }
         : {}),
+      ...(getCurrentSegment(automationState.runOfShow)?.name
+        ? { automationCurrentSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
+        : {}),
+      ...(getNextSegment(automationState.runOfShow)?.name
+        ? { automationNextSegmentName: getNextSegment(automationState.runOfShow)!.name }
+        : {}),
+      automationModeLabel: automationModeLabel(automationState.automationMode),
     }),
     [
       programScene,
@@ -2715,6 +2748,7 @@ export function SceneWorkspace({
       previewMediaOverlayItems,
       previewSceneMediaComposition.replayBuffer,
       collaborationState.remoteProduction,
+      automationState,
     ],
   );
 
@@ -2934,6 +2968,15 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
+      {activeBottomDock === 'automation' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <AutomationPanel
+            state={automationState}
+            dispatch={dispatchAutomation}
+            className="h-full"
+          />
+        </div>
+      ) : null}
       {activeBottomDock === 'logs' ? (
         <div className="space-y-2 px-ubos-2 py-ubos-2">
           <ProductionGraphInspector session={productionGraphSession} />
@@ -2961,6 +3004,7 @@ export function SceneWorkspace({
         cpu={safeHealthMetrics.cpu}
         dropped={safeHealthMetrics.dropped}
         upload={safeHealthMetrics.upload}
+        automationModeLabel={automationModeLabel(automationState.automationMode)}
         toolsMenu={toolsMenu}
       />
 
@@ -3016,6 +3060,7 @@ export function SceneWorkspace({
               mediaContent={mediaWorkspaceContent}
               replayPanels={replayWorkspacePanels}
               collaborationContent={collaborationWorkspaceContent}
+              automationContent={automationWorkspaceContent}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>

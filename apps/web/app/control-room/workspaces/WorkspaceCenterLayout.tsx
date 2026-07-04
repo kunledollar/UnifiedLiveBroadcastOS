@@ -53,6 +53,15 @@ function DirectorWorkspace({ context }: { context: WorkspaceMonitorContext }) {
           {...(context.collaborationPreviewChangedBy
             ? { collaborationPreviewChangedBy: context.collaborationPreviewChangedBy }
             : {})}
+          {...(context.automationCurrentSegmentName
+            ? { automationCurrentSegmentName: context.automationCurrentSegmentName }
+            : {})}
+          {...(context.automationNextSegmentName
+            ? { automationNextSegmentName: context.automationNextSegmentName }
+            : {})}
+          {...(context.automationModeLabel
+            ? { automationModeLabel: context.automationModeLabel }
+            : {})}
         />
       }
       secondary={
@@ -326,6 +335,7 @@ export function WorkspaceCenterLayout({
   mediaContent,
   replayPanels,
   collaborationContent,
+  automationContent,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
@@ -335,6 +345,7 @@ export function WorkspaceCenterLayout({
   mediaContent?: ReactNode;
   replayPanels?: WorkspaceReplayPanels;
   collaborationContent?: ReactNode;
+  automationContent?: ReactNode;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -361,6 +372,8 @@ export function WorkspaceCenterLayout({
       return graphicsContent ?? <DirectorWorkspace context={context} />;
     case 'media-operator':
       return mediaContent ?? <DirectorWorkspace context={context} />;
+    case 'automation-operator':
+      return automationContent ?? <DirectorWorkspace context={context} />;
     case 'custom':
       return <CustomWorkspace context={context} viewMode={viewMode} />;
     default:

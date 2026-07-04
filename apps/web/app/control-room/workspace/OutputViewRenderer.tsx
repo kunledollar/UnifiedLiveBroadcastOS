@@ -21,6 +21,7 @@ import type {
 import { GraphicsMetadataOverlay } from '../graphics/GraphicsMetadataOverlay';
 import { MediaMetadataOverlay } from '../media/MediaMetadataOverlay';
 import { CollaborationMetadataOverlay } from '../collaboration/CollaborationMetadataOverlay';
+import { AutomationMetadataOverlay } from '../automation/AutomationMetadataOverlay';
 import {
   deriveEmptyStateMessage,
   deriveMonitorTelemetry,
@@ -52,6 +53,9 @@ type OutputViewRendererProps = {
   collaborationLockCount?: number;
   collaborationOpenNoteCount?: number;
   collaborationPreviewChangedBy?: string;
+  automationCurrentSegmentName?: string;
+  automationNextSegmentName?: string;
+  automationModeLabel?: string;
 };
 
 function MonitorCompositor({
@@ -100,6 +104,9 @@ export function ProgramMonitor({
   collaborationLockCount,
   collaborationOpenNoteCount,
   collaborationPreviewChangedBy,
+  automationCurrentSegmentName,
+  automationNextSegmentName,
+  automationModeLabel,
   role = 'program',
   compact = false,
 }: {
@@ -122,6 +129,9 @@ export function ProgramMonitor({
   collaborationLockCount?: number;
   collaborationOpenNoteCount?: number;
   collaborationPreviewChangedBy?: string;
+  automationCurrentSegmentName?: string;
+  automationNextSegmentName?: string;
+  automationModeLabel?: string;
   role?: 'program' | 'preview';
   compact?: boolean;
 }) {
@@ -202,6 +212,11 @@ export function ProgramMonitor({
             {...(collaborationOpenNoteCount !== undefined ? { openNoteCount: collaborationOpenNoteCount } : {})}
             {...(collaborationPreviewChangedBy ? { previewChangedBy: collaborationPreviewChangedBy } : {})}
           />
+          <AutomationMetadataOverlay
+            {...(automationCurrentSegmentName ? { currentSegmentName: automationCurrentSegmentName } : {})}
+            {...(automationNextSegmentName ? { nextSegmentName: automationNextSegmentName } : {})}
+            {...(automationModeLabel ? { automationMode: automationModeLabel } : {})}
+          />
         </>
       ) : null}
     </MonitorFrame>
@@ -234,6 +249,9 @@ export function OutputViewRenderer({
   collaborationLockCount,
   collaborationOpenNoteCount,
   collaborationPreviewChangedBy,
+  automationCurrentSegmentName,
+  automationNextSegmentName,
+  automationModeLabel,
 }: OutputViewRendererProps) {
   const graphProps = graph ? { graph } : {};
 
@@ -254,6 +272,9 @@ export function OutputViewRenderer({
           {...(collaborationLockCount !== undefined ? { collaborationLockCount } : {})}
           {...(collaborationOpenNoteCount !== undefined ? { collaborationOpenNoteCount } : {})}
           {...(collaborationPreviewChangedBy ? { collaborationPreviewChangedBy } : {})}
+          {...(automationCurrentSegmentName ? { automationCurrentSegmentName } : {})}
+          {...(automationNextSegmentName ? { automationNextSegmentName } : {})}
+          {...(automationModeLabel ? { automationModeLabel } : {})}
         />
       );
     case 'horizontal':
@@ -272,6 +293,9 @@ export function OutputViewRenderer({
           {...(collaborationLockCount !== undefined ? { collaborationLockCount } : {})}
           {...(collaborationOpenNoteCount !== undefined ? { collaborationOpenNoteCount } : {})}
           {...(collaborationPreviewChangedBy ? { collaborationPreviewChangedBy } : {})}
+          {...(automationCurrentSegmentName ? { automationCurrentSegmentName } : {})}
+          {...(automationNextSegmentName ? { automationNextSegmentName } : {})}
+          {...(automationModeLabel ? { automationModeLabel } : {})}
         />
       );
     case 'multiview': {
