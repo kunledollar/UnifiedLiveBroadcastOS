@@ -74,10 +74,13 @@ import {
   type TransitionType,
   LocalProductionCommandDispatcher,
   createBroadcastSession,
+  createInitialProductionGraph,
   selectBroadcastStatus,
   selectHealthSummary,
   selectRecordingState,
   type ProductionCommandType,
+  type ProductionBroadcastSession,
+  type SceneNode,
   createMockSyncScenario,
   createSyncSession,
   getStaleClients,
@@ -1191,6 +1194,114 @@ function OperatorMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
+
+
+interface CurrentProgramState {
+  sceneId: string;
+  transitionType: TransitionType;
+  transitionDuration: number;
+}
+
+interface CurrentPreviewState {
+  sceneId: string;
+}
+
+class ProgramOutputController {
+  constructor(private readonly state: CurrentProgramState) {}
+  get sceneId() { return this.state.sceneId; }
+}
+
+class PreviewOutputController {
+  constructor(private readonly state: CurrentPreviewState) {}
+  get sceneId() { return this.state.sceneId; }
+}
+
+class SceneSelectionController {
+  constructor(private readonly dispatch: (type: ProductionCommandType, payload?: Record<string, unknown>) => unknown) {}
+  select(sceneId: string) { return this.dispatch('SET_PREVIEW_SCENE', { sceneId }); }
+}
+
+class TransitionController {
+  constructor(private readonly dispatch: (type: ProductionCommandType, payload?: Record<string, unknown>) => unknown) {}
+  execute(type: TransitionType, previewSceneId: string, durationMs: number) {
+    return this.dispatch(type === 'cut' ? 'CUT_TO_PROGRAM' : type === 'fade' ? 'AUTO_TRANSITION' : 'TAKE_PREVIEW', {
+      sceneId: previewSceneId,
+      transitionType: type,
+      durationMs: type === 'cut' ? 0 : durationMs,
+    });
+  }
+}
+
+class ProgramPreviewSynchronizer {
+  static fromSwitchingState(state: ProductionSwitchingState) {
+    return {
+      program: new ProgramOutputController({
+        sceneId: state.programSceneId,
+        transitionType: state.transitionType,
+        transitionDuration: state.transitionDuration,
+      }),
+      preview: new PreviewOutputController({ sceneId: state.previewSceneId }),
+    };
+  }
+}
+
+function createProductionGraphSessionFromScenes(input: {
+  scenes: Scene[];
+  productionState: ProductionSwitchingState;
+  broadcastId: string;
+}): ProductionBroadcastSession {
+  const timestamp = new Date().toISOString();
+  const graph = createInitialProductionGraph({
+    broadcastSessionId: input.broadcastId,
+    name: 'Control Room Session',
+    operatorId: 'local-director',
+    timestamp,
+  });
+  const scenesById: Record<string, SceneNode> = Object.fromEntries(
+    input.scenes.map((scene) => [
+      scene.id,
+      {
+        id: scene.id,
+        name: scene.name,
+        order: scene.order,
+        sourceIds: scene.sources.map((source) => source.id),
+        canvasIds: scene.canvases.map((canvas) => canvas.id),
+        overlayIds: scene.overlays.map((overlay) => String(overlay.id)),
+        metadata: { type: scene.type, layout: scene.layout },
+        createdAt: scene.createdAt,
+        updatedAt: scene.updatedAt,
+      },
+    ]),
+  );
+  const fallbackSceneId = input.scenes.find((scene) => scene.isActive)?.id ?? input.scenes[0]?.id ?? 'scene-empty';
+  const programSceneId = scenesById[input.productionState.programSceneId]
+    ? input.productionState.programSceneId
+    : fallbackSceneId;
+  const previewSceneId = scenesById[input.productionState.previewSceneId]
+    ? input.productionState.previewSceneId
+    : programSceneId;
+  const session = createBroadcastSession({
+    id: input.broadcastId,
+    name: 'Control Room Session',
+    operatorId: 'local-director',
+    timestamp,
+  });
+  return {
+    ...session,
+    graph: {
+      ...graph,
+      scenes: scenesById,
+      program: {
+        ...graph.program,
+        sceneId: programSceneId,
+        transitionType: input.productionState.transitionType,
+        transitionDurationMs: input.productionState.transitionDuration,
+      },
+      preview: { ...graph.preview, sceneId: previewSceneId },
+    },
+  };
+}
+
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
   dual: 'grid min-h-0 gap-1 lg:grid-cols-[minmax(0,3fr)_minmax(13rem,1fr)] xl:grid-cols-[minmax(0,3fr)_minmax(14rem,1fr)]',
   program: 'grid min-h-0 gap-1 lg:grid-cols-[minmax(0,3.4fr)_minmax(12rem,0.9fr)]',
@@ -1354,10 +1465,11 @@ export function SceneWorkspace({
   const previewScene =
     sorted.find((scene) => scene.id === productionState.previewSceneId) ?? programScene;
   const activeScene = previewScene;
+  const synchronizedOutputs = ProgramPreviewSynchronizer.fromSwitchingState(productionState);
   const activeSceneTallyState = getTallyState({
     id: activeScene.id,
-    programId: productionState.programSceneId,
-    previewId: productionState.previewSceneId,
+    programId: synchronizedOutputs.program.sceneId,
+    previewId: synchronizedOutputs.preview.sceneId,
   });
   const programRoute = mediaRoutes.find((route) => route.isOnProgram);
   const layoutPreset =
@@ -1386,19 +1498,17 @@ export function SceneWorkspace({
     engine.setExecutionRuntimeMode('mock_live');
     return engine;
   }, []);
-  const productionGraphDispatcher = useMemo(
-    () =>
-      new LocalProductionCommandDispatcher(
-        createBroadcastSession({
-          id: programScene.broadcastId,
-          name: 'Control Room Session',
-          operatorId: 'local-director',
-        }),
-        mediaExecutionEngine,
-      ),
-    [programScene.broadcastId, mediaExecutionEngine],
+  const [productionGraphSession, setProductionGraphSession] = useState(() =>
+    createProductionGraphSessionFromScenes({
+      scenes: sorted,
+      productionState: initialProductionState,
+      broadcastId: programScene.broadcastId,
+    }),
   );
-  const productionGraphSession = productionGraphDispatcher.getSession();
+  const productionGraphDispatcher = useMemo(
+    () => new LocalProductionCommandDispatcher(productionGraphSession, mediaExecutionEngine),
+    [productionGraphSession, mediaExecutionEngine],
+  );
   const syncDiagnosticsEnabled = process.env.NEXT_PUBLIC_ENABLE_SYNC_DIAGNOSTICS === 'true';
   const realtimeSyncEnabled = isRealtimeSyncEnabled(process.env);
   const realtimeSyncUrl = process.env.NEXT_PUBLIC_UBOS_SYNC_URL;
@@ -1450,7 +1560,7 @@ export function SceneWorkspace({
   }, [productionGraphSession, realtimeSyncEnabled, realtimeSyncUrl]);
   const dispatchProductionGraphCommand = useCallback(
     (type: ProductionCommandType, payload: Record<string, unknown> = {}) => {
-      productionGraphDispatcher.dispatch({
+      const transition = productionGraphDispatcher.dispatch({
         id: `ui-${type.toLowerCase()}-${Date.now()}`,
         type,
         broadcastSessionId: programScene.broadcastId,
@@ -1459,6 +1569,8 @@ export function SceneWorkspace({
         timestamp: new Date().toISOString(),
         payload,
       });
+      setProductionGraphSession(productionGraphDispatcher.getSession());
+      return transition;
     },
     [productionGraphDispatcher, programScene.broadcastId],
   );
@@ -1474,14 +1586,15 @@ export function SceneWorkspace({
   };
 
   const stageScene = (sceneId: string) => {
-    dispatchProductionGraphCommand('SET_PREVIEW_SCENE', { sceneId });
+    new SceneSelectionController(dispatchProductionGraphCommand).select(sceneId);
     persistProductionState({ ...productionState, previewSceneId: sceneId }, 'stage');
   };
   const switchProgram = (type: TransitionType) => {
-    dispatchProductionGraphCommand(type === 'cut' ? 'CUT_TO_PROGRAM' : 'TAKE_PREVIEW', {
-      sceneId: productionState.previewSceneId,
-      transitionType: type,
-    });
+    new TransitionController(dispatchProductionGraphCommand).execute(
+      type,
+      productionState.previewSceneId,
+      productionState.transitionDuration,
+    );
     const duration = type === 'cut' ? 0 : productionState.transitionDuration;
     const label =
       type === 'cut'

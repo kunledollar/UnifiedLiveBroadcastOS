@@ -171,6 +171,21 @@ assert(
 graph = transition.nextGraph;
 transition = applyProductionCommand(graph, command('CUT_TO_PROGRAM', { sceneId: 'scene-a' }));
 assert(transition.nextGraph.program.transitionType === 'cut', 'CUT_TO_PROGRAM sets cut transition');
+assert(
+  !applyProductionCommand(graph, command('SET_PREVIEW_SCENE', { sceneId: 'missing-scene' })).accepted,
+  'unknown preview scene is rejected',
+);
+const auto = applyProductionCommand(
+  graph,
+  command('AUTO_TRANSITION', { sceneId: 'scene-a', transitionType: 'fade', durationMs: 750 }),
+);
+assert(auto.accepted, 'AUTO_TRANSITION is accepted for known scene');
+assert(auto.nextGraph.program.sceneId === 'scene-a', 'AUTO_TRANSITION promotes preview target');
+assert(auto.nextGraph.program.transitionDurationMs === 750, 'AUTO_TRANSITION stores duration');
+assert(
+  !applyProductionCommand(graph, command('SET_TRANSITION', { transitionType: 'invalid' })).accepted,
+  'invalid transition is rejected',
+);
 const rejected = applyProductionCommand(
   graph,
   command('STOP_BROADCAST', {}, 'VIEWER', graph.metadata.revision),
