@@ -2137,9 +2137,12 @@ export function SceneWorkspace({
   );
 
   const rightSidebarVisible = Boolean(rightSidebar);
+  const [activeDock, setActiveDock] = useState<
+    'scenes' | 'sources' | 'media' | 'layouts' | 'outputs' | 'settings'
+  >('scenes');
   const workspaceColumns = rightSidebarVisible
-    ? 'minmax(16rem, 18rem) minmax(0, 1fr) minmax(19rem, 23rem)'
-    : 'minmax(16rem, 18rem) minmax(0, 1fr)';
+    ? 'minmax(13rem,15vw) minmax(0,70vw) minmax(16rem,15vw)'
+    : 'minmax(13rem,15vw) minmax(0,1fr)';
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2156,221 +2159,265 @@ export function SceneWorkspace({
       className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
       style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
-      <aside className="min-h-0 space-y-2 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
-        {
-          <SceneList
-            scenes={sorted}
-            sceneTypes={sceneTypes}
-            isPending={isPending}
-            onAdd={(data) => {
-              const tempScene: Scene = {
-                ...activeScene,
-                id: `temp-${Date.now()}`,
-                name: data.name,
-                type: data.type,
-                order: sorted.length,
-                isActive: false,
-                sources: [],
-                overlays: [],
-                audioConfig: {},
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
-              refresh([...sorted, tempScene]);
-              const formData = new FormData();
-              formData.set('broadcastId', activeScene.broadcastId);
-              formData.set('name', data.name);
-              formData.set('type', data.type);
-              startTransition(async () => {
-                await addScene(formData);
-              });
-            }}
-            onRename={(sceneId, name) => {
-              const formData = new FormData();
-              formData.set('sceneId', sceneId);
-              formData.set('name', name);
-              refresh(sorted.map((scene) => (scene.id === sceneId ? { ...scene, name } : scene)));
-              startTransition(async () => {
-                await renameScene(formData);
-              });
-            }}
-            previewSceneId={productionState.previewSceneId}
-            programSceneId={productionState.programSceneId}
-            onSwitch={(sceneId) => {
-              stageScene(sceneId);
-            }}
-            onDuplicate={(sceneId) => {
-              const original = sorted.find((scene) => scene.id === sceneId);
-              if (original)
-                refresh([
-                  ...sorted,
-                  {
-                    ...original,
-                    id: `temp-${Date.now()}`,
-                    name: `${original.name} Copy`,
-                    isActive: false,
-                    order: sorted.length,
-                  },
-                ]);
-              startTransition(async () => {
-                await duplicateScene(sceneId);
-              });
-            }}
-            onDelete={(sceneId) => {
-              const next = sorted
-                .filter((scene) => scene.id !== sceneId)
-                .map((scene, index) => ({ ...scene, order: index }));
-              refresh(
-                next.some((scene) => scene.isActive)
-                  ? next
-                  : next.map((scene, index) => ({ ...scene, isActive: index === 0 })),
-              );
-              startTransition(async () => {
-                await deleteScene(sceneId);
-              });
-            }}
-            onMove={(sceneId, direction) => {
-              const index = sorted.findIndex((scene) => scene.id === sceneId);
-              const swapIndex = direction === 'up' ? index - 1 : index + 1;
-              if (index >= 0 && swapIndex >= 0 && swapIndex < sorted.length) {
-                const next = [...sorted];
-                [next[index], next[swapIndex]] = [next[swapIndex]!, next[index]!];
-                refresh(next.map((scene, order) => ({ ...scene, order })));
-              }
-              startTransition(async () => {
-                await moveScene(sceneId, direction);
-              });
-            }}
-          />
-        }
-        {
-          <SourceManager
-            scene={activeScene}
-            sourceTypes={sourceTypes}
-            isPending={isPending}
-            tallyState={activeSceneTallyState}
-            onAdd={(input) => {
-              const tempSource: SceneSource = {
-                id: `temp-${Date.now()}`,
-                sceneId: input.sceneId,
-                broadcastId: activeScene.broadcastId,
-                name: input.name,
-                label: input.name,
-                type: input.type,
-                order: activeScene.sources.length,
-                visible: true,
-                isVisible: true,
-                isLocked: false,
-                settings: {},
-                transform: {},
-              };
-              updateActiveSources((sources) => [...sources, tempSource]);
-              const formData = new FormData();
-              formData.set('sceneId', input.sceneId);
-              formData.set('name', input.name);
-              formData.set('type', input.type);
-              if (input.url) formData.set('url', input.url);
-              startTransition(async () => {
-                await addSource(formData);
-              });
-            }}
-            onRename={(sourceId, name) => {
-              updateActiveSources((sources) =>
-                sources.map((source) =>
-                  source.id === sourceId ? { ...source, name, label: name } : source,
-                ),
-              );
-              const formData = new FormData();
-              formData.set('sourceId', sourceId);
-              formData.set('name', name);
-              startTransition(async () => {
-                await renameSource(formData);
-              });
-            }}
-            onDuplicate={(sourceId) => {
-              updateActiveSources((sources) => {
-                const source = sources.find((item) => item.id === sourceId);
-                return source
-                  ? [
-                      ...sources,
-                      {
-                        ...source,
-                        id: `temp-${Date.now()}`,
-                        name: `${source.name} Copy`,
-                        label: `${source.name} Copy`,
-                        order: sources.length,
-                      },
-                    ]
-                  : sources;
-              });
-              startTransition(async () => {
-                await duplicateSource(sourceId);
-              });
-            }}
-            onDelete={(sourceId) => {
-              updateActiveSources((sources) =>
-                sources
-                  .filter((source) => source.id !== sourceId)
-                  .map((source, order) => ({ ...source, order })),
-              );
-              startTransition(async () => {
-                await deleteSource(sourceId);
-              });
-            }}
-            onMove={(sourceId, direction) => {
-              updateActiveSources((sources) => {
-                const index = sources.findIndex((source) => source.id === sourceId);
-                const swapIndex = direction === 'up' ? index - 1 : index + 1;
-                if (index < 0 || swapIndex < 0 || swapIndex >= sources.length) return sources;
-                const next = [...sources];
-                [next[index], next[swapIndex]] = [next[swapIndex]!, next[index]!];
-                return next.map((source, order) => ({ ...source, order }));
-              });
-              startTransition(async () => {
-                await moveSource(sourceId, direction);
-              });
-            }}
-            onToggleVisibility={(sourceId) => {
-              updateActiveSources((sources) =>
-                sources.map((source) =>
-                  source.id === sourceId
-                    ? { ...source, isVisible: !source.isVisible, visible: !source.isVisible }
-                    : source,
-                ),
-              );
-              startTransition(async () => {
-                await toggleSourceVisibility(sourceId);
-              });
-            }}
-            onToggleLock={(sourceId) => {
-              updateActiveSources((sources) =>
-                sources.map((source) =>
-                  source.id === sourceId ? { ...source, isLocked: !source.isLocked } : source,
-                ),
-              );
-              startTransition(async () => {
-                await toggleSourceLock(sourceId);
-              });
-            }}
-          />
-        }
-        <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-3">
-          <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-            Assets
-          </p>
-          <div className="grid gap-2">
-            {assets.map((asset) => (
-              <div
-                key={asset.id}
-                className="rounded-xl bg-slate-950/70 p-2 text-xs font-semibold text-slate-200"
-              >
-                <span className="block truncate">{asset.name}</span>
-                <span className="font-mono text-[10px] uppercase text-slate-500">
-                  {asset.type} · {asset.status}
-                </span>
-              </div>
-            ))}
+      <aside className="grid min-h-0 grid-cols-[4.5rem_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20 max-xl:max-h-[34rem]">
+        <nav className="flex min-h-0 flex-col gap-1 border-r border-white/10 bg-black/25 p-1.5">
+          {[
+            ['scenes', '▦', 'Scenes'],
+            ['sources', '◫', 'Sources'],
+            ['media', '▣', 'Media'],
+            ['layouts', '▤', 'Layouts'],
+            ['outputs', '⇪', 'Outputs'],
+            ['settings', '⚙', 'Settings'],
+          ].map(([id, icon, label]) => (
+            <button
+              key={id}
+              type="button"
+              aria-pressed={activeDock === id}
+              onClick={() => setActiveDock(id as typeof activeDock)}
+              className={`grid justify-items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition ${
+                activeDock === id
+                  ? 'bg-cyan-300/15 text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-cyan-300/25'
+                  : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
+              }`}
+            >
+              <span className="text-lg leading-none">{icon}</span>
+              <span>{label}</span>
+            </button>
+          ))}
+          <div className="mt-auto grid justify-items-center gap-1 rounded-xl border border-white/10 bg-slate-950/80 px-1 py-2 text-[10px] text-slate-500">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
+            Ready
           </div>
+        </nav>
+        <div className="min-h-0 overflow-y-auto p-2">
+          {activeDock === 'scenes' ? (
+            <SceneList
+              scenes={sorted}
+              sceneTypes={sceneTypes}
+              isPending={isPending}
+              onAdd={(data) => {
+                const tempScene: Scene = {
+                  ...activeScene,
+                  id: `temp-${Date.now()}`,
+                  name: data.name,
+                  type: data.type,
+                  order: sorted.length,
+                  isActive: false,
+                  sources: [],
+                  overlays: [],
+                  audioConfig: {},
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+                refresh([...sorted, tempScene]);
+                const formData = new FormData();
+                formData.set('broadcastId', activeScene.broadcastId);
+                formData.set('name', data.name);
+                formData.set('type', data.type);
+                startTransition(async () => {
+                  await addScene(formData);
+                });
+              }}
+              onRename={(sceneId, name) => {
+                const formData = new FormData();
+                formData.set('sceneId', sceneId);
+                formData.set('name', name);
+                refresh(sorted.map((scene) => (scene.id === sceneId ? { ...scene, name } : scene)));
+                startTransition(async () => {
+                  await renameScene(formData);
+                });
+              }}
+              previewSceneId={productionState.previewSceneId}
+              programSceneId={productionState.programSceneId}
+              onSwitch={(sceneId) => {
+                stageScene(sceneId);
+              }}
+              onDuplicate={(sceneId) => {
+                const original = sorted.find((scene) => scene.id === sceneId);
+                if (original)
+                  refresh([
+                    ...sorted,
+                    {
+                      ...original,
+                      id: `temp-${Date.now()}`,
+                      name: `${original.name} Copy`,
+                      isActive: false,
+                      order: sorted.length,
+                    },
+                  ]);
+                startTransition(async () => {
+                  await duplicateScene(sceneId);
+                });
+              }}
+              onDelete={(sceneId) => {
+                const next = sorted
+                  .filter((scene) => scene.id !== sceneId)
+                  .map((scene, index) => ({ ...scene, order: index }));
+                refresh(
+                  next.some((scene) => scene.isActive)
+                    ? next
+                    : next.map((scene, index) => ({ ...scene, isActive: index === 0 })),
+                );
+                startTransition(async () => {
+                  await deleteScene(sceneId);
+                });
+              }}
+              onMove={(sceneId, direction) => {
+                const index = sorted.findIndex((scene) => scene.id === sceneId);
+                const swapIndex = direction === 'up' ? index - 1 : index + 1;
+                if (index >= 0 && swapIndex >= 0 && swapIndex < sorted.length) {
+                  const next = [...sorted];
+                  [next[index], next[swapIndex]] = [next[swapIndex]!, next[index]!];
+                  refresh(next.map((scene, order) => ({ ...scene, order })));
+                }
+                startTransition(async () => {
+                  await moveScene(sceneId, direction);
+                });
+              }}
+            />
+          ) : null}
+          {activeDock === 'sources' ? (
+            <SourceManager
+              scene={activeScene}
+              sourceTypes={sourceTypes}
+              isPending={isPending}
+              tallyState={activeSceneTallyState}
+              onAdd={(input) => {
+                const tempSource: SceneSource = {
+                  id: `temp-${Date.now()}`,
+                  sceneId: input.sceneId,
+                  broadcastId: activeScene.broadcastId,
+                  name: input.name,
+                  label: input.name,
+                  type: input.type,
+                  order: activeScene.sources.length,
+                  visible: true,
+                  isVisible: true,
+                  isLocked: false,
+                  settings: {},
+                  transform: {},
+                };
+                updateActiveSources((sources) => [...sources, tempSource]);
+                const formData = new FormData();
+                formData.set('sceneId', input.sceneId);
+                formData.set('name', input.name);
+                formData.set('type', input.type);
+                if (input.url) formData.set('url', input.url);
+                startTransition(async () => {
+                  await addSource(formData);
+                });
+              }}
+              onRename={(sourceId, name) => {
+                updateActiveSources((sources) =>
+                  sources.map((source) =>
+                    source.id === sourceId ? { ...source, name, label: name } : source,
+                  ),
+                );
+                const formData = new FormData();
+                formData.set('sourceId', sourceId);
+                formData.set('name', name);
+                startTransition(async () => {
+                  await renameSource(formData);
+                });
+              }}
+              onDuplicate={(sourceId) => {
+                updateActiveSources((sources) => {
+                  const source = sources.find((item) => item.id === sourceId);
+                  return source
+                    ? [
+                        ...sources,
+                        {
+                          ...source,
+                          id: `temp-${Date.now()}`,
+                          name: `${source.name} Copy`,
+                          label: `${source.name} Copy`,
+                          order: sources.length,
+                        },
+                      ]
+                    : sources;
+                });
+                startTransition(async () => {
+                  await duplicateSource(sourceId);
+                });
+              }}
+              onDelete={(sourceId) => {
+                updateActiveSources((sources) =>
+                  sources
+                    .filter((source) => source.id !== sourceId)
+                    .map((source, order) => ({ ...source, order })),
+                );
+                startTransition(async () => {
+                  await deleteSource(sourceId);
+                });
+              }}
+              onMove={(sourceId, direction) => {
+                updateActiveSources((sources) => {
+                  const index = sources.findIndex((source) => source.id === sourceId);
+                  const swapIndex = direction === 'up' ? index - 1 : index + 1;
+                  if (index < 0 || swapIndex < 0 || swapIndex >= sources.length) return sources;
+                  const next = [...sources];
+                  [next[index], next[swapIndex]] = [next[swapIndex]!, next[index]!];
+                  return next.map((source, order) => ({ ...source, order }));
+                });
+                startTransition(async () => {
+                  await moveSource(sourceId, direction);
+                });
+              }}
+              onToggleVisibility={(sourceId) => {
+                updateActiveSources((sources) =>
+                  sources.map((source) =>
+                    source.id === sourceId
+                      ? { ...source, isVisible: !source.isVisible, visible: !source.isVisible }
+                      : source,
+                  ),
+                );
+                startTransition(async () => {
+                  await toggleSourceVisibility(sourceId);
+                });
+              }}
+              onToggleLock={(sourceId) => {
+                updateActiveSources((sources) =>
+                  sources.map((source) =>
+                    source.id === sourceId ? { ...source, isLocked: !source.isLocked } : source,
+                  ),
+                );
+                startTransition(async () => {
+                  await toggleSourceLock(sourceId);
+                });
+              }}
+            />
+          ) : null}
+          {activeDock === 'media' ? (
+            <div className="rounded-2xl border border-white/10 bg-slate-900/75 p-3">
+              <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+                Assets
+              </p>
+              <div className="grid gap-2">
+                {assets.map((asset) => (
+                  <div
+                    key={asset.id}
+                    className="rounded-xl bg-slate-950/70 p-2 text-xs font-semibold text-slate-200"
+                  >
+                    <span className="block truncate">{asset.name}</span>
+                    <span className="font-mono text-[10px] uppercase text-slate-500">
+                      {asset.type} · {asset.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+          {activeDock === 'layouts' ? <LayoutSelector layouts={layouts} /> : null}
+          {activeDock === 'outputs' ? (
+            <div className="rounded-xl bg-slate-900/70 p-3 text-xs text-slate-400">
+              Output dock ready.
+            </div>
+          ) : null}
+          {activeDock === 'settings' ? (
+            <div className="rounded-xl bg-slate-900/70 p-3 text-xs text-slate-400">
+              Workspace, automation, AI, analytics, and replay docks are reserved.
+            </div>
+          ) : null}
         </div>
       </aside>
       <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
@@ -2404,8 +2451,12 @@ export function SceneWorkspace({
             <div className="hidden items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5 lg:flex">
               <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
               <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
+              <OperatorMetric label="GPU" value="unavailable" />
               <OperatorMetric label="DROP" value={safeHealthMetrics.dropped} />
+              <OperatorMetric label="LAT" value="unavailable" />
               <OperatorMetric label="UP" value={safeHealthMetrics.upload} />
+              <OperatorMetric label="AI" value="idle" />
+              <OperatorMetric label="NET" value="local" />
             </div>
             <details className="group relative lg:hidden">
               <summary className="flex h-6 cursor-pointer list-none items-center rounded-md border border-white/10 bg-slate-950/80 px-2 font-mono text-[10px] font-bold uppercase tracking-[0.08em] text-slate-200">
@@ -2652,12 +2703,15 @@ export function SceneWorkspace({
             );
           }}
         />
-        <div className="grid shrink-0 gap-2 lg:grid-cols-5">
-          <details open className="rounded-xl border border-white/10 bg-slate-900/70">
-            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
-              Audio
+        <div className="grid h-24 shrink-0 gap-2 overflow-hidden lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
+          <details
+            open
+            className="rounded-xl border border-white/10 bg-slate-950/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+          >
+            <summary className="cursor-pointer px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+              Audio Dock
             </summary>
-            <div className="max-h-48 overflow-y-auto p-2">
+            <div className="max-h-16 overflow-y-auto px-2 pb-2">
               <ProductionDock channels={channels} assets={[]} />
             </div>
           </details>
@@ -2708,22 +2762,21 @@ export function SceneWorkspace({
             <div className="p-2 text-xs text-slate-400">Replay placeholder.</div>
           </details>
         </div>
-        <details className="shrink-0 rounded-xl border border-white/10 bg-slate-950/80">
-          <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
-            Timeline / Recent Events / Warnings / Automation
-          </summary>
-          <div className="grid max-h-40 gap-2 overflow-y-auto p-2 text-xs text-slate-300 md:grid-cols-4">
-            <div className="rounded-lg bg-slate-900/80 p-2">Recent: {lastTransitionLabel}</div>
-            <div className="rounded-lg bg-slate-900/80 p-2">Timeline: PGM {programScene.name}</div>
-            <div className="rounded-lg bg-slate-900/80 p-2">
-              Warnings: {transitionActive ? 'Transition active' : 'None'}
-            </div>
-            <div className="rounded-lg bg-slate-900/80 p-2">Automation: Manual</div>
-          </div>
-        </details>
+        <div className="flex h-8 shrink-0 items-center gap-2 overflow-hidden rounded-lg border border-white/10 bg-slate-950/80 px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
+          <span className="truncate">History: {lastTransitionLabel}</span>
+          <span className="hidden h-4 w-px bg-white/10 sm:block" />
+          <span className="truncate">Program: {programScene.name}</span>
+          <span className="hidden h-4 w-px bg-white/10 sm:block" />
+          <span className={transitionActive ? 'text-amber-200' : 'text-emerald-200'}>
+            {transitionActive ? 'Transition active' : 'No warnings'}
+          </span>
+          <span className="ml-auto hidden text-slate-600 md:block">Automation manual</span>
+        </div>
       </section>
       {rightSidebarVisible ? (
-        <aside className="min-h-0 overflow-y-auto pr-1 max-xl:max-h-[42rem]">{rightSidebar}</aside>
+        <aside className="min-h-0 overflow-hidden rounded-2xl max-xl:max-h-[42rem]">
+          {rightSidebar}
+        </aside>
       ) : null}
     </div>
   );
