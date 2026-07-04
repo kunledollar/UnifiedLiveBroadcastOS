@@ -759,7 +759,9 @@ export function SourceManager({
   scene: Scene;
   sourceTypes: SceneSourceType[];
   isPending?: boolean;
-  onAdd: ((input: { sceneId: string; name: string; type: SceneSourceType; url?: string }) => void) | undefined;
+  onAdd:
+    | ((input: { sceneId: string; name: string; type: SceneSourceType; url?: string }) => void)
+    | undefined;
   onRename: (sourceId: string, name: string) => void;
   onDuplicate: (sourceId: string) => void;
   onDelete: (sourceId: string) => void;
@@ -792,12 +794,18 @@ export function SourceManager({
           <button
             key={type}
             className="rounded-lg bg-slate-950/70 px-2 py-2 hover:bg-slate-800"
-            onClick={() =>
-              {
-                const url = type === 'browser' ? window.prompt('Browser source URL', 'https://example.com') : null;
-                onAdd?.({ sceneId: scene.id, name: `${sourceTypeLabels[type]} Source`, type, ...(url ? { url } : {}) });
-              }
-            }
+            onClick={() => {
+              const url =
+                type === 'browser'
+                  ? window.prompt('Browser source URL', 'https://example.com')
+                  : null;
+              onAdd?.({
+                sceneId: scene.id,
+                name: `${sourceTypeLabels[type]} Source`,
+                type,
+                ...(url ? { url } : {}),
+              });
+            }}
             type="button"
           >
             + {sourceTypeLabels[type]}
@@ -807,7 +815,8 @@ export function SourceManager({
       <div className="space-y-2">
         {sources.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
-            No sources assigned to this scene. Add camera, screen, media, overlay, browser, audio, or guest metadata; real capture starts only when a runtime is available.
+            No sources assigned to this scene. Add camera, screen, media, overlay, browser, audio,
+            or guest metadata; real capture starts only when a runtime is available.
           </p>
         ) : null}
         {sources.map((source, index) => (
@@ -827,9 +836,21 @@ export function SourceManager({
                 <Badge tone={source.isVisible ? 'success' : 'neutral'}>
                   {source.isVisible ? 'Shown' : 'Hidden'}
                 </Badge>
-                {source.settings?.runtimeStatus === 'mock' ? <Badge tone="warning">MOCK</Badge> : null}
-                <Badge tone={source.settings?.runtimeStatus === 'unavailable' ? 'danger' : source.settings?.runtimeStatus === 'permission_required' ? 'warning' : 'neutral'}>
-                  {String(source.settings?.runtimeStatus ?? (source.isVisible ? 'ready' : 'disabled')).replaceAll('_', ' ')}
+                {source.settings?.runtimeStatus === 'mock' ? (
+                  <Badge tone="warning">MOCK</Badge>
+                ) : null}
+                <Badge
+                  tone={
+                    source.settings?.runtimeStatus === 'unavailable'
+                      ? 'danger'
+                      : source.settings?.runtimeStatus === 'permission_required'
+                        ? 'warning'
+                        : 'neutral'
+                  }
+                >
+                  {String(
+                    source.settings?.runtimeStatus ?? (source.isVisible ? 'ready' : 'disabled'),
+                  ).replaceAll('_', ' ')}
                 </Badge>
                 {source.isLocked ? <Badge tone="warning">Locked</Badge> : null}
               </div>
@@ -1265,7 +1286,10 @@ function routeMonitorState(route: MediaRoute) {
   ) {
     return {
       title: state === 'inactive' ? 'Offline' : 'Disconnected',
-      subtitle: state === 'removed' ? 'Route stale — guest removed' : 'Route unavailable — guest disconnected',
+      subtitle:
+        state === 'removed'
+          ? 'Route stale — guest removed'
+          : 'Route unavailable — guest disconnected',
       badge: 'OFFLINE',
       tone: 'danger' as const,
     };
@@ -1341,9 +1365,9 @@ function EmptySlot({
   return (
     <MonitorStateScreen
       label={big ? (output === 'vertical' ? 'VERTICAL' : 'PROGRAM') : undefined}
-      title={output === 'vertical' ? 'No sources assigned to this scene.' : 'No sources assigned to this scene.'}
+      title="No source assigned."
       subtitle={
-        hasGuests ? 'Assign a guest, scene or media source.' : 'Add a source to this scene to render composition.'
+        hasGuests ? 'Assign a guest, scene or media source.' : 'Add a source to render composition.'
       }
       icon={output === 'vertical' ? '▯' : '▣'}
       badge={output === 'vertical' ? 'OFFLINE' : 'READY'}
@@ -1638,7 +1662,8 @@ function BaseCompositor({
   const slots = Array.from({ length: capacity }, (_, index) => selectedRoutes[index]);
   const hasGuests = guests.length > 0;
   const activeRouteCount = selectedRoutes.filter(Boolean).length;
-  const hasOfflineProgramSource = output === 'program' && routes.some((route) => route.isOnProgram && isRouteUnavailable(route));
+  const hasOfflineProgramSource =
+    output === 'program' && routes.some((route) => route.isOnProgram && isRouteUnavailable(route));
   return (
     <BroadcastCanvas aspect={output === 'vertical' ? 'vertical' : 'video'}>
       {slots.map((route, index) => (
@@ -1762,14 +1787,14 @@ function BroadcastMonitorFrame({
   const tallyLabel = headerVariant === 'preview' ? 'PREVIEW / READY' : 'PROGRAM / LIVE';
 
   return (
-    <section className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border bg-black ${tallyCardClasses(tallyState)} ${className}`}>
+    <section
+      className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border bg-black ${tallyCardClasses(tallyState)} ${className}`}
+    >
       <div
         className={`shrink-0 border-b px-3 py-2 ${tallyState === 'program' ? 'border-red-400/25 bg-red-950/10' : 'border-emerald-300/25 bg-emerald-950/10'}`}
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-200">
-            {label}
-          </p>
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-200">{label}</p>
           <TallyIndicator state={tallyState} label={tallyLabel} />
         </div>
         <div className="mt-0.5 flex items-center justify-between gap-2">
@@ -2107,7 +2132,8 @@ export function UnifiedChatPanel({ messages }: { messages: ChatMessage[] }) {
       <div className="space-y-2">
         {messages.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400">
-            No chat connectors connected. Messages will appear after a platform integration is configured.
+            No chat connectors connected. Messages will appear after a platform integration is
+            configured.
           </p>
         ) : null}
         {messages.map((message) => (

@@ -181,7 +181,10 @@ function MediaExecutionInspector({
   const mediaSyncStore = useMemo(() => new MediaSyncStore(mediaClock), [mediaClock]);
   const driftMonitor = useMemo(() => new SyncDriftMonitor(undefined, 20), []);
   const browserCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const browserRenderer = useMemo(() => new BrowserMediaRenderer({ target: 'debug_composition_preview', debug: true }), []);
+  const browserRenderer = useMemo(
+    () => new BrowserMediaRenderer({ target: 'debug_composition_preview', debug: true }),
+    [],
+  );
   const [browserDebug, setBrowserDebug] = useState(true);
   const webRTCAdapter = engine.getRegisteredAdapter('webrtc-media-execution-adapter');
   const webRTC = webRTCAdapter instanceof WebRTCMediaExecutionAdapter ? webRTCAdapter : undefined;
@@ -189,13 +192,47 @@ function MediaExecutionInspector({
   const state = engine.getExecutionState();
   const productionRuntime = useMemo(() => {
     const supervisor = new RuntimeSupervisor();
-    const base = { required: false, state: 'ready' as const, health: 'healthy' as const, degradedModes: [], diagnostics: {} };
-    supervisor.register({ ...base, id: 'recording-runtime', type: 'recording', label: 'Recording Runtime', health: graph.recording.status === 'recording' ? 'healthy' : 'degraded', degradedModes: graph.recording.status === 'recording' ? [] : ['diagnostics_only_mode'] });
-    supervisor.register({ ...base, id: 'streaming-runtime', type: 'streaming', label: 'Streaming Runtime', health: Object.values(graph.destinations).some((destination) => destination.enabled) ? 'healthy' : 'degraded', degradedModes: Object.values(graph.destinations).some((destination) => destination.enabled) ? [] : ['output_disabled_mode'] });
-    supervisor.register({ ...base, id: 'encoder-runtime', type: 'encoder', label: 'Encoder Layer' });
+    const base = {
+      required: false,
+      state: 'ready' as const,
+      health: 'healthy' as const,
+      degradedModes: [],
+      diagnostics: {},
+    };
+    supervisor.register({
+      ...base,
+      id: 'recording-runtime',
+      type: 'recording',
+      label: 'Recording Runtime',
+      health: graph.recording.status === 'recording' ? 'healthy' : 'degraded',
+      degradedModes: graph.recording.status === 'recording' ? [] : ['diagnostics_only_mode'],
+    });
+    supervisor.register({
+      ...base,
+      id: 'streaming-runtime',
+      type: 'streaming',
+      label: 'Streaming Runtime',
+      health: Object.values(graph.destinations).some((destination) => destination.enabled)
+        ? 'healthy'
+        : 'degraded',
+      degradedModes: Object.values(graph.destinations).some((destination) => destination.enabled)
+        ? []
+        : ['output_disabled_mode'],
+    });
+    supervisor.register({
+      ...base,
+      id: 'encoder-runtime',
+      type: 'encoder',
+      label: 'Encoder Layer',
+    });
     supervisor.register({ ...base, id: 'ffmpeg-runtime', type: 'ffmpeg', label: 'FFmpeg Runtime' });
     supervisor.register({ ...base, id: 'webrtc-runtime', type: 'webrtc', label: 'WebRTC Runtime' });
-    supervisor.register({ ...base, id: 'browser-renderer-runtime', type: 'browser_renderer', label: 'Browser Renderer Runtime' });
+    supervisor.register({
+      ...base,
+      id: 'browser-renderer-runtime',
+      type: 'browser_renderer',
+      label: 'Browser Renderer Runtime',
+    });
     supervisor.register({ ...base, id: 'gpu-runtime', type: 'gpu', label: 'GPU Runtime' });
     supervisor.register({ ...base, id: 'output-runtime', type: 'output', label: 'Output Engine' });
     supervisor.start();
@@ -233,7 +270,10 @@ function MediaExecutionInspector({
   const browserDiagnostics = browserRenderer.getRendererDiagnostics();
   const syncState = mediaSyncStore.getState();
   const syncSummary = syncState.syncHealthSummary;
-  const resetDriftStats = () => { driftMonitor.reset(); rerender(); };
+  const resetDriftStats = () => {
+    driftMonitor.reset();
+    rerender();
+  };
   const audioRoutePlan = createAudioRoutePlan(graph, {
     includeRecording: graph.recording.status === 'recording',
     includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled),
@@ -308,7 +348,9 @@ function MediaExecutionInspector({
     videoRoutePlan: routePlan,
     audioRoutePlan,
     outputId: streamingPlan.broadcastOutputPlanId,
-    ...(graph.recording.activeRecordingId ? { recordingId: graph.recording.activeRecordingId } : {}),
+    ...(graph.recording.activeRecordingId
+      ? { recordingId: graph.recording.activeRecordingId }
+      : {}),
     ...(primaryStreamTarget ? { streamId: primaryStreamTarget.id } : {}),
     mediaClock,
     frameId: mediaClock.getCurrentFrame(),
@@ -441,33 +483,131 @@ function MediaExecutionInspector({
         <InspectorMetric label="Avg Latency" value={`${health.averageExecutionMs}ms`} />
         <InspectorMetric label="Latest Intent" value={state.lastIntents.at(-1)?.type ?? '—'} />
         <InspectorMetric label="Runtime State" value={productionRuntime.state} />
-        <InspectorMetric label="Runtime Active" value={String(productionRuntimeHealth.activeSubsystems)} />
+        <InspectorMetric
+          label="Runtime Active"
+          value={String(productionRuntimeHealth.activeSubsystems)}
+        />
         <InspectorMetric label="Runtime Health" value={productionRuntimeHealth.health} />
-        <InspectorMetric label="Recording Runtime" value={String(productionRuntimeHealth.subsystemHealth.recording ?? '—')} />
-        <InspectorMetric label="Streaming Runtime" value={String(productionRuntimeHealth.subsystemHealth.streaming ?? '—')} />
-        <InspectorMetric label="Encoder Runtime" value={String(productionRuntimeHealth.subsystemHealth.encoder ?? '—')} />
-        <InspectorMetric label="FFmpeg Runtime" value={String(productionRuntimeHealth.subsystemHealth.ffmpeg ?? '—')} />
-        <InspectorMetric label="WebRTC Runtime" value={String(productionRuntimeHealth.subsystemHealth.webrtc ?? '—')} />
-        <InspectorMetric label="Browser Runtime" value={String(productionRuntimeHealth.subsystemHealth.browser_renderer ?? '—')} />
-        <InspectorMetric label="GPU Runtime" value={String(productionRuntimeHealth.subsystemHealth.gpu ?? '—')} />
-        <InspectorMetric label="Hardware Runtime" value={hardwareEnabled ? hardwareDashboard.diagnostics.health.status : 'software fallback'} />
-        <InspectorMetric label="Hardware GPUs" value={String(hardwareDashboard.diagnostics.devices.length)} />
-        <InspectorMetric label="Hardware Encoders" value={hardwareDashboard.diagnostics.devices.map((device) => `${device.api}:${device.capabilities.encoderCount}`).join(', ') || '—'} />
-        <InspectorMetric label="Hardware Temp" value={hardwareDashboard.diagnostics.devices.map((device) => device.temperatureC ?? '—').join(', ')} />
-        <InspectorMetric label="Hardware Util" value={hardwareDashboard.diagnostics.devices.map((device) => `${Math.round(device.utilization * 100)}%`).join(', ') || '—'} />
-        <InspectorMetric label="Hardware Caps" value={hardwareDashboard.capabilities.map((capability) => capability.apis.join('/')).join(', ') || 'software'} />
-        <InspectorMetric label="Production Engine" value={productionEngineEnabled ? productionEngineDashboard.productionEngine : 'feature disabled'} />
-        <InspectorMetric label="Engine Timeline" value={String(productionEngineDashboard.executionTimeline.length)} />
-        <InspectorMetric label="Frame Scheduler" value={`${productionEngineDashboard.frameScheduler.length} frames`} />
-        <InspectorMetric label="Sync Drift" value={`${productionEngineDashboard.synchronizationView.driftMs}ms`} />
-        <InspectorMetric label="Engine Resources" value={`${productionEngineDashboard.resourceView.cpu}% CPU / ${productionEngineDashboard.resourceView.gpu}% GPU`} />
-        <InspectorMetric label="Performance" value={`${productionEngineDashboard.performanceMetrics.pipelineLatencyMs}ms pipeline`} />
-        <InspectorMetric label="Recovery Status" value={productionEngineDashboard.recoveryStatus.at(-1) ?? 'ready'} />
-        <InspectorMetric label="Session Inspector" value={String(productionEngineDashboard.sessionInspector.sessionId)} />
-        <InspectorMetric label="Runtime Degraded" value={productionRuntimeHealth.degradedModes.join(', ') || '—'} />
-        <InspectorMetric label="Runtime Failure" value={productionRuntimeHealth.latestFailure?.code ?? '—'} />
-        <InspectorMetric label="Runtime Frame" value={String(productionRuntimeHealth.latestFrameId ?? '—')} />
-        <InspectorMetric label="Runtime Graph Rev" value={String(productionRuntimeHealth.latestGraphRevision ?? state.currentGraphRevision)} />
+        <InspectorMetric
+          label="Recording Runtime"
+          value={String(productionRuntimeHealth.subsystemHealth.recording ?? '—')}
+        />
+        <InspectorMetric
+          label="Streaming Runtime"
+          value={String(productionRuntimeHealth.subsystemHealth.streaming ?? '—')}
+        />
+        <InspectorMetric
+          label="Encoder Runtime"
+          value={String(productionRuntimeHealth.subsystemHealth.encoder ?? '—')}
+        />
+        <InspectorMetric
+          label="FFmpeg Runtime"
+          value={String(productionRuntimeHealth.subsystemHealth.ffmpeg ?? '—')}
+        />
+        <InspectorMetric
+          label="WebRTC Runtime"
+          value={String(productionRuntimeHealth.subsystemHealth.webrtc ?? '—')}
+        />
+        <InspectorMetric
+          label="Browser Runtime"
+          value={String(productionRuntimeHealth.subsystemHealth.browser_renderer ?? '—')}
+        />
+        <InspectorMetric
+          label="GPU Runtime"
+          value={String(productionRuntimeHealth.subsystemHealth.gpu ?? '—')}
+        />
+        <InspectorMetric
+          label="Hardware Runtime"
+          value={
+            hardwareEnabled ? hardwareDashboard.diagnostics.health.status : 'software fallback'
+          }
+        />
+        <InspectorMetric
+          label="Hardware GPUs"
+          value={String(hardwareDashboard.diagnostics.devices.length)}
+        />
+        <InspectorMetric
+          label="Hardware Encoders"
+          value={
+            hardwareDashboard.diagnostics.devices
+              .map((device) => `${device.api}:${device.capabilities.encoderCount}`)
+              .join(', ') || '—'
+          }
+        />
+        <InspectorMetric
+          label="Hardware Temp"
+          value={hardwareDashboard.diagnostics.devices
+            .map((device) => device.temperatureC ?? '—')
+            .join(', ')}
+        />
+        <InspectorMetric
+          label="Hardware Util"
+          value={
+            hardwareDashboard.diagnostics.devices
+              .map((device) => `${Math.round(device.utilization * 100)}%`)
+              .join(', ') || '—'
+          }
+        />
+        <InspectorMetric
+          label="Hardware Caps"
+          value={
+            hardwareDashboard.capabilities
+              .map((capability) => capability.apis.join('/'))
+              .join(', ') || 'software'
+          }
+        />
+        <InspectorMetric
+          label="Production Engine"
+          value={
+            productionEngineEnabled
+              ? productionEngineDashboard.productionEngine
+              : 'feature disabled'
+          }
+        />
+        <InspectorMetric
+          label="Engine Timeline"
+          value={String(productionEngineDashboard.executionTimeline.length)}
+        />
+        <InspectorMetric
+          label="Frame Scheduler"
+          value={`${productionEngineDashboard.frameScheduler.length} frames`}
+        />
+        <InspectorMetric
+          label="Sync Drift"
+          value={`${productionEngineDashboard.synchronizationView.driftMs}ms`}
+        />
+        <InspectorMetric
+          label="Engine Resources"
+          value={`${productionEngineDashboard.resourceView.cpu}% CPU / ${productionEngineDashboard.resourceView.gpu}% GPU`}
+        />
+        <InspectorMetric
+          label="Performance"
+          value={`${productionEngineDashboard.performanceMetrics.pipelineLatencyMs}ms pipeline`}
+        />
+        <InspectorMetric
+          label="Recovery Status"
+          value={productionEngineDashboard.recoveryStatus.at(-1) ?? 'ready'}
+        />
+        <InspectorMetric
+          label="Session Inspector"
+          value={String(productionEngineDashboard.sessionInspector.sessionId)}
+        />
+        <InspectorMetric
+          label="Runtime Degraded"
+          value={productionRuntimeHealth.degradedModes.join(', ') || '—'}
+        />
+        <InspectorMetric
+          label="Runtime Failure"
+          value={productionRuntimeHealth.latestFailure?.code ?? '—'}
+        />
+        <InspectorMetric
+          label="Runtime Frame"
+          value={String(productionRuntimeHealth.latestFrameId ?? '—')}
+        />
+        <InspectorMetric
+          label="Runtime Graph Rev"
+          value={String(productionRuntimeHealth.latestGraphRevision ?? state.currentGraphRevision)}
+        />
         <InspectorMetric
           label="Program Composition"
           value={
@@ -545,30 +685,57 @@ function MediaExecutionInspector({
       <div className="mt-3 rounded-lg border border-sky-700/40 bg-sky-950/20 p-2">
         <p className="font-black uppercase tracking-[0.16em] text-sky-200">Streaming</p>
         <div className="mt-2 grid gap-2 md:grid-cols-4">
-          <InspectorMetric label="Protocol" value={primaryStreamTarget?.transport.protocol ?? '—'} />
+          <InspectorMetric
+            label="Protocol"
+            value={primaryStreamTarget?.transport.protocol ?? '—'}
+          />
           <InspectorMetric label="Destination" value={primaryDestination?.name ?? '—'} />
           <InspectorMetric label="Status" value={streamingSession.status} />
           <InspectorMetric label="Connected" value={String(streamingHealth.connectedTargets)} />
-          <InspectorMetric label="Latency" value={primaryStreamTarget?.transport.latencyMs ? `${primaryStreamTarget.transport.latencyMs}ms` : 'mock'} />
+          <InspectorMetric
+            label="Latency"
+            value={
+              primaryStreamTarget?.transport.latencyMs
+                ? `${primaryStreamTarget.transport.latencyMs}ms`
+                : 'mock'
+            }
+          />
           <InspectorMetric label="Health" value={streamingHealth.health} />
           <InspectorMetric label="Warnings" value={String(streamingHealth.warnings.length)} />
           <InspectorMetric label="Active Streams" value={String(streamingHealth.activeTargets)} />
-          <InspectorMetric label="Real Output" value={ffmpegStreamingPlan.enabled ? 'enabled' : 'disabled'} />
-          <InspectorMetric label="Destination URL" value={ffmpegStreamingPlan.targets[0]?.sanitizedUrl ?? '—'} />
+          <InspectorMetric
+            label="Real Output"
+            value={ffmpegStreamingPlan.enabled ? 'enabled' : 'disabled'}
+          />
+          <InspectorMetric
+            label="Destination URL"
+            value={ffmpegStreamingPlan.targets[0]?.sanitizedUrl ?? '—'}
+          />
           <InspectorMetric label="FFmpeg" value={ffmpegStreamingPlan.ffmpegPath} />
-          <InspectorMetric label="Process" value={String(ffmpegStreamingDiagnostics.processState)} />
-          <InspectorMetric label="Reconnects" value={String(ffmpegStreamingDiagnostics.reconnectAttempts)} />
+          <InspectorMetric
+            label="Process"
+            value={String(ffmpegStreamingDiagnostics.processState)}
+          />
+          <InspectorMetric
+            label="Reconnects"
+            value={String(ffmpegStreamingDiagnostics.reconnectAttempts)}
+          />
           <InspectorMetric label="Manifest" value={ffmpegStreamingDiagnostics.manifestStatus} />
-          <InspectorMetric label="Runtime Health" value={String(ffmpegStreamingDiagnostics.health)} />
+          <InspectorMetric
+            label="Runtime Health"
+            value={String(ffmpegStreamingDiagnostics.health)}
+          />
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-sky-300/80">
-          FFmpeg live output diagnostics are sanitized and feature-flagged; dry-run/mock defaults do not publish or retain process handles.
+          FFmpeg live output diagnostics are sanitized and feature-flagged; dry-run/mock defaults do
+          not publish or retain process handles.
         </p>
       </div>
 
-
       <div className="mt-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
-        <p className="font-black uppercase tracking-[0.16em] text-emerald-200">Multiview Confidence</p>
+        <p className="font-black uppercase tracking-[0.16em] text-emerald-200">
+          Multiview Confidence
+        </p>
         <div className="mt-2 grid gap-2 md:grid-cols-4">
           <InspectorMetric label="Preset" value={multiviewPlan.preset} />
           <InspectorMetric label="Tiles" value={String(multiviewPlan.tiles.length)} />
@@ -578,16 +745,19 @@ function MediaExecutionInspector({
           <InspectorMetric label="Audio Conf" value={confidenceMonitor.signals.audio} />
           <InspectorMetric label="Network Conf" value={confidenceMonitor.signals.network} />
           <InspectorMetric label="Unhealthy Tiles" value={String(multiviewHealth.unhealthyTiles)} />
-          <InspectorMetric label="Warnings" value={String(multiviewHealth.warnings.length + confidenceSummary.warnings.length)} />
+          <InspectorMetric
+            label="Warnings"
+            value={String(multiviewHealth.warnings.length + confidenceSummary.warnings.length)}
+          />
           <InspectorMetric label="Latest Frame" value={String(multiviewPlan.frameId)} />
           <InspectorMetric label="Graph Rev" value={String(multiviewPlan.graphRevision)} />
           <InspectorMetric label="Overall" value={confidenceSummary.status} />
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-emerald-300/80">
-          Metadata-only mock diagnostics; existing browser renderer/composition paths remain the rendering boundary.
+          Metadata-only mock diagnostics; existing browser renderer/composition paths remain the
+          rendering boundary.
         </p>
       </div>
-
 
       <div className="mt-3 rounded-lg border border-amber-700/40 bg-amber-950/20 p-2">
         <p className="font-black uppercase tracking-[0.16em] text-amber-200">Encoder</p>
@@ -598,37 +768,76 @@ function MediaExecutionInspector({
           <InspectorMetric label="Video Codec" value={encoderPlan.profile.videoCodec} />
           <InspectorMetric label="Audio Codec" value={encoderPlan.profile.audioCodec} />
           <InspectorMetric label="Bitrate" value={`${encoderSession.estimatedBitrateKbps}kbps`} />
-          <InspectorMetric label="Resolution" value={`${encoderPlan.profile.resolution.width}x${encoderPlan.profile.resolution.height}`} />
+          <InspectorMetric
+            label="Resolution"
+            value={`${encoderPlan.profile.resolution.width}x${encoderPlan.profile.resolution.height}`}
+          />
           <InspectorMetric label="FPS" value={String(encoderSession.estimatedFps)} />
           <InspectorMetric label="Target Output" value={encoderPlan.target.outputId} />
-          <InspectorMetric label="Recording/Stream" value={encoderPlan.recordingId ?? encoderPlan.streamId ?? '—'} />
+          <InspectorMetric
+            label="Recording/Stream"
+            value={encoderPlan.recordingId ?? encoderPlan.streamId ?? '—'}
+          />
           <InspectorMetric label="Health" value={encoderHealth.health} />
-          <InspectorMetric label="Warn/Fail" value={`${encoderHealth.warningCount}/${encoderHealth.failureCount}`} />
+          <InspectorMetric
+            label="Warn/Fail"
+            value={`${encoderHealth.warningCount}/${encoderHealth.failureCount}`}
+          />
         </div>
         <p className="mt-2 text-[10px] uppercase tracking-[0.14em] text-amber-300/80">
-          Mock lifecycle metadata only; no FFmpeg, WebCodecs, GPU APIs, raw media, or encoded packets are created.
+          Mock lifecycle metadata only; no FFmpeg, WebCodecs, GPU APIs, raw media, or encoded
+          packets are created.
         </p>
       </div>
 
       {orchestration ? (
         <div className="mt-3 rounded-lg border border-fuchsia-700/40 bg-fuchsia-950/20 p-2">
-          <p className="font-black uppercase tracking-[0.16em] text-fuchsia-200">Media Orchestration</p>
+          <p className="font-black uppercase tracking-[0.16em] text-fuchsia-200">
+            Media Orchestration
+          </p>
           <div className="mt-2 grid gap-2 md:grid-cols-4">
-            <InspectorMetric label="Active Intents" value={String(orchestration.activeIntents.length)} />
-            <InspectorMetric label="Frame Plans" value={String(orchestration.activeFramePlans.length)} />
-            <InspectorMetric label="Dependency Edges" value={String(orchestration.dependencyGraph?.edges.length ?? 0)} />
+            <InspectorMetric
+              label="Active Intents"
+              value={String(orchestration.activeIntents.length)}
+            />
+            <InspectorMetric
+              label="Frame Plans"
+              value={String(orchestration.activeFramePlans.length)}
+            />
+            <InspectorMetric
+              label="Dependency Edges"
+              value={String(orchestration.dependencyGraph?.edges.length ?? 0)}
+            />
             <InspectorMetric label="Conflicts" value={String(orchestration.conflicts.length)} />
             <InspectorMetric label="Frame Align" value={orchestration.frameAlignmentStatus} />
-            <InspectorMetric label="Queued/Dropped" value={String(orchestration.droppedOrQueuedIntents)} />
-            <InspectorMetric label="Subsystems" value={Object.entries(orchestration.subsystemStateSnapshot).map(([key, value]) => `${key}:${value}`).join(' · ')} />
-            <InspectorMetric label="Latest Plan" value={orchestration.activeFramePlans.at(-1)?.id ?? '—'} />
+            <InspectorMetric
+              label="Queued/Dropped"
+              value={String(orchestration.droppedOrQueuedIntents)}
+            />
+            <InspectorMetric
+              label="Subsystems"
+              value={Object.entries(orchestration.subsystemStateSnapshot)
+                .map(([key, value]) => `${key}:${value}`)
+                .join(' · ')}
+            />
+            <InspectorMetric
+              label="Latest Plan"
+              value={orchestration.activeFramePlans.at(-1)?.id ?? '—'}
+            />
           </div>
           <div className="mt-2 rounded border border-fuchsia-900/70 bg-slate-950/60 p-2 font-mono text-[10px] text-fuchsia-100">
-            {(orchestration.activeFramePlans.at(-1)?.orderedExecutionSteps ?? []).slice(0, 6).map((intent) => (
-              <div key={intent.id}>{intent.targetSubsystem} → {intent.executionType} · deps {intent.dependencies.length}</div>
-            ))}
+            {(orchestration.activeFramePlans.at(-1)?.orderedExecutionSteps ?? [])
+              .slice(0, 6)
+              .map((intent) => (
+                <div key={intent.id}>
+                  {intent.targetSubsystem} → {intent.executionType} · deps{' '}
+                  {intent.dependencies.length}
+                </div>
+              ))}
             {orchestration.conflicts.slice(0, 3).map((conflict) => (
-              <div key={conflict.id}>conflict {conflict.type}: {conflict.message}</div>
+              <div key={conflict.id}>
+                conflict {conflict.type}: {conflict.message}
+              </div>
             ))}
           </div>
         </div>
@@ -636,7 +845,9 @@ function MediaExecutionInspector({
 
       {mediaSyncEnabled ? (
         <div className="mt-3 rounded-lg border border-emerald-700/40 bg-emerald-950/20 p-2">
-          <p className="font-black uppercase tracking-[0.16em] text-emerald-200">Media Sync Diagnostics</p>
+          <p className="font-black uppercase tracking-[0.16em] text-emerald-200">
+            Media Sync Diagnostics
+          </p>
           <div className="mt-2 grid gap-2 md:grid-cols-4">
             <InspectorMetric label="Current Frame" value={String(syncSummary.currentFrame)} />
             <InspectorMetric label="FPS" value={String(syncSummary.fps)} />
@@ -644,16 +855,45 @@ function MediaExecutionInspector({
             <InspectorMetric label="Audio Drift" value={`${syncSummary.drift.audioDriftMs}ms`} />
             <InspectorMetric label="Render Drift" value={`${syncSummary.drift.renderDriftMs}ms`} />
             <InspectorMetric label="Output Drift" value={`${syncSummary.drift.outputDriftMs}ms`} />
-            <InspectorMetric label="Last Tick" value={syncState.lastTickResult ? String(syncState.lastTickResult.broadcastTime) : '—'} />
+            <InspectorMetric
+              label="Last Tick"
+              value={
+                syncState.lastTickResult ? String(syncState.lastTickResult.broadcastTime) : '—'
+              }
+            />
             <InspectorMetric label="Jitter" value={`${syncSummary.jitterEstimate}ms`} />
             <InspectorMetric label="Dropped" value={String(syncSummary.droppedFramesCount)} />
             <InspectorMetric label="Clock" value={syncState.clockState.status} />
             <InspectorMetric label="Health Score" value={String(syncSummary.healthScore)} />
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={() => { mediaClock.pauseClock(); rerender(); }} className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200">Pause clock</button>
-            <button type="button" onClick={() => { mediaClock.resumeClock(); rerender(); }} className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200">Resume clock</button>
-            <button type="button" onClick={resetDriftStats} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Reset drift stats</button>
+            <button
+              type="button"
+              onClick={() => {
+                mediaClock.pauseClock();
+                rerender();
+              }}
+              className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200"
+            >
+              Pause clock
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                mediaClock.resumeClock();
+                rerender();
+              }}
+              className="rounded border border-emerald-700 bg-emerald-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-emerald-200"
+            >
+              Resume clock
+            </button>
+            <button
+              type="button"
+              onClick={resetDriftStats}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Reset drift stats
+            </button>
           </div>
         </div>
       ) : null}
@@ -662,37 +902,158 @@ function MediaExecutionInspector({
           <p className="font-black uppercase tracking-[0.16em] text-cyan-200">Browser Renderer</p>
           <div className="mt-2 grid gap-2 md:grid-cols-4">
             <InspectorMetric label="Enabled" value="true" />
-            <InspectorMetric label="Targets" value={programComposition?.renderTargets.join(', ') ?? '—'} />
+            <InspectorMetric
+              label="Targets"
+              value={programComposition?.renderTargets.join(', ') ?? '—'}
+            />
             <InspectorMetric label="Composition" value={browserHealth.compositionId ?? '—'} />
             <InspectorMetric label="Layers" value={String(browserHealth.layerCount)} />
-            <InspectorMetric label="Runtime Sources" value={String(webRTCDiagnostics?.activeLocalStreamCount ?? 0)} />
+            <InspectorMetric
+              label="Runtime Sources"
+              value={String(webRTCDiagnostics?.activeLocalStreamCount ?? 0)}
+            />
             <InspectorMetric label="Frames" value={String(browserHealth.stats.frameCount)} />
             <InspectorMetric label="Target FPS" value={String(browserHealth.stats.targetFps)} />
             <InspectorMetric label="Est FPS" value={String(browserHealth.stats.estimatedFps)} />
-            <InspectorMetric label="Last Render" value={`${browserHealth.stats.lastRenderDurationMs}ms`} />
+            <InspectorMetric
+              label="Last Render"
+              value={`${browserHealth.stats.lastRenderDurationMs}ms`}
+            />
             <InspectorMetric label="Missing Sources" value={String(compositionWarnings.length)} />
             <InspectorMetric label="Latest Error" value={browserHealth.latestError?.code ?? '—'} />
             <InspectorMetric label="Backend" value={browserDiagnostics.activeBackend} />
             <InspectorMetric label="Fallback" value={browserDiagnostics.fallbackStatus} />
             <InspectorMetric label="Frame Budget" value={`${browserDiagnostics.frameBudget}ms`} />
-            <InspectorMetric label="Over Budget" value={String(browserDiagnostics.overBudgetFrameCount)} />
-            <InspectorMetric label="Dirty Layers" value={String(browserDiagnostics.dirtyLayerCount)} />
-            <InspectorMetric label="Cache" value={`${browserDiagnostics.cacheSummary.layers} layers ${browserDiagnostics.cacheSummary.hits}/${browserDiagnostics.cacheSummary.misses}`} />
-            <InspectorMetric label="Pipeline" value={browserDiagnostics.pipelineStages.stages.join(' → ')} />
-            <InspectorMetric label="Health" value={browserDiagnostics.rendererHealth.isHealthy ? 'healthy' : 'degraded'} />
+            <InspectorMetric
+              label="Over Budget"
+              value={String(browserDiagnostics.overBudgetFrameCount)}
+            />
+            <InspectorMetric
+              label="Dirty Layers"
+              value={String(browserDiagnostics.dirtyLayerCount)}
+            />
+            <InspectorMetric
+              label="Cache"
+              value={`${browserDiagnostics.cacheSummary.layers} layers ${browserDiagnostics.cacheSummary.hits}/${browserDiagnostics.cacheSummary.misses}`}
+            />
+            <InspectorMetric
+              label="Pipeline"
+              value={browserDiagnostics.pipelineStages.stages.join(' → ')}
+            />
+            <InspectorMetric
+              label="Health"
+              value={browserDiagnostics.rendererHealth.isHealthy ? 'healthy' : 'degraded'}
+            />
           </div>
-          <canvas ref={browserCanvasRef} className="mt-2 aspect-video w-full rounded border border-cyan-500/30 bg-black" />
+          <canvas
+            ref={browserCanvasRef}
+            className="mt-2 aspect-video w-full rounded border border-cyan-500/30 bg-black"
+          />
           <div className="mt-2 flex flex-wrap gap-2">
-            <button type="button" onClick={() => { browserRenderer.start(); rerender(); }} className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200">Start renderer</button>
-            <button type="button" onClick={() => { browserRenderer.stop(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Stop renderer</button>
-            <button type="button" onClick={() => { if (programComposition) browserRenderer.render(programComposition, { debug: browserDebug }); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Render frame</button>
-            <button type="button" onClick={() => { setBrowserDebug((value) => !value); browserRenderer.setDebug(!browserDebug); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Toggle guides</button>
-            <button type="button" onClick={() => { browserRenderer.clearStats(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Clear renderer stats</button>
-            <button type="button" onClick={() => { browserRenderer.switchBackend('canvas2d_default'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Use Canvas2D</button>
-            <button type="button" onClick={() => { browserRenderer.switchBackend('webgl_preview'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Try WebGL</button>
-            <button type="button" onClick={() => { browserRenderer.switchBackend('webgpu_preview'); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Try WebGPU</button>
-            <button type="button" onClick={() => { browserRenderer.clearRenderCache(); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Clear render cache</button>
-            <button type="button" onClick={() => { browserRenderer.forceFullRender(); if (programComposition) browserRenderer.render(programComposition, { debug: browserDebug }); rerender(); }} className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300">Force full redraw</button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.start();
+                rerender();
+              }}
+              className="rounded border border-cyan-700 bg-cyan-950/40 px-2 py-1 font-bold uppercase tracking-[0.12em] text-cyan-200"
+            >
+              Start renderer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.stop();
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Stop renderer
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (programComposition)
+                  browserRenderer.render(programComposition, { debug: browserDebug });
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Render frame
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setBrowserDebug((value) => !value);
+                browserRenderer.setDebug(!browserDebug);
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Toggle guides
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.clearStats();
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Clear renderer stats
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.switchBackend('canvas2d_default');
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Use Canvas2D
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.switchBackend('webgl_preview');
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Try WebGL
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.switchBackend('webgpu_preview');
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Try WebGPU
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.clearRenderCache();
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Clear render cache
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                browserRenderer.forceFullRender();
+                if (programComposition)
+                  browserRenderer.render(programComposition, { debug: browserDebug });
+                rerender();
+              }}
+              className="rounded border border-slate-700 bg-slate-900 px-2 py-1 font-bold uppercase tracking-[0.12em] text-slate-300"
+            >
+              Force full redraw
+            </button>
           </div>
         </div>
       ) : null}
@@ -943,14 +1304,35 @@ function ProductionGraphInspector({
         />
         <InspectorMetric label="Audio" value={String(Object.keys(graph.audioChannels).length)} />
         <InspectorMetric label="Recording" value={recording.status} />
-        <InspectorMetric label="Recording File" value={String(recording.metadata?.currentFile ?? '—')} />
-        <InspectorMetric label="Recording Folder" value={String(recording.metadata?.outputFolder ?? '—')} />
-        <InspectorMetric label="Recording Bitrate" value={String(recording.metadata?.bitrateKbps ?? '—')} />
+        <InspectorMetric
+          label="Recording File"
+          value={String(recording.metadata?.currentFile ?? '—')}
+        />
+        <InspectorMetric
+          label="Recording Folder"
+          value={String(recording.metadata?.outputFolder ?? '—')}
+        />
+        <InspectorMetric
+          label="Recording Bitrate"
+          value={String(recording.metadata?.bitrateKbps ?? '—')}
+        />
         <InspectorMetric label="Recording FPS" value={String(recording.metadata?.fps ?? '—')} />
-        <InspectorMetric label="Recording Size" value={String(recording.metadata?.currentSizeBytes ?? '—')} />
-        <InspectorMetric label="Recording Health" value={String(recording.metadata?.health ?? recording.status)} />
-        <InspectorMetric label="Recording Drops" value={String(recording.metadata?.droppedFrames ?? '—')} />
-        <InspectorMetric label="Recording Disk" value={String(recording.metadata?.diskUsageBytes ?? '—')} />
+        <InspectorMetric
+          label="Recording Size"
+          value={String(recording.metadata?.currentSizeBytes ?? '—')}
+        />
+        <InspectorMetric
+          label="Recording Health"
+          value={String(recording.metadata?.health ?? recording.status)}
+        />
+        <InspectorMetric
+          label="Recording Drops"
+          value={String(recording.metadata?.droppedFrames ?? '—')}
+        />
+        <InspectorMetric
+          label="Recording Disk"
+          value={String(recording.metadata?.diskUsageBytes ?? '—')}
+        />
         <InspectorMetric label="Health" value={health.status} />
         <InspectorMetric label="Accepted" value={String(session.commandLog.length)} />
         <InspectorMetric label="Rejected" value={String(rejectedCommands)} />
@@ -1195,16 +1577,20 @@ function OperatorMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-
-
-
 const MIN_AUTO_TRANSITION_DURATION_MS = 100;
 const DEFAULT_TRANSITION_DURATION_MS = 500;
 
-function normalizeTransitionDuration(transitionType: TransitionType, value: unknown, fallback = DEFAULT_TRANSITION_DURATION_MS) {
+function normalizeTransitionDuration(
+  transitionType: TransitionType,
+  value: unknown,
+  fallback = DEFAULT_TRANSITION_DURATION_MS,
+) {
   const raw = typeof value === 'string' && value.trim() === '' ? Number.NaN : Number(value);
   if (transitionType === 'cut') return 0;
-  const normalizedFallback = Number.isFinite(fallback) && fallback >= MIN_AUTO_TRANSITION_DURATION_MS ? fallback : DEFAULT_TRANSITION_DURATION_MS;
+  const normalizedFallback =
+    Number.isFinite(fallback) && fallback >= MIN_AUTO_TRANSITION_DURATION_MS
+      ? fallback
+      : DEFAULT_TRANSITION_DURATION_MS;
   if (!Number.isFinite(raw)) return normalizedFallback;
   return Math.min(Math.max(Math.round(raw), MIN_AUTO_TRANSITION_DURATION_MS), 5000);
 }
@@ -1220,27 +1606,46 @@ interface CurrentPreviewState {
 
 class ProgramOutputController {
   constructor(private readonly state: CurrentProgramState) {}
-  get sceneId() { return this.state.sceneId; }
+  get sceneId() {
+    return this.state.sceneId;
+  }
 }
 
 class PreviewOutputController {
   constructor(private readonly state: CurrentPreviewState) {}
-  get sceneId() { return this.state.sceneId; }
+  get sceneId() {
+    return this.state.sceneId;
+  }
 }
 
 class SceneSelectionController {
-  constructor(private readonly dispatch: (type: ProductionCommandType, payload?: Record<string, unknown>) => unknown) {}
-  select(sceneId: string) { return this.dispatch('SET_PREVIEW_SCENE', { sceneId }); }
+  constructor(
+    private readonly dispatch: (
+      type: ProductionCommandType,
+      payload?: Record<string, unknown>,
+    ) => unknown,
+  ) {}
+  select(sceneId: string) {
+    return this.dispatch('SET_PREVIEW_SCENE', { sceneId });
+  }
 }
 
 class TransitionController {
-  constructor(private readonly dispatch: (type: ProductionCommandType, payload?: Record<string, unknown>) => unknown) {}
+  constructor(
+    private readonly dispatch: (
+      type: ProductionCommandType,
+      payload?: Record<string, unknown>,
+    ) => unknown,
+  ) {}
   execute(type: TransitionType, previewSceneId: string, durationMs: number) {
-    return this.dispatch(type === 'cut' ? 'CUT_TO_PROGRAM' : type === 'fade' ? 'AUTO_TRANSITION' : 'TAKE_PREVIEW', {
-      sceneId: previewSceneId,
-      transitionType: type,
-      durationMs: type === 'cut' ? 0 : durationMs,
-    });
+    return this.dispatch(
+      type === 'cut' ? 'CUT_TO_PROGRAM' : type === 'fade' ? 'AUTO_TRANSITION' : 'TAKE_PREVIEW',
+      {
+        sceneId: previewSceneId,
+        transitionType: type,
+        durationMs: type === 'cut' ? 0 : durationMs,
+      },
+    );
   }
 }
 
@@ -1300,7 +1705,8 @@ function createProductionGraphSessionFromScenes(input: {
       ]),
     ),
   );
-  const fallbackSceneId = input.scenes.find((scene) => scene.isActive)?.id ?? input.scenes[0]?.id ?? 'scene-empty';
+  const fallbackSceneId =
+    input.scenes.find((scene) => scene.isActive)?.id ?? input.scenes[0]?.id ?? 'scene-empty';
   const programSceneId = scenesById[input.productionState.programSceneId]
     ? input.productionState.programSceneId
     : fallbackSceneId;
@@ -1331,10 +1737,10 @@ function createProductionGraphSessionFromScenes(input: {
 }
 
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]',
-  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.12fr)]',
-  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]',
-  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]',
+  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
+  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.18fr)]',
+  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
+  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,0.96fr)_minmax(0,1.08fr)]',
   multiview: 'grid min-h-0 gap-3',
 };
 
@@ -1520,7 +1926,10 @@ export function SceneWorkspace({
     const webRTCAdapter = new WebRTCMediaExecutionAdapter();
     engine.registerAdapter(webRTCAdapter, createWebRTCAdapterMetadata(webRTCAdapter));
     if (isBrowserRendererEnabled(process.env)) {
-      const browserAdapter = new BrowserRendererAdapter(new BrowserMediaRenderer({ target: 'preview' }), 'mock_live');
+      const browserAdapter = new BrowserRendererAdapter(
+        new BrowserMediaRenderer({ target: 'preview' }),
+        'mock_live',
+      );
       engine.registerAdapter(browserAdapter, createBrowserRendererAdapterMetadata(browserAdapter));
     }
     engine.setExecutionRuntimeMode('mock_live');
@@ -1711,7 +2120,12 @@ export function SceneWorkspace({
         status: 'good' as const,
       },
       { id: 'recording', label: 'Recording', value: 'idle', status: 'warning' as const },
-      { id: 'streaming', label: 'Streaming', value: activeRouteCount > 0 ? 'routes active' : 'not configured', status: 'warning' as const },
+      {
+        id: 'streaming',
+        label: 'Streaming',
+        value: activeRouteCount > 0 ? 'routes active' : 'not configured',
+        status: 'warning' as const,
+      },
       {
         id: 'webrtc',
         label: 'WebRTC',
@@ -1729,8 +2143,8 @@ export function SceneWorkspace({
       isPanelVisible('chat') ||
       isPanelVisible('outputs'));
   const workspaceColumns = rightSidebarVisible
-    ? `minmax(13rem, ${workspace.sizes.left}px) minmax(${workspace.sizes.center}px, 1fr) minmax(16rem, ${workspace.sizes.right}px)`
-    : `minmax(13rem, ${workspace.sizes.left}px) minmax(${workspace.sizes.center}px, 1fr)`;
+    ? `minmax(12rem, ${Math.min(workspace.sizes.left, 248)}px) minmax(0, 1fr) minmax(15rem, ${Math.min(workspace.sizes.right, 360)}px)`
+    : `minmax(12rem, ${Math.min(workspace.sizes.left, 248)}px) minmax(0, 1fr)`;
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -1747,7 +2161,7 @@ export function SceneWorkspace({
       className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
       style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
-      <aside className="min-h-0 space-y-4 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
+      <aside className="min-h-0 space-y-2 overflow-y-auto pr-1 max-xl:max-h-[34rem]">
         <div className="rounded-xl border border-white/10 bg-slate-900/75 p-2">
           <p className="mb-2 text-[10px] font-black uppercase tracking-[0.16em] text-cyan-100">
             Panel Visibility
@@ -2007,9 +2421,18 @@ export function SceneWorkspace({
       <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
         <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/95 px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
           <div className="flex min-h-8 items-center gap-1 overflow-x-auto whitespace-nowrap">
-            <span className="inline-flex items-center gap-2 pr-2 text-sm font-black uppercase tracking-[0.18em] text-white"><span className="grid h-7 w-7 place-items-center rounded-lg bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25">UB</span><span className="hidden max-w-[12rem] truncate md:inline">Launch Day</span></span>
+            <span className="inline-flex items-center gap-2 pr-2 text-sm font-black uppercase tracking-[0.18em] text-white">
+              <span className="grid h-7 w-7 place-items-center rounded-lg bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25">
+                UB
+              </span>
+              <span className="hidden max-w-[12rem] truncate md:inline">Launch Day</span>
+            </span>
             <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
-              <OperatorStatusBadge label={activeRouteCount > 0 ? "LIVE" : "LIVE idle"} tone={activeRouteCount > 0 ? "live" : "neutral"} pulse={activeRouteCount > 0} />
+              <OperatorStatusBadge
+                label={activeRouteCount > 0 ? 'LIVE' : 'LIVE idle'}
+                tone={activeRouteCount > 0 ? 'live' : 'neutral'}
+                pulse={activeRouteCount > 0}
+              />
               <OperatorStatusBadge label="REC idle" tone="neutral" />
             </div>
             <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
@@ -2266,8 +2689,13 @@ export function SceneWorkspace({
               productionState.transitionDuration,
             );
             dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
-            dispatchProductionGraphCommand('SET_TRANSITION_DURATION', { durationMs: transitionDuration });
-            persistProductionState({ ...productionState, transitionType, transitionDuration }, 'stage');
+            dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+              durationMs: transitionDuration,
+            });
+            persistProductionState(
+              { ...productionState, transitionType, transitionDuration },
+              'stage',
+            );
           }}
           onDurationChange={(transitionDuration) => {
             const normalizedDuration = normalizeTransitionDuration(
@@ -2284,31 +2712,68 @@ export function SceneWorkspace({
             );
           }}
         />
-        <ProductionGraphInspector session={productionGraphSession} />
-        <MediaExecutionInspector
-          engine={mediaExecutionEngine}
-          graph={productionGraphSession.graph}
-        />
         {isPanelVisible('productionDock') ? (
-          <div className="shrink-0 overflow-y-auto" style={{ maxHeight: workspace.sizes.dock }}>
-            {isPanelExpanded('productionDock') ? (
-              <ProductionDock channels={channels} assets={assets} />
-            ) : (
-              <div className="rounded-xl border border-white/10 bg-slate-900/75 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-slate-400">
-                Production Dock collapsed
+          <div className="grid shrink-0 gap-2 lg:grid-cols-3">
+            <details
+              open={isPanelExpanded('audioMixer')}
+              className="rounded-xl border border-white/10 bg-slate-900/70"
+            >
+              <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+                Audio Mixer
+              </summary>
+              <div className="max-h-48 overflow-y-auto p-2">
+                <ProductionDock channels={channels} assets={[]} />
               </div>
-            )}
+            </details>
+            <details open className="rounded-xl border border-white/10 bg-slate-900/70">
+              <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+                Scene Layers
+              </summary>
+              <div className="max-h-48 overflow-y-auto p-2 text-xs text-slate-300">
+                {activeScene.sources.length ? (
+                  activeScene.sources.map((source) => (
+                    <div
+                      key={source.id}
+                      className="mb-1 flex items-center justify-between rounded-lg bg-slate-950/70 px-2 py-1"
+                    >
+                      <span className="truncate">{source.name}</span>
+                      <span className="font-mono text-[10px] text-slate-500">
+                        {source.isVisible ? 'READY' : 'OFF'}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-slate-500">No layers in preview scene.</p>
+                )}
+              </div>
+            </details>
+            <details className="rounded-xl border border-white/10 bg-slate-900/70">
+              <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+                Inspector
+              </summary>
+              <div className="max-h-48 overflow-y-auto p-2">
+                <ProductionGraphInspector session={productionGraphSession} />
+                <MediaExecutionInspector
+                  engine={mediaExecutionEngine}
+                  graph={productionGraphSession.graph}
+                />
+              </div>
+            </details>
           </div>
         ) : null}
-        <input
-          aria-label="Production dock height"
-          className="w-full accent-cyan-300"
-          type="range"
-          min={96}
-          max={280}
-          value={workspace.sizes.dock}
-          onChange={(e) => resizeWorkspace('dock', Number(e.target.value))}
-        />
+        <details className="shrink-0 rounded-xl border border-white/10 bg-slate-950/80">
+          <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-400">
+            Timeline / Recent Events / Warnings / Automation
+          </summary>
+          <div className="grid max-h-40 gap-2 overflow-y-auto p-2 text-xs text-slate-300 md:grid-cols-4">
+            <div className="rounded-lg bg-slate-900/80 p-2">Recent: {lastTransitionLabel}</div>
+            <div className="rounded-lg bg-slate-900/80 p-2">Timeline: PGM {programScene.name}</div>
+            <div className="rounded-lg bg-slate-900/80 p-2">
+              Warnings: {transitionActive ? 'Transition active' : 'None'}
+            </div>
+            <div className="rounded-lg bg-slate-900/80 p-2">Automation: Manual</div>
+          </div>
+        </details>
       </section>
       {rightSidebarVisible ? (
         <aside className="min-h-0 overflow-y-auto pr-1 max-xl:max-h-[42rem]">
