@@ -1556,7 +1556,7 @@ function SourceLayers({ sources, output }: { sources: SceneSource[]; output: Out
   if (!visibleSources.length) return null;
   return (
     <div
-      className={`pointer-events-none absolute z-20 flex flex-col gap-1.5 ${output === 'vertical' ? 'inset-x-4 top-16' : 'left-4 top-16 w-56'}`}
+      className={`pointer-events-none absolute z-20 flex max-w-[46%] flex-col gap-1 ${output === 'vertical' ? 'inset-x-4 top-16' : 'left-3 top-3 w-52'}`}
     >
       <span className="text-[9px] font-black uppercase tracking-[0.22em] text-white/45">
         Scene Layers
@@ -1566,7 +1566,7 @@ function SourceLayers({ sources, output }: { sources: SceneSource[]; output: Out
         return (
           <div
             key={source.id}
-            className={`flex items-center justify-between gap-2 rounded-lg border border-dashed ${theme.ring} bg-slate-950/70 px-2 py-1 backdrop-blur`}
+            className={`flex items-center justify-between gap-2 rounded-lg border border-dashed ${theme.ring} bg-slate-950/55 px-2 py-1 backdrop-blur`}
             style={{ zIndex: 20 + index }}
           >
             <span className="flex min-w-0 items-center gap-1.5 text-[11px] font-bold text-white">
@@ -1599,7 +1599,7 @@ function SceneFooter({
 }) {
   const status = routeCount > 0 ? `${routeCount} on air` : hasGuests ? 'Assign guests' : 'Standby';
   return (
-    <div className="absolute inset-x-2 bottom-1.5 z-40 flex items-center justify-between gap-2 bg-black/75 px-2 py-1">
+    <div className="absolute inset-x-0 bottom-0 z-40 flex items-center justify-between gap-2 border-t border-white/10 bg-black/80 px-3 py-1.5">
       <div className="min-w-0">
         <p className="truncate text-[10px] font-semibold text-slate-200">{scene.name}</p>
         <p className="truncate text-[9px] uppercase tracking-[0.12em] text-slate-500">
@@ -1641,13 +1641,6 @@ function BaseCompositor({
   const hasOfflineProgramSource = output === 'program' && routes.some((route) => route.isOnProgram && isRouteUnavailable(route));
   return (
     <BroadcastCanvas aspect={output === 'vertical' ? 'vertical' : 'video'}>
-      <CanvasHud
-        output={output}
-        layoutPreset={layoutPreset}
-        monitorRole={monitorRole}
-        scene={scene}
-        activeRouteCount={activeRouteCount}
-      />
       {slots.map((route, index) => (
         <CompositorLayer
           key={route?.id ?? `empty-${index}`}
@@ -1769,12 +1762,12 @@ function BroadcastMonitorFrame({
   const tallyLabel = headerVariant === 'preview' ? 'PREVIEW / READY' : 'PROGRAM / LIVE';
 
   return (
-    <section className={`min-w-0 border bg-black ${tallyCardClasses(tallyState)} ${className}`}>
+    <section className={`flex h-full min-w-0 flex-col overflow-hidden rounded-xl border bg-black ${tallyCardClasses(tallyState)} ${className}`}>
       <div
-        className={`border-b px-1.5 py-0.5 ${tallyState === 'program' ? 'border-red-400/25' : 'border-emerald-300/25'}`}
+        className={`shrink-0 border-b px-3 py-2 ${tallyState === 'program' ? 'border-red-400/25 bg-red-950/10' : 'border-emerald-300/25 bg-emerald-950/10'}`}
       >
         <div className="flex items-center justify-between gap-2">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">
+          <p className="text-xs font-black uppercase tracking-[0.24em] text-slate-200">
             {label}
           </p>
           <TallyIndicator state={tallyState} label={tallyLabel} />
@@ -1786,7 +1779,7 @@ function BroadcastMonitorFrame({
           {meta ? <p className="truncate text-[10px] text-slate-500">{meta}</p> : null}
         </div>
       </div>
-      <div className="bg-black">{children}</div>
+      <div className="min-h-0 flex-1 bg-black">{children}</div>
     </section>
   );
 }
