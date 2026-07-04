@@ -17,6 +17,7 @@ export type ProfessionalWorkspaceId =
   | 'automation-operator'
   | 'ai-operator'
   | 'distribution-operator'
+  | 'device-operator'
   | 'custom';
 
 export type MultiviewLayoutMode =
@@ -36,7 +37,8 @@ export type MultiviewLayoutMode =
   | 'collaboration-focus'
   | 'automation-focus'
   | 'ai-focus'
-  | 'distribution-focus';
+  | 'distribution-focus'
+  | 'devices-focus';
 
 export type WorkspaceProfile = {
   id: ProfessionalWorkspaceId;

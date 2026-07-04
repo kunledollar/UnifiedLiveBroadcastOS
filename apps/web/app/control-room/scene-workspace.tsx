@@ -217,7 +217,14 @@ import {
 import {
   createDistributionManifest,
   createSampleOutputHealth,
+  createDeviceManifest,
 } from '@ubos/shared';
+import {
+  DeviceManagerWorkspace,
+  createInitialDeviceState,
+  deviceHealthSummaryLabel,
+  deviceReducer,
+} from './devices';
 
 function MediaStreamPreview({
   stream,
@@ -2137,6 +2144,11 @@ export function SceneWorkspace({
       outputHealth: createSampleOutputHealth(distributionManifest.destinations),
     }),
   );
+  const deviceManifest = useMemo(() => createDeviceManifest(), []);
+  const [deviceState, dispatchDevice] = useReducer(
+    deviceReducer,
+    createInitialDeviceState(deviceManifest),
+  );
   const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
   ]);
@@ -2323,6 +2335,10 @@ export function SceneWorkspace({
     <DistributionWorkspace state={distributionState} dispatch={dispatchDistribution} />
   );
 
+  const deviceWorkspaceContent = (
+    <DeviceManagerWorkspace state={deviceState} dispatch={dispatchDevice} />
+  );
+
   const replayWorkspacePanels = useMemo(
     () => ({
       clipBrowser: (
@@ -2443,6 +2459,8 @@ export function SceneWorkspace({
         aiSummaryLines,
         distributionState,
         onDistributionDispatch: dispatchDistribution,
+        deviceState,
+        onDeviceDispatch: dispatchDevice,
       }),
     [
       broadcastId,
@@ -2471,6 +2489,7 @@ export function SceneWorkspace({
       aiState,
       aiSummaryLines,
       distributionState,
+      deviceState,
     ],
   );
 
@@ -2480,6 +2499,7 @@ export function SceneWorkspace({
       'guests',
       'team',
       'automation',
+      'devices',
       'inspector',
       'routing',
       'outputs',
@@ -3093,6 +3113,7 @@ export function SceneWorkspace({
           destinations: distributionState.destinations,
           health: distributionState.outputHealth,
         })}
+        deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
         toolsMenu={toolsMenu}
       />
 
@@ -3151,6 +3172,7 @@ export function SceneWorkspace({
               automationContent={automationWorkspaceContent}
               aiContent={aiWorkspaceContent}
               distributionContent={distributionWorkspaceContent}
+              deviceContent={deviceWorkspaceContent}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>

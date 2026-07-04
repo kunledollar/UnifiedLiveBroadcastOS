@@ -338,6 +338,7 @@ export function WorkspaceCenterLayout({
   automationContent,
   aiContent,
   distributionContent,
+  deviceContent,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
@@ -350,6 +351,7 @@ export function WorkspaceCenterLayout({
   automationContent?: ReactNode;
   aiContent?: ReactNode;
   distributionContent?: ReactNode;
+  deviceContent?: ReactNode;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -382,6 +384,8 @@ export function WorkspaceCenterLayout({
       return aiContent ?? <DirectorWorkspace context={context} />;
     case 'distribution-operator':
       return distributionContent ?? <DirectorWorkspace context={context} />;
+    case 'device-operator':
+      return deviceContent ?? <DirectorWorkspace context={context} />;
     case 'custom':
       return <CustomWorkspace context={context} viewMode={viewMode} />;
     default:

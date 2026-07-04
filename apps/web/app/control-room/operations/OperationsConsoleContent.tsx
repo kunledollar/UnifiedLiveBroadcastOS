@@ -29,6 +29,10 @@ import { HostDevicesSection } from './HostDevicesSection';
 import type { DistributionAction, DistributionState } from '../distribution/distribution-state';
 import { createDistributionManifest } from '@ubos/shared';
 import { createInitialDistributionState } from '../distribution/distribution-state';
+import { DevicePanel } from '../devices/DevicePanel';
+import type { DeviceAction, DeviceState } from '../devices/device-state';
+import { createDeviceManifest } from '@ubos/shared';
+import { createInitialDeviceState } from '../devices/device-state';
 
 export function OperationsConsoleContent({
   broadcastId,
@@ -64,6 +68,8 @@ export function OperationsConsoleContent({
   aiSummaryLines,
   distributionState,
   onDistributionDispatch,
+  deviceState,
+  onDeviceDispatch,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -98,6 +104,8 @@ export function OperationsConsoleContent({
   aiSummaryLines?: string[];
   distributionState?: DistributionState;
   onDistributionDispatch?: (action: DistributionAction) => void;
+  deviceState?: DeviceState;
+  onDeviceDispatch?: (action: DeviceAction) => void;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -146,6 +154,15 @@ export function OperationsConsoleContent({
             outputRoutes: [],
             outputHealth: [],
           })}
+          dispatch={() => undefined}
+        />
+      ),
+    devices:
+      deviceState && onDeviceDispatch ? (
+        <DevicePanel state={deviceState} dispatch={onDeviceDispatch} />
+      ) : (
+        <DevicePanel
+          state={createInitialDeviceState(createDeviceManifest({ devices: [] }))}
           dispatch={() => undefined}
         />
       ),
