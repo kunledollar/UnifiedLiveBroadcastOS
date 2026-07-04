@@ -2141,7 +2141,7 @@ export function SceneWorkspace({
     'scenes' | 'sources' | 'media' | 'layouts' | 'outputs' | 'settings'
   >('scenes');
   const workspaceColumns = rightSidebarVisible
-    ? 'minmax(13rem,15vw) minmax(0,70vw) minmax(16rem,15vw)'
+    ? 'minmax(12rem,14vw) minmax(0,68vw) minmax(18rem,18vw)'
     : 'minmax(13rem,15vw) minmax(0,1fr)';
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
@@ -2159,8 +2159,8 @@ export function SceneWorkspace({
       className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
       style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
-      <aside className="grid min-h-0 grid-cols-[4.5rem_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20 max-xl:max-h-[34rem]">
-        <nav className="flex min-h-0 flex-col gap-1 border-r border-white/10 bg-black/25 p-1.5">
+      <aside className="grid min-h-0 grid-cols-[5rem_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20 max-xl:max-h-[34rem]">
+        <nav className="flex min-h-0 flex-col gap-2 border-r border-white/10 bg-black/35 p-2">
           {[
             ['scenes', '▦', 'Scenes'],
             ['sources', '◫', 'Sources'],
@@ -2422,7 +2422,7 @@ export function SceneWorkspace({
       </aside>
       <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
         <div className="shrink-0 rounded-2xl border border-white/10 bg-slate-950/95 px-3 py-2 shadow-[0_1px_0_rgba(255,255,255,0.04)]">
-          <div className="flex min-h-8 items-center gap-1 overflow-x-auto whitespace-nowrap">
+          <div className="grid min-h-8 grid-cols-[auto_auto_auto_auto_1fr_auto] items-center gap-2 overflow-x-auto whitespace-nowrap">
             <span className="inline-flex items-center gap-2 pr-2 text-sm font-black uppercase tracking-[0.18em] text-white">
               <span className="grid h-7 w-7 place-items-center rounded-lg bg-cyan-400/15 text-cyan-200 ring-1 ring-cyan-300/25">
                 UB
@@ -2430,6 +2430,9 @@ export function SceneWorkspace({
               <span className="hidden max-w-[12rem] truncate md:inline">Launch Day</span>
             </span>
             <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
+              <span className="px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Session
+              </span>
               <OperatorStatusBadge
                 label={activeRouteCount > 0 ? 'LIVE' : 'LIVE idle'}
                 tone={activeRouteCount > 0 ? 'live' : 'neutral'}
@@ -2441,6 +2444,9 @@ export function SceneWorkspace({
               <OperatorMetric label="RUN" value={formatElapsed(elapsedSeconds)} />
             </div>
             <div className="flex items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5">
+              <span className="px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Session
+              </span>
               <OperatorStatusBadge
                 label={transitionActive ? 'WARN Transition' : 'READY'}
                 tone={transitionActive ? 'warning' : 'ready'}
@@ -2449,6 +2455,9 @@ export function SceneWorkspace({
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 sm:inline" />
             <span className="mx-0.5 hidden h-5 w-px shrink-0 bg-white/10 md:inline" />
             <div className="hidden items-center gap-1 rounded-md border border-white/5 bg-black/20 p-0.5 lg:flex">
+              <span className="px-1 text-[9px] font-black uppercase tracking-[0.16em] text-slate-500">
+                Performance
+              </span>
               <OperatorMetric label="FPS" value={safeHealthMetrics.fps} />
               <OperatorMetric label="CPU" value={safeHealthMetrics.cpu} />
               <OperatorMetric label="GPU" value="unavailable" />
@@ -2630,6 +2639,24 @@ export function SceneWorkspace({
             </button>
           </div>
         </div>
+        <div className="shrink-0 rounded-xl border border-white/10 bg-slate-950/80 p-2">
+          <div className="flex items-center gap-2 overflow-x-auto font-mono text-[10px] uppercase tracking-[0.12em]">
+            <span className="shrink-0 text-slate-500">Rundown</span>
+            {['Opening', 'Intro', 'Guest 1', 'Video', 'Sponsor', 'Guest 2', 'Closing'].map(
+              (segment, index) => (
+                <span
+                  key={segment}
+                  className={`shrink-0 rounded-lg px-3 py-1.5 ${index === 2 ? 'bg-red-500/20 text-red-100 ring-1 ring-red-400/40' : index === 3 ? 'bg-cyan-300/15 text-cyan-100 ring-1 ring-cyan-300/25' : 'bg-black/25 text-slate-400'}`}
+                >
+                  {segment}
+                </span>
+              ),
+            )}
+            <span className="ml-auto shrink-0 text-slate-500">
+              Next: Video · 04:12 remaining · Automation manual
+            </span>
+          </div>
+        </div>
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {viewMode === 'multiview' ? (
             <ProductionMultiview
@@ -2643,18 +2670,10 @@ export function SceneWorkspace({
               preset="broadcast"
             />
           ) : (
-            <div className={`min-h-[22rem] flex-1 ${monitorDeckClasses[viewMode]}`}>
-              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-red-400/25">
+            <div className="min-h-[28rem] flex-1">
+              <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-red-400/20">
                 <ProgramPreview
                   scene={programScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                />
-              </div>
-              <div className="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-emerald-300/20">
-                <PreviewMonitor
-                  scene={previewScene}
                   routes={mediaRoutes}
                   layoutPreset={layoutPreset}
                   guests={guests}
@@ -2774,8 +2793,16 @@ export function SceneWorkspace({
         </div>
       </section>
       {rightSidebarVisible ? (
-        <aside className="min-h-0 overflow-hidden rounded-2xl max-xl:max-h-[42rem]">
+        <aside className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(13rem,0.38fr)] gap-3 overflow-hidden rounded-2xl max-xl:max-h-[52rem]">
           {rightSidebar}
+          <div className="min-h-0 overflow-hidden rounded-2xl bg-slate-950/60 p-1 ring-1 ring-emerald-300/25">
+            <PreviewMonitor
+              scene={previewScene}
+              routes={mediaRoutes}
+              layoutPreset={layoutPreset}
+              guests={guests}
+            />
+          </div>
         </aside>
       ) : null}
     </div>

@@ -187,7 +187,7 @@ export function ProductionSwitcher({
   onDurationChange: (value: number) => void;
 }) {
   return (
-    <section className="shrink-0 rounded-xl border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,.96),rgba(2,6,23,.96))] p-2 shadow-[0_10px_28px_rgba(0,0,0,0.28),inset_0_1px_0_rgba(255,255,255,0.05)]">
+    <section className="shrink-0 rounded-2xl border border-white/10 bg-[linear-gradient(180deg,rgba(15,23,42,.98),rgba(2,6,23,.98))] p-3 shadow-[0_12px_32px_rgba(0,0,0,0.34),inset_0_1px_0_rgba(255,255,255,0.05)]">
       <div className="grid items-end gap-2 xl:grid-cols-[minmax(15rem,1.15fr)_minmax(18rem,1.35fr)_minmax(15rem,1fr)]">
         <div className="min-w-0">
           <div className="mb-1 flex items-center justify-between gap-2">
@@ -210,7 +210,7 @@ export function ProductionSwitcher({
               <span className="block truncate font-black text-cyan-100">{previewSceneName}</span>
             </div>
             <div className="rounded-md bg-black/30 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
-              History{' '}
+              Previous{' '}
               <span className="block truncate font-black text-slate-200">
                 {lastTransitionLabel}
               </span>
@@ -218,7 +218,7 @@ export function ProductionSwitcher({
           </div>
         </div>
 
-        <div className="grid grid-cols-[1fr_1fr_1.25fr] gap-1">
+        <div className="grid grid-cols-[1fr_1fr_1.25fr] gap-2 rounded-xl border border-white/10 bg-black/25 p-2">
           <SwitcherButton tone="program" onClick={onCut}>
             CUT
           </SwitcherButton>
@@ -228,6 +228,16 @@ export function ProductionSwitcher({
           <SwitcherButton tone="preview" onClick={onTake}>
             TAKE
           </SwitcherButton>
+          <div className="col-span-full grid grid-cols-2 gap-1 rounded-lg border border-white/5 bg-black/20 p-1 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-400 xl:col-span-1">
+            <span className="rounded bg-red-500/15 px-2 py-1 text-red-100">
+              PGM → {programSceneName}
+            </span>
+            <span className="rounded bg-cyan-300/15 px-2 py-1 text-cyan-100">
+              PVW → {previewSceneName}
+            </span>
+            <span>Next: {transitionLabel(productionState.transitionType)}</span>
+            <span>Last exec: {lastTransitionLabel}</span>
+          </div>
         </div>
 
         <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto] items-end gap-2">
