@@ -1,7 +1,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { BroadcastHeader, BroadcastPanel, cn } from '@ubos/ui';
+import { BroadcastPanel, cn, ubosTypographyClasses } from '@ubos/ui';
 import type { OperationsTabId } from './types';
 
 const tabOrder: OperationsTabId[] = [
@@ -45,14 +45,18 @@ export function RightOperationsConsole({
   return (
     <aside
       className={cn(
-        'flex w-[var(--ubos-operations-width)] shrink-0 min-h-0 flex-col border-l border-ubos-border-subtle bg-ubos-graphite',
+        'flex w-[var(--ubos-operations-width)] shrink-0 min-h-0 flex-col overflow-hidden border-l border-ubos-border-subtle bg-ubos-graphite',
         className,
       )}
     >
-      <BroadcastHeader title="Operations Console" className="shrink-0 px-ubos-3 pt-ubos-3" />
+      <header className="shrink-0 border-b border-ubos-border-subtle px-ubos-3 py-ubos-2">
+        <h2 className={cn(ubosTypographyClasses.section, 'text-ubos-fg-primary')}>
+          Operations Console
+        </h2>
+      </header>
 
-      <div
-        className="grid shrink-0 grid-cols-2 gap-px border-b border-ubos-border-subtle px-ubos-2 pb-ubos-2"
+      <nav
+        className="grid shrink-0 grid-cols-4 gap-1 border-b border-ubos-border-subtle p-ubos-2"
         role="tablist"
         aria-label="Operations console sections"
       >
@@ -64,9 +68,12 @@ export function RightOperationsConsole({
               type="button"
               role="tab"
               aria-selected={selected}
+              title={tabLabels[tab.id]}
               onClick={() => onTabChange(tab.id)}
               className={cn(
-                'rounded-ubos-sm px-ubos-2 py-ubos-2 text-left text-ubos-caption transition-colors duration-ubos-fast',
+                'rounded-ubos-sm px-1 py-1.5 text-center transition-colors duration-ubos-fast',
+                ubosTypographyClasses.metadata,
+                'font-medium ubos-truncate',
                 selected
                   ? 'bg-ubos-selection-muted text-ubos-selection-text'
                   : 'text-ubos-fg-muted hover:bg-ubos-midnight hover:text-ubos-fg-secondary',
@@ -76,14 +83,16 @@ export function RightOperationsConsole({
             </button>
           );
         })}
-      </div>
+      </nav>
 
-      <div className="ubos-scroll min-h-0 flex-1 overflow-y-auto p-ubos-2" role="tabpanel">
-        {active?.content}
-      </div>
+      <BroadcastPanel variant="inset" padding={false} className="min-h-0 min-w-0 flex-1 border-0 shadow-none">
+        <div className="ubos-scroll h-full overflow-y-auto overflow-x-hidden p-ubos-2" role="tabpanel">
+          {active?.content}
+        </div>
+      </BroadcastPanel>
 
       {previewSlot && activeTab !== 'preview' ? (
-        <div className="mx-ubos-2 mb-ubos-2 mt-ubos-1 h-40 shrink-0 overflow-hidden">
+        <div className="mx-ubos-2 mb-ubos-2 mt-ubos-1 h-36 shrink-0 overflow-hidden rounded-ubos-sm border border-ubos-border-subtle">
           {previewSlot}
         </div>
       ) : null}
