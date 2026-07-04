@@ -76,6 +76,12 @@ export function ProgramMonitor({
   graph,
   healthFps,
   showSafeAreas,
+  showTitleSafe,
+  showActionSafe,
+  showCrosshair,
+  showVerticalGuide,
+  showFourThreeGuide,
+  showPlatformCrop,
   role = 'program',
   compact = false,
 }: {
@@ -86,6 +92,12 @@ export function ProgramMonitor({
   graph?: ProductionGraph;
   healthFps: string;
   showSafeAreas: boolean;
+  showTitleSafe?: boolean;
+  showActionSafe?: boolean;
+  showCrosshair?: boolean;
+  showVerticalGuide?: boolean;
+  showFourThreeGuide?: boolean;
+  showPlatformCrop?: boolean;
   role?: 'program' | 'preview';
   compact?: boolean;
 }) {
@@ -115,6 +127,12 @@ export function ProgramMonitor({
       {...(emptyMessage ? { emptyMessage } : {})}
       showSafeAreas={showSafeAreas && hasSignal}
       safeAreaVariant="horizontal"
+      {...(showTitleSafe !== undefined ? { showTitleSafe } : {})}
+      {...(showActionSafe !== undefined ? { showActionSafe } : {})}
+      {...(showCrosshair !== undefined ? { showCrosshair } : {})}
+      {...(showVerticalGuide !== undefined ? { showVerticalGuide } : {})}
+      {...(showFourThreeGuide !== undefined ? { showFourThreeGuide } : {})}
+      {...(showPlatformCrop !== undefined ? { showPlatformCrop } : {})}
       metadata={
         compact
           ? [{ label: 'Scene', value: scene.name }]

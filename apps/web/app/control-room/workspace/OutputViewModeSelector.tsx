@@ -1,19 +1,17 @@
 'use client';
 
-import { BroadcastButton, cn } from '@ubos/ui';
+import { cn } from '@ubos/ui';
 import { outputViewModes, type OutputViewMode } from './monitor-state';
 
 export function OutputViewModeSelector({
   selected,
   onSelect,
-  showSafeAreas,
-  onToggleSafeAreas,
   className,
 }: {
   selected: OutputViewMode;
   onSelect: (mode: OutputViewMode) => void;
-  showSafeAreas: boolean;
-  onToggleSafeAreas: () => void;
+  showSafeAreas?: boolean;
+  onToggleSafeAreas?: () => void;
   className?: string;
 }) {
   return (
@@ -41,16 +39,6 @@ export function OutputViewModeSelector({
           );
         })}
       </div>
-      <BroadcastButton
-        type="button"
-        size="sm"
-        variant="ghost"
-        active={showSafeAreas}
-        onClick={onToggleSafeAreas}
-        className="ml-auto"
-      >
-        Safe Areas
-      </BroadcastButton>
     </div>
   );
 }

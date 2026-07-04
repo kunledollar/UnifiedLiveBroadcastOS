@@ -1,11 +1,7 @@
 'use client';
 
 import {
-  LayoutSelector,
-  ProductionDock,
   getTallyState,
-  SceneList,
-  SourceManager,
 } from '@ubos/ui';
 import {
   MediaExecutionEngine,
@@ -59,7 +55,10 @@ import {
 import {
   SceneType,
   type AudioChannel,
+  type ChatMessage,
+  type Destination,
   type Guest,
+  type GuestInvite,
   type ProductionAsset,
   type Scene,
   type SceneLayout,
@@ -68,6 +67,7 @@ import {
   type MediaRoute,
   type MediaLayoutPreset,
   type ProductionSwitchingState,
+  type StreamHealthMetric,
   type TransitionType,
   LocalProductionCommandDispatcher,
   createBroadcastSession,
@@ -75,6 +75,7 @@ import {
   selectBroadcastStatus,
   selectHealthSummary,
   selectRecordingState,
+  selectAudioChannels,
   type ProductionCommandType,
   type ProductionBroadcastSession,
   type SceneNode,
@@ -102,8 +103,6 @@ import {
   deleteSource,
   duplicateScene,
   duplicateSource,
-  moveScene,
-  moveSource,
   renameScene,
   renameSource,
   updateProductionState,
@@ -116,18 +115,35 @@ import {
   resetDemoProductionState,
   setRouteMuted,
 } from './media-route-actions';
-import { ProductionSwitcher } from './production-switcher';
+import { ProfessionalSwitcher } from './switcher';
 import { BroadcastStatusBar } from './shell/BroadcastStatusBar';
 import { LeftNavigationRail } from './shell/LeftNavigationRail';
 import { CenterProgramWorkspace } from './shell/CenterProgramWorkspace';
 import { RightOperationsConsole } from './shell/RightOperationsConsole';
 import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
 import { BottomDock } from './shell/BottomDock';
+import { LeftNavPanel } from './browsers';
+import { DigitalAudioConsole, DockPanelEmpty, DockPanelTags } from './audio-console';
+import { OperationsConsoleContent } from './operations';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
+import {
+  applyWorkspaceProfile,
+  defaultSafeAreaToggles,
+  defaultWorkspaceId,
+  normalizeWorkspaceId,
+  SafeAreaControls,
+  WorkspaceCenterLayout,
+  WorkspaceLayout,
+  WorkspaceSelector,
+  workspaceProfiles,
+  type ProfessionalWorkspaceId,
+  type SafeAreaToggles,
+} from './workspaces';
 import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
-import { OutputViewRenderer, PreviewMonitorCompact } from './workspace/OutputViewRenderer';
+import { PreviewMonitorCompact } from './workspace/OutputViewRenderer';
 import {
   normalizeOutputViewMode,
+  outputViewModes,
   type OutputViewMode,
 } from './workspace/monitor-state';
 
@@ -1374,124 +1390,42 @@ function ProductionGraphInspector({
 const sceneTypes = Object.values(SceneType);
 const sourceTypes: SceneSourceType[] = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio'];
 
-type WorkspacePresetId = 'default' | 'broadcast' | 'compact' | 'interview' | 'streaming';
-type PanelId =
-  | 'scenes'
-  | 'sources'
-  | 'guestManager'
-  | 'programPreview'
-  | 'audioMixer'
-  | 'productionDock'
-  | 'broadcastHealth'
-  | 'chat'
-  | 'outputs';
-type PanelStatus = 'expanded' | 'collapsed' | 'hidden';
-type WorkspaceLayout = {
-  selectedPreset: WorkspacePresetId;
-  panelState: Record<PanelId, PanelStatus>;
-  sizes: { left: number; center: number; right: number; dock: number };
+type ControlRoomWorkspaceState = {
+  selectedWorkspace: ProfessionalWorkspaceId;
   viewMode: OutputViewMode;
-};
-type WorkspacePreset = WorkspaceLayout & {
-  id: WorkspacePresetId;
-  label: string;
-  description: string;
+  splitRatio: number;
+  sizes: { left: number; center: number; right: number; dock: number; operations: number };
+  safeAreaToggles: SafeAreaToggles;
 };
 
 const controlRoomViewStorageKey = 'ubos.controlRoom.viewMode';
-const workspaceStorageKey = 'ubos.controlRoom.workspace.v1';
-const panelIds: PanelId[] = [
-  'scenes',
-  'sources',
-  'guestManager',
-  'programPreview',
-  'audioMixer',
-  'productionDock',
-  'broadcastHealth',
-  'chat',
-  'outputs',
-];
-const panelLabels: Record<PanelId, string> = {
-  scenes: 'Scenes',
-  sources: 'Sources',
-  guestManager: 'Guest Manager',
-  programPreview: 'Program/Preview',
-  audioMixer: 'Audio',
-  productionDock: 'Production Dock',
-  broadcastHealth: 'Broadcast Health',
-  chat: 'Chat',
-  outputs: 'Outputs',
-};
-const allExpanded = (): Record<PanelId, PanelStatus> =>
-  Object.fromEntries(panelIds.map((id) => [id, 'expanded'])) as Record<PanelId, PanelStatus>;
-const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
-  default: {
-    id: 'default',
-    label: 'Default',
-    description: 'Balanced control room',
-    selectedPreset: 'default',
-    panelState: allExpanded(),
-    sizes: { left: 288, center: 640, right: 352, dock: 220 },
-    viewMode: 'program',
-  },
-  broadcast: {
-    id: 'broadcast',
-    label: 'Broadcast',
-    description: 'Program emphasis',
-    selectedPreset: 'broadcast',
-    panelState: { ...allExpanded(), chat: 'collapsed' },
-    sizes: { left: 304, center: 720, right: 384, dock: 240 },
-    viewMode: 'program',
-  },
-  compact: {
-    id: 'compact',
-    label: 'Compact',
-    description: 'Laptop friendly',
-    selectedPreset: 'compact',
-    panelState: { ...allExpanded(), sources: 'collapsed', chat: 'hidden', outputs: 'hidden' },
-    sizes: { left: 232, center: 560, right: 280, dock: 180 },
-    viewMode: 'program',
-  },
-  interview: {
-    id: 'interview',
-    label: 'Interview',
-    description: 'Guest manager focus',
-    selectedPreset: 'interview',
-    panelState: { ...allExpanded(), broadcastHealth: 'collapsed', outputs: 'hidden' },
-    sizes: { left: 272, center: 640, right: 420, dock: 220 },
-    viewMode: 'program',
-  },
-  streaming: {
-    id: 'streaming',
-    label: 'Streaming',
-    description: 'Chat and health focus',
-    selectedPreset: 'streaming',
-    panelState: { ...allExpanded(), outputs: 'collapsed' },
-    sizes: { left: 260, center: 640, right: 400, dock: 220 },
-    viewMode: 'vertical',
-  },
-};
-const factoryWorkspace = workspacePresets.default;
+const workspaceStorageKey = 'ubos.controlRoom.workspace.v2';
 
-function normalizeWorkspaceLayout(
-  value: Partial<WorkspaceLayout> | null | undefined,
-): WorkspaceLayout {
-  const selectedPreset = value?.selectedPreset;
-  const preset: WorkspacePresetId =
-    selectedPreset && selectedPreset in workspacePresets
-      ? (selectedPreset as WorkspacePresetId)
-      : factoryWorkspace.selectedPreset;
-  const storedViewMode = value?.viewMode ?? null;
-  const viewMode = normalizeOutputViewMode(
-    typeof storedViewMode === 'string' ? storedViewMode : null,
+const factoryWorkspace: ControlRoomWorkspaceState = {
+  selectedWorkspace: defaultWorkspaceId,
+  viewMode: workspaceProfiles.director.defaultViewMode,
+  splitRatio: 0.72,
+  sizes: { left: 288, center: 640, right: 352, dock: 220, operations: 288 },
+  safeAreaToggles: defaultSafeAreaToggles,
+};
+
+function normalizeControlRoomWorkspace(
+  value: Partial<ControlRoomWorkspaceState> & { selectedPreset?: string } | null | undefined,
+): ControlRoomWorkspaceState {
+  const selectedWorkspace = normalizeWorkspaceId(
+    value?.selectedWorkspace ?? value?.selectedPreset ?? null,
   );
+  const profile = workspaceProfiles[selectedWorkspace];
+  const storedViewMode = value?.viewMode ?? null;
 
   return {
-    ...workspacePresets[preset],
+    ...factoryWorkspace,
     ...value,
-    selectedPreset: preset,
-    viewMode,
-    panelState: { ...factoryWorkspace.panelState, ...value?.panelState },
+    selectedWorkspace,
+    viewMode: normalizeOutputViewMode(
+      typeof storedViewMode === 'string' ? storedViewMode : profile.defaultViewMode,
+    ),
+    safeAreaToggles: { ...defaultSafeAreaToggles, ...value?.safeAreaToggles },
     sizes: { ...factoryWorkspace.sizes, ...value?.sizes },
   };
 }
@@ -1706,8 +1640,15 @@ export function SceneWorkspace({
   assets,
   mediaRoutes = [],
   guests = [],
+  invites = [],
+  destinations = [],
+  messages = [],
+  streamHealthMetrics = [],
+  persistenceDiagnostics = {},
+  broadcastId = 'demo-broadcast',
+  workspaceId = 'demo-workspace',
   initialProductionState,
-  operationsTabs = [],
+  operationsTabs,
 }: {
   initialScenes: Scene[];
   initialProductionState: ProductionSwitchingState;
@@ -1716,15 +1657,24 @@ export function SceneWorkspace({
   assets: ProductionAsset[];
   mediaRoutes?: MediaRoute[];
   guests?: Guest[];
+  invites?: GuestInvite[];
+  destinations?: Destination[];
+  messages?: ChatMessage[];
+  streamHealthMetrics?: StreamHealthMetric[];
+  persistenceDiagnostics?: Record<string, unknown> & { currentGraphRevision?: number };
+  broadcastId?: string;
+  workspaceId?: string;
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
   const [isPending, startTransition] = useTransition();
-  const [workspace, setWorkspace] = useState<WorkspaceLayout>(factoryWorkspace);
+  const [workspace, setWorkspace] = useState<ControlRoomWorkspaceState>(factoryWorkspace);
   const viewMode = workspace.viewMode;
+  const selectedWorkspace = workspace.selectedWorkspace;
   const [scenes, setScenes] = useOptimistic(initialScenes, (_current, next: Scene[]) => next);
   const [productionState, setProductionState] = useState(initialProductionState);
   const [transitionActive, setTransitionActive] = useState(false);
   const [lastTransitionLabel, setLastTransitionLabel] = useState('None');
+  const [transitionHistory, setTransitionHistory] = useState<string[]>([]);
   const [switcherFeedback, setSwitcherFeedback] = useState<string | null>(null);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -1733,22 +1683,27 @@ export function SceneWorkspace({
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
     const storedWorkspace = window.localStorage.getItem(workspaceStorageKey);
-    if (storedWorkspace) {
+    const legacyWorkspace = window.localStorage.getItem('ubos.controlRoom.workspace.v1');
+    const rawWorkspace = storedWorkspace ?? legacyWorkspace;
+    if (rawWorkspace) {
       try {
-        const parsed = JSON.parse(storedWorkspace) as WorkspaceLayout;
-        if (parsed?.selectedPreset && parsed?.panelState && parsed?.sizes) {
-          setWorkspace(normalizeWorkspaceLayout(parsed));
+        const parsed = JSON.parse(rawWorkspace) as Partial<ControlRoomWorkspaceState> & {
+          selectedPreset?: string;
+        };
+        if (parsed) {
+          setWorkspace(normalizeControlRoomWorkspace(parsed));
           return;
         }
       } catch {
         window.localStorage.removeItem(workspaceStorageKey);
       }
     }
-    if (storedViewMode)
+    if (storedViewMode) {
       setWorkspace((current) => ({
         ...current,
         viewMode: normalizeOutputViewMode(storedViewMode),
       }));
+    }
   }, []);
 
   useEffect(() => {
@@ -1771,37 +1726,46 @@ export function SceneWorkspace({
     window.localStorage.setItem(controlRoomViewStorageKey, mode);
   };
 
-  const applyWorkspace = (next: WorkspaceLayout) => {
+  const applyWorkspace = (next: ControlRoomWorkspaceState) => {
     setWorkspace(next);
     window.localStorage.setItem(controlRoomViewStorageKey, next.viewMode);
   };
+
+  const selectProfessionalWorkspace = (id: ProfessionalWorkspaceId) => {
+    const profile = applyWorkspaceProfile(id);
+    setActiveNav(profile.activeNav);
+    setActiveOperationsTab(profile.activeOperationsTab);
+    setActiveBottomDock(profile.activeBottomDock);
+    setWorkspace((current) => ({
+      ...current,
+      selectedWorkspace: profile.selectedWorkspace,
+      viewMode: profile.viewMode,
+    }));
+    window.localStorage.setItem(controlRoomViewStorageKey, profile.viewMode);
+  };
+
   const saveWorkspace = () =>
     window.localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
+
   const restoreWorkspace = () => {
     const storedWorkspace = window.localStorage.getItem(workspaceStorageKey);
     if (!storedWorkspace) return applyWorkspace(factoryWorkspace);
     try {
       applyWorkspace(
-        normalizeWorkspaceLayout(JSON.parse(storedWorkspace) as Partial<WorkspaceLayout>),
+        normalizeControlRoomWorkspace(
+          JSON.parse(storedWorkspace) as Partial<ControlRoomWorkspaceState>,
+        ),
       );
     } catch {
       applyWorkspace(factoryWorkspace);
     }
   };
-  const applyPreset = (id: WorkspacePresetId) => applyWorkspace(workspacePresets[id]);
+
   const resetWorkspace = () => {
     window.localStorage.removeItem(workspaceStorageKey);
+    selectProfessionalWorkspace(defaultWorkspaceId);
     applyWorkspace(factoryWorkspace);
   };
-  const setPanelStatus = (panel: PanelId, status: PanelStatus) =>
-    setWorkspace((current) => ({
-      ...current,
-      panelState: { ...current.panelState, [panel]: status },
-    }));
-  const resizeWorkspace = (key: keyof WorkspaceLayout['sizes'], value: number) =>
-    setWorkspace((current) => ({ ...current, sizes: { ...current.sizes, [key]: value } }));
-  const isPanelVisible = (panel: PanelId) => workspace.panelState[panel] !== 'hidden';
-  const isPanelExpanded = (panel: PanelId) => workspace.panelState[panel] === 'expanded';
 
   const refresh = useCallback(
     (next: Scene[]) => startTransition(() => setScenes(next)),
@@ -1955,7 +1919,10 @@ export function SceneWorkspace({
         : type === 'fade'
           ? 'Fade Executed'
           : `${type.toUpperCase()} Executed`;
+    const historyLabel =
+      type === 'cut' ? 'CUT' : type === 'fade' ? 'AUTO' : type.toUpperCase();
     setLastTransitionLabel(label);
+    setTransitionHistory((current) => [historyLabel, ...current].slice(0, 8));
     setSwitcherFeedback(type === 'cut' ? 'Cut Complete' : 'Transition Complete');
     window.setTimeout(() => setSwitcherFeedback(null), 1600);
     const next = {
@@ -2056,6 +2023,7 @@ export function SceneWorkspace({
   const [activeBottomDock, setActiveBottomDock] = useState<DockTabId>('audio');
   const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
   const [showSafeAreas, setShowSafeAreas] = useState(false);
+  const safeAreaToggles = workspace.safeAreaToggles;
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
     refresh(
@@ -2075,12 +2043,47 @@ export function SceneWorkspace({
     [assets],
   );
 
-  const operationsTabsWithPreview = useMemo(
-    () => [
-      ...operationsTabs,
-      {
-        id: 'preview' as const,
-        content: (
+  const outputViewModeLabel =
+    outputViewModes.find((mode) => mode.value === viewMode)?.label ?? viewMode;
+
+  const graphHealth = useMemo(
+    () => selectHealthSummary(productionGraphSession.graph),
+    [productionGraphSession.graph],
+  );
+
+  const operationsPanels = useMemo(
+    () =>
+      OperationsConsoleContent({
+        broadcastId,
+        workspaceId,
+        guests,
+        invites,
+        scenes: sorted,
+        routes: mediaRoutes,
+        destinations,
+        messages,
+        streamHealthMetrics: streamHealthMetrics.length
+          ? streamHealthMetrics
+          : multiviewHealthMetrics,
+        programScene,
+        previewScene,
+        graphRevision:
+          persistenceDiagnostics.currentGraphRevision ??
+          productionGraphSession.graph.metadata.revision,
+        outputViewMode: outputViewModeLabel,
+        sourceCount: previewScene.sources.length,
+        warnings: transitionActive ? ['Transition active'] : [],
+        runtimeStatus: productionGraphSession.status,
+        recoveryStatus: graphHealth.status,
+        commandCount: productionGraphSession.commandLog.length,
+        eventCount: productionGraphSession.eventLog.length,
+        activeLocks: authorityDiagnostics.activeLocks.length,
+        conflicts: authorityDiagnostics.conflicts.length,
+        unavailableSubsystems: [
+          safeHealthMetrics.fps === 'unavailable' ? 'FPS telemetry' : null,
+          safeHealthMetrics.cpu === 'unavailable' ? 'CPU telemetry' : null,
+        ].filter((item): item is string => Boolean(item)),
+        previewMonitor: (
           <PreviewMonitorCompact
             scene={previewScene}
             routes={mediaRoutes}
@@ -2091,19 +2094,49 @@ export function SceneWorkspace({
             showSafeAreas={showSafeAreas}
           />
         ),
-      },
-    ],
+      }),
     [
-      operationsTabs,
-      previewScene,
-      mediaRoutes,
-      layoutPreset,
+      broadcastId,
+      workspaceId,
       guests,
-      productionGraphSession.graph,
-      safeHealthMetrics.fps,
+      invites,
+      sorted,
+      mediaRoutes,
+      destinations,
+      messages,
+      streamHealthMetrics,
+      multiviewHealthMetrics,
+      programScene,
+      previewScene,
+      persistenceDiagnostics.currentGraphRevision,
+      productionGraphSession,
+      outputViewModeLabel,
+      transitionActive,
+      graphHealth.status,
+      authorityDiagnostics,
+      safeHealthMetrics,
+      layoutPreset,
       showSafeAreas,
     ],
   );
+
+  const operationsTabsResolved = useMemo(() => {
+    if (operationsTabs?.length) return operationsTabs;
+    const panelIds: OperationsTabId[] = [
+      'guests',
+      'inspector',
+      'routing',
+      'outputs',
+      'health',
+      'preview',
+      'logs',
+      'ai',
+    ];
+    return panelIds.map((id) => ({
+      id,
+      content: operationsPanels[id],
+    }));
+  }, [operationsTabs, operationsPanels]);
 
   const previewMonitor = (
     <PreviewMonitorCompact
@@ -2119,47 +2152,7 @@ export function SceneWorkspace({
 
   const toolsMenu = (
     <div className="flex items-center gap-1">
-      <details className="group relative">
-        <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
-          Workspace
-        </summary>
-        <div className="absolute right-0 z-30 mt-1 grid min-w-48 gap-1 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-2 text-ubos-caption text-ubos-fg-secondary shadow-ubos-raised">
-          {Object.values(workspacePresets).map((preset) => (
-            <button
-              key={preset.id}
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => applyPreset(preset.id)}
-            >
-              {preset.label}
-              <span className="block text-ubos-metadata text-ubos-fg-muted">{preset.description}</span>
-            </button>
-          ))}
-          <div className="border-t border-ubos-border-subtle pt-1">
-            <button
-              type="button"
-              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={saveWorkspace}
-            >
-              Save Current
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={restoreWorkspace}
-            >
-              Restore Last Workspace
-            </button>
-            <button
-              type="button"
-              className="w-full rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={resetWorkspace}
-            >
-              Reset Workspace
-            </button>
-          </div>
-        </div>
-      </details>
+      <WorkspaceSelector selected={selectedWorkspace} onSelect={selectProfessionalWorkspace} />
       <details className="group relative">
         <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
           Tools
@@ -2168,291 +2161,277 @@ export function SceneWorkspace({
           <button
             type="button"
             className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={() => startTransition(async () => seedDemoProductionState())}
+            onClick={saveWorkspace}
           >
-            Seed demo
+            Save Workspace
           </button>
           <button
             type="button"
             className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={() => startTransition(async () => simulateDemoProduction())}
+            onClick={restoreWorkspace}
           >
-            Simulate
+            Restore Workspace
           </button>
           <button
             type="button"
             className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={() => startTransition(async () => resetDemoProductionState())}
+            onClick={resetWorkspace}
           >
-            Reset
+            Reset Workspace
           </button>
+          <div className="border-t border-ubos-border-subtle pt-1">
+            <button
+              type="button"
+              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={() => startTransition(async () => seedDemoProductionState())}
+            >
+              Seed demo
+            </button>
+            <button
+              type="button"
+              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={() => startTransition(async () => simulateDemoProduction())}
+            >
+              Simulate
+            </button>
+            <button
+              type="button"
+              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
+              onClick={() => startTransition(async () => resetDemoProductionState())}
+            >
+              Reset
+            </button>
+          </div>
         </div>
       </details>
     </div>
   );
 
   const leftNavContent = (
-    <>
-      {activeNav === 'scenes' ? (
-        <SceneList
-              scenes={sorted}
-              sceneTypes={sceneTypes}
-              isPending={isPending}
-              onAdd={(data) => {
-                const tempScene: Scene = {
-                  ...activeScene,
+    <LeftNavPanel
+      activeNav={activeNav}
+      scenes={sorted}
+      sceneTypes={sceneTypes}
+      guests={guests}
+      programSceneId={productionState.programSceneId}
+      previewSceneId={productionState.previewSceneId}
+      previewScene={previewScene}
+      previewSceneName={previewScene.name}
+      sourceTypes={sourceTypes}
+      tallyState={activeSceneTallyState}
+      layouts={layouts}
+      assets={assets}
+      mediaRouteCount={mediaRoutes.length}
+      isPending={isPending}
+      onSceneAdd={(data) => {
+        const tempScene: Scene = {
+          ...activeScene,
+          id: `temp-${Date.now()}`,
+          name: data.name,
+          type: data.type,
+          order: sorted.length,
+          isActive: false,
+          sources: [],
+          overlays: [],
+          audioConfig: {},
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        refresh([...sorted, tempScene]);
+        const formData = new FormData();
+        formData.set('broadcastId', activeScene.broadcastId);
+        formData.set('name', data.name);
+        formData.set('type', data.type);
+        startTransition(async () => {
+          await addScene(formData);
+        });
+      }}
+      onSceneRename={(sceneId, name) => {
+        const formData = new FormData();
+        formData.set('sceneId', sceneId);
+        formData.set('name', name);
+        refresh(sorted.map((scene) => (scene.id === sceneId ? { ...scene, name } : scene)));
+        startTransition(async () => {
+          await renameScene(formData);
+        });
+      }}
+      onSceneSwitch={(sceneId) => {
+        stageScene(sceneId);
+      }}
+      onSceneDuplicate={(sceneId) => {
+        const original = sorted.find((scene) => scene.id === sceneId);
+        if (original)
+          refresh([
+            ...sorted,
+            {
+              ...original,
+              id: `temp-${Date.now()}`,
+              name: `${original.name} Copy`,
+              isActive: false,
+              order: sorted.length,
+            },
+          ]);
+        startTransition(async () => {
+          await duplicateScene(sceneId);
+        });
+      }}
+      onSceneDelete={(sceneId) => {
+        const next = sorted
+          .filter((scene) => scene.id !== sceneId)
+          .map((scene, index) => ({ ...scene, order: index }));
+        refresh(
+          next.some((scene) => scene.isActive)
+            ? next
+            : next.map((scene, index) => ({ ...scene, isActive: index === 0 })),
+        );
+        startTransition(async () => {
+          await deleteScene(sceneId);
+        });
+      }}
+      onSourceAdd={(input) => {
+        const tempSource: SceneSource = {
+          id: `temp-${Date.now()}`,
+          sceneId: input.sceneId,
+          broadcastId: activeScene.broadcastId,
+          name: input.name,
+          label: input.name,
+          type: input.type,
+          order: activeScene.sources.length,
+          visible: true,
+          isVisible: true,
+          isLocked: false,
+          settings: {},
+          transform: {},
+        };
+        updateActiveSources((sources) => [...sources, tempSource]);
+        const formData = new FormData();
+        formData.set('sceneId', input.sceneId);
+        formData.set('name', input.name);
+        formData.set('type', input.type);
+        if (input.url) formData.set('url', input.url);
+        startTransition(async () => {
+          await addSource(formData);
+        });
+      }}
+      onSourceRename={(sourceId, name) => {
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.id === sourceId ? { ...source, name, label: name } : source,
+          ),
+        );
+        const formData = new FormData();
+        formData.set('sourceId', sourceId);
+        formData.set('name', name);
+        startTransition(async () => {
+          await renameSource(formData);
+        });
+      }}
+      onSourceDuplicate={(sourceId) => {
+        updateActiveSources((sources) => {
+          const source = sources.find((item) => item.id === sourceId);
+          return source
+            ? [
+                ...sources,
+                {
+                  ...source,
                   id: `temp-${Date.now()}`,
-                  name: data.name,
-                  type: data.type,
-                  order: sorted.length,
-                  isActive: false,
-                  sources: [],
-                  overlays: [],
-                  audioConfig: {},
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
-                };
-                refresh([...sorted, tempScene]);
-                const formData = new FormData();
-                formData.set('broadcastId', activeScene.broadcastId);
-                formData.set('name', data.name);
-                formData.set('type', data.type);
-                startTransition(async () => {
-                  await addScene(formData);
-                });
-              }}
-              onRename={(sceneId, name) => {
-                const formData = new FormData();
-                formData.set('sceneId', sceneId);
-                formData.set('name', name);
-                refresh(sorted.map((scene) => (scene.id === sceneId ? { ...scene, name } : scene)));
-                startTransition(async () => {
-                  await renameScene(formData);
-                });
-              }}
-              previewSceneId={productionState.previewSceneId}
-              programSceneId={productionState.programSceneId}
-              onSwitch={(sceneId) => {
-                stageScene(sceneId);
-              }}
-              onDuplicate={(sceneId) => {
-                const original = sorted.find((scene) => scene.id === sceneId);
-                if (original)
-                  refresh([
-                    ...sorted,
-                    {
-                      ...original,
-                      id: `temp-${Date.now()}`,
-                      name: `${original.name} Copy`,
-                      isActive: false,
-                      order: sorted.length,
-                    },
-                  ]);
-                startTransition(async () => {
-                  await duplicateScene(sceneId);
-                });
-              }}
-              onDelete={(sceneId) => {
-                const next = sorted
-                  .filter((scene) => scene.id !== sceneId)
-                  .map((scene, index) => ({ ...scene, order: index }));
-                refresh(
-                  next.some((scene) => scene.isActive)
-                    ? next
-                    : next.map((scene, index) => ({ ...scene, isActive: index === 0 })),
-                );
-                startTransition(async () => {
-                  await deleteScene(sceneId);
-                });
-              }}
-              onMove={(sceneId, direction) => {
-                const index = sorted.findIndex((scene) => scene.id === sceneId);
-                const swapIndex = direction === 'up' ? index - 1 : index + 1;
-                if (index >= 0 && swapIndex >= 0 && swapIndex < sorted.length) {
-                  const next = [...sorted];
-                  [next[index], next[swapIndex]] = [next[swapIndex]!, next[index]!];
-                  refresh(next.map((scene, order) => ({ ...scene, order })));
-                }
-                startTransition(async () => {
-                  await moveScene(sceneId, direction);
-                });
-              }}
-            />
-          ) : null}
-      {activeNav === 'sources' ? (
-            <SourceManager
-              scene={activeScene}
-              sourceTypes={sourceTypes}
-              isPending={isPending}
-              tallyState={activeSceneTallyState}
-              onAdd={(input) => {
-                const tempSource: SceneSource = {
-                  id: `temp-${Date.now()}`,
-                  sceneId: input.sceneId,
-                  broadcastId: activeScene.broadcastId,
-                  name: input.name,
-                  label: input.name,
-                  type: input.type,
-                  order: activeScene.sources.length,
-                  visible: true,
-                  isVisible: true,
-                  isLocked: false,
-                  settings: {},
-                  transform: {},
-                };
-                updateActiveSources((sources) => [...sources, tempSource]);
-                const formData = new FormData();
-                formData.set('sceneId', input.sceneId);
-                formData.set('name', input.name);
-                formData.set('type', input.type);
-                if (input.url) formData.set('url', input.url);
-                startTransition(async () => {
-                  await addSource(formData);
-                });
-              }}
-              onRename={(sourceId, name) => {
-                updateActiveSources((sources) =>
-                  sources.map((source) =>
-                    source.id === sourceId ? { ...source, name, label: name } : source,
-                  ),
-                );
-                const formData = new FormData();
-                formData.set('sourceId', sourceId);
-                formData.set('name', name);
-                startTransition(async () => {
-                  await renameSource(formData);
-                });
-              }}
-              onDuplicate={(sourceId) => {
-                updateActiveSources((sources) => {
-                  const source = sources.find((item) => item.id === sourceId);
-                  return source
-                    ? [
-                        ...sources,
-                        {
-                          ...source,
-                          id: `temp-${Date.now()}`,
-                          name: `${source.name} Copy`,
-                          label: `${source.name} Copy`,
-                          order: sources.length,
-                        },
-                      ]
-                    : sources;
-                });
-                startTransition(async () => {
-                  await duplicateSource(sourceId);
-                });
-              }}
-              onDelete={(sourceId) => {
-                updateActiveSources((sources) =>
-                  sources
-                    .filter((source) => source.id !== sourceId)
-                    .map((source, order) => ({ ...source, order })),
-                );
-                startTransition(async () => {
-                  await deleteSource(sourceId);
-                });
-              }}
-              onMove={(sourceId, direction) => {
-                updateActiveSources((sources) => {
-                  const index = sources.findIndex((source) => source.id === sourceId);
-                  const swapIndex = direction === 'up' ? index - 1 : index + 1;
-                  if (index < 0 || swapIndex < 0 || swapIndex >= sources.length) return sources;
-                  const next = [...sources];
-                  [next[index], next[swapIndex]] = [next[swapIndex]!, next[index]!];
-                  return next.map((source, order) => ({ ...source, order }));
-                });
-                startTransition(async () => {
-                  await moveSource(sourceId, direction);
-                });
-              }}
-              onToggleVisibility={(sourceId) => {
-                updateActiveSources((sources) =>
-                  sources.map((source) =>
-                    source.id === sourceId
-                      ? { ...source, isVisible: !source.isVisible, visible: !source.isVisible }
-                      : source,
-                  ),
-                );
-                startTransition(async () => {
-                  await toggleSourceVisibility(sourceId);
-                });
-              }}
-              onToggleLock={(sourceId) => {
-                updateActiveSources((sources) =>
-                  sources.map((source) =>
-                    source.id === sourceId ? { ...source, isLocked: !source.isLocked } : source,
-                  ),
-                );
-                startTransition(async () => {
-                  await toggleSourceLock(sourceId);
-                });
-              }}
-            />
-          ) : null}
-      {activeNav === 'graphics' ? (
-        graphicsAssets.length ? (
-          <div className="grid gap-2">
-            {graphicsAssets.map((asset) => (
-              <div
-                key={asset.id}
-                className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-2 text-ubos-caption text-ubos-fg-primary"
-              >
-                <span className="block ubos-truncate">{asset.name}</span>
-                <span className="text-ubos-metadata text-ubos-fg-muted">
-                  {asset.type} · {asset.status}
-                </span>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-ubos-caption text-ubos-fg-muted">No graphics assets configured.</p>
-        )
-      ) : null}
-      {activeNav === 'media' ? (
-        <div className="grid gap-2">
-          {assets.length ? (
-            assets.map((asset) => (
-              <div
-                key={asset.id}
-                className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-2 text-ubos-caption text-ubos-fg-primary"
-              >
-                <span className="block ubos-truncate">{asset.name}</span>
-                <span className="text-ubos-metadata text-ubos-fg-muted">
-                  {asset.type} · {asset.status}
-                </span>
-              </div>
-            ))
-          ) : (
-            <p className="text-ubos-caption text-ubos-fg-muted">No media assets loaded.</p>
-          )}
-        </div>
-      ) : null}
-      {activeNav === 'layouts' ? <LayoutSelector layouts={layouts} /> : null}
-      {activeNav === 'replay' ? (
-        <p className="text-ubos-caption text-ubos-fg-muted">Replay not active.</p>
-      ) : null}
-      {activeNav === 'outputs' ? (
-        <p className="text-ubos-caption text-ubos-fg-muted">
-          {mediaRoutes.length
-            ? `${mediaRoutes.length} output route${mediaRoutes.length === 1 ? '' : 's'} configured`
-            : 'No aux output assigned.'}
-        </p>
-      ) : null}
-      {activeNav === 'settings' ? (
-        <p className="text-ubos-caption text-ubos-fg-muted">
-          Workspace, automation, and analytics settings reserved for future release.
-        </p>
-      ) : null}
-    </>
+                  name: `${source.name} Copy`,
+                  label: `${source.name} Copy`,
+                  order: sources.length,
+                },
+              ]
+            : sources;
+        });
+        startTransition(async () => {
+          await duplicateSource(sourceId);
+        });
+      }}
+      onSourceDelete={(sourceId) => {
+        updateActiveSources((sources) =>
+          sources
+            .filter((source) => source.id !== sourceId)
+            .map((source, order) => ({ ...source, order })),
+        );
+        startTransition(async () => {
+          await deleteSource(sourceId);
+        });
+      }}
+      onSourceToggleVisibility={(sourceId) => {
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.id === sourceId
+              ? { ...source, isVisible: !source.isVisible, visible: !source.isVisible }
+              : source,
+          ),
+        );
+        startTransition(async () => {
+          await toggleSourceVisibility(sourceId);
+        });
+      }}
+      onSourceToggleLock={(sourceId) => {
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.id === sourceId ? { ...source, isLocked: !source.isLocked } : source,
+          ),
+        );
+        startTransition(async () => {
+          await toggleSourceLock(sourceId);
+        });
+      }}
+    />
+  );
+
+  const graphAudioChannels = useMemo(
+    () => selectAudioChannels(productionGraphSession.graph),
+    [productionGraphSession.graph],
+  );
+
+  const recordingActive = useMemo(
+    () => selectRecordingState(productionGraphSession.graph).status === 'recording',
+    [productionGraphSession.graph],
+  );
+
+  const workspaceMonitorContext = useMemo(
+    () => ({
+      programScene,
+      previewScene,
+      routes: mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      healthMetrics: multiviewHealthMetrics,
+      graph: productionGraphSession.graph,
+      healthFps: safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+    }),
+    [
+      programScene,
+      previewScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      multiviewHealthMetrics,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+    ],
   );
 
   const bottomDockContent = (
     <>
-      {activeBottomDock === 'audio' ? <ProductionDock channels={channels} assets={[]} /> : null}
+      {activeBottomDock === 'audio' ? (
+        <DigitalAudioConsole
+          channels={channels}
+          graphChannels={graphAudioChannels}
+          recordingActive={recordingActive}
+        />
+      ) : null}
       {activeBottomDock === 'layers' ? (
         activeScene.sources.length ? (
-          <div className="grid gap-1 text-ubos-caption text-ubos-fg-secondary">
+          <div className="grid gap-1 px-ubos-2 py-ubos-2 text-ubos-caption text-ubos-fg-secondary">
             {activeScene.sources.map((source) => (
               <div
                 key={source.id}
@@ -2466,60 +2445,36 @@ export function SceneWorkspace({
             ))}
           </div>
         ) : (
-          <p className="text-ubos-caption text-ubos-fg-muted">No layers in preview scene.</p>
+          <div className="px-ubos-2 py-ubos-2">
+            <DockPanelEmpty message="No layers in preview scene." />
+          </div>
         )
       ) : null}
       {activeBottomDock === 'graphics' ? (
-        graphicsAssets.length ? (
-          <div className="flex flex-wrap gap-2">
-            {graphicsAssets.map((asset) => (
-              <span
-                key={asset.id}
-                className="rounded-ubos-sm border border-ubos-border-subtle px-2 py-1 text-ubos-metadata text-ubos-fg-secondary"
-              >
-                {asset.name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-ubos-caption text-ubos-fg-muted">No graphics in production.</p>
-        )
+        <div className="px-ubos-2 py-ubos-2">
+          {graphicsAssets.length ? (
+            <DockPanelTags items={graphicsAssets.map((asset) => asset.name)} />
+          ) : (
+            <DockPanelEmpty message="No graphics in production." />
+          )}
+        </div>
       ) : null}
       {activeBottomDock === 'media' ? (
-        assets.length ? (
-          <div className="flex flex-wrap gap-2">
-            {assets.map((asset) => (
-              <span
-                key={asset.id}
-                className="rounded-ubos-sm border border-ubos-border-subtle px-2 py-1 text-ubos-metadata text-ubos-fg-secondary"
-              >
-                {asset.name}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-ubos-caption text-ubos-fg-muted">No media assets loaded.</p>
-        )
+        <div className="px-ubos-2 py-ubos-2">
+          {assets.length ? (
+            <DockPanelTags items={assets.map((asset) => asset.name)} />
+          ) : (
+            <DockPanelEmpty message="No media assets loaded." />
+          )}
+        </div>
       ) : null}
       {activeBottomDock === 'replay' ? (
-        <p className="text-ubos-caption text-ubos-fg-muted">Replay not active.</p>
-      ) : null}
-      {activeBottomDock === 'timeline' ? (
-        <p className="text-ubos-caption text-ubos-fg-muted">Timeline not configured.</p>
-      ) : null}
-      {activeBottomDock === 'automation' ? (
-        <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
-          <span>History: {lastTransitionLabel}</span>
-          <span>·</span>
-          <span>Program: {programScene.name}</span>
-          <span>·</span>
-          <span className={transitionActive ? 'text-ubos-warning-text' : 'text-ubos-success-text'}>
-            {transitionActive ? 'Transition active' : 'Manual mode'}
-          </span>
+        <div className="px-ubos-2 py-ubos-2">
+          <DockPanelEmpty message="Replay not active." />
         </div>
       ) : null}
       {activeBottomDock === 'logs' ? (
-        <div className="space-y-2">
+        <div className="space-y-2 px-ubos-2 py-ubos-2">
           <ProductionGraphInspector session={productionGraphSession} />
           <MediaExecutionInspector
             engine={mediaExecutionEngine}
@@ -2555,15 +2510,31 @@ export function SceneWorkspace({
 
         <CenterProgramWorkspace
           viewModeSelector={
-            <OutputViewModeSelector
-              selected={viewMode}
-              onSelect={selectViewMode}
-              showSafeAreas={showSafeAreas}
-              onToggleSafeAreas={() => setShowSafeAreas((current) => !current)}
-            />
+            <div className="flex flex-wrap items-center gap-ubos-2">
+              <OutputViewModeSelector selected={viewMode} onSelect={selectViewMode} />
+              <SafeAreaControls
+                enabled={showSafeAreas}
+                toggles={safeAreaToggles}
+                onToggleEnabled={() => setShowSafeAreas((current) => !current)}
+                onToggleGuide={(key) =>
+                  setWorkspace((current) => ({
+                    ...current,
+                    safeAreaToggles: {
+                      ...current.safeAreaToggles,
+                      [key]: !current.safeAreaToggles[key],
+                    },
+                  }))
+                }
+                className="ml-auto"
+              />
+            </div>
           }
           statusFooter={
             <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
+              <span className="ubos-truncate">
+                Workspace: {workspaceProfiles[selectedWorkspace].label}
+              </span>
+              <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
               <span className="ubos-truncate">History: {lastTransitionLabel}</span>
               <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
               <span className="ubos-truncate">Program: {programScene.name}</span>
@@ -2574,23 +2545,18 @@ export function SceneWorkspace({
             </div>
           }
         >
-          <OutputViewRenderer
-            mode={viewMode}
-            programScene={programScene}
-            previewScene={previewScene}
-            routes={mediaRoutes}
-            layoutPreset={layoutPreset}
-            guests={guests}
-            channels={channels}
-            healthMetrics={multiviewHealthMetrics}
-            graph={productionGraphSession.graph}
-            healthFps={safeHealthMetrics.fps}
-            showSafeAreas={showSafeAreas}
-          />
+          <WorkspaceLayout workspaceId={selectedWorkspace}>
+            <WorkspaceCenterLayout
+              workspaceId={selectedWorkspace}
+              context={workspaceMonitorContext}
+              viewMode={viewMode}
+              graphChannels={graphAudioChannels}
+            />
+          </WorkspaceLayout>
         </CenterProgramWorkspace>
 
         <RightOperationsConsole
-          tabs={operationsTabsWithPreview}
+          tabs={operationsTabsResolved}
           activeTab={activeOperationsTab}
           onTabChange={setActiveOperationsTab}
           previewSlot={previewMonitor}
@@ -2598,12 +2564,22 @@ export function SceneWorkspace({
       </div>
 
       <ProfessionalSwitcherBar>
-        <ProductionSwitcher
+        <ProfessionalSwitcher
           productionState={productionState}
           programSceneName={programScene.name}
           previewSceneName={previewScene.name}
           lastTransitionLabel={lastTransitionLabel}
           feedbackLabel={switcherFeedback}
+          transitionActive={transitionActive}
+          transitionHistory={transitionHistory}
+          switcherReady={!isPending && !transitionActive}
+          transitionReady={!transitionActive}
+          programLocked={authorityDiagnostics.activeLocks.some(
+            (lock) => lock.scope === 'program',
+          )}
+          automationMode={
+            productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'
+          }
           onTake={() => switchProgram(productionState.transitionType)}
           onCut={() => switchProgram('cut')}
           onAuto={() => switchProgram('fade')}

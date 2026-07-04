@@ -39,6 +39,12 @@ export function MonitorFrame({
   warning,
   showSafeAreas = false,
   safeAreaVariant = 'horizontal',
+  showTitleSafe = true,
+  showActionSafe = true,
+  showCrosshair = true,
+  showVerticalGuide = false,
+  showFourThreeGuide = false,
+  showPlatformCrop,
   metadata,
   liveIndicator = false,
 }: {
@@ -55,6 +61,12 @@ export function MonitorFrame({
   warning?: string;
   showSafeAreas?: boolean;
   safeAreaVariant?: SafeAreaVariant;
+  showTitleSafe?: boolean;
+  showActionSafe?: boolean;
+  showCrosshair?: boolean;
+  showVerticalGuide?: boolean;
+  showFourThreeGuide?: boolean;
+  showPlatformCrop?: boolean;
   metadata?: Array<{ label: string; value: ReactNode }>;
   liveIndicator?: boolean;
 }) {
@@ -104,7 +116,12 @@ export function MonitorFrame({
         {showSafeAreas && hasSignal ? (
           <MonitorSafeAreaGuides
             variant={safeAreaVariant}
-            showPlatformCrop={safeAreaVariant === 'vertical'}
+            showTitleSafe={showTitleSafe}
+            showActionSafe={showActionSafe}
+            showCrosshair={showCrosshair}
+            showVerticalGuide={showVerticalGuide}
+            showFourThreeGuide={showFourThreeGuide}
+            showPlatformCrop={showPlatformCrop ?? safeAreaVariant === 'vertical'}
           />
         ) : null}
       </div>
