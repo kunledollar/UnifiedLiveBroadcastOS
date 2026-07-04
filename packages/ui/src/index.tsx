@@ -1685,6 +1685,21 @@ function BaseCompositor({
         </div>
       ) : null}
       <SourceLayers sources={scene.sources} output={output} />
+      {output === 'program' ? (
+        <div className="pointer-events-none absolute inset-0 z-[55]">
+          <div className="absolute inset-[8%] border border-white/10" />
+          <div className="absolute inset-[14%] border border-dashed border-white/12" />
+          <div className="absolute left-3 top-3 rounded bg-black/55 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-slate-300">
+            Layer stack {scene.sources.length || 'empty'} · {layoutPreset.replace('_', ' ')}
+          </div>
+          <div className="absolute right-3 top-3 rounded bg-red-500/20 px-2 py-1 font-mono text-[10px] font-black uppercase tracking-[0.12em] text-red-100">
+            PGM · {activeRouteCount || 'no source'}
+          </div>
+          <div className="absolute bottom-9 left-3 rounded bg-black/55 px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-slate-300">
+            1920×1080 · FPS unavailable · output pending
+          </div>
+        </div>
+      ) : null}
       <SafeAreaOverlay output={output} guides={safeAreaGuides} />
       <SceneFooter
         scene={scene}
@@ -1827,7 +1842,7 @@ export function ProgramPreview({
   return (
     <BroadcastMonitorFrame
       label="PROGRAM"
-      meta="1920×1080 • FPS unavailable"
+      meta={`${scene.name} • ${scene.sources.length} layers • ${onProgramCount} live routes • 1920×1080 • FPS unavailable`}
       status={isLive ? 'LIVE' : 'PROGRAM READY'}
       headerVariant="program"
       isLive={isLive}
@@ -1858,7 +1873,12 @@ export function PreviewMonitor({
   guests?: Guest[];
 }) {
   return (
-    <BroadcastMonitorFrame label="PREVIEW" meta={scene.name} status="READY" headerVariant="preview">
+    <BroadcastMonitorFrame
+      label="PREVIEW"
+      meta={`${scene.name} • ${scene.sources.length} layers`}
+      status="READY"
+      headerVariant="preview"
+    >
       <ProgramCompositor
         scene={scene}
         routes={routes}
@@ -1916,6 +1936,54 @@ export function VerticalPreview({
         />
       </div>
     </Panel>
+  );
+}
+
+function GuestTile({ guest }: { guest: Guest }) {
+  return (
+    <div className="rounded-xl bg-slate-950/70 p-3 ring-1 ring-white/10">
+      <div className="flex items-center justify-between gap-2">
+        <p className="truncate font-semibold text-white">{guest.displayName}</p>
+        <Badge
+          tone={
+            guest.status === 'on_air'
+              ? 'live'
+              : guest.status === 'connected'
+                ? 'success'
+                : 'warning'
+          }
+        >
+          {guest.status.replace('_', ' ')}
+        </Badge>
+      </div>
+      <p className="mt-1 text-xs text-slate-400">
+        {guest.isMuted ? 'Muted' : 'Microphone ready'} · {guest.role}
+      </p>
+    </div>
+  );
+}
+
+function DestinationToggle({ destination }: { destination: Destination }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-950/70 p-3 ring-1 ring-white/10">
+      <div className="min-w-0">
+        <p className="truncate font-semibold text-white">{destination.label}</p>
+        <p className="text-xs uppercase tracking-wide text-slate-500">{destination.platform}</p>
+      </div>
+      <Badge tone={destination.enabled ? 'success' : 'neutral'}>{destination.status}</Badge>
+    </div>
+  );
+}
+
+function ChatMessageItem({ message }: { message: ChatMessage }) {
+  return (
+    <div className="rounded-xl bg-slate-950/70 p-3 ring-1 ring-white/10">
+      <div className="flex items-center justify-between gap-2 text-xs text-slate-500">
+        <span className="font-bold text-slate-300">{message.authorName}</span>
+        <span>{message.platform}</span>
+      </div>
+      <p className="mt-1 text-sm text-slate-200">{message.body}</p>
+    </div>
   );
 }
 
@@ -2224,28 +2292,38 @@ export function AudioMixer({
 }) {
   const emptyMessage = audioRuntimeEmptyMessage(runtimeState, channels.length);
   return (
-    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid gap-1.5">
       {emptyMessage ? (
-        <p className="rounded-xl border border-dashed border-white/10 p-4 text-sm text-slate-400 sm:col-span-2 xl:col-span-4">
+        <p className="rounded-lg border border-dashed border-white/10 px-3 py-2 text-xs text-slate-400">
           {emptyMessage}
         </p>
       ) : null}
-      {channels.map((channel) => (
-        <div key={channel.id} className="rounded-lg border border-white/10 bg-slate-950/70 p-2">
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1">
-              <TallyBadge
-                state={channel.muted ? 'muted' : 'idle'}
-                label={channel.muted ? 'MUTED' : 'IDLE'}
+      {channels.map((channel) => {
+        const level = Math.max(0, Math.min(100, Math.round(channel.level ?? 0)));
+        const clipping = level > 88;
+        return (
+          <div
+            key={channel.id}
+            className="grid grid-cols-[4.5rem_minmax(0,1fr)_7rem] items-center gap-2 rounded-lg bg-slate-950/75 px-2 py-1.5"
+          >
+            <span className="truncate text-[11px] font-black text-slate-100">{channel.label}</span>
+            <div className="flex h-3 overflow-hidden rounded-sm bg-slate-800 ring-1 ring-black/40">
+              <div
+                className={`h-full ${clipping ? 'bg-red-500' : 'bg-gradient-to-r from-emerald-500 via-lime-300 to-amber-300'}`}
+                style={{ width: `${level}%` }}
               />
-              <Badge tone={channel.muted ? 'danger' : 'success'}>
-                {channel.muted ? 'Muted' : channel.kind}
-              </Badge>
+            </div>
+            <div className="flex items-center justify-end gap-1 font-mono text-[9px] font-black uppercase tracking-[0.08em]">
+              <span className={channel.muted ? 'text-rose-300' : 'text-slate-500'}>mute</span>
+              <span className="text-slate-600">solo</span>
+              <span className={clipping ? 'text-red-300' : 'text-emerald-300'}>
+                {clipping ? 'clip' : 'peak'}
+              </span>
+              <span className="text-cyan-200">{level}</span>
             </div>
           </div>
-          <AudioMeter channel={channel} />
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2270,7 +2348,7 @@ export function ProductionDock({
         </div>
         <div className="grid gap-2 sm:grid-cols-2">
           {assetGroups.map((group) => (
-            <div key={group} className="rounded-lg border border-white/10 bg-slate-950/70 p-2">
+            <div key={group} className="rounded-lg bg-slate-950/70 p-2 ring-1 ring-white/10">
               <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
                 {group.replace('_', ' ')}s
               </p>
@@ -2286,132 +2364,6 @@ export function ProductionDock({
         </div>
       </div>
     </Panel>
-  );
-}
-
-function guestMonitorState(guest: Guest) {
-  if (guest.status === 'connected' || guest.status === 'on_air' || guest.status === 'green_room') {
-    return {
-      title: guest.isMuted ? 'Audio Only' : 'Waiting for Camera',
-      subtitle: guest.isMuted
-        ? 'Guest camera is disabled or muted.'
-        : 'Camera preview will appear when media arrives.',
-      badge: guest.status === 'on_air' ? 'LIVE' : 'READY',
-      tone: guest.status === 'on_air' ? ('live' as const) : ('success' as const),
-      icon: guest.isMuted ? '🎧' : '🎥',
-    };
-  }
-  if (guest.status === 'reconnecting' || guest.status === 'waiting' || guest.status === 'invited') {
-    return {
-      title: guest.status === 'reconnecting' ? 'Connecting...' : 'Waiting for Camera',
-      subtitle:
-        guest.status === 'invited'
-          ? 'Guest has not joined yet.'
-          : 'Awaiting guest media connection.',
-      badge: 'CONNECTING',
-      tone: 'warning' as const,
-      icon: '◌',
-    };
-  }
-  if (guest.status === 'muted') {
-    return {
-      title: 'Camera Disabled',
-      subtitle: 'Guest media is muted.',
-      badge: 'AUDIO ONLY',
-      tone: 'warning' as const,
-      icon: '🎧',
-    };
-  }
-  return {
-    title: 'Disconnected',
-    subtitle: 'Guest is offline.',
-    badge: 'OFFLINE',
-    tone: 'danger' as const,
-    icon: '⏻',
-  };
-}
-
-export function GuestTile({ guest }: { guest: Guest }) {
-  const state = guestMonitorState(guest);
-  const conn = connectionMeta(guest.status);
-  return (
-    <div className="rounded-lg border border-white/10 bg-slate-950/70 p-2 transition-colors duration-300">
-      <div className="relative aspect-video overflow-hidden rounded border border-slate-800 bg-black">
-        <MonitorStateScreen
-          title={state.title}
-          subtitle={state.subtitle}
-          icon={state.icon}
-          badge={state.badge}
-          tone={state.tone}
-          compact
-        />
-        <MonitorHUD
-          title={guest.displayName}
-          position="bottom-left"
-          subdued
-          metrics={[{ value: conn.label, label: 'Connection' }]}
-          badges={[
-            <OutputBadge
-              key="cam"
-              label={guest.isMuted ? '◼ CAM' : '● CAM'}
-              tone={guest.isMuted ? 'warning' : 'success'}
-            />,
-            <OutputBadge
-              key="mic"
-              label={guest.isMuted ? '◼ MIC' : '● MIC'}
-              tone={guest.isMuted ? 'warning' : 'success'}
-            />,
-            <OutputBadge key="screen" label="▣ SCR" tone="neutral" />,
-          ]}
-        />
-      </div>
-      <div className="mt-2 flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-white">{guest.displayName}</p>
-          <p className="text-[11px] text-slate-400">{connectionMeta(guest.status).label}</p>
-        </div>
-        <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-black/40 px-2 py-1 text-[10px] font-bold uppercase text-slate-200 ring-1 ring-white/10">
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${conn.dot} ${conn.pulse ? 'animate-pulse' : ''}`}
-          />
-          {state.badge}
-        </span>
-      </div>
-    </div>
-  );
-}
-
-export function DestinationToggle({ destination }: { destination: Destination }) {
-  return (
-    <div className="flex items-center justify-between rounded-xl bg-slate-800 p-4">
-      <div>
-        <p className="font-medium">{destination.label}</p>
-        <p className="text-[11px] text-slate-400">{destination.platform}</p>
-      </div>
-      <Badge tone={destination.enabled ? 'success' : 'neutral'}>{destination.status}</Badge>
-    </div>
-  );
-}
-
-export function ChatMessageItem({ message }: { message: ChatMessage }) {
-  return (
-    <article className="rounded-xl bg-slate-800/80 p-3">
-      <p className="text-xs text-cyan-300">
-        {message.authorName} · {message.platform}
-      </p>
-      <p className="text-sm text-slate-100">{message.body}</p>
-    </article>
-  );
-}
-
-export function StreamHealthCard({ health }: { health: StreamHealth }) {
-  return (
-    <div className="grid grid-cols-2 gap-3 text-sm">
-      <Metric label="Bitrate" value={`${health.bitrateKbps} kbps`} />
-      <Metric label="Resolution" value={health.resolution} />
-      <Metric label="Dropped" value={`${health.droppedFrames}`} />
-      <Metric label="CPU" value={`${health.cpuPercent}%`} />
-    </div>
   );
 }
 

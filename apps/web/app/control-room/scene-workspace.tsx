@@ -1594,6 +1594,108 @@ function normalizeTransitionDuration(
   if (!Number.isFinite(raw)) return normalizedFallback;
   return Math.min(Math.max(Math.round(raw), MIN_AUTO_TRANSITION_DURATION_MS), 5000);
 }
+function ContextAwareInspector({
+  guests,
+  routes,
+  activeScene,
+  graphRevision,
+}: {
+  guests: Guest[];
+  routes: MediaRoute[];
+  activeScene: Scene;
+  graphRevision: number;
+}) {
+  const selectedGuest = guests.find((guest) => guest.status === 'on_air') ?? guests[0];
+  const selectedRoute = routes.find((route) => route.isOnProgram) ?? routes[0];
+  const selectedSource = activeScene.sources[0];
+  const mode = selectedGuest
+    ? 'Guest'
+    : selectedRoute?.routeType === 'media_source'
+      ? 'Media'
+      : selectedSource?.type === 'camera'
+        ? 'Camera Source'
+        : selectedSource
+          ? 'Graphics'
+          : 'Workspace';
+  const metrics = selectedGuest
+    ? [
+        ['Camera', selectedGuest.isMuted ? 'Muted / audio only' : 'No camera connected'],
+        ['Microphone', selectedGuest.isMuted ? 'Muted' : 'Ready'],
+        ['Network', selectedGuest.status],
+        ['Packet loss', 'unavailable'],
+        ['Latency', 'unavailable'],
+        ['Recording', 'follows session'],
+      ]
+    : selectedRoute
+      ? [
+          ['Duration', String(selectedRoute.metadata?.duration ?? 'unavailable')],
+          ['Position', String(selectedRoute.metadata?.position ?? '00:00')],
+          ['Loop', String(selectedRoute.metadata?.loop ?? false)],
+          ['Volume', String(selectedRoute.metadata?.volume ?? 'unity')],
+        ]
+      : selectedSource
+        ? [
+            ['Resolution', String(selectedSource.settings?.resolution ?? 'No camera connected')],
+            ['FPS', String(selectedSource.settings?.fps ?? 'unavailable')],
+            ['Device', String(selectedSource.settings?.deviceId ?? 'No camera connected')],
+            ['Layer', String(selectedSource.order)],
+            ['Visible', selectedSource.isVisible ? 'yes' : 'no'],
+          ]
+        : [
+            ['Scene', activeScene.name],
+            ['Sources', String(activeScene.sources.length)],
+            ['Graph revision', String(graphRevision)],
+          ];
+  const actions =
+    mode === 'Guest'
+      ? [
+          'Assign Scene',
+          'Assign Slot',
+          'Send to Program',
+          'Send to Vertical',
+          'Pin',
+          'Mute',
+          'Remove',
+        ]
+      : mode === 'Media'
+        ? ['Loop', 'Trim', 'Fade In', 'Fade Out', 'Preview', 'Send Live']
+        : mode === 'Camera Source'
+          ? ['Exposure', 'White Balance', 'Audio Source', 'Live Thumbnail']
+          : ['Publish', 'Remove'];
+
+  return (
+    <div className="space-y-2 text-xs">
+      <div className="flex items-center justify-between gap-2">
+        <p className="font-black uppercase tracking-[0.16em] text-cyan-100">{mode} Inspector</p>
+        <span className="rounded bg-slate-950 px-2 py-1 font-mono text-[10px] text-slate-400">
+          rev {graphRevision}
+        </span>
+      </div>
+      <div className="grid grid-cols-2 gap-1">
+        {metrics.map(([label, value]) => (
+          <div key={label} className="rounded-lg bg-slate-950/70 p-2">
+            <p className="text-[9px] font-black uppercase tracking-[0.12em] text-slate-500">
+              {label}
+            </p>
+            <p className="truncate font-mono text-cyan-100">{value}</p>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {actions.map((action) => (
+          <button
+            key={action}
+            type="button"
+            className="rounded-md border border-white/10 bg-slate-950 px-2 py-1 text-[10px] font-black uppercase tracking-[0.1em] text-slate-300"
+          >
+            {action}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 interface CurrentProgramState {
   sceneId: string;
   transitionType: TransitionType;
@@ -1737,10 +1839,10 @@ function createProductionGraphSessionFromScenes(input: {
 }
 
 const monitorDeckClasses: Record<ControlRoomViewMode, string> = {
-  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
-  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
-  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
-  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,1.85fr)_minmax(18rem,0.9fr)]',
+  dual: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,7fr)_minmax(16rem,3fr)]',
+  program: 'grid min-h-0 gap-3 xl:grid-cols-[minmax(0,7fr)_minmax(16rem,3fr)]',
+  vertical: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,7fr)_minmax(16rem,3fr)]',
+  compact: 'grid min-h-0 gap-3 lg:grid-cols-[minmax(0,7fr)_minmax(16rem,3fr)]',
   multiview: 'grid min-h-0 gap-3',
 };
 
@@ -2159,8 +2261,8 @@ export function SceneWorkspace({
       className={rightSidebar ? 'grid min-h-0 gap-2 xl:h-full max-xl:grid-cols-1' : 'contents'}
       style={rightSidebar ? { gridTemplateColumns: workspaceColumns } : undefined}
     >
-      <aside className="grid min-h-0 grid-cols-[4.5rem_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20 max-xl:max-h-[34rem]">
-        <nav className="flex min-h-0 flex-col gap-1 border-r border-white/10 bg-black/25 p-1.5">
+      <aside className="grid min-h-0 grid-cols-[5rem_minmax(0,1fr)] overflow-hidden rounded-2xl border border-white/10 bg-slate-950/70 shadow-2xl shadow-black/20 max-xl:max-h-[34rem]">
+        <nav className="flex min-h-0 flex-col gap-2 border-r border-white/5 bg-black/20 p-2">
           {[
             ['scenes', '▦', 'Scenes'],
             ['sources', '◫', 'Sources'],
@@ -2173,14 +2275,16 @@ export function SceneWorkspace({
               key={id}
               type="button"
               aria-pressed={activeDock === id}
+              title={label}
+              aria-label={label}
               onClick={() => setActiveDock(id as typeof activeDock)}
-              className={`grid justify-items-center gap-1 rounded-xl px-1 py-2 text-[10px] font-bold transition ${
+              className={`group grid justify-items-center gap-1 rounded-2xl px-1 py-2.5 text-[10px] font-black uppercase tracking-[0.08em] transition duration-200 hover:-translate-y-0.5 ${
                 activeDock === id
-                  ? 'bg-cyan-300/15 text-cyan-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] ring-1 ring-cyan-300/25'
-                  : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
+                  ? 'bg-cyan-300/18 text-cyan-50 shadow-[0_0_22px_rgba(34,211,238,0.12),inset_3px_0_0_rgba(103,232,249,0.9)] ring-1 ring-cyan-300/35'
+                  : 'text-slate-500 hover:bg-white/7 hover:text-slate-100 hover:ring-1 hover:ring-white/10'
               }`}
             >
-              <span className="text-lg leading-none">{icon}</span>
+              <span className="text-2xl leading-none transition group-hover:scale-110">{icon}</span>
               <span>{label}</span>
             </button>
           ))}
@@ -2703,7 +2807,7 @@ export function SceneWorkspace({
             );
           }}
         />
-        <div className="grid h-24 shrink-0 gap-2 overflow-hidden lg:grid-cols-[minmax(0,2fr)_repeat(4,minmax(0,1fr))]">
+        <div className="grid h-28 shrink-0 gap-2 overflow-hidden lg:grid-cols-[minmax(0,2fr)_repeat(7,minmax(0,1fr))]">
           <details
             open
             className="rounded-xl border border-white/10 bg-slate-950/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
@@ -2737,15 +2841,16 @@ export function SceneWorkspace({
               )}
             </div>
           </details>
-          <details className="rounded-xl border border-white/10 bg-slate-900/70">
+          <details open className="rounded-xl border border-white/10 bg-slate-900/70">
             <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
               Inspector
             </summary>
             <div className="max-h-48 overflow-y-auto p-2">
-              <ProductionGraphInspector session={productionGraphSession} />
-              <MediaExecutionInspector
-                engine={mediaExecutionEngine}
-                graph={productionGraphSession.graph}
+              <ContextAwareInspector
+                guests={guests}
+                routes={mediaRoutes}
+                activeScene={activeScene}
+                graphRevision={productionGraphSession.graph.metadata.revision}
               />
             </div>
           </details>
@@ -2753,13 +2858,45 @@ export function SceneWorkspace({
             <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
               Media
             </summary>
-            <div className="p-2 text-xs text-slate-400">Media bins ready.</div>
+            <div className="p-2 text-xs text-slate-400">
+              {mediaRoutes.length
+                ? `${mediaRoutes.length} routed media assets`
+                : 'No media assets loaded'}
+            </div>
+          </details>
+          <details className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              Graphics
+            </summary>
+            <div className="p-2 text-xs text-slate-400">
+              {assets.filter((asset) => asset.type !== 'video').length
+                ? `${assets.filter((asset) => asset.type !== 'video').length} graphics assets`
+                : 'No graphics loaded'}
+            </div>
           </details>
           <details className="rounded-xl border border-white/10 bg-slate-900/70">
             <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
               Replay
             </summary>
-            <div className="p-2 text-xs text-slate-400">Replay placeholder.</div>
+            <div className="p-2 text-xs text-slate-400">
+              Replay dock prepared for live event markers.
+            </div>
+          </details>
+          <details className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              AI
+            </summary>
+            <div className="p-2 text-xs text-slate-400">
+              AI dock prepared for future operator assists.
+            </div>
+          </details>
+          <details className="rounded-xl border border-white/10 bg-slate-900/70">
+            <summary className="cursor-pointer px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em] text-slate-300">
+              Automation
+            </summary>
+            <div className="p-2 text-xs text-slate-400">
+              Automation dock prepared for rundown actions.
+            </div>
           </details>
         </div>
         <div className="flex h-8 shrink-0 items-center gap-2 overflow-hidden rounded-lg border border-white/10 bg-slate-950/80 px-3 font-mono text-[10px] uppercase tracking-[0.1em] text-slate-500">
