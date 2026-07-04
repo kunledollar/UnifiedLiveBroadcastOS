@@ -20,6 +20,7 @@ export function BroadcastStatusBar({
   aiStatusLabel,
   outputHealthLabel,
   deviceHealthLabel,
+  engineStatusLabel,
   toolsMenu,
   className,
 }: {
@@ -39,6 +40,7 @@ export function BroadcastStatusBar({
   aiStatusLabel?: string;
   outputHealthLabel?: string;
   deviceHealthLabel?: string;
+  engineStatusLabel?: string;
   toolsMenu?: ReactNode;
   className?: string;
 }) {
@@ -88,6 +90,8 @@ export function BroadcastStatusBar({
       {deviceHealthLabel ? (
         <StatusBadge variant="neutral">{deviceHealthLabel}</StatusBadge>
       ) : null}
+
+      <StatusBadge variant="neutral">{engineStatusLabel ?? 'Unavailable'}</StatusBadge>
 
       <div className="hidden min-w-0 items-center gap-1 lg:flex">
         <TelemetryBadge label="FPS" value={fps} variant="neutral" />

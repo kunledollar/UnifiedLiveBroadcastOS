@@ -7,7 +7,8 @@ export type NavItemId =
   | 'replay'
   | 'outputs'
   | 'devices'
-  | 'settings';
+  | 'settings'
+  | 'engine';
 
 export type DockTabId =
   | 'audio'
@@ -30,4 +31,5 @@ export type OperationsTabId =
   | 'ai'
   | 'team'
   | 'automation'
-  | 'devices';
+  | 'devices'
+  | 'engine';

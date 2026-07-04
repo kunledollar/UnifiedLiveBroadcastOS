@@ -177,6 +177,17 @@ export const workspaceProfiles: Record<WorkspaceProfile['id'], WorkspaceProfile>
     defaultNavItem: 'devices',
     programFlexWeight: 45,
   },
+  'engine-operator': {
+    id: 'engine-operator',
+    label: 'Engine Operator',
+    description: 'Production Engine command bus, event bus, dependency graph, and locks',
+    centerLayout: 'engine-focus',
+    defaultViewMode: 'program',
+    defaultOperationsTab: 'engine',
+    defaultDockTab: 'logs',
+    defaultNavItem: 'engine',
+    programFlexWeight: 55,
+  },
   custom: {
     id: 'custom',
     label: 'Custom Workspace',
