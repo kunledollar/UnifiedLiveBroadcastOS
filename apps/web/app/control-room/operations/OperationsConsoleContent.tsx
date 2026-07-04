@@ -10,7 +10,10 @@ import type {
   Scene,
   StreamHealthMetric,
 } from '@ubos/shared';
-import { AIPanel } from './AIPanel';
+import { AIAssistantPanel } from '../ai/AIAssistantPanel';
+import type { AIAction, AIState } from '../ai/ai-state';
+import { createDefaultAIAssistantState } from '@ubos/shared';
+import { createInitialAIState } from '../ai/ai-state';
 import { GuestsPanel } from './GuestsPanel';
 import { HealthPanel } from './HealthPanel';
 import { InspectorPanel, deriveInspectorRoutes } from './InspectorPanel';
@@ -18,6 +21,10 @@ import { LogsPanelContainer } from './LogsPanelContainer';
 import { OutputsPanel } from './OutputsPanel';
 import { PreviewPanel } from './PreviewPanel';
 import { RoutingPanel } from './RoutingPanel';
+import { TeamPanel } from '../collaboration/TeamPanel';
+import type { CollaborationAction, CollaborationState } from '../collaboration/collaboration-state';
+import { AutomationPanel } from '../automation/AutomationPanel';
+import type { AutomationAction, AutomationState } from '../automation/automation-state';
 import { HostDevicesSection } from './HostDevicesSection';
 
 export function OperationsConsoleContent({
@@ -44,6 +51,14 @@ export function OperationsConsoleContent({
   conflicts,
   unavailableSubsystems,
   previewMonitor,
+  collaborationState,
+  collaborationConflictCount,
+  onCollaborationDispatch,
+  automationState,
+  onAutomationDispatch,
+  aiState,
+  onAIDispatch,
+  aiSummaryLines,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -68,6 +83,14 @@ export function OperationsConsoleContent({
   conflicts: number;
   unavailableSubsystems: string[];
   previewMonitor: ReactNode;
+  collaborationState?: CollaborationState;
+  collaborationConflictCount?: number;
+  onCollaborationDispatch?: (action: CollaborationAction) => void;
+  automationState?: AutomationState;
+  onAutomationDispatch?: (action: AutomationAction) => void;
+  aiState?: AIState;
+  onAIDispatch?: (action: AIAction) => void;
+  aiSummaryLines?: string[];
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -127,6 +150,66 @@ export function OperationsConsoleContent({
         messages={messages}
       />
     ),
-    ai: <AIPanel />,
+    ai:
+      aiState && onAIDispatch ? (
+        <AIAssistantPanel
+          state={aiState}
+          dispatch={onAIDispatch}
+          {...(aiSummaryLines ? { summaryLines: aiSummaryLines } : {})}
+        />
+      ) : (
+        <AIAssistantPanel
+          state={createInitialAIState({
+            assistant: { ...createDefaultAIAssistantState(), status: 'disabled' },
+            recommendations: [],
+            riskSignals: [],
+          })}
+          dispatch={() => undefined}
+        />
+      ),
+    automation:
+      automationState && onAutomationDispatch ? (
+        <AutomationPanel state={automationState} dispatch={onAutomationDispatch} />
+      ) : (
+        <AutomationPanel
+          state={{
+            runOfShow: {
+              id: 'empty',
+              name: 'Run of Show',
+              status: 'draft',
+              segments: [],
+              estimatedDurationMs: 0,
+              updatedAt: new Date().toISOString(),
+            },
+            macros: [],
+            automationMode: 'manual',
+            selectedSegmentId: null,
+            selectedCueId: null,
+            commandLog: [],
+          }}
+          dispatch={() => undefined}
+        />
+      ),
+    team:
+      collaborationState && onCollaborationDispatch ? (
+        <TeamPanel
+          state={collaborationState.remoteProduction}
+          conflictCount={collaborationConflictCount ?? 0}
+          dispatch={onCollaborationDispatch}
+        />
+      ) : (
+        <TeamPanel
+          state={{
+            operators: [],
+            locks: [],
+            notes: [],
+            events: [],
+            collaborationEnabled: false,
+            containsRuntimeHandles: false,
+          }}
+          conflictCount={0}
+          dispatch={() => undefined}
+        />
+      ),
   };
 }

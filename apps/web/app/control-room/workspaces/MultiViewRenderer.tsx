@@ -92,6 +92,10 @@ export function MultiViewRenderer({
           {...safeAreas}
           graphicsLayers={context.programGraphicsLayers ?? []}
           mediaOverlayItems={context.programMediaOverlayItems ?? []}
+          {...(context.collaborationDirectorName ? { collaborationDirectorName: context.collaborationDirectorName } : {})}
+          {...(context.collaborationLockCount !== undefined ? { collaborationLockCount: context.collaborationLockCount } : {})}
+          {...(context.collaborationOpenNoteCount !== undefined ? { collaborationOpenNoteCount: context.collaborationOpenNoteCount } : {})}
+          {...(context.collaborationPreviewChangedBy ? { collaborationPreviewChangedBy: context.collaborationPreviewChangedBy } : {})}
           {...(cell.compact ? { compact: true } : {})}
         />
       );

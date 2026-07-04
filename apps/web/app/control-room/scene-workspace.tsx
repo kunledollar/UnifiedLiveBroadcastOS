@@ -170,7 +170,44 @@ import {
   mediaCompositionReducer,
   productionAssetToMediaAsset,
 } from './media';
+import {
+  CollaborationWorkspace,
+  TeamPanel,
+  buildRemoteProductionState,
+  collaborationReducer,
+  conflictsToEvents,
+  createLocalOperatorPresence,
+  initialCollaborationState,
+  isCollaborationDemoEnabled,
+  mapAuthorityLockToProductionLock,
+  mapCollaborationOperatorToPresence,
+} from './collaboration';
+import { createMockCollaborationOperators, createDefaultRunOfShow } from '@ubos/shared';
+import {
+  createDefaultAIAssistantState,
+  createSampleAIRecommendations,
+  createSampleAIRiskSignals,
+} from '@ubos/shared';
 import type { LowerThirdTemplate } from '@ubos/shared';
+import {
+  AutomationPanel,
+  AutomationWorkspace,
+  automationModeLabel,
+  automationReducer,
+  createInitialAutomationState,
+  createSampleMacros,
+  enrichRunOfShowWithSampleCues,
+  getCurrentSegment,
+  getNextSegment,
+} from './automation';
+import {
+  AIAssistantWorkspace,
+  aiReducer,
+  aiStatusLabel,
+  createInitialAIState,
+  getProductionSummaryLines,
+  getSuggestedRecommendations,
+} from './ai';
 
 function MediaStreamPreview({
   stream,
@@ -2061,6 +2098,25 @@ export function SceneWorkspace({
   const [selectedMediaAssetId, setSelectedMediaAssetId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedReplayClipId, setSelectedReplayClipId] = useState<string | null>(null);
+  const [collaborationState, dispatchCollaboration] = useReducer(
+    collaborationReducer,
+    initialCollaborationState,
+  );
+  const [automationState, dispatchAutomation] = useReducer(
+    automationReducer,
+    createInitialAutomationState(
+      enrichRunOfShowWithSampleCues(createDefaultRunOfShow()),
+      createSampleMacros(),
+    ),
+  );
+  const [aiState, dispatchAI] = useReducer(
+    aiReducer,
+    createInitialAIState({
+      assistant: createDefaultAIAssistantState(),
+      recommendations: createSampleAIRecommendations(),
+      riskSignals: createSampleAIRiskSignals(),
+    }),
+  );
   const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
   ]);
@@ -2105,6 +2161,54 @@ export function SceneWorkspace({
     dispatchMedia({ type: 'REGISTER_ASSETS', sceneId: previewScene.id, assets: registered });
   }, [binMediaAssets, previewScene.id]);
 
+  const collaborationDemoEnabled = isCollaborationDemoEnabled();
+  const remoteProductionOperators = useMemo(() => {
+    if (collaborationDemoEnabled) {
+      return createMockCollaborationOperators(
+        productionGraphSession.graph.metadata.revision,
+      ).map((operator) => mapCollaborationOperatorToPresence(operator, true));
+    }
+    return [
+      createLocalOperatorPresence({
+        workspaceId: selectedWorkspace,
+        currentPanel: activeOperationsTab,
+      }),
+    ];
+  }, [
+    collaborationDemoEnabled,
+    productionGraphSession.graph.metadata.revision,
+    selectedWorkspace,
+    activeOperationsTab,
+  ]);
+
+  const remoteProductionLocks = useMemo(
+    () => authorityDiagnostics.activeLocks.map(mapAuthorityLockToProductionLock),
+    [authorityDiagnostics.activeLocks],
+  );
+
+  const remoteProductionEvents = useMemo(
+    () => conflictsToEvents(authorityDiagnostics.conflicts),
+    [authorityDiagnostics.conflicts],
+  );
+
+  useEffect(() => {
+    dispatchCollaboration({
+      type: 'SET_REMOTE_PRODUCTION',
+      state: buildRemoteProductionState({
+        operators: remoteProductionOperators,
+        locks: remoteProductionLocks,
+        notes: collaborationState.remoteProduction.notes,
+        events: remoteProductionEvents,
+        collaborationEnabled: collaborationDemoEnabled || remoteProductionOperators.length > 0,
+      }),
+    });
+  }, [
+    remoteProductionOperators,
+    remoteProductionLocks,
+    remoteProductionEvents,
+    collaborationDemoEnabled,
+  ]);
+
   const programMediaOverlayItems = useMemo(
     () => getProgramMediaOverlayItems(previewSceneMediaComposition),
     [previewSceneMediaComposition],
@@ -2142,6 +2246,56 @@ export function SceneWorkspace({
       onSelectClip={setSelectedClipId}
       onSelectReplayClip={setSelectedReplayClipId}
       dispatch={dispatchMedia}
+    />
+  );
+
+  const collaborationWorkspaceContent = (
+    <CollaborationWorkspace
+      state={collaborationState.remoteProduction}
+      guests={guests}
+      invites={invites}
+      routes={mediaRoutes}
+      messages={messages}
+      activeRouteCount={activeRouteCount}
+      outputHealth={safeHealthMetrics.upload}
+      productionStatus={productionGraphSession.status}
+      recoveryStatus={selectHealthSummary(productionGraphSession.graph).status}
+      conflictCount={authorityDiagnostics.conflicts.length}
+      dispatch={dispatchCollaboration}
+    />
+  );
+
+  const automationWorkspaceContent = (
+    <AutomationWorkspace state={automationState} dispatch={dispatchAutomation} />
+  );
+
+  const aiSummaryLines = useMemo(
+    () =>
+      getProductionSummaryLines({
+        programSceneName: programScene.name,
+        previewSceneName: previewScene.name,
+        guestCount: guests.length,
+        ...(getCurrentSegment(automationState.runOfShow)?.name
+          ? { automationSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
+          : {}),
+        riskCount: aiState.riskSignals.length,
+        recommendationCount: getSuggestedRecommendations(aiState.recommendations).length,
+      }),
+    [
+      programScene.name,
+      previewScene.name,
+      guests.length,
+      automationState.runOfShow,
+      aiState.riskSignals.length,
+      aiState.recommendations,
+    ],
+  );
+
+  const aiWorkspaceContent = (
+    <AIAssistantWorkspace
+      state={aiState}
+      dispatch={dispatchAI}
+      summaryLines={aiSummaryLines}
     />
   );
 
@@ -2255,6 +2409,14 @@ export function SceneWorkspace({
             showSafeAreas={showSafeAreas}
           />
         ),
+        collaborationState,
+        collaborationConflictCount: authorityDiagnostics.conflicts.length,
+        onCollaborationDispatch: dispatchCollaboration,
+        automationState,
+        onAutomationDispatch: dispatchAutomation,
+        aiState,
+        onAIDispatch: dispatchAI,
+        aiSummaryLines,
       }),
     [
       broadcastId,
@@ -2278,6 +2440,10 @@ export function SceneWorkspace({
       safeHealthMetrics,
       layoutPreset,
       showSafeAreas,
+      collaborationState,
+      automationState,
+      aiState,
+      aiSummaryLines,
     ],
   );
 
@@ -2285,6 +2451,8 @@ export function SceneWorkspace({
     if (operationsTabs?.length) return operationsTabs;
     const panelIds: OperationsTabId[] = [
       'guests',
+      'team',
+      'automation',
       'inspector',
       'routing',
       'outputs',
@@ -2588,6 +2756,36 @@ export function SceneWorkspace({
       programMediaOverlayItems,
       previewMediaOverlayItems,
       replayBuffer: previewSceneMediaComposition.replayBuffer,
+      ...(collaborationState.remoteProduction.operators.find((operator) => operator.role === 'director')
+        ?.name
+        ? {
+            collaborationDirectorName: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.role === 'director',
+            )!.name,
+          }
+        : {}),
+      collaborationLockCount: collaborationState.remoteProduction.locks.filter(
+        (lock) => Date.parse(lock.expiresAt) > Date.now(),
+      ).length,
+      collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
+        (note) => note.status === 'open',
+      ).length,
+      ...(collaborationState.remoteProduction.operators.find((operator) =>
+        operator.currentPanel?.toLowerCase().includes('preview'),
+      )?.name
+        ? {
+            collaborationPreviewChangedBy: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.currentPanel?.toLowerCase().includes('preview'),
+            )!.name,
+          }
+        : {}),
+      ...(getCurrentSegment(automationState.runOfShow)?.name
+        ? { automationCurrentSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
+        : {}),
+      ...(getNextSegment(automationState.runOfShow)?.name
+        ? { automationNextSegmentName: getNextSegment(automationState.runOfShow)!.name }
+        : {}),
+      automationModeLabel: automationModeLabel(automationState.automationMode),
     }),
     [
       programScene,
@@ -2605,6 +2803,8 @@ export function SceneWorkspace({
       programMediaOverlayItems,
       previewMediaOverlayItems,
       previewSceneMediaComposition.replayBuffer,
+      collaborationState.remoteProduction,
+      automationState,
     ],
   );
 
@@ -2814,6 +3014,25 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
+      {activeBottomDock === 'collaboration' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <TeamPanel
+            state={collaborationState.remoteProduction}
+            conflictCount={authorityDiagnostics.conflicts.length}
+            dispatch={dispatchCollaboration}
+            className="h-full"
+          />
+        </div>
+      ) : null}
+      {activeBottomDock === 'automation' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <AutomationPanel
+            state={automationState}
+            dispatch={dispatchAutomation}
+            className="h-full"
+          />
+        </div>
+      ) : null}
       {activeBottomDock === 'logs' ? (
         <div className="space-y-2 px-ubos-2 py-ubos-2">
           <ProductionGraphInspector session={productionGraphSession} />
@@ -2841,6 +3060,8 @@ export function SceneWorkspace({
         cpu={safeHealthMetrics.cpu}
         dropped={safeHealthMetrics.dropped}
         upload={safeHealthMetrics.upload}
+        automationModeLabel={automationModeLabel(automationState.automationMode)}
+        aiStatusLabel={aiStatusLabel(aiState.assistant)}
         toolsMenu={toolsMenu}
       />
 
@@ -2895,6 +3116,9 @@ export function SceneWorkspace({
               graphicsContent={graphicsWorkspaceContent}
               mediaContent={mediaWorkspaceContent}
               replayPanels={replayWorkspacePanels}
+              collaborationContent={collaborationWorkspaceContent}
+              automationContent={automationWorkspaceContent}
+              aiContent={aiWorkspaceContent}
             />
           </WorkspaceLayout>
         </CenterProgramWorkspace>

@@ -20,6 +20,8 @@ import type {
 } from '@ubos/shared';
 import { GraphicsMetadataOverlay } from '../graphics/GraphicsMetadataOverlay';
 import { MediaMetadataOverlay } from '../media/MediaMetadataOverlay';
+import { CollaborationMetadataOverlay } from '../collaboration/CollaborationMetadataOverlay';
+import { AutomationMetadataOverlay } from '../automation/AutomationMetadataOverlay';
 import {
   deriveEmptyStateMessage,
   deriveMonitorTelemetry,
@@ -47,6 +49,13 @@ type OutputViewRendererProps = {
   previewGraphicsLayers?: GraphicsLayer[];
   programMediaOverlayItems?: Array<{ id: string; name: string }>;
   previewMediaOverlayItems?: Array<{ id: string; name: string }>;
+  collaborationDirectorName?: string;
+  collaborationLockCount?: number;
+  collaborationOpenNoteCount?: number;
+  collaborationPreviewChangedBy?: string;
+  automationCurrentSegmentName?: string;
+  automationNextSegmentName?: string;
+  automationModeLabel?: string;
 };
 
 function MonitorCompositor({
@@ -91,6 +100,13 @@ export function ProgramMonitor({
   showPlatformCrop,
   graphicsLayers = [],
   mediaOverlayItems = [],
+  collaborationDirectorName,
+  collaborationLockCount,
+  collaborationOpenNoteCount,
+  collaborationPreviewChangedBy,
+  automationCurrentSegmentName,
+  automationNextSegmentName,
+  automationModeLabel,
   role = 'program',
   compact = false,
 }: {
@@ -109,6 +125,13 @@ export function ProgramMonitor({
   showPlatformCrop?: boolean;
   graphicsLayers?: GraphicsLayer[];
   mediaOverlayItems?: Array<{ id: string; name: string }>;
+  collaborationDirectorName?: string;
+  collaborationLockCount?: number;
+  collaborationOpenNoteCount?: number;
+  collaborationPreviewChangedBy?: string;
+  automationCurrentSegmentName?: string;
+  automationNextSegmentName?: string;
+  automationModeLabel?: string;
   role?: 'program' | 'preview';
   compact?: boolean;
 }) {
@@ -183,6 +206,17 @@ export function ProgramMonitor({
           {mediaOverlayItems.length ? (
             <MediaMetadataOverlay items={mediaOverlayItems} mode={role === 'preview' ? 'preview' : 'program'} />
           ) : null}
+          <CollaborationMetadataOverlay
+            {...(collaborationDirectorName ? { directorName: collaborationDirectorName } : {})}
+            {...(collaborationLockCount !== undefined ? { activeLockCount: collaborationLockCount } : {})}
+            {...(collaborationOpenNoteCount !== undefined ? { openNoteCount: collaborationOpenNoteCount } : {})}
+            {...(collaborationPreviewChangedBy ? { previewChangedBy: collaborationPreviewChangedBy } : {})}
+          />
+          <AutomationMetadataOverlay
+            {...(automationCurrentSegmentName ? { currentSegmentName: automationCurrentSegmentName } : {})}
+            {...(automationNextSegmentName ? { nextSegmentName: automationNextSegmentName } : {})}
+            {...(automationModeLabel ? { automationMode: automationModeLabel } : {})}
+          />
         </>
       ) : null}
     </MonitorFrame>
@@ -211,6 +245,13 @@ export function OutputViewRenderer({
   previewGraphicsLayers = [],
   programMediaOverlayItems = [],
   previewMediaOverlayItems = [],
+  collaborationDirectorName,
+  collaborationLockCount,
+  collaborationOpenNoteCount,
+  collaborationPreviewChangedBy,
+  automationCurrentSegmentName,
+  automationNextSegmentName,
+  automationModeLabel,
 }: OutputViewRendererProps) {
   const graphProps = graph ? { graph } : {};
 
@@ -227,6 +268,13 @@ export function OutputViewRenderer({
           showSafeAreas={showSafeAreas}
           graphicsLayers={programGraphicsLayers}
           mediaOverlayItems={programMediaOverlayItems}
+          {...(collaborationDirectorName ? { collaborationDirectorName } : {})}
+          {...(collaborationLockCount !== undefined ? { collaborationLockCount } : {})}
+          {...(collaborationOpenNoteCount !== undefined ? { collaborationOpenNoteCount } : {})}
+          {...(collaborationPreviewChangedBy ? { collaborationPreviewChangedBy } : {})}
+          {...(automationCurrentSegmentName ? { automationCurrentSegmentName } : {})}
+          {...(automationNextSegmentName ? { automationNextSegmentName } : {})}
+          {...(automationModeLabel ? { automationModeLabel } : {})}
         />
       );
     case 'horizontal':
@@ -241,6 +289,13 @@ export function OutputViewRenderer({
           showSafeAreas={showSafeAreas}
           graphicsLayers={programGraphicsLayers}
           mediaOverlayItems={programMediaOverlayItems}
+          {...(collaborationDirectorName ? { collaborationDirectorName } : {})}
+          {...(collaborationLockCount !== undefined ? { collaborationLockCount } : {})}
+          {...(collaborationOpenNoteCount !== undefined ? { collaborationOpenNoteCount } : {})}
+          {...(collaborationPreviewChangedBy ? { collaborationPreviewChangedBy } : {})}
+          {...(automationCurrentSegmentName ? { automationCurrentSegmentName } : {})}
+          {...(automationNextSegmentName ? { automationNextSegmentName } : {})}
+          {...(automationModeLabel ? { automationModeLabel } : {})}
         />
       );
     case 'multiview': {

@@ -6,6 +6,8 @@ import type { OperationsTabId } from './types';
 
 const tabOrder: OperationsTabId[] = [
   'guests',
+  'team',
+  'automation',
   'inspector',
   'routing',
   'outputs',
@@ -17,6 +19,8 @@ const tabOrder: OperationsTabId[] = [
 
 const tabLabels: Record<OperationsTabId, string> = {
   guests: 'Guests',
+  team: 'Team',
+  automation: 'Automation',
   inspector: 'Inspector',
   routing: 'Routing',
   outputs: 'Outputs',

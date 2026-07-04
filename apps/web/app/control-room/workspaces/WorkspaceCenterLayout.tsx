@@ -41,6 +41,27 @@ function DirectorWorkspace({ context }: { context: WorkspaceMonitorContext }) {
           previewGraphicsLayers={context.previewGraphicsLayers ?? []}
           programMediaOverlayItems={context.programMediaOverlayItems ?? []}
           previewMediaOverlayItems={context.previewMediaOverlayItems ?? []}
+          {...(context.collaborationDirectorName
+            ? { collaborationDirectorName: context.collaborationDirectorName }
+            : {})}
+          {...(context.collaborationLockCount !== undefined
+            ? { collaborationLockCount: context.collaborationLockCount }
+            : {})}
+          {...(context.collaborationOpenNoteCount !== undefined
+            ? { collaborationOpenNoteCount: context.collaborationOpenNoteCount }
+            : {})}
+          {...(context.collaborationPreviewChangedBy
+            ? { collaborationPreviewChangedBy: context.collaborationPreviewChangedBy }
+            : {})}
+          {...(context.automationCurrentSegmentName
+            ? { automationCurrentSegmentName: context.automationCurrentSegmentName }
+            : {})}
+          {...(context.automationNextSegmentName
+            ? { automationNextSegmentName: context.automationNextSegmentName }
+            : {})}
+          {...(context.automationModeLabel
+            ? { automationModeLabel: context.automationModeLabel }
+            : {})}
         />
       }
       secondary={
@@ -313,6 +334,9 @@ export function WorkspaceCenterLayout({
   graphicsContent,
   mediaContent,
   replayPanels,
+  collaborationContent,
+  automationContent,
+  aiContent,
 }: {
   workspaceId: ProfessionalWorkspaceId;
   context: WorkspaceMonitorContext;
@@ -321,6 +345,9 @@ export function WorkspaceCenterLayout({
   graphicsContent?: ReactNode;
   mediaContent?: ReactNode;
   replayPanels?: WorkspaceReplayPanels;
+  collaborationContent?: ReactNode;
+  automationContent?: ReactNode;
+  aiContent?: ReactNode;
 }) {
   switch (workspaceId) {
     case 'director':
@@ -342,11 +369,15 @@ export function WorkspaceCenterLayout({
     case 'audio-engineer':
       return <AudioWorkspace context={context} graphChannels={graphChannels} />;
     case 'remote-production':
-      return <RemoteProductionWorkspace context={context} />;
+      return collaborationContent ?? <RemoteProductionWorkspace context={context} />;
     case 'graphics-operator':
       return graphicsContent ?? <DirectorWorkspace context={context} />;
     case 'media-operator':
       return mediaContent ?? <DirectorWorkspace context={context} />;
+    case 'automation-operator':
+      return automationContent ?? <DirectorWorkspace context={context} />;
+    case 'ai-operator':
+      return aiContent ?? <DirectorWorkspace context={context} />;
     case 'custom':
       return <CustomWorkspace context={context} viewMode={viewMode} />;
     default:

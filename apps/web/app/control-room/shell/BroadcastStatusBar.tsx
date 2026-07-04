@@ -16,6 +16,8 @@ export function BroadcastStatusBar({
   cpu,
   dropped,
   upload,
+  automationModeLabel,
+  aiStatusLabel,
   toolsMenu,
   className,
 }: {
@@ -31,6 +33,8 @@ export function BroadcastStatusBar({
   cpu: string;
   dropped: string;
   upload: string;
+  automationModeLabel?: string;
+  aiStatusLabel?: string;
   toolsMenu?: ReactNode;
   className?: string;
 }) {
@@ -64,6 +68,14 @@ export function BroadcastStatusBar({
       <StatusBadge variant={transitionActive ? 'warning' : 'success'}>
         {transitionActive ? 'Transition' : 'Ready'}
       </StatusBadge>
+
+      {automationModeLabel ? (
+        <StatusBadge variant="neutral">{automationModeLabel}</StatusBadge>
+      ) : null}
+
+      {aiStatusLabel ? (
+        <StatusBadge variant="neutral">{aiStatusLabel}</StatusBadge>
+      ) : null}
 
       <div className="hidden min-w-0 items-center gap-1 lg:flex">
         <TelemetryBadge label="FPS" value={fps} variant="neutral" />

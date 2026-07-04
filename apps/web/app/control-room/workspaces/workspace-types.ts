@@ -14,6 +14,8 @@ export type ProfessionalWorkspaceId =
   | 'remote-production'
   | 'graphics-operator'
   | 'media-operator'
+  | 'automation-operator'
+  | 'ai-operator'
   | 'custom';
 
 export type MultiviewLayoutMode =
@@ -29,7 +31,10 @@ export type MultiviewLayoutMode =
   | 'audio-focus'
   | 'replay-focus'
   | 'graphics-focus'
-  | 'media-focus';
+  | 'media-focus'
+  | 'collaboration-focus'
+  | 'automation-focus'
+  | 'ai-focus';
 
 export type WorkspaceProfile = {
   id: ProfessionalWorkspaceId;
