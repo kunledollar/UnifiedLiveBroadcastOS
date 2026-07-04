@@ -1,0 +1,3 @@
+import type { ProductionGraph } from '../production-graph.js';
+import type { GraphMutationPlan } from './execution-result.js';
+export function resolveExecutionDependencies(graph: ProductionGraph, plan: GraphMutationPlan) { const errors:string[]=[]; const warnings:string[]=[]; for (const dep of plan.dependencies) { const [kind,id]=dep.split(':'); if (!id) continue; if (kind==='scene' && !graph.scenes[id]) errors.push(`Missing scene dependency ${id}`); if (kind==='destination' && !graph.destinations[id]) errors.push(`Missing destination dependency ${id}`); if (kind==='cue' && !((graph.automation.metadata.cues as Record<string,unknown>|undefined)?.[id])) errors.push(`Missing automation cue dependency ${id}`); } return { ok: errors.length===0, warnings, errors }; }
