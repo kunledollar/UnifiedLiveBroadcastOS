@@ -1180,3 +1180,6 @@ export { ProductionEngine, PipelineScheduler as ProductionPipelineScheduler, Syn
 export type { ProductionSession, ExecutionStatistics, ExecutionManifest, ExecutionDiagnostics, ExecutionHistory, ExecutionSnapshot, ExecutionCheckpoint, ProductionHealth, ProductionMetrics, ProductionEngineDashboard, ProductionRuntimeName, ProductionAction, EngineEvent, PipelineDependency, PipelineStep, ScheduledFrame, ClockSample, SynchronizationReport } from './production-engine/index.js';
 export * from './media-runtime/index.js';
 export * from './media-runtime/ffmpeg/index.js';
+
+export { FallbackRenderer, WebGPURenderer, calculateAspectFit, createRenderer as createVideoRenderer, createRenderSurface as createVideoRenderSurface, createRendererStatusEvent } from './rendering/index.js';
+export type { Renderer, RenderPipeline as VideoRenderPipeline, RenderSurface as VideoRenderSurface, RenderFrame as VideoRenderFrame, RendererSnapshot as VideoRendererSnapshot, RendererStatusEvent as VideoRendererStatusEvent, RendererState as VideoRendererState, RendererBackend as VideoRendererBackend } from './rendering/index.js';
