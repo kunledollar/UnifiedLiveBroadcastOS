@@ -84,3 +84,40 @@ The developer Media Execution Inspector includes compact compositor diagnostics:
 - No server-side video compositor exists yet.
 - Runtime media availability is represented as warnings only.
 - Advanced styling, masks, transitions, and animated overlays are placeholders for later phases.
+
+## Phase 2.6 Scene Compositor Foundation
+
+Phase 2.6 introduces a backend-independent `SceneCompositor` abstraction that turns ordered `RenderLayer` metadata into a single metadata-safe `RenderFrame`. The compositor is intentionally payload-free: video frames, image pixels, GPU textures, canvas contexts, and renderer-specific handles remain outside persisted compositor state.
+
+### Responsibilities
+
+- Maintain a scene canvas and support deterministic canvas resizing.
+- Maintain ordered render layers with position, size, rotation, opacity, visibility, enablement, locking, and z-index.
+- Support source descriptors for video, image, solid color, and placeholder layers.
+- Compose enabled and visible layers into a single `RenderFrame` sorted by z-index and stable layer id.
+- Use `MediaClock` frame identity and timestamps when provided.
+- Accept a frame scheduler and renderer adapter without depending on a concrete backend.
+- Emit compositor status events for creation, layer changes, canvas resizing, and frame composition.
+
+### Constraints
+
+The Phase 2.6 compositor does not implement transitions, chroma key, audio mixing, animations, browser sources, or text rendering. Those features should be layered on top of the `RenderLayer` metadata model in later phases without storing runtime-only objects in snapshots.
+
+### Demo Pattern
+
+Create a compositor with multiple layer source types, then call `composeFrame()`:
+
+```ts
+const compositor = createSceneCompositor({
+  canvas: { width: 1280, height: 720, fps: 30 },
+  layers: [
+    createRenderLayer({ id: 'bg', source: { type: 'solid_color', color: '#111827', metadata: {} }, zIndex: 0 }),
+    createRenderLayer({ id: 'camera', source: { type: 'video', sourceId: 'camera-1', metadata: {} }, zIndex: 1 }),
+    createRenderLayer({ id: 'logo', source: { type: 'image', sourceId: 'logo', metadata: {} }, zIndex: 2 }),
+  ],
+});
+
+const frame = compositor.composeFrame();
+```
+
+`frame.layers` is the renderer-facing composition plan and remains safe to serialize for deterministic replay.

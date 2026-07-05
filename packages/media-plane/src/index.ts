@@ -251,7 +251,8 @@ export interface MediaExecutionAdapter {
 
 export interface WebRtcMediaExecutionAdapter extends MediaExecutionAdapter {}
 export * from './adapters/webrtc/index.js';
-export * from './compositor/index.js';
+export { CompositionStore, createDefaultCanvas, createSceneCompositionFromGraph, diffSceneCompositions, getAddedLayers, getChangedLayers, getCompositionWarnings, getLayoutBounds, getRemovedLayers, hasLayoutChanged, orderRenderLayers, createCompositorStatusEvent, createRenderFrameLayer, createRenderLayer as createCompositorRenderLayer, createRenderLayerFromCompositionLayer, createSceneCompositor, createSceneCompositorFromComposition, validateCanvas, validateLayerBounds, validateSceneComposition } from './compositor/index.js';
+export type { CompositionBackground, CompositionBounds, CompositionCanvas, CompositionCrop, CompositionFitMode, CompositionLayer, CompositionLayoutPreset, CompositionOverlay, CompositionRenderTarget, CompositionSafeArea, CompositionSource, CompositionSourceType, CompositionStyle, CompositionTransform, CompositionValidationIssue, ComposeFrameOptions, RenderFrame, RenderFrameLayer, RenderLayer, RenderLayerGeometry, RenderLayerSource, RenderLayerSourceType, SceneComposition, SceneCompositionOptions, SceneCompositor, SceneCompositorSnapshot, SceneCompositorStatusEvent, SceneCompositorStatusEventType } from './compositor/index.js';
 export * from './routing.js';
 export * from './audio-routing/index.js';
 export * from './browser-renderer/index.js';

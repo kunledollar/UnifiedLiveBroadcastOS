@@ -722,6 +722,9 @@ import {
   CompositionStore,
   createDefaultCanvas,
   createSceneCompositionFromGraph,
+  createRenderLayer as createCompositorRenderLayer,
+  createSceneCompositor,
+  createSceneCompositorFromComposition,
   diffSceneCompositions,
   getLayoutBounds,
   validateLayerBounds,
@@ -822,6 +825,42 @@ assert.equal(
   true,
   'composition diff detects changed layers',
 );
+
+const compositorClock = createClock({ frameRate: 30 });
+compositorClock.start();
+const sceneCompositor = createSceneCompositorFromComposition(compositionA, { mediaClock: compositorClock });
+sceneCompositor.addLayer(createCompositorRenderLayer({ id: 'compositor-background', label: 'Background', source: { type: 'solid_color', color: '#111827', metadata: {} }, position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, zIndex: -1 }));
+sceneCompositor.addLayer(createCompositorRenderLayer({ id: 'compositor-logo', label: 'Logo', source: { type: 'image', sourceId: 'asset:logo', metadata: {} }, position: { x: 1600, y: 40 }, size: { width: 240, height: 120 }, opacity: 0.85, rotation: 5, zIndex: 10 }));
+assert.deepEqual(
+  sceneCompositor.getOrderedLayers().map((layer) => layer.id).slice(0, 2),
+  ['compositor-background', compositionA.layers[0]?.id],
+  'scene compositor orders layers by z-index and stable id',
+);
+const disabledLogo = sceneCompositor.disableLayer('compositor-logo');
+assert.equal(disabledLogo.enabled, false, 'scene compositor can disable layers');
+const lockedBackground = sceneCompositor.lockLayer('compositor-background');
+assert.equal(lockedBackground.locked, true, 'scene compositor can lock layers');
+let lockedRejected = false;
+try { sceneCompositor.updateLayer('compositor-background', { opacity: 0.5 }); } catch { lockedRejected = true; }
+assert.equal(lockedRejected, true, 'locked compositor layer rejects updates');
+sceneCompositor.unlockLayer('compositor-background');
+sceneCompositor.updateLayer('compositor-background', { opacity: 0.9 });
+sceneCompositor.resizeCanvas({ width: 1280, height: 720 });
+const compositedFrame = sceneCompositor.composeFrame({ frameId: 12, rendererBackend: 'mock-renderer', metadata: { demo: 'phase-2.6' } });
+assert.equal(compositedFrame.canvas.width, 1280, 'scene compositor supports canvas resizing');
+assert.equal(compositedFrame.layers.some((layer) => layer.layerId === 'compositor-logo'), false, 'disabled layers are omitted from render frame');
+assert.equal(compositedFrame.layers[0]?.layerId, 'compositor-background', 'composited render frame preserves ordered draw layers');
+assert.equal(compositedFrame.frameTimestamp, compositorClock.getFrameTimestamp(12), 'composited render frame derives timestamp from MediaClock');
+assert.equal(compositedFrame.rendererBackend, 'mock-renderer', 'scene compositor stays renderer backend independent');
+assert.equal(sceneCompositor.getSnapshot().containsRuntimeHandles, false, 'scene compositor snapshots are metadata-safe');
+assert.equal(JSON.stringify(sceneCompositor.getSnapshot()).includes('mediaPayload'), false, 'scene compositor snapshots omit media payloads');
+assert.equal(sceneCompositor.getStatusEvents().some((event) => event.type === 'frame_composited'), true, 'scene compositor emits status events');
+const demoCompositor = createSceneCompositor({ canvas: { width: 640, height: 360, fps: 30 }, layers: [
+  createCompositorRenderLayer({ id: 'demo-video', source: { type: 'video', sourceId: 'camera:demo', metadata: {} }, zIndex: 1 }),
+  createCompositorRenderLayer({ id: 'demo-placeholder', source: { type: 'placeholder', label: 'Guest pending', metadata: {} }, position: { x: 420, y: 220 }, size: { width: 180, height: 100 }, zIndex: 2 }),
+] });
+assert.equal(demoCompositor.composeFrame({ frameId: 1 }).layers.length, 2, 'scene compositor demo renders multiple layers together');
+
 const compositionStore = new CompositionStore();
 compositionStore.setComposition('program', compositionA);
 assert.equal(
