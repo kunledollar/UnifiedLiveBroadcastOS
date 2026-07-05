@@ -48,6 +48,7 @@ import { MonitoringPanel } from './MonitoringPanel';
 import { ClusterPanel } from './ClusterPanel';
 import { PluginPanel } from './PluginPanel';
 import { CloudPanel } from './CloudPanel';
+import { AIDirectorPanel } from './AIDirectorPanel';
 import type { DeviceAction, DeviceState } from '../devices/device-state';
 import { createDeviceManifest } from '@ubos/shared';
 import { createInitialDeviceState } from '../devices/device-state';
@@ -210,7 +211,7 @@ export function OperationsConsoleContent({
     monitoring: <MonitoringPanel />,
     cluster: <ClusterPanel />,
     plugins: <PluginPanel />,
-    cloud: <CloudPanel />, 
+    cloud: <CloudPanel />,
     recording: recordingRuntimeState ? (
       <RecordingRuntimePanel state={recordingRuntimeState} />
     ) : (
@@ -233,6 +234,7 @@ export function OperationsConsoleContent({
     logs: (
       <LogsPanelContainer workspaceId={workspaceId} broadcastId={broadcastId} messages={messages} />
     ),
+    'ai-director': <AIDirectorPanel />,
     ai:
       aiState && onAIDispatch ? (
         <AIAssistantPanel

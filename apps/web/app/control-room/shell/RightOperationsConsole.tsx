@@ -24,6 +24,7 @@ const tabOrder: OperationsTabId[] = [
   'health',
   'preview',
   'logs',
+  'ai-director',
   'ai',
 ];
 
@@ -47,6 +48,7 @@ const tabLabels: Record<OperationsTabId, string> = {
   health: 'Health',
   preview: 'Preview',
   logs: 'Logs',
+  'ai-director': 'AI Director',
   ai: 'AI',
 };
 

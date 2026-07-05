@@ -609,3 +609,5 @@ export * from './runtime-cluster/index.js';
 export * from './plugin-sdk/index.js';
 
 export * from './cloud-platform/index.js';
+
+export * from './runtime-ai-director/index.js';
