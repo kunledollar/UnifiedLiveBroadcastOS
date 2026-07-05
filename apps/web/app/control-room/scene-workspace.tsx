@@ -2578,6 +2578,7 @@ export function SceneWorkspace({
       'compositor',
       'runtime',
       'security',
+      'cluster',
       'inspector',
       'routing',
       'outputs',
