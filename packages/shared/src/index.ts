@@ -504,3 +504,5 @@ export type { MediaRuntimeState, MediaPlaybackCommand, MediaPlaybackEvent, Media
 
 export { AudioRuntime, AudioPlaybackSession, AudioRuntimeDispatcher, AudioRuntimeExecutor, AudioRuntimeQueue, AudioRuntimeHistory, NullAudioDSPAdapter, WebAudioDSPAdapter, createAudioRuntime, createAudioRuntimeState, createAudioRuntimeSnapshot, createAudioRuntimeCommand } from './runtime-audio/index.js';
 export type { AudioRuntimeState, AudioRuntimeCommand, AudioRuntimeCommandType, AudioChannelRuntime, AudioBusRuntime, AudioMixRuntime, AudioRoutingRuntime, AudioMonitorRuntime, AudioRuntimeSnapshot, AudioRuntimeHealth, AudioRuntimeMetrics, AudioDSPAdapter, AudioDSPAdapterStatus } from './runtime-audio/index.js';
+
+export * from './runtime-webrtc/index.js';

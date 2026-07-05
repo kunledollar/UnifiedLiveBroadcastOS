@@ -6,7 +6,7 @@ import {
   BroadcastButton,
   StatusBadge,
 } from '@ubos/ui';
-import { GuestStatus, type Guest, type GuestInvite, type MediaRoute } from '@ubos/shared';
+import { GuestStatus, createGuestRuntimeState, createGuestRuntimeSession, type Guest, type GuestInvite, type MediaRoute } from '@ubos/shared';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useBroadcastRealtime } from '../../../lib/realtime';
 import type { BroadcastRealtimeEvent } from '@ubos/shared';
@@ -123,6 +123,19 @@ export function GuestsPanel({
   const routesByGuest = new Map(
     routes.filter((route) => route.guestId).map((route) => [route.guestId!, route]),
   );
+  const guestRuntimeState = createGuestRuntimeState({
+    sessions: Object.fromEntries(
+      guests.map((guest) => [
+        guest.id,
+        createGuestRuntimeSession({
+          id: guest.id,
+          displayName: guest.displayName,
+          connectionState: connectionLabel(guest.status).toLowerCase() === 'connected' ? 'connected' : guest.status === GuestStatus.Invited ? 'invited' : guest.status === GuestStatus.Disconnected ? 'disconnected' : 'waiting',
+          muted: Boolean(guest.isMuted),
+        }),
+      ]),
+    ),
+  });
 
   const closeGuestPeer = useCallback((guestId: string) => {
     peerConnections.current[guestId]?.close();
@@ -290,6 +303,17 @@ export function GuestsPanel({
   useBroadcastRealtime({ workspaceId: 'demo-workspace', broadcastId }, handleRealtimeEvent);
 
   return (
+    <div className="space-y-ubos-3">
+      <div className="rounded-2xl border border-cyan-400/20 bg-cyan-950/20 p-4 text-sm text-cyan-50">
+        <div className="font-semibold">WebRTC runtime health</div>
+        <div className="mt-2 grid gap-2 md:grid-cols-4">
+          <span>{guestRuntimeState.invitedGuestIds.length} invited</span>
+          <span>{guestRuntimeState.waitingGuestIds.length} waiting</span>
+          <span>{guestRuntimeState.connectedGuestIds.length} connected</span>
+          <span>{guestRuntimeState.disconnectedGuestIds.length} disconnected</span>
+        </div>
+        <p className="mt-2 text-cyan-200">WebRTC runtime unavailable · Guest transport not connected · Media stream unavailable · Metadata only</p>
+      </div>
     <OperationsPanel
       title="Guests"
       action={
@@ -457,6 +481,7 @@ export function GuestsPanel({
         </p>
       ) : null}
     </OperationsPanel>
+    </div>
   );
 }
 
