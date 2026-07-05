@@ -498,3 +498,6 @@ export * from './intelligent-broadcast-operations/index.js';
 export * from './compositor/index.js';
 
 export * from './runtime-switching/index.js';
+
+export { MediaRuntime, MediaPlaybackSession, MediaRuntimeDispatcher, MediaRuntimeExecutor, MediaRuntimeQueue, MediaRuntimeHistory, NullMediaPlaybackAdapter, BrowserMediaPlaybackAdapter, createMediaRuntime, createMediaRuntimeState, createMediaRuntimeSnapshot, createMediaPlaybackCommand } from './runtime-media/index.js';
+export type { MediaRuntimeState, MediaPlaybackCommand, MediaPlaybackEvent, MediaPlaylistRuntime, MediaClipRuntime, MediaRuntimeSnapshot, MediaRuntimeHealth, MediaRuntimeMetrics, MediaPlaybackAdapter, MediaPlaybackAdapterResult, MediaPlaybackCommandType, MediaPlaybackEventType } from './runtime-media/index.js';

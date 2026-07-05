@@ -12,6 +12,8 @@ import type {
   RuntimeHealth,
   RuntimeSnapshot,
   RuntimeState,
+  MediaRuntimeState,
+  MediaRuntimeHealth,
 } from '@ubos/shared';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import type { AIAction, AIState } from '../ai/ai-state';
@@ -34,6 +36,8 @@ import { createDistributionManifest } from '@ubos/shared';
 import { createInitialDistributionState } from '../distribution/distribution-state';
 import { DevicePanel } from '../devices/DevicePanel';
 import { RuntimeDashboard } from '../runtime/RuntimeDashboard';
+import { MediaRuntimePanel } from './MediaRuntimePanel';
+import { createMediaRuntimeState } from '@ubos/shared';
 import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import type { DeviceAction, DeviceState } from '../devices/device-state';
@@ -79,6 +83,8 @@ export function OperationsConsoleContent({
   runtimeState,
   runtimeHealth,
   runtimeSnapshots,
+  mediaRuntimeState,
+  mediaRuntimeHealth,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -118,6 +124,8 @@ export function OperationsConsoleContent({
   runtimeState?: RuntimeState;
   runtimeHealth?: RuntimeHealth;
   runtimeSnapshots?: RuntimeSnapshot[];
+  mediaRuntimeState?: MediaRuntimeState;
+  mediaRuntimeHealth?: MediaRuntimeHealth;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -180,9 +188,12 @@ export function OperationsConsoleContent({
       ),
     engine: <EngineWorkspace compact />,
     compositor: <CompositorPanel />,
-    runtime: runtimeState && runtimeHealth ? (
-      <RuntimeDashboard state={runtimeState} health={runtimeHealth} snapshots={runtimeSnapshots ?? []} />
-    ) : null,
+    runtime: (
+      <div className="space-y-ubos-2">
+        {runtimeState && runtimeHealth ? <RuntimeDashboard state={runtimeState} health={runtimeHealth} snapshots={runtimeSnapshots ?? []} /> : null}
+        <MediaRuntimePanel state={mediaRuntimeState ?? createMediaRuntimeState()} health={mediaRuntimeHealth ?? createMediaRuntimeState().health} />
+      </div>
+    ),
     health: (
       <HealthPanel
         streamMetrics={streamHealthMetrics}
