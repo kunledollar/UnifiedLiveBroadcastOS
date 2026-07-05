@@ -1,0 +1,20 @@
+import { AuditRecorder, PermissionValidator, PolicyEvaluator, type AuditTrail, type SecurityContext } from './index.js';
+function assert(condition: unknown, message: string): asserts condition { if (!condition) throw new Error(message); }
+const director: SecurityContext = { operator: { id: 'd1', displayName: 'Director', role: 'director' }, permissions: PermissionValidator.permissionsForRole('director') };
+assert(new PolicyEvaluator().evaluate(director, 'switch.cut').allowed, 'director allowed switching');
+const observer: SecurityContext = { operator: { id: 'o1', displayName: 'Observer', role: 'observer' }, permissions: PermissionValidator.permissionsForRole('observer') };
+assert(!new PolicyEvaluator().evaluate(observer, 'switch.cut').allowed, 'observer denied mutation');
+const audio: SecurityContext = { operator: { id: 'a1', displayName: 'A1', role: 'audio_engineer' }, permissions: PermissionValidator.permissionsForRole('audio_engineer') };
+assert(new PolicyEvaluator().evaluate(audio, 'audio.mix').allowed, 'audio engineer allowed audio');
+assert(!new PolicyEvaluator().evaluate(audio, 'switch.cut').allowed, 'audio engineer denied switching');
+const gm: SecurityContext = { operator: { id: 'gm', displayName: 'GM', role: 'guest_manager' }, permissions: PermissionValidator.permissionsForRole('guest_manager') };
+assert(new PolicyEvaluator().evaluate(gm, 'guest.invite').allowed, 'guest manager allowed guest actions');
+const ai: SecurityContext = { operator: { id: 'ai', displayName: 'AI', role: 'api_client', isAI: true }, permissions: ['ai.approve'] };
+assert(new PolicyEvaluator().evaluate(ai, 'ai.execute').requiresApproval, 'AI action requires approval');
+assert(new PolicyEvaluator().evaluate(director, 'recording.start').allowed, 'recording requires elevated permission');
+assert(new PolicyEvaluator().evaluate(director, 'scene.delete').requiresApproval, 'destructive action requires approval');
+const trail: AuditTrail = { events: [] };
+const next = AuditRecorder.record(trail, { id: 'evt', at: '2026-07-05T00:00:00.000Z', actorId: 'd1', actorRole: 'director', action: 'switch.cut', decision: 'allow', metadata: { revision: 1 } });
+assert(JSON.parse(JSON.stringify(next)).events[0].id === 'evt', 'audit event serialization');
+assert(JSON.stringify(new PolicyEvaluator().evaluate(director, 'switch.cut')) === JSON.stringify(new PolicyEvaluator().evaluate(director, 'switch.cut')), 'deterministic behavior');
+console.log('security validation passed');

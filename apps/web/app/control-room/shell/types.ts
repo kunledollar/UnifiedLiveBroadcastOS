@@ -11,7 +11,8 @@ export type NavItemId =
   | 'engine'
   | 'compositor'
   | 'runtime'
-  | 'recording';
+  | 'recording'
+  | 'security';
 
 export type DockTabId =
   'audio' | 'layers' | 'graphics' | 'media' | 'replay' | 'collaboration' | 'automation' | 'logs';
@@ -31,4 +32,5 @@ export type OperationsTabId =
   | 'engine'
   | 'compositor'
   | 'runtime'
-  | 'recording';
+  | 'recording'
+  | 'security';

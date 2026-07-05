@@ -2577,6 +2577,7 @@ export function SceneWorkspace({
       'devices',
       'compositor',
       'runtime',
+      'security',
       'inspector',
       'routing',
       'outputs',

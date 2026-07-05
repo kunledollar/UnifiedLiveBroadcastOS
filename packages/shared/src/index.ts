@@ -601,3 +601,5 @@ export type {
 export * from './runtime-webrtc/index.js';
 export * from './runtime-recording/index.js';
 export * from './runtime-render/index.js';
+
+export * from "./security/index.js";
