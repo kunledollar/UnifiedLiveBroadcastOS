@@ -215,6 +215,11 @@ import {
   createMp4RecordingCommand,
   createRtmpCommand,
   createFFmpegMediaRuntimeAdapter,
+  createVideoDecodeSource,
+  RingFrameBuffer,
+  createFFmpegVideoDecoder,
+  buildFFprobeFrameMetadataArgs,
+  createFFmpegDecodeCommandPreview,
 } from './index.js';
 
 const command = (
@@ -1795,6 +1800,39 @@ assert.equal(ffmpegRecordingState.state, 'recording', 'FFmpeg adapter creates ba
 const ffmpegRtmpState = await ffmpegMediaAdapter.streamRtmp(mediaPipeline, 'rtmp://example.test/live/key');
 assert.equal(ffmpegRtmpState.events[0]?.type, 'rtmp_stubbed', 'FFmpeg adapter exposes RTMP as stubbed output abstraction');
 await ffmpegMediaAdapter.stop();
+
+
+// UBOS 2.0 Phase 2.4 video decode pipeline validation
+const decodeSource = createVideoDecodeSource({ id: 'decode:mp4', uri: 'fixtures/clip.mp4' });
+assert.equal(decodeSource.container, 'mp4', 'video decode source infers MP4 container');
+const decodeBuffer = new RingFrameBuffer(2);
+const ffmpegDecoder = createFFmpegVideoDecoder({ id: 'decoder:phase-2-4', dryRun: true, maxFrames: 3, bufferCapacity: 2, env: {} });
+const decoderEvents: string[] = [];
+ffmpegDecoder.onStatus((event) => decoderEvents.push(event.type));
+const openedDecoder = await ffmpegDecoder.open(decodeSource);
+assert.equal(openedDecoder.state, 'decoding', 'FFmpeg video decoder opens into decoding state');
+const firstDecodedFrame = await ffmpegDecoder.decodeNext();
+assert.equal(firstDecodedFrame?.frameIndex, 0, 'video decoder decodes frames sequentially from index zero');
+assert.equal(firstDecodedFrame?.metadataOnly, true, 'decoded video frames are metadata-only serializable objects');
+assert.equal(firstDecodedFrame?.containsFrameData, false, 'decoded video frame payload ownership stays inside runtime');
+assert.equal(typeof firstDecodedFrame?.ptsMs, 'number', 'decoded video frame exposes PTS metadata');
+assert.equal(typeof firstDecodedFrame?.durationMs, 'number', 'decoded video frame exposes duration metadata');
+assert.equal(firstDecodedFrame?.pixelFormat, 'yuv420p', 'decoded video frame exposes pixel format metadata');
+await ffmpegDecoder.decodeNext();
+await ffmpegDecoder.decodeNext();
+const eosFrame = await ffmpegDecoder.decodeNext();
+assert.equal(eosFrame, undefined, 'video decoder reports end-of-stream after final frame');
+assert.equal(ffmpegDecoder.getSnapshot().state, 'completed', 'video decoder enters completed state at end-of-stream');
+assert.equal(ffmpegDecoder.getSnapshot().endOfStream, true, 'video decoder snapshot exposes end-of-stream detection');
+assert.equal(ffmpegDecoder.getBuffer().size(), 2, 'frame buffer enforces configured capacity');
+decodeBuffer.push(firstDecodedFrame!);
+assert.equal(decodeBuffer.peek()?.frameIndex, 0, 'frame buffering abstraction supports peeking decoded metadata');
+ffmpegDecoder.pause();
+assert.equal(ffmpegDecoder.getSnapshot().state, 'completed', 'completed decoder does not regress when paused after EOS');
+assert.equal(decoderEvents.includes('frame_decoded'), true, 'video decoder emits runtime status events');
+assert.equal(buildFFprobeFrameMetadataArgs(decodeSource, 2).includes('-show_entries'), true, 'FFmpeg video decoder builds ffprobe metadata command');
+assert.equal(createFFmpegDecodeCommandPreview(decodeSource, { executable: 'ffmpeg', env: {} }).includes('-f null'), true, 'FFmpeg video decoder exposes backend command preview without UI internals');
+assert.equal(JSON.stringify(ffmpegDecoder.getSnapshot()).includes('containsMediaPayloads'), true, 'decoder snapshot declares media payload exclusion');
 
 // UBOS 2.0 Phase 2.2 real FFmpeg process pipeline validation
 const dryRunRuntime = createFFmpegRuntime(createFFmpegEnvironment({}), { dryRun: true, startupTimeoutMs: 25 });
