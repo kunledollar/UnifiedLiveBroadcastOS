@@ -243,6 +243,8 @@ import {
   createProgramOutput,
   OutputPipelineManager,
   createPreviewProgramOutputDemo,
+  createProductionSwitcher,
+  createProductionSwitcherDemo,
 } from './index.js';
 
 const command = (
@@ -2111,5 +2113,54 @@ outputManager.stopAll();
 assert.equal(outputManager.getSnapshot().program?.state, 'stopped', 'output manager stops outputs');
 const outputDemo = await createPreviewProgramOutputDemo();
 assert.equal(outputDemo.description.includes('Preview and Program'), true, 'preview/program output demo describes simultaneous rendering');
+
+// UBOS 2.0 Phase 2.11 production switching engine validation
+const switchClock = createClock({ frameRate: 30 });
+const switcher = createProductionSwitcher({
+  id: 'production-switcher:phase-2-11',
+  previewSceneId: 'scene:preview',
+  programSceneId: 'scene:program',
+  previewCompositor,
+  programCompositor,
+  previewOutput,
+  programOutput,
+  mediaClock: switchClock,
+  transitionDurationMs: 500,
+  metadata: { phase: '2.11' },
+});
+const switchEvents: string[] = [];
+switcher.onRuntimeEvent((event) => switchEvents.push(event.type));
+switcher.setPreviewScene('scene:guest', { operatorId: 'director' });
+assert.equal(switcher.getSnapshot().previewSceneId, 'scene:guest', 'production switcher maintains independent preview assignment');
+assert.equal(switcher.getSnapshot().programSceneId, 'scene:program', 'production switcher maintains independent program assignment');
+const cutSnapshot = switcher.cut({ operatorId: 'director' });
+assert.equal(cutSnapshot.programSceneId, 'scene:guest', 'cut promotes preview scene to program');
+assert.equal(cutSnapshot.history[0]?.action, 'cut', 'cut records switch history');
+assert.equal(switchEvents.includes('preview_changed'), true, 'production switcher emits preview_changed');
+assert.equal(switchEvents.includes('cut'), true, 'production switcher emits cut');
+assert.equal(switchEvents.includes('program_changed'), true, 'production switcher emits program_changed');
+switcher.setPreviewScene('scene:wide');
+const scheduled = switcher.scheduleTransition({ kind: 'auto', durationMs: 750, metadata: { requestedBy: 'validation' } });
+assert.equal(scheduled.durationMs, 750, 'transition metadata preserves duration');
+assert.equal(scheduled.containsRuntimeHandles, false, 'transition metadata excludes runtime handles');
+const autoSnapshot = switcher.completeScheduledTransition({ completedBy: 'validation' });
+assert.equal(autoSnapshot.programSceneId, 'scene:wide', 'scheduled auto promotes preview scene to program');
+assert.equal(autoSnapshot.history[0]?.transition.kind, 'auto', 'scheduled transition records auto kind');
+switcher.setPreviewScene('scene:close');
+const takeSnapshot = switcher.take({ operatorId: 'director' });
+assert.equal(takeSnapshot.programSceneId, 'scene:close', 'take promotes preview using deterministic cut semantics');
+assert.equal(switchEvents.includes('take'), true, 'production switcher emits take');
+switcher.setPreviewScene('scene:graphics');
+const autoDirectSnapshot = switcher.auto({ durationMs: 1000, metadata: { operatorId: 'director' } });
+assert.equal(autoDirectSnapshot.programSceneId, 'scene:graphics', 'auto schedules and completes metadata transition');
+assert.equal(switchEvents.includes('auto'), true, 'production switcher emits auto');
+assert.equal(autoDirectSnapshot.containsRuntimeHandles, false, 'production switcher snapshot is backend independent');
+assert.equal(autoDirectSnapshot.containsMediaPayloads, false, 'production switcher snapshot excludes media payloads');
+assert.equal(autoDirectSnapshot.outputIds.preview, 'output:preview:phase-2-10', 'production switcher integrates preview output identity');
+assert.equal(autoDirectSnapshot.compositorIds.program, 'compositor:program:phase-2-10', 'production switcher integrates program compositor identity');
+const switchDemo = await createProductionSwitcherDemo();
+assert.equal(switchDemo.before.programSceneId, 'scene:host', 'production switcher demo starts with initial program scene');
+assert.equal(switchDemo.after.programSceneId, 'scene:guest', 'production switcher demo promotes preview to program');
+
 
 assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');
