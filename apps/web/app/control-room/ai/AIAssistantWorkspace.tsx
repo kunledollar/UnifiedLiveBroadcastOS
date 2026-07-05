@@ -9,6 +9,8 @@ import { AIRiskMonitor } from './AIRiskMonitor';
 import { AISafetyPanel } from './AISafetyPanel';
 import { AIProductionSummary } from './AIProductionSummary';
 import type { AIAction } from './ai-state';
+import { AgentManager, SuggestionCenter, createInitialProductionGraph } from '@ubos/shared';
+import { SuggestionCenterPanel } from './SuggestionCenterPanel';
 import { aiStatusLabel, getProductionSummaryLines, getSuggestedRecommendations } from './ai-utils';
 
 export function AIAssistantWorkspace({
@@ -29,6 +31,17 @@ export function AIAssistantWorkspace({
       recommendationCount: getSuggestedRecommendations(recommendations).length,
       riskCount: riskSignals.length,
     });
+  const phase18Graph = createInitialProductionGraph({ broadcastSessionId: 'control-room-ai', name: 'Control Room AI' });
+  const agentManager = new AgentManager();
+  const suggestionCenter = new SuggestionCenter();
+  const phase18Suggestions = suggestionCenter.ingest(
+    agentManager.observe({
+      graph: phase18Graph,
+      mode: assistant.mode === 'supervised' ? 'supervised' : 'manual',
+      timestamp: assistant.lastUpdated,
+      chatMessages: [{ id: 'chat-question-1', author: 'Viewer', text: 'Can you explain the next segment?', timestamp: assistant.lastUpdated }],
+    }),
+  );
   const selectedRecommendation =
     recommendations.find((recommendation) => recommendation.id === state.selectedRecommendationId) ??
     getSuggestedRecommendations(recommendations)[0] ??
@@ -56,6 +69,12 @@ export function AIAssistantWorkspace({
           <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden p-ubos-1">
             <AIProductionSummary assistant={assistant} summaryLines={resolvedSummary} />
             <AISafetyPanel mode={assistant.mode} />
+            <SuggestionCenterPanel
+              suggestions={phase18Suggestions}
+              onAccept={() => dispatch({ type: 'REQUEST_ANALYSIS' })}
+              onReject={() => dispatch({ type: 'REQUEST_ANALYSIS' })}
+              onIgnore={() => dispatch({ type: 'REQUEST_ANALYSIS' })}
+            />
             <AIRiskMonitor
               riskSignals={riskSignals}
               onAcknowledgeRisk={(riskId) => dispatch({ type: 'ACKNOWLEDGE_RISK', riskId })}

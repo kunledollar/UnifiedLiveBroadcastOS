@@ -1229,3 +1229,25 @@ const replay = reconstructExecutionReplay({ initialSnapshot: snapshot, events: a
 assert(replay.graphRevision === acceptedExecution.graphRevisionAfter, 'Phase 17 replay reconstruction handles known events');
 const replayWithUnknown = reconstructExecutionReplay({ initialSnapshot: snapshot, events: [{ ...acceptedExecution.events[0]!, type: 'UNKNOWN_EVENT' as never }] });
 assert(replayWithUnknown.warnings.length === 1 && replayWithUnknown.unsupportedEvents.length === 1, 'Phase 17 replay reconstruction warns on unknown events');
+
+import { AgentManager, SuggestionCenter, AutomationRuleEngine, ProviderRegistry, addSuggestionsToGraph, createAnalyticsInsights } from './intelligent-broadcast-operations/index.js';
+
+const iboGraph = createInitialProductionGraph({ broadcastSessionId: 'ibo-validation', name: 'IBO Validation', timestamp: '2026-07-05T00:00:00.000Z' });
+const iboManager = new AgentManager();
+const iboSuggestions = iboManager.observe({ graph: iboGraph, mode: 'manual', timestamp: '2026-07-05T00:00:01.000Z', chatMessages: [{ id: 'q1', author: 'viewer', text: 'What is next?', timestamp: '2026-07-05T00:00:01.000Z' }] });
+assert(iboManager.getStates().length >= 5, 'Phase 18 registers prototype IBO agents');
+assert(iboSuggestions.some((s) => s.agentId === 'agent-moderator'), 'Phase 18 moderator emits chat suggestion metadata');
+const iboCenter = new SuggestionCenter();
+iboCenter.ingest(iboSuggestions);
+const acceptedIboCommand = iboCenter.accept(iboSuggestions[0]!.id, 'director');
+assert(!acceptedIboCommand || acceptedIboCommand.metadata?.requiresHumanApproval === true, 'Phase 18 accepted suggestions remain command-gated');
+iboCenter.reject(iboSuggestions.at(-1)!.id, 'producer');
+assert(iboCenter.list().some((s) => s.status === 'rejected'), 'Phase 18 rejected suggestions are audited');
+const ruleEngine = new AutomationRuleEngine([{ id: 'recording-badge', name: 'Recording badge', enabled: true, trigger: 'recording.starts', condition: {}, commandTemplate: { type: 'SET_PANEL_VISIBILITY', payload: { panelId: 'recording-badge', visible: true } }, createdBy: 'producer' }]);
+assert(ruleEngine.compile('recording.starts', iboGraph).length === 1, 'Phase 18 automation rules compile to Production Commands');
+const providerRegistry = new ProviderRegistry();
+providerRegistry.register({ id: 'local-placeholder', name: 'Local Placeholder', supports: ['translation'], complete: async () => ({ text: '', metadata: {} }) });
+assert(providerRegistry.list()[0]?.id === 'local-placeholder', 'Phase 18 provider abstraction registers future providers');
+assert(createAnalyticsInsights(iboGraph).length >= 3, 'Phase 18 analytics engine emits dashboard insights');
+const graphWithIboSuggestions = addSuggestionsToGraph(iboGraph, iboSuggestions.slice(0, 1));
+assert(Object.keys(graphWithIboSuggestions.agentSuggestions).length === 1, 'Phase 18 suggestions flow through Production Graph');
