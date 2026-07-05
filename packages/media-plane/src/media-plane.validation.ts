@@ -231,6 +231,14 @@ import {
   createFFmpegAudioDecoder,
   buildFFprobeAudioFrameMetadataArgs,
   createFFmpegAudioDecodeCommandPreview,
+  createAudioMixer,
+  createSyntheticAudioFrame,
+  createLimiterProcessor,
+  createCompressorProcessor,
+  createEqualizerProcessor,
+  createHighPassFilterProcessor,
+  createLowPassFilterProcessor,
+  createAudioMixerDemo,
 } from './index.js';
 
 const command = (
@@ -2007,5 +2015,51 @@ assert.equal(audioDecoderEvents.includes('audio_frame_decoded'), true, 'audio de
 assert.equal(buildFFprobeAudioFrameMetadataArgs(audioDecodeSource, 2).includes('-show_entries'), true, 'FFmpeg audio decoder builds ffprobe metadata command');
 assert.equal(createFFmpegAudioDecodeCommandPreview(audioDecodeSource, { executable: 'ffmpeg', env: {} }).includes('-f null'), true, 'FFmpeg audio decoder exposes backend command preview without UI internals');
 assert.equal(JSON.stringify(ffmpegAudioDecoder.getSnapshot()).includes('containsMediaPayloads'), true, 'audio decoder snapshot declares media payload exclusion');
+
+
+// UBOS 2.0 Phase 2.9 audio engine mixer and DSP foundation validation
+const mixerEvents: string[] = [];
+const mixerInputA = new RingAudioBuffer(4);
+const mixerInputB = new RingAudioBuffer(4);
+mixerInputA.push(createSyntheticAudioFrame({ id: 'validation:tone:a:0', sourceId: 'tone:a', frequencyHz: 440, amplitude: 0.25 }));
+mixerInputB.push(createSyntheticAudioFrame({ id: 'validation:tone:b:0', sourceId: 'tone:b', frequencyHz: 880, amplitude: 0.2 }));
+const audioMixer = createAudioMixer({ id: 'mixer:phase-2-9', sampleRate: 48000 });
+audioMixer.onStatus((event) => mixerEvents.push(event.type));
+audioMixer.addChannel({ id: 'channel:music', label: 'Music bed', buffer: mixerInputA, controls: { gain: 0.8, mute: false, solo: false, pan: -0.25 } });
+audioMixer.addChannel({ id: 'channel:voice', label: 'Voice', buffer: mixerInputB, controls: { gain: 1, mute: false, solo: true, pan: 0.25 } });
+audioMixer.addBus({ id: 'bus:program', label: 'Program', channels: 2, sampleRate: 48000 });
+audioMixer.addBus({ id: 'bus:monitor', label: 'Monitor', channels: 2, sampleRate: 48000 });
+audioMixer.addRoute({ id: 'route:music:program', inputChannelId: 'channel:music', outputBusId: 'bus:program', gain: 1, enabled: true });
+audioMixer.addRoute({ id: 'route:voice:program', inputChannelId: 'channel:voice', outputBusId: 'bus:program', gain: 1, enabled: true });
+audioMixer.addRoute({ id: 'route:voice:monitor', inputChannelId: 'channel:voice', outputBusId: 'bus:monitor', gain: 0.5, enabled: true });
+audioMixer.addProcessor('bus:program', createCompressorProcessor({ thresholdDb: -12, ratio: 2 }));
+audioMixer.addProcessor('bus:program', createLimiterProcessor({ ceilingDb: -0.5 }));
+audioMixer.addProcessor('bus:monitor', createEqualizerProcessor({ bands: [{ frequencyHz: 1000, gainDb: 1, q: 1 }] }));
+audioMixer.addProcessor('bus:monitor', createHighPassFilterProcessor({ cutoffHz: 80 }));
+audioMixer.addProcessor('bus:monitor', createLowPassFilterProcessor({ cutoffHz: 16000 }));
+audioMixer.start();
+const mixedOutputs = audioMixer.mix();
+assert.equal(mixedOutputs.length, 2, 'audio mixer renders every configured output bus');
+assert.equal(mixedOutputs[0]?.metadataOnly, true, 'mixed audio output frames expose metadata only');
+assert.equal(mixedOutputs[0]?.containsAudioData, false, 'mixed audio output frames do not expose sample payloads');
+assert.equal(typeof mixedOutputs[0]?.levels.peak, 'number', 'audio mixer reports peak levels');
+assert.equal(typeof mixedOutputs[0]?.levels.rms, 'number', 'audio mixer reports RMS levels');
+assert.equal(typeof mixedOutputs[0]?.levels.lufs, 'number', 'audio mixer reports LUFS levels');
+assert.equal(typeof mixedOutputs[0]?.levels.clipped, 'boolean', 'audio mixer reports clipping detection');
+assert.equal(audioMixer.getSnapshot().containsRuntimeHandles, false, 'audio mixer snapshot preserves backend independence');
+assert.equal(audioMixer.getSnapshot().containsMediaPayloads, false, 'audio mixer snapshot excludes media payloads');
+assert.equal(audioMixer.getSnapshot().clock.containsRuntimeHandles, false, 'audio mixer synchronizes with serializable MediaClock state');
+assert.equal(audioMixer.getSnapshot().routes.length, 3, 'audio mixer models input-to-bus routing');
+assert.equal(audioMixer.getSnapshot().buses[0]?.processors.length, 2, 'audio buses own DSP processor chains');
+assert.equal(mixerEvents.includes('levels_updated'), true, 'audio mixer emits level events');
+audioMixer.pause();
+assert.equal(audioMixer.getSnapshot().state, 'paused', 'audio mixer supports pause lifecycle');
+audioMixer.resume();
+assert.equal(audioMixer.getSnapshot().state, 'running', 'audio mixer supports resume lifecycle');
+audioMixer.stop();
+assert.equal(audioMixer.getSnapshot().state, 'stopped', 'audio mixer supports stopped lifecycle');
+const mixerDemo = await createAudioMixerDemo();
+assert.equal(mixerDemo.outputs.length, 1, 'audio mixer demo mixes multiple synthetic sources to the program bus');
+assert.equal(mixerDemo.snapshot.events.some((event) => event.type === 'buffer_mixed'), true, 'audio mixer demo emits runtime status events');
 
 assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');
