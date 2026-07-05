@@ -496,3 +496,5 @@ export { createProductionEngineManifest } from './production-engine/manifest.js'
 
 export * from './intelligent-broadcast-operations/index.js';
 export * from './compositor/index.js';
+
+export * from './runtime-switching/index.js';

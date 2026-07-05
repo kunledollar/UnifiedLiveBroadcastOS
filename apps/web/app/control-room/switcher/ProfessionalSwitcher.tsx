@@ -27,6 +27,8 @@ export function ProfessionalSwitcher({
   transitionReady,
   programLocked,
   automationMode,
+  runtimeStatus,
+  queueSize,
   compactChrome = false,
   detailsDefaultOpen = false,
   onTake,
@@ -49,6 +51,8 @@ export function ProfessionalSwitcher({
   transitionReady: boolean;
   programLocked: boolean;
   automationMode: 'manual' | 'automation';
+  runtimeStatus?: 'idle' | 'executing' | 'transition_active' | 'locked' | 'error';
+  queueSize?: number;
   compactChrome?: boolean;
   detailsDefaultOpen?: boolean;
   onTake: () => void;
@@ -95,6 +99,8 @@ export function ProfessionalSwitcher({
             transitionReady={transitionReady}
             programLocked={programLocked}
             automationMode={automationMode}
+            runtimeStatus={runtimeStatus ?? 'idle'}
+            queueSize={queueSize ?? 0}
             className="hidden items-end justify-end lg:flex"
           />
         </div>
@@ -190,6 +196,8 @@ export function ProfessionalSwitcher({
           transitionReady={transitionReady}
           programLocked={programLocked}
           automationMode={automationMode}
+          runtimeStatus={runtimeStatus ?? 'idle'}
+          queueSize={queueSize ?? 0}
           className="lg:hidden"
         />
       </div>

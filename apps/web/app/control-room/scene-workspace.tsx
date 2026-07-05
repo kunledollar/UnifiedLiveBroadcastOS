@@ -68,6 +68,11 @@ import {
   type MediaLayoutPreset,
   type ProductionSwitchingState,
   type StreamHealthMetric,
+  AutoCommand,
+  CutCommand,
+  PreviewCommand,
+  ProgramCommand,
+  ProductionRuntime,
   type TransitionType,
   LocalProductionCommandDispatcher,
   createBroadcastSession,
@@ -1775,6 +1780,12 @@ export function SceneWorkspace({
   const [lastTransitionLabel, setLastTransitionLabel] = useState('None');
   const [transitionHistory, setTransitionHistory] = useState<string[]>([]);
   const [switcherFeedback, setSwitcherFeedback] = useState<string | null>(null);
+  const [runtime] = useState(() => new ProductionRuntime({
+    currentProgram: initialProductionState.programSceneId,
+    currentPreview: initialProductionState.previewSceneId,
+    currentScene: initialProductionState.programSceneId,
+  }));
+  const [runtimeView, setRuntimeView] = useState(runtime.state);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [clock, setClock] = useState('00:00:00');
@@ -2037,9 +2048,14 @@ export function SceneWorkspace({
 
   const stageScene = (sceneId: string) => {
     new SceneSelectionController(dispatchProductionGraphCommand).select(sceneId);
+    runtime.dispatch(PreviewCommand(sceneId, 'local-director'));
+    setRuntimeView({ ...runtime.state });
     persistProductionState({ ...productionState, previewSceneId: sceneId }, 'stage');
   };
   const switchProgram = (type: TransitionType) => {
+    if (type === 'cut') runtime.dispatch(CutCommand('local-director'));
+    else runtime.dispatch(AutoCommand('local-director'));
+    setRuntimeView({ ...runtime.state });
     new TransitionController(dispatchProductionGraphCommand).execute(
       type,
       productionState.previewSceneId,
@@ -2515,6 +2531,9 @@ export function SceneWorkspace({
         onDistributionDispatch: dispatchDistribution,
         deviceState,
         onDeviceDispatch: dispatchDevice,
+        runtimeState: runtimeView,
+        runtimeHealth: runtime.session.health(),
+        runtimeSnapshots: runtime.session.history.history,
       }),
     [
       broadcastId,
@@ -2544,6 +2563,8 @@ export function SceneWorkspace({
       aiSummaryLines,
       distributionState,
       deviceState,
+      runtimeView,
+      runtime,
     ],
   );
 
@@ -2555,6 +2576,7 @@ export function SceneWorkspace({
       'automation',
       'devices',
       'compositor',
+      'runtime',
       'inspector',
       'routing',
       'outputs',
@@ -3275,6 +3297,8 @@ export function SceneWorkspace({
           automationMode={
             productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'
           }
+          runtimeStatus={runtimeView.status}
+          queueSize={runtimeView.executionQueue.length}
           compactChrome={workspace.compactChrome}
           detailsDefaultOpen={!workspace.compactChrome && workspace.layoutFocus === 'full'}
           onTake={() => switchProgram(productionState.transitionType)}

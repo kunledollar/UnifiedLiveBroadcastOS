@@ -9,7 +9,8 @@ export type NavItemId =
   | 'devices'
   | 'settings'
   | 'engine'
-  | 'compositor';
+  | 'compositor'
+  | 'runtime';
 
 export type DockTabId =
   | 'audio'
@@ -34,4 +35,5 @@ export type OperationsTabId =
   | 'automation'
   | 'devices'
   | 'engine'
-  | 'compositor';
+  | 'compositor'
+  | 'runtime';
