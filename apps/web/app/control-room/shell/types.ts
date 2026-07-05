@@ -29,6 +29,7 @@ export type OperationsTabId =
   | 'health'
   | 'preview'
   | 'logs'
+  | 'ai-director'
   | 'ai'
   | 'team'
   | 'automation'

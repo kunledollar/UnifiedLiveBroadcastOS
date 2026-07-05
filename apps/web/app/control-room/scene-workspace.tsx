@@ -1,8 +1,6 @@
 'use client';
 
-import {
-  getTallyState,
-} from '@ubos/ui';
+import { getTallyState } from '@ubos/ui';
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
@@ -1512,7 +1510,7 @@ const factoryWorkspace: ControlRoomWorkspaceState = {
 };
 
 function normalizeControlRoomWorkspace(
-  value: Partial<ControlRoomWorkspaceState> & { selectedPreset?: string } | null | undefined,
+  value: (Partial<ControlRoomWorkspaceState> & { selectedPreset?: string }) | null | undefined,
 ): ControlRoomWorkspaceState {
   const selectedWorkspace = normalizeWorkspaceId(
     value?.selectedWorkspace ?? value?.selectedPreset ?? null,
@@ -1780,11 +1778,14 @@ export function SceneWorkspace({
   const [lastTransitionLabel, setLastTransitionLabel] = useState('None');
   const [transitionHistory, setTransitionHistory] = useState<string[]>([]);
   const [switcherFeedback, setSwitcherFeedback] = useState<string | null>(null);
-  const [runtime] = useState(() => new ProductionRuntime({
-    currentProgram: initialProductionState.programSceneId,
-    currentPreview: initialProductionState.previewSceneId,
-    currentScene: initialProductionState.programSceneId,
-  }));
+  const [runtime] = useState(
+    () =>
+      new ProductionRuntime({
+        currentProgram: initialProductionState.programSceneId,
+        currentPreview: initialProductionState.previewSceneId,
+        currentScene: initialProductionState.programSceneId,
+      }),
+  );
   const [runtimeView, setRuntimeView] = useState(runtime.state);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
@@ -2068,8 +2069,7 @@ export function SceneWorkspace({
         : type === 'fade'
           ? 'Fade Executed'
           : `${type.toUpperCase()} Executed`;
-    const historyLabel =
-      type === 'cut' ? 'CUT' : type === 'fade' ? 'AUTO' : type.toUpperCase();
+    const historyLabel = type === 'cut' ? 'CUT' : type === 'fade' ? 'AUTO' : type.toUpperCase();
     setLastTransitionLabel(label);
     setTransitionHistory((current) => [historyLabel, ...current].slice(0, 8));
     setSwitcherFeedback(type === 'cut' ? 'Cut Complete' : 'Transition Complete');
@@ -2234,10 +2234,7 @@ export function SceneWorkspace({
   };
 
   const graphicsAssets = useMemo(
-    () =>
-      assets.filter((asset) =>
-        ['overlay', 'lower_third', 'background'].includes(asset.type),
-      ),
+    () => assets.filter((asset) => ['overlay', 'lower_third', 'background'].includes(asset.type)),
     [assets],
   );
 
@@ -2266,9 +2263,9 @@ export function SceneWorkspace({
   const collaborationDemoEnabled = isCollaborationDemoEnabled();
   const remoteProductionOperators = useMemo(() => {
     if (collaborationDemoEnabled) {
-      return createMockCollaborationOperators(
-        productionGraphSession.graph.metadata.revision,
-      ).map((operator) => mapCollaborationOperatorToPresence(operator, true));
+      return createMockCollaborationOperators(productionGraphSession.graph.metadata.revision).map(
+        (operator) => mapCollaborationOperatorToPresence(operator, true),
+      );
     }
     return [
       createLocalOperatorPresence({
@@ -2394,11 +2391,7 @@ export function SceneWorkspace({
   );
 
   const aiWorkspaceContent = (
-    <AIAssistantWorkspace
-      state={aiState}
-      dispatch={dispatchAI}
-      summaryLines={aiSummaryLines}
-    />
+    <AIAssistantWorkspace state={aiState} dispatch={dispatchAI} summaryLines={aiSummaryLines} />
   );
 
   const distributionWorkspaceContent = (
@@ -2438,7 +2431,11 @@ export function SceneWorkspace({
           assets={previewSceneMediaComposition.assets}
           clips={previewSceneMediaComposition.clips}
           onCreatePlaylist={() =>
-            dispatchMedia({ type: 'CREATE_PLAYLIST', sceneId: previewScene.id, name: 'Replay Playlist' })
+            dispatchMedia({
+              type: 'CREATE_PLAYLIST',
+              sceneId: previewScene.id,
+              name: 'Replay Playlist',
+            })
           }
           onClearPlaylist={(playlistId) =>
             dispatchMedia({ type: 'CLEAR_PLAYLIST', sceneId: previewScene.id, playlistId })
@@ -2460,12 +2457,7 @@ export function SceneWorkspace({
         />
       ),
     }),
-    [
-      previewSceneMediaComposition,
-      previewScene.id,
-      selectedClipId,
-      selectedReplayClipId,
-    ],
+    [previewSceneMediaComposition, previewScene.id, selectedClipId, selectedReplayClipId],
   );
 
   const outputViewModeLabel =
@@ -2590,6 +2582,7 @@ export function SceneWorkspace({
       'health',
       'preview',
       'logs',
+      'ai-director',
       'ai',
     ];
     return panelIds.map((id) => ({
@@ -2898,8 +2891,9 @@ export function SceneWorkspace({
       programMediaOverlayItems,
       previewMediaOverlayItems,
       replayBuffer: previewSceneMediaComposition.replayBuffer,
-      ...(collaborationState.remoteProduction.operators.find((operator) => operator.role === 'director')
-        ?.name
+      ...(collaborationState.remoteProduction.operators.find(
+        (operator) => operator.role === 'director',
+      )?.name
         ? {
             collaborationDirectorName: collaborationState.remoteProduction.operators.find(
               (operator) => operator.role === 'director',
@@ -3024,8 +3018,18 @@ export function SceneWorkspace({
             assets={graphicsAssets.map((asset) => ({
               id: asset.id,
               name: asset.name,
-              type: asset.type === 'lower_third' ? 'lower_third' : asset.type === 'overlay' ? 'text' : 'image',
-              status: asset.status === 'ready' ? 'ready' : asset.status === 'disabled' ? 'disabled' : 'draft',
+              type:
+                asset.type === 'lower_third'
+                  ? 'lower_third'
+                  : asset.type === 'overlay'
+                    ? 'text'
+                    : 'image',
+              status:
+                asset.status === 'ready'
+                  ? 'ready'
+                  : asset.status === 'disabled'
+                    ? 'disabled'
+                    : 'draft',
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             }))}
@@ -3038,10 +3042,20 @@ export function SceneWorkspace({
               dispatchGraphics({ type: 'TOGGLE_LOCK', sceneId: previewScene.id, layerId })
             }
             onMoveUp={(layerId) =>
-              dispatchGraphics({ type: 'MOVE_LAYER', sceneId: previewScene.id, layerId, direction: 'up' })
+              dispatchGraphics({
+                type: 'MOVE_LAYER',
+                sceneId: previewScene.id,
+                layerId,
+                direction: 'up',
+              })
             }
             onMoveDown={(layerId) =>
-              dispatchGraphics({ type: 'MOVE_LAYER', sceneId: previewScene.id, layerId, direction: 'down' })
+              dispatchGraphics({
+                type: 'MOVE_LAYER',
+                sceneId: previewScene.id,
+                layerId,
+                direction: 'down',
+              })
             }
             onDuplicate={(layerId) =>
               dispatchGraphics({ type: 'DUPLICATE_LAYER', sceneId: previewScene.id, layerId })
@@ -3095,8 +3109,12 @@ export function SceneWorkspace({
                 });
               }
             }}
-            onClearPreview={() => dispatchMedia({ type: 'CLEAR_PREVIEW', sceneId: previewScene.id })}
-            onClearProgram={() => dispatchMedia({ type: 'CLEAR_PROGRAM', sceneId: previewScene.id })}
+            onClearPreview={() =>
+              dispatchMedia({ type: 'CLEAR_PREVIEW', sceneId: previewScene.id })
+            }
+            onClearProgram={() =>
+              dispatchMedia({ type: 'CLEAR_PROGRAM', sceneId: previewScene.id })
+            }
           />
           <MediaBin
             assets={previewSceneMediaComposition.assets}
@@ -3195,7 +3213,10 @@ export function SceneWorkspace({
   const showRightConsole = shouldShowRightConsole(workspace.layoutFocus);
   const layoutStyle = {
     '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
-    '--ubos-switcher-height': switcherHeightForLayout(workspace.layoutFocus, workspace.compactChrome),
+    '--ubos-switcher-height': switcherHeightForLayout(
+      workspace.layoutFocus,
+      workspace.compactChrome,
+    ),
     '--ubos-dock-content-height': `${dockContentHeightPx}px`,
     '--ubos-dock-total-height': `${DOCK_TAB_HEIGHT_PX + dockContentHeightPx}px`,
   } as CSSProperties;
@@ -3298,12 +3319,8 @@ export function SceneWorkspace({
           transitionHistory={transitionHistory}
           switcherReady={!isPending && !transitionActive}
           transitionReady={!transitionActive}
-          programLocked={authorityDiagnostics.activeLocks.some(
-            (lock) => lock.scope === 'program',
-          )}
-          automationMode={
-            productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'
-          }
+          programLocked={authorityDiagnostics.activeLocks.some((lock) => lock.scope === 'program')}
+          automationMode={productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'}
           runtimeStatus={runtimeView.status}
           queueSize={runtimeView.executionQueue.length}
           compactChrome={workspace.compactChrome}
@@ -3357,4 +3374,3 @@ export function SceneWorkspace({
     </div>
   );
 }
-
