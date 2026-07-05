@@ -24,6 +24,7 @@ import {
   summarizeExecutionForRevision,
   translateGraphTransitionToIntents,
   createClock,
+  SUPPORTED_FRAME_RATES,
   FrameScheduler,
   MediaSyncBus,
   SyncDriftMonitor,
@@ -1726,6 +1727,44 @@ assert.equal(new (await import('./production-engine/index.js')).ExecutionValidat
 assert.equal(new (await import('./production-engine/index.js')).ExecutionValidator().validateClock([{ timestamp: '2026-07-01T00:00:00.000Z', frameId: 1, clockMs: 1, driftMs: 101, source: 'audio' }]).length > 0, true, 'production engine rejects clock conflicts');
 assert.equal(isProductionEngineEnabled({ UBOS_ENABLE_PRODUCTION_ENGINE: 'true', NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true' }), true, 'production engine feature flags enable runtime');
 
+
+
+// UBOS 2.0 Phase 2.3 media clock and frame scheduler validation
+let deterministicNow = 10_000;
+const phaseClock = createClock({ frameRate: 29.97, now: () => deterministicNow });
+assert.equal(SUPPORTED_FRAME_RATES.includes(59.94), true, 'media clock exposes broadcast fractional frame rates');
+let clockState = phaseClock.start();
+assert.equal(clockState.status, 'running', 'media clock starts');
+deterministicNow += 1000 / 29.97;
+clockState = phaseClock.getState();
+assert.equal(clockState.currentFrame, 1, 'media clock tracks frame number from elapsed time');
+assert.equal(clockState.presentationTimestamp, phaseClock.getFrameTimestamp(1), 'media clock derives PTS from frame rate');
+assert.equal(clockState.mediaTimestamp, clockState.presentationTimestamp, 'media clock exposes media timestamp');
+clockState = phaseClock.pause();
+assert.equal(clockState.status, 'paused', 'media clock pauses');
+deterministicNow += 500;
+clockState = phaseClock.resume();
+assert.equal(clockState.status, 'running', 'media clock resumes');
+clockState = phaseClock.reset();
+assert.equal(clockState.currentFrame, 0, 'media clock resets frame number');
+phaseClock.start();
+const phaseBus = new MediaSyncBus();
+const phaseScheduler = new FrameScheduler(phaseClock, phaseBus, { lateThresholdMs: 5, driftThresholdMs: 10 });
+deterministicNow += 1000 / 29.97;
+const firstTick = phaseScheduler.createTick(deterministicNow);
+assert.equal(firstTick.metadataOnly, true, 'frame ticks are metadata-only');
+assert.equal(firstTick.containsFrameData, false, 'frame ticks do not contain frame data');
+deterministicNow += (1000 / 29.97) * 3;
+const droppedTick = phaseScheduler.createTick(deterministicNow + 20);
+assert.equal(droppedTick.diagnostics!.droppedFrames >= 1, true, 'frame scheduler detects dropped frames');
+assert.equal(phaseBus.listEvents().some((event) => event.type === 'FRAME_DROPPED'), true, 'frame scheduler emits dropped frame events');
+const duplicateTick = phaseScheduler.createTick(deterministicNow + 21);
+assert.equal(duplicateTick.diagnostics!.classification, 'duplicated', 'frame scheduler detects duplicated frames');
+assert.equal(phaseScheduler.getStats().lateFrames > 0, true, 'frame scheduler tracks late frame diagnostics');
+deterministicNow += 15;
+phaseScheduler.createTick(deterministicNow);
+assert.equal(phaseBus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'), true, 'frame scheduler emits clock drift diagnostics');
+assert.equal(JSON.stringify(firstTick).includes('runtimeHandles'), false, 'frame scheduler state remains serializable metadata');
 
 // UBOS 2.0 Phase 2.1 media runtime foundation validation
 const fileVideoSource = createMediaSource({ id: 'source:file-video', kind: 'video_file', uri: 'fixtures/video.mp4', graphSourceId: 'graph-video' });
