@@ -1,0 +1,30 @@
+{
+  "product": "UBOS",
+  "version": "1.0.0-RC1",
+  "npmVersion": "1.0.0-rc.1",
+  "releaseDate": "2026-07-05",
+  "channel": "release-candidate",
+  "buildNumber": "rc1.20260705",
+  "minimumNodeVersion": "20.9.0",
+  "packageManager": "pnpm@10.28.1",
+  "packagingTargets": [
+    "windows-msi",
+    "macos-dmg",
+    "linux-appimage",
+    "linux-deb",
+    "linux-rpm",
+    "electron"
+  ],
+  "reports": [
+    "system-health",
+    "performance",
+    "dependency",
+    "memory",
+    "build",
+    "package",
+    "validation",
+    "compatibility",
+    "accessibility",
+    "production-readiness"
+  ]
+}

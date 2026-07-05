@@ -1,6 +1,6 @@
 {
   "name": "@ubos/media-plane",
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
   "private": true,
   "type": "module",
   "main": "dist/media-plane/src/index.js",
