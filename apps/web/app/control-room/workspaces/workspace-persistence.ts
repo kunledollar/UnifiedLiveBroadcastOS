@@ -1,6 +1,6 @@
 import type { DockTabId, NavItemId, OperationsTabId } from '../shell/types';
 import type { OutputViewMode } from '../workspace/monitor-state';
-import type { ProfessionalWorkspaceId, SafeAreaToggles } from './workspace-types';
+import type { LayoutFocusMode, ProfessionalWorkspaceId, SafeAreaToggles } from './workspace-types';
 
 /**
  * Persistence architecture for saved workspaces.
@@ -27,6 +27,8 @@ export type WorkspacePersistenceSnapshot = {
   viewMode: OutputViewMode;
   splitRatio: number;
   safeAreaToggles: SafeAreaToggles;
+  compactChrome: boolean;
+  layoutFocus: LayoutFocusMode;
   updatedAt: string;
 };
 

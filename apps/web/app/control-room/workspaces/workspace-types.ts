@@ -1,6 +1,8 @@
 import type { DockTabId, NavItemId, OperationsTabId } from '../shell/types';
 import type { OutputViewMode } from '../workspace/monitor-state';
 
+export type LayoutFocusMode = 'full' | 'switcher' | 'audio';
+
 export type ProfessionalWorkspaceId =
   | 'director'
   | 'producer'

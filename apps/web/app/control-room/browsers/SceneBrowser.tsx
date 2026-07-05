@@ -11,14 +11,12 @@ import { SceneType, type Guest, type Scene } from '@ubos/shared';
 import {
   BrowserSection,
   BrowserToolbar,
-  CompactRowActions,
-  RowIconButton,
+  SceneRowOverflowMenu,
   SceneThumbnail,
 } from './BrowserChrome';
 import {
   deriveSceneRowStatus,
   filterScenes,
-  getSceneAspectBadges,
   getSceneLayoutLabel,
   getSceneTypeLabel,
   sceneStatusLabel,
@@ -120,55 +118,39 @@ export function SceneBrowser({
           const isProgram = scene.id === programSceneId || scene.isActive;
           const isPreview = scene.id === previewSceneId;
           const status = deriveSceneRowStatus(scene, guests);
-          const aspectBadges = getSceneAspectBadges(scene);
           const selected = isPreview;
+          const tally = isProgram ? 'program' : isPreview ? 'preview' : null;
 
           return (
             <AssetRow
               key={scene.id}
               selected={selected}
               onClick={() => onSwitch?.(scene.id)}
-              thumbnail={<SceneThumbnail label={String(index + 1)} />}
+              thumbnail={
+                <SceneThumbnail
+                  label={String(index + 1)}
+                  tally={tally}
+                />
+              }
               title={scene.name}
               subtitle={`${getSceneLayoutLabel(scene)} · ${getSceneTypeLabel(scene)} · ${scene.sources.length} source${scene.sources.length === 1 ? '' : 's'}`}
               status={
-                <div className="flex flex-col items-end gap-0.5">
-                  {isProgram ? <StatusBadge variant="live">PROGRAM</StatusBadge> : null}
-                  {isPreview && !isProgram ? <StatusBadge variant="preview">PREVIEW</StatusBadge> : null}
-                  <StatusBadge variant={sceneStatusVariant(status)}>
-                    {sceneStatusLabel(status)}
-                  </StatusBadge>
-                  <div className="flex flex-wrap justify-end gap-0.5">
-                    {aspectBadges.map((ratio) => (
-                      <StatusBadge key={`${scene.id}-${ratio}`} variant="neutral">
-                        {ratio}
-                      </StatusBadge>
-                    ))}
-                  </div>
-                </div>
+                <StatusBadge variant={sceneStatusVariant(status)}>
+                  {sceneStatusLabel(status)}
+                </StatusBadge>
               }
               action={
-                <CompactRowActions>
-                  <RowIconButton
-                    label="Dup"
-                    onClick={() => onDuplicate?.(scene.id)}
-                  />
-                  <RowIconButton
-                    label="Ren"
-                    onClick={() => {
-                      const name = window.prompt('Rename scene', scene.name);
-                      if (name) onRename?.(scene.id, name);
-                    }}
-                  />
-                  <RowIconButton
-                    label="Del"
-                    variant="danger"
-                    disabled={scenes.length <= 1}
-                    onClick={() => {
-                      if (window.confirm(`Delete ${scene.name}?`)) onDelete?.(scene.id);
-                    }}
-                  />
-                </CompactRowActions>
+                <SceneRowOverflowMenu
+                  onDuplicate={() => onDuplicate?.(scene.id)}
+                  onRename={() => {
+                    const name = window.prompt('Rename scene', scene.name);
+                    if (name) onRename?.(scene.id, name);
+                  }}
+                  onDelete={() => {
+                    if (window.confirm(`Delete ${scene.name}?`)) onDelete?.(scene.id);
+                  }}
+                  deleteDisabled={scenes.length <= 1}
+                />
               }
             />
           );

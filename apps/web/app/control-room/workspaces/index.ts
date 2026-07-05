@@ -8,6 +8,7 @@ export { MultiViewRenderer, type MonitorCellKind, type MonitorCellSpec } from '.
 export { MonitorGrid } from './MonitorGrid';
 export { SafeAreaControls } from './SafeAreaControls';
 export { WorkspaceSelector } from './WorkspaceSelector';
+export { LayoutFocusSelector } from './LayoutFocusSelector';
 export { WorkspaceLayout } from './WorkspaceLayout';
 export {
   WorkspaceManager,

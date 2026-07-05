@@ -32,10 +32,13 @@ export function DigitalAudioConsole({
   if (!consoleChannels.length) {
     return (
       <BroadcastPanel variant="inset" padding={false} className={cn('border-0 shadow-none', className)}>
-        <div className="flex h-full items-center justify-center px-ubos-3 py-ubos-2">
+        <div className="flex h-full items-center justify-between gap-ubos-3 px-ubos-3 py-ubos-2">
           <p className={cn(ubosTypographyClasses.caption, 'text-ubos-fg-muted')}>
             No audio channels configured
           </p>
+          <span className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-disabled')}>
+            Add sources to enable mixing
+          </span>
         </div>
       </BroadcastPanel>
     );

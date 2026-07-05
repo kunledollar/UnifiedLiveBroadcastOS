@@ -148,10 +148,94 @@ export function RowIconButton({
   );
 }
 
-export function SceneThumbnail({ label }: { label: string }) {
+export function SceneThumbnail({
+  label,
+  tally,
+}: {
+  label: string;
+  tally?: 'program' | 'preview' | null;
+}) {
   return (
-    <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-ubos-midnight to-ubos-carbon">
+    <div className="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-ubos-midnight to-ubos-carbon">
+      {tally ? (
+        <span
+          className={cn(
+            'absolute left-1 top-1 h-2 w-2 rounded-full ring-1 ring-black/40',
+            tally === 'program' ? 'bg-ubos-program' : 'bg-ubos-preview',
+          )}
+          aria-hidden="true"
+        />
+      ) : null}
+      {tally ? (
+        <span
+          className={cn(
+            'absolute right-1 top-0.5 rounded-ubos-sm px-1 py-px text-[0.5rem] font-bold uppercase tracking-wide',
+            tally === 'program'
+              ? 'bg-ubos-program-muted text-ubos-program-text'
+              : 'bg-ubos-preview-muted text-ubos-preview-text',
+          )}
+        >
+          {tally === 'program' ? 'PGM' : 'PVW'}
+        </span>
+      ) : null}
       <span className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-muted')}>{label}</span>
     </div>
+  );
+}
+
+export function SceneRowOverflowMenu({
+  onDuplicate,
+  onRename,
+  onDelete,
+  deleteDisabled = false,
+}: {
+  onDuplicate: () => void;
+  onRename: () => void;
+  onDelete: () => void;
+  deleteDisabled?: boolean;
+}) {
+  return (
+    <details className="group relative" onClick={(event) => event.stopPropagation()}>
+      <summary
+        className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight text-ubos-metadata font-bold text-ubos-fg-muted hover:bg-ubos-slate hover:text-ubos-fg-secondary"
+        aria-label="Scene actions"
+        onClick={(event) => event.stopPropagation()}
+      >
+        ⋯
+      </summary>
+      <div className="absolute right-0 z-20 mt-1 grid min-w-28 gap-0.5 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-1 text-ubos-caption shadow-ubos-raised">
+        <button
+          type="button"
+          className="rounded-ubos-sm px-2 py-1 text-left text-ubos-fg-secondary hover:bg-ubos-midnight"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDuplicate();
+          }}
+        >
+          Duplicate
+        </button>
+        <button
+          type="button"
+          className="rounded-ubos-sm px-2 py-1 text-left text-ubos-fg-secondary hover:bg-ubos-midnight"
+          onClick={(event) => {
+            event.stopPropagation();
+            onRename();
+          }}
+        >
+          Rename
+        </button>
+        <button
+          type="button"
+          disabled={deleteDisabled}
+          className="rounded-ubos-sm px-2 py-1 text-left text-ubos-error-text hover:bg-ubos-error-muted disabled:cursor-not-allowed disabled:opacity-40"
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+        >
+          Delete
+        </button>
+      </div>
+    </details>
   );
 }
