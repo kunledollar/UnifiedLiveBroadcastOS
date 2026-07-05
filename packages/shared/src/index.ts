@@ -501,3 +501,6 @@ export * from './runtime-switching/index.js';
 
 export { MediaRuntime, MediaPlaybackSession, MediaRuntimeDispatcher, MediaRuntimeExecutor, MediaRuntimeQueue, MediaRuntimeHistory, NullMediaPlaybackAdapter, BrowserMediaPlaybackAdapter, createMediaRuntime, createMediaRuntimeState, createMediaRuntimeSnapshot, createMediaPlaybackCommand } from './runtime-media/index.js';
 export type { MediaRuntimeState, MediaPlaybackCommand, MediaPlaybackEvent, MediaPlaylistRuntime, MediaClipRuntime, MediaRuntimeSnapshot, MediaRuntimeHealth, MediaRuntimeMetrics, MediaPlaybackAdapter, MediaPlaybackAdapterResult, MediaPlaybackCommandType, MediaPlaybackEventType } from './runtime-media/index.js';
+
+export { AudioRuntime, AudioPlaybackSession, AudioRuntimeDispatcher, AudioRuntimeExecutor, AudioRuntimeQueue, AudioRuntimeHistory, NullAudioDSPAdapter, WebAudioDSPAdapter, createAudioRuntime, createAudioRuntimeState, createAudioRuntimeSnapshot, createAudioRuntimeCommand } from './runtime-audio/index.js';
+export type { AudioRuntimeState, AudioRuntimeCommand, AudioRuntimeCommandType, AudioChannelRuntime, AudioBusRuntime, AudioMixRuntime, AudioRoutingRuntime, AudioMonitorRuntime, AudioRuntimeSnapshot, AudioRuntimeHealth, AudioRuntimeMetrics, AudioDSPAdapter, AudioDSPAdapterStatus } from './runtime-audio/index.js';
