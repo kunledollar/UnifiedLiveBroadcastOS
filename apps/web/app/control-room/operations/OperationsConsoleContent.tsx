@@ -44,6 +44,7 @@ import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
 import { RecordingRuntimePanel } from './RecordingRuntimePanel';
 import { SecurityPanel } from './SecurityPanel';
+import { MonitoringPanel } from './MonitoringPanel';
 import { ClusterPanel } from './ClusterPanel';
 import { PluginPanel } from './PluginPanel';
 import { CloudPanel } from './CloudPanel';
@@ -206,6 +207,7 @@ export function OperationsConsoleContent({
       </div>
     ),
     security: <SecurityPanel />,
+    monitoring: <MonitoringPanel />,
     cluster: <ClusterPanel />,
     plugins: <PluginPanel />,
     cloud: <CloudPanel />, 

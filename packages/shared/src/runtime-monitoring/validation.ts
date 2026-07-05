@@ -1,0 +1,14 @@
+import { MonitoringRuntime, createMonitoringManifest } from './index.js';
+const assert = { equal: (a: unknown, b: unknown) => { if (a !== b) throw new Error(`Expected ${String(a)} to equal ${String(b)}`); }, ok: (v: unknown) => { if (!v) throw new Error('Expected value to be truthy'); }, throws: (fn: () => unknown) => { let threw = false; try { fn(); } catch { threw = true; } if (!threw) throw new Error('Expected function to throw'); } };
+const runtime = new MonitoringRuntime();
+runtime.registerSignal({ id: 'cpu', label: 'CPU Load', kind: 'metric', status: 'healthy', value: '42', unit: '%' });
+assert.throws(() => runtime.registerSignal({ id: 'cpu', label: 'Duplicate', kind: 'metric', status: 'unknown', value: 'n/a' }));
+assert.throws(() => runtime.registerSignal({ id: 'unsafe', label: 'Unsafe', kind: 'trace', status: 'unknown', value: 'n/a', endpoint: 'https://example.com' } as never));
+runtime.recordSample('cpu', '92', 'warning');
+assert.equal(runtime.health().status, 'warning');
+assert.equal(runtime.health().activeAlerts, 1);
+runtime.acknowledgeAlert(runtime.session.alerts[0]!.id);
+assert.equal(runtime.health().status, 'healthy');
+assert.ok(runtime.snapshot().signals.length === 1);
+assert.equal(createMonitoringManifest(runtime.session).externalTelemetryEnabled, false);
+console.log('runtime-monitoring validation passed');
