@@ -1,4 +1,4 @@
-import { RecordingPipeline, isRealRecordingEnabled, safeRecordingFilename } from './recording-runtime/index.js';
+import { RecordingPipeline, isRealRecordingEnabled, safeRecordingFilename, createRecordingPipeline as createRecordingPipelineV2, createDemoRecordingSession } from './recording-runtime/index.js';
 const assert = {
   equal(actual: unknown, expected: unknown, message: string) {
     if (actual !== expected)
@@ -2107,7 +2107,51 @@ assert.equal(outputFrames.program.state, 'rendering', 'program output renders th
 assert.equal(outputFrames.preview.renderState.sceneId, 'scene:preview', 'preview output owns independent preview scene');
 assert.equal(outputFrames.program.renderState.sceneId, 'scene:program', 'program output owns independent program scene');
 assert.equal(outputFrames.preview.videoSurface.containsRuntimeHandles, false, 'preview video surface is metadata-only');
+
 assert.equal(outputFrames.program.audioBus.containsRuntimeHandles, false, 'program audio bus is metadata-only');
+
+// UBOS 2.0 Phase 2.13 recording pipeline validation
+const recordingClock = createClock({ frameRate: 30 });
+const recordingScheduler = new FrameScheduler(recordingClock);
+const recordingEvents: string[] = [];
+const phase213RecordingPipeline = createRecordingPipelineV2({ id: 'recording-pipeline:phase-2-13' });
+phase213RecordingPipeline.onRuntimeEvent((event) => recordingEvents.push(event.type));
+const recordingSession = phase213RecordingPipeline.createSession({ id: 'recording-session:phase-2-13', container: 'mp4', outputUri: 'program-master.mp4', programOutput, audioMixer: programMixer, mediaClock: recordingClock, frameScheduler: recordingScheduler });
+assert.equal(recordingSession.state, 'idle', 'recording session starts idle');
+assert.equal(recordingSession.container, 'mp4', 'recording pipeline supports MP4 container');
+assert.equal(recordingSession.source.programOutputId, programOutput.id, 'recording session binds ProgramOutput identity');
+assert.equal(recordingSession.source.audioMixerId, programMixer.id, 'recording session binds AudioMixer identity');
+phase213RecordingPipeline.prepare(recordingSession.id);
+assert.equal(phase213RecordingPipeline.getSession(recordingSession.id)?.state, 'preparing', 'recording lifecycle supports preparing');
+phase213RecordingPipeline.start(recordingSession.id);
+const recordingTick = recordingScheduler.createTick();
+phase213RecordingPipeline.recordProgramFrame(recordingSession.id, recordingTick);
+phase213RecordingPipeline.recordAudioFrame(recordingSession.id, 480, recordingTick);
+const activeRecording = phase213RecordingPipeline.getSession(recordingSession.id)!;
+assert.equal(activeRecording.state, 'recording', 'recording lifecycle supports recording');
+assert.equal(activeRecording.metadata.frameCount, 1, 'recording metadata tracks frame count');
+assert.equal(activeRecording.metadata.audioSamples, 480, 'recording metadata tracks audio samples');
+assert.equal(activeRecording.metadata.droppedFrames, recordingTick.diagnostics?.droppedFrames ?? 0, 'recording metadata tracks dropped frames');
+assert.equal(typeof activeRecording.metadata.estimatedFileSizeBytes, 'number', 'recording metadata estimates file size');
+assert.equal(activeRecording.clock.containsRuntimeHandles, false, 'recording session synchronizes with serializable MediaClock state');
+assert.equal(activeRecording.scheduler.metadataOnly, true, 'recording pipeline integrates FrameScheduler metadata');
+phase213RecordingPipeline.pause(recordingSession.id);
+assert.equal(phase213RecordingPipeline.getSession(recordingSession.id)?.state, 'paused', 'recording lifecycle supports paused');
+phase213RecordingPipeline.resume(recordingSession.id);
+phase213RecordingPipeline.stop(recordingSession.id);
+assert.equal(phase213RecordingPipeline.getSession(recordingSession.id)?.state, 'stopped', 'recording lifecycle supports stopped');
+assert.equal(recordingEvents.includes('recording_started'), true, 'recording pipeline emits runtime events');
+assert.equal(phase213RecordingPipeline.getSnapshot().backend.mode, 'metadata_only', 'recording pipeline preserves backend independence');
+assert.equal(phase213RecordingPipeline.getSnapshot().containsMediaPayloads, false, 'recording pipeline excludes media payloads');
+const movSession = phase213RecordingPipeline.createSession({ id: 'recording-session:mov', container: 'mov', programOutput, audioMixer: programMixer, mediaClock: recordingClock, frameScheduler: recordingScheduler });
+assert.equal(movSession.container, 'mov', 'recording pipeline supports MOV container');
+const mkvSession = phase213RecordingPipeline.createSession({ id: 'recording-session:mkv', container: 'mkv', programOutput, audioMixer: programMixer, mediaClock: recordingClock, frameScheduler: recordingScheduler });
+assert.equal(mkvSession.container, 'mkv', 'recording pipeline supports MKV container');
+const failedRecording = phase213RecordingPipeline.fail(mkvSession.id, 'validation failure');
+assert.equal(failedRecording.state, 'failed', 'recording lifecycle supports failed');
+const recordingDemo = await createDemoRecordingSession({ programOutput, audioMixer: programMixer, mediaClock: recordingClock, frameScheduler: recordingScheduler });
+assert.equal(recordingDemo.session.state, 'stopped', 'demo recording session completes lifecycle');
+
 assert.equal(outputFrames.preview.renderState.audioFrames.length, 1, 'preview output presents mixed audio with video');
 assert.equal(outputFrames.program.renderState.audioFrames.length, 1, 'program output presents mixed audio with video');
 assert.equal(typeof outputFrames.preview.renderState.synchronizedPresentationMs, 'number', 'preview output exposes synchronized presentation timestamp');
