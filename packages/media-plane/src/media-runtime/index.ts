@@ -33,3 +33,5 @@ export function mapProductionGraphSources(graph: { revision?: number; scenes?: r
 
 export * from "./video-decoder.js";
 export * from "./ffmpeg/video-decoder.js";
+
+export * from "./video-capture.js";
