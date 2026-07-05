@@ -35,3 +35,6 @@ export * from "./video-decoder.js";
 export * from "./ffmpeg/video-decoder.js";
 
 export * from "./video-capture.js";
+export * from "./audio-capture.js";
+export * from "./audio-decoder.js";
+export * from "./ffmpeg/audio-decoder.js";
