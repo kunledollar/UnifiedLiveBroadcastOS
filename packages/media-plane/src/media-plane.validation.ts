@@ -223,6 +223,14 @@ import {
   createVideoCaptureSource,
   FFmpegDeviceCaptureBackend,
   createVideoCaptureDevice,
+  createAudioCaptureSource,
+  FFmpegAudioCaptureBackend,
+  createAudioCaptureDevice,
+  createAudioDecodeSource,
+  RingAudioBuffer,
+  createFFmpegAudioDecoder,
+  buildFFprobeAudioFrameMetadataArgs,
+  createFFmpegAudioDecodeCommandPreview,
 } from './index.js';
 
 const command = (
@@ -1933,4 +1941,71 @@ assert.equal(captureSource.getSnapshot().state, 'capturing', 'video capture supp
 await captureSource.stop();
 assert.equal(captureSource.getSnapshot().state, 'stopped', 'video capture supports stopped lifecycle');
 assert.equal(captureSource.getStatusEvents().some((event) => event.type === 'frame_captured'), true, 'video capture emits runtime status events');
+
+// UBOS 2.0 Phase 2.8 audio capture and decode foundation validation
+const audioCaptureBackend = new FFmpegAudioCaptureBackend([
+  createAudioCaptureDevice({
+    id: 'microphone:test:virtual',
+    label: 'Validation Virtual Microphone',
+    kind: 'virtual_audio_device',
+    backend: 'ffmpeg-audio-capture',
+    capabilities: [
+      { sampleRate: 48000, channels: 2, sampleFormat: 'flt', frameDurationMs: 10, label: '48k stereo float', metadata: {} },
+      { sampleRate: 44100, channels: 1, sampleFormat: 's16', frameDurationMs: 20, label: '44.1k mono s16', metadata: {} },
+    ],
+    metadata: { platformNeutral: true },
+  }),
+]);
+const audioCapture = createAudioCaptureSource({ id: 'audio-capture:phase-2-8', backend: audioCaptureBackend, graphRevision: 128 });
+const audioDevices = await audioCapture.discoverDevices();
+assert.equal(audioDevices.length, 1, 'audio capture discovery returns microphone devices');
+assert.equal(audioDevices[0]?.containsRuntimeHandles, false, 'audio capture devices are serializable metadata');
+await audioCapture.selectDevice('microphone:test:virtual', { sampleRate: 44100, channels: 1, sampleFormat: 's16' });
+assert.equal(audioCapture.getSnapshot().selectedCapability?.label, '44.1k mono s16', 'audio capture source selects requested input device capability');
+await audioCapture.start();
+const capturedAudio = audioCapture.captureFrame();
+assert.equal(capturedAudio.sampleRate, 44100, 'captured audio frame exposes sample rate metadata');
+assert.equal(capturedAudio.channels, 1, 'captured audio frame exposes channel metadata');
+assert.equal(capturedAudio.sampleFormat, 's16', 'captured audio frame exposes sample format metadata');
+assert.equal(capturedAudio.metadataOnly, true, 'captured audio frames are metadata-only');
+assert.equal(capturedAudio.containsAudioData, false, 'captured audio frames do not expose sample payloads');
+audioCapture.pause();
+assert.equal(audioCapture.getSnapshot().state, 'paused', 'audio capture supports paused lifecycle');
+audioCapture.resume();
+assert.equal(audioCapture.getSnapshot().state, 'capturing', 'audio capture supports resume lifecycle');
+await audioCapture.stop();
+assert.equal(audioCapture.getStatusEvents().some((event) => event.type === 'audio_frame_captured'), true, 'audio capture emits runtime status events');
+
+const audioDecodeSource = createAudioDecodeSource({ id: 'decode:wav', uri: 'fixtures/audio.wav' });
+assert.equal(audioDecodeSource.container, 'wav', 'audio decode source infers WAV container');
+for (const uri of ['clip.mp4', 'clip.mov', 'clip.mkv', 'clip.webm', 'clip.wav', 'clip.mp3']) {
+  assert.equal(Boolean(createAudioDecodeSource({ id: `decode:${uri}`, uri: `fixtures/${uri}` }).container), true, `audio decoder supports ${uri}`);
+}
+const audioBuffer = new RingAudioBuffer(2);
+const ffmpegAudioDecoder = createFFmpegAudioDecoder({ id: 'decoder:phase-2-8', dryRun: true, maxFrames: 3, bufferCapacity: 2, env: {} });
+const audioDecoderEvents: string[] = [];
+ffmpegAudioDecoder.onStatus((event) => audioDecoderEvents.push(event.type));
+const openedAudioDecoder = await ffmpegAudioDecoder.open(audioDecodeSource);
+assert.equal(openedAudioDecoder.state, 'decoding', 'FFmpeg audio decoder opens into decoding state');
+const firstAudioFrame = await ffmpegAudioDecoder.decodeNext();
+assert.equal(firstAudioFrame?.frameIndex, 0, 'audio decoder decodes frames sequentially from index zero');
+assert.equal(firstAudioFrame?.sampleRate, 48000, 'decoded audio frame exposes sample rate metadata');
+assert.equal(firstAudioFrame?.channels, 2, 'decoded audio frame exposes channel metadata');
+assert.equal(firstAudioFrame?.sampleFormat, 's16', 'decoded WAV frame exposes sample format metadata');
+assert.equal(typeof firstAudioFrame?.timestamp, 'number', 'decoded audio frame exposes timestamp metadata');
+assert.equal(typeof firstAudioFrame?.duration, 'number', 'decoded audio frame exposes duration metadata');
+assert.equal(firstAudioFrame?.metadataOnly, true, 'decoded audio frames are metadata-only');
+assert.equal(firstAudioFrame?.containsAudioData, false, 'decoded audio frame payload ownership stays inside runtime');
+await ffmpegAudioDecoder.decodeNext();
+await ffmpegAudioDecoder.decodeNext();
+assert.equal(await ffmpegAudioDecoder.decodeNext(), undefined, 'audio decoder reports end-of-stream after final frame');
+assert.equal(ffmpegAudioDecoder.getSnapshot().state, 'completed', 'audio decoder enters completed state at end-of-stream');
+assert.equal(ffmpegAudioDecoder.getBuffer().size(), 2, 'audio buffer enforces configured capacity');
+audioBuffer.push(firstAudioFrame!);
+assert.equal(audioBuffer.peek()?.frameIndex, 0, 'audio buffering abstraction supports peeking decoded metadata');
+assert.equal(audioDecoderEvents.includes('audio_frame_decoded'), true, 'audio decoder emits runtime status events');
+assert.equal(buildFFprobeAudioFrameMetadataArgs(audioDecodeSource, 2).includes('-show_entries'), true, 'FFmpeg audio decoder builds ffprobe metadata command');
+assert.equal(createFFmpegAudioDecodeCommandPreview(audioDecodeSource, { executable: 'ffmpeg', env: {} }).includes('-f null'), true, 'FFmpeg audio decoder exposes backend command preview without UI internals');
+assert.equal(JSON.stringify(ffmpegAudioDecoder.getSnapshot()).includes('containsMediaPayloads'), true, 'audio decoder snapshot declares media payload exclusion');
+
 assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');
