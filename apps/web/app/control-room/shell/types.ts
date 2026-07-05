@@ -14,7 +14,8 @@ export type NavItemId =
   | 'recording'
   | 'security'
   | 'cluster'
-  | 'plugins';
+  | 'plugins'
+  | 'cloud';
 
 export type DockTabId =
   'audio' | 'layers' | 'graphics' | 'media' | 'replay' | 'collaboration' | 'automation' | 'logs';
@@ -37,4 +38,5 @@ export type OperationsTabId =
   | 'recording'
   | 'security'
   | 'cluster'
-  | 'plugins';
+  | 'plugins'
+  | 'cloud';

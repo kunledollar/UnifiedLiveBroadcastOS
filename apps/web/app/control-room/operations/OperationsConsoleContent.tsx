@@ -46,6 +46,7 @@ import { RecordingRuntimePanel } from './RecordingRuntimePanel';
 import { SecurityPanel } from './SecurityPanel';
 import { ClusterPanel } from './ClusterPanel';
 import { PluginPanel } from './PluginPanel';
+import { CloudPanel } from './CloudPanel';
 import type { DeviceAction, DeviceState } from '../devices/device-state';
 import { createDeviceManifest } from '@ubos/shared';
 import { createInitialDeviceState } from '../devices/device-state';
@@ -207,6 +208,7 @@ export function OperationsConsoleContent({
     security: <SecurityPanel />,
     cluster: <ClusterPanel />,
     plugins: <PluginPanel />,
+    cloud: <CloudPanel />, 
     recording: recordingRuntimeState ? (
       <RecordingRuntimePanel state={recordingRuntimeState} />
     ) : (
