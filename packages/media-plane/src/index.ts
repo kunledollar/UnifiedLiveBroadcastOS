@@ -1182,3 +1182,5 @@ export type { ProductionSession, ExecutionStatistics, ExecutionManifest, Executi
 export * from './media-runtime/index.js';
 export * from './output-pipeline.js';
 export * from './media-runtime/ffmpeg/index.js';
+
+export * from './production-switcher.js';
