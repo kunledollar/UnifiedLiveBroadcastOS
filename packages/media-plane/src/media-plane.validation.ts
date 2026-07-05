@@ -743,6 +743,12 @@ assert.equal(
   'mock_live mode still selects mock adapter',
 );
 
+
+import {
+  createTransitionRenderer,
+  createTransitionRendererDemo,
+} from './transition-renderer.js';
+
 import {
   CompositionStore,
   createDefaultCanvas,
@@ -2143,6 +2149,36 @@ switcher.setPreviewScene('scene:wide');
 const scheduled = switcher.scheduleTransition({ kind: 'auto', durationMs: 750, metadata: { requestedBy: 'validation' } });
 assert.equal(scheduled.durationMs, 750, 'transition metadata preserves duration');
 assert.equal(scheduled.containsRuntimeHandles, false, 'transition metadata excludes runtime handles');
+
+// UBOS 2.0 Phase 2.12 transition rendering engine validation
+const transitionClock = createClock({ frameRate: 30 });
+const transitionFromCompositor = createSceneCompositor({ id: 'compositor:transition:from', sceneId: 'scene:program', mediaClock: transitionClock });
+transitionFromCompositor.addLayer(createCompositorRenderLayer({ id: 'transition-program-camera', label: 'Program Camera', source: { type: 'video', sourceId: 'camera:program', metadata: {} }, position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, zIndex: 0 }));
+const transitionToCompositor = createSceneCompositor({ id: 'compositor:transition:to', sceneId: 'scene:preview', mediaClock: transitionClock });
+transitionToCompositor.addLayer(createCompositorRenderLayer({ id: 'transition-preview-camera', label: 'Preview Camera', source: { type: 'video', sourceId: 'camera:preview', metadata: {} }, position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, zIndex: 0 }));
+const transitionOutputCompositor = createSceneCompositor({ id: 'compositor:transition:output', sceneId: 'scene:program', mediaClock: transitionClock });
+const transitionRenderer = createTransitionRenderer({ id: 'transition-renderer:phase-2-12', fromCompositor: transitionFromCompositor, toCompositor: transitionToCompositor, outputCompositor: transitionOutputCompositor, mediaClock: transitionClock, renderer: createGpuRuntime(), durationMs: 500, metadata: { phase: '2.12' } });
+const transitionEvents: string[] = [];
+transitionRenderer.onRuntimeEvent((event) => transitionEvents.push(event.type));
+const transitionStart = transitionRenderer.start({ effect: 'dissolve', fromSceneId: 'scene:program', toSceneId: 'scene:preview', durationMs: 500, metadata: { operatorId: 'director' } });
+assert.equal(transitionStart.progress, 0, 'transition timeline starts at zero progress');
+const dissolveFrame = transitionRenderer.renderNextFrame();
+assert.equal(dissolveFrame.frame.metadata.transitionEffect, 'dissolve', 'dissolve transition renders metadata effect marker');
+assert.equal(dissolveFrame.frame.layers.length, 2, 'dissolve transition combines program and preview layers');
+assert.equal(dissolveFrame.containsRuntimeHandles, false, 'transition render result excludes runtime handles');
+assert.equal(dissolveFrame.containsMediaPayloads, false, 'transition render result excludes media payloads');
+assert.equal(Boolean(dissolveFrame.gpuFrame), true, 'transition renderer can submit metadata GPU frame');
+assert.equal(transitionEvents.includes('transition_started'), true, 'transition renderer emits transition_started');
+assert.equal(transitionEvents.some((event) => event === 'transition_progress' || event === 'transition_completed'), true, 'transition renderer emits progress lifecycle events');
+const fadeRenderer = createTransitionRenderer({ fromCompositor: transitionFromCompositor, toCompositor: transitionToCompositor, outputCompositor: transitionOutputCompositor, mediaClock: transitionClock, durationMs: 400 });
+fadeRenderer.start({ effect: 'fade', fromSceneId: 'scene:program', toSceneId: 'scene:preview' });
+assert.equal(fadeRenderer.renderNextFrame().frame.layers.some((layer) => layer.source.type === 'solid_color'), true, 'fade transition includes generated black layer');
+const dipRenderer = createTransitionRenderer({ fromCompositor: transitionFromCompositor, toCompositor: transitionToCompositor, outputCompositor: transitionOutputCompositor, mediaClock: transitionClock, durationMs: 400 });
+dipRenderer.start({ effect: 'dip_to_black', fromSceneId: 'scene:program', toSceneId: 'scene:preview' });
+assert.equal(dipRenderer.renderNextFrame().frame.metadata.transitionEffect, 'dip_to_black', 'dip-to-black transition renders effect metadata');
+const transitionDemo = await createTransitionRendererDemo();
+assert.equal(transitionDemo.events.some((event) => event.type === 'transition_completed'), true, 'transition renderer demo completes preview-to-program transition');
+
 const autoSnapshot = switcher.completeScheduledTransition({ completedBy: 'validation' });
 assert.equal(autoSnapshot.programSceneId, 'scene:wide', 'scheduled auto promotes preview scene to program');
 assert.equal(autoSnapshot.history[0]?.transition.kind, 'auto', 'scheduled transition records auto kind');

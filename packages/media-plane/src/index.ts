@@ -1184,3 +1184,4 @@ export * from './output-pipeline.js';
 export * from './media-runtime/ffmpeg/index.js';
 
 export * from './production-switcher.js';
+export * from './transition-renderer.js';
