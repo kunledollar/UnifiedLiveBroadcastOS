@@ -604,6 +604,7 @@ export * from './runtime-render/index.js';
 
 export * from './security/index.js';
 
+export * from './runtime-monitoring/index.js';
 export * from './runtime-cluster/index.js';
 export * from './plugin-sdk/index.js';
 

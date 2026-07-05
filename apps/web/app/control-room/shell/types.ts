@@ -13,6 +13,7 @@ export type NavItemId =
   | 'runtime'
   | 'recording'
   | 'security'
+  | 'monitoring'
   | 'cluster'
   | 'plugins'
   | 'cloud';
@@ -37,6 +38,7 @@ export type OperationsTabId =
   | 'runtime'
   | 'recording'
   | 'security'
+  | 'monitoring'
   | 'cluster'
   | 'plugins'
   | 'cloud';
