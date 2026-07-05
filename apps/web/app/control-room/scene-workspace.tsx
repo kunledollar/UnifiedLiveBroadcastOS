@@ -2576,6 +2576,7 @@ export function SceneWorkspace({
       'cluster',
       'plugins',
       'cloud',
+      'analytics',
       'inspector',
       'routing',
       'outputs',

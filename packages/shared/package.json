@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node dist/production-graph.validation.js && node dist/runtime-switching/validation.js && node dist/runtime-media/validation.js && node dist/runtime-audio/validation.js && node dist/runtime-webrtc/validation.js && node dist/runtime-recording/validation.js && node dist/security/validation.js && node dist/runtime-monitoring/validation.js && node dist/runtime-cluster/validation.js && node dist/plugin-sdk/validation.js && node dist/cloud-platform/validation.test.js && node dist/runtime-ai-director/validation.js"
+    "test": "pnpm build && node dist/production-graph.validation.js && node dist/runtime-switching/validation.js && node dist/runtime-media/validation.js && node dist/runtime-audio/validation.js && node dist/runtime-webrtc/validation.js && node dist/runtime-recording/validation.js && node dist/security/validation.js && node dist/runtime-monitoring/validation.js && node dist/runtime-cluster/validation.js && node dist/plugin-sdk/validation.js && node dist/cloud-platform/validation.test.js && node dist/runtime-ai-director/validation.js && node dist/runtime-analytics/validation.js"
   },
   "dependencies": {
     "zod": "^3.24.1"
