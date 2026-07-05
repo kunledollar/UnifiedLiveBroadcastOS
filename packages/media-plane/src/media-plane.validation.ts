@@ -159,6 +159,7 @@ import {
   redactRuntimeDiagnostics,
   RuntimeSupervisor,
   createFFmpegRuntime,
+  createFFmpegEnvironment,
   buildCommand,
   validateExecutable,
   locateFFmpeg,
@@ -1488,7 +1489,7 @@ assert.equal(ffmpegMockProcess.state, 'running', 'real FFmpeg runtime mock fallb
 assert.equal(ffmpegRuntime.summarizeHealth().featureFlag, false, 'real FFmpeg runtime diagnostics expose disabled feature flag');
 assert.equal(summarizeFFmpegRuntimeStatistics(ffmpegMockProcess).lifecycleEvents.some((event) => JSON.stringify(event).includes('pid')), false, 'real FFmpeg runtime replay events omit PID');
 const ffmpegRestart = await ffmpegRuntime.manager.restart(ffmpegRuntimeCommand);
-assert.equal(ffmpegRestart.state, 'recovering', 'real FFmpeg runtime restart enters recovering');
+assert.equal(ffmpegRestart.state, 'running', 'real FFmpeg runtime restart re-enters running lifecycle');
 const ffmpegStopped = await ffmpegRuntime.manager.stop();
 assert.equal(ffmpegStopped?.state, 'stopped', 'real FFmpeg runtime stop lifecycle works');
 const ffmpegFailure = mapFFmpegRuntimeFailure({ kind: 'spawn_failure', message: 'spawn failed' });
@@ -1755,3 +1756,20 @@ assert.equal(ffmpegRecordingState.state, 'recording', 'FFmpeg adapter creates ba
 const ffmpegRtmpState = await ffmpegMediaAdapter.streamRtmp(mediaPipeline, 'rtmp://example.test/live/key');
 assert.equal(ffmpegRtmpState.events[0]?.type, 'rtmp_stubbed', 'FFmpeg adapter exposes RTMP as stubbed output abstraction');
 await ffmpegMediaAdapter.stop();
+
+// UBOS 2.0 Phase 2.2 real FFmpeg process pipeline validation
+const dryRunRuntime = createFFmpegRuntime(createFFmpegEnvironment({}), { dryRun: true, startupTimeoutMs: 25 });
+const dryRunCommand = buildCommand({ executable: 'ffmpeg', args: ['-version'], outputs: [], metadata: { test: 'dry-run' } });
+const dryRunProcess = await dryRunRuntime.manager.start(dryRunCommand);
+assert.equal(dryRunProcess.state, 'running', 'FFmpeg dry-run process enters running lifecycle without spawning');
+assert.equal(dryRunProcess.dryRun, true, 'FFmpeg dry-run records mock-safe execution mode');
+assert.equal(dryRunProcess.events.some((event) => event.type === 'dry_run_running'), true, 'FFmpeg dry-run emits lifecycle event');
+assert.equal(dryRunRuntime.createManifest().containsProcessHandles, false, 'FFmpeg runtime manifest excludes process handles');
+const dryRunStopped = await dryRunRuntime.manager.stop();
+assert.equal(dryRunStopped?.state, 'stopped', 'FFmpeg dry-run stop reaches stopped lifecycle');
+const missingRuntime = createFFmpegRuntime(createFFmpegEnvironment({ UBOS_ENABLE_REAL_FFMPEG: 'true', NEXT_PUBLIC_UBOS_REAL_FFMPEG: 'true' }), { startupTimeoutMs: 100 });
+const missingProcess = await missingRuntime.manager.start(buildCommand({ executable: 'ubos-ffmpeg-missing-binary', args: ['-version'], outputs: [] }));
+await new Promise((resolve) => setTimeout(resolve, 25));
+assert.equal(['failed', 'running'].includes(missingRuntime.manager.getProcess()?.state ?? missingProcess.state), true, 'FFmpeg real process layer tolerates missing binaries without throwing');
+assert.equal(missingRuntime.createManifest().containsPipes, false, 'FFmpeg real process manifest excludes stdio pipes');
+await missingRuntime.manager.kill();

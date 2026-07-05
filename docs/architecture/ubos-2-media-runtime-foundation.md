@@ -60,3 +60,44 @@ Run a real FFmpeg-backed recording through application code only when FFmpeg is 
 ```bash
 UBOS_ENABLE_REAL_FFMPEG=true NEXT_PUBLIC_UBOS_REAL_FFMPEG=true pnpm media:demo ./input.mp4 ./recording.mp4
 ```
+
+# UBOS 2.0 Phase 2.2: Real FFmpeg Process Pipeline
+
+Phase 2.2 promotes FFmpeg from command modeling to a controlled process boundary while keeping mock-safe behavior as the default. The process runner is explicit, status-oriented, and isolated from UI code.
+
+## Runtime process layer
+
+- `ProcessRunner` defines `start`, `stop`, `kill`, and `getProcess` without exposing child-process handles.
+- `FFmpegProcessRunner` starts FFmpeg with argument arrays and `shell: false` only when both real-execution flags are enabled.
+- Lifecycle state is limited to `idle`, `starting`, `running`, `stopping`, `stopped`, and `failed`.
+- Dry-run mode is enabled by default unless real FFmpeg execution is explicitly enabled.
+- stdout and stderr are captured as bounded diagnostic line arrays on process metadata, but manifests continue to report that replay does not store stdout/stderr streams.
+- Missing executables, spawn failures, unexpected exits, timeouts, cancellation, and kills become structured failures instead of crashing validation or CI.
+
+## Status events
+
+FFmpeg process changes emit process events such as `process_starting`, `process_running`, `stdout`, `stderr`, `process_stopping`, `process_stopped`, `process_failed`, `process_timeout`, and `process_killed`. The media runtime adapter maps those changes into runtime status-event metadata so callers can observe lifecycle transitions without receiving process handles or media payloads.
+
+## Safe execution rules
+
+Real execution requires both flags:
+
+```bash
+UBOS_ENABLE_REAL_FFMPEG=true NEXT_PUBLIC_UBOS_REAL_FFMPEG=true
+```
+
+Without those flags, tests and CI use dry-run/mock fallback and do not require FFmpeg to be installed. Command construction still validates executables, rejects shell metacharacters and traversal patterns, redacts secrets in previews, and never executes shell command strings.
+
+## Demo command
+
+Print the command without executing FFmpeg:
+
+```bash
+pnpm media:demo testsrc ./ubos-demo-recording.mp4
+```
+
+Run a short two-second synthetic FFmpeg MP4 recording only when FFmpeg is installed and real execution is explicitly enabled:
+
+```bash
+UBOS_ENABLE_REAL_FFMPEG=true NEXT_PUBLIC_UBOS_REAL_FFMPEG=true pnpm media:demo --run testsrc ./ubos-demo-recording.mp4
+```
