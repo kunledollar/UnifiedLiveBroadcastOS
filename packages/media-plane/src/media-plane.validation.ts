@@ -204,6 +204,15 @@ import {
   ProductionEngine,
   ProductionPipelineScheduler,
   isProductionEngineEnabled,
+  createMediaSource,
+  createMediaSink,
+  createMediaClock as createCoreMediaClock,
+  DefaultFrameScheduler,
+  createMediaRuntimePipeline,
+  mapProductionGraphSources,
+  createMp4RecordingCommand,
+  createRtmpCommand,
+  createFFmpegMediaRuntimeAdapter,
 } from './index.js';
 
 const command = (
@@ -1715,3 +1724,34 @@ const invalidManifest = { ...productionEngine.snapshot().manifest, steps: produc
 assert.equal(new (await import('./production-engine/index.js')).ExecutionValidator().validateManifest(invalidManifest).length > 0, true, 'production engine rejects unsafe execution order');
 assert.equal(new (await import('./production-engine/index.js')).ExecutionValidator().validateClock([{ timestamp: '2026-07-01T00:00:00.000Z', frameId: 1, clockMs: 1, driftMs: 101, source: 'audio' }]).length > 0, true, 'production engine rejects clock conflicts');
 assert.equal(isProductionEngineEnabled({ UBOS_ENABLE_PRODUCTION_ENGINE: 'true', NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true' }), true, 'production engine feature flags enable runtime');
+
+
+// UBOS 2.0 Phase 2.1 media runtime foundation validation
+const fileVideoSource = createMediaSource({ id: 'source:file-video', kind: 'video_file', uri: 'fixtures/video.mp4', graphSourceId: 'graph-video' });
+const fileAudioSource = createMediaSource({ id: 'source:file-audio', kind: 'audio_file', uri: 'fixtures/audio.wav', graphSourceId: 'graph-audio' });
+const cameraSource = createMediaSource({ id: 'source:camera', kind: 'camera', uri: '/dev/video0' });
+const micSource = createMediaSource({ id: 'source:mic', kind: 'microphone', uri: 'default' });
+const mp4Sink = createMediaSink({ id: 'sink:recording', kind: 'mp4_recording', uri: 'recordings/test.mp4' });
+const rtmpSink = createMediaSink({ id: 'sink:rtmp', kind: 'rtmp_stream', uri: 'rtmp://example.test/live/key', enabled: false });
+const mediaPipeline = createMediaRuntimePipeline({ id: 'pipeline:phase-2-1', sources: [fileVideoSource, fileAudioSource, cameraSource, micSource], sinks: [mp4Sink, rtmpSink], graphRevision: 121 });
+const coreClock = createCoreMediaClock(30);
+const frameSchedule = new DefaultFrameScheduler().schedule(coreClock, mediaPipeline.sources, mediaPipeline.sinks, mediaPipeline.graphRevision);
+assert.equal(frameSchedule.metadataOnly, true, 'frame scheduler emits metadata-only schedules');
+assert.equal(frameSchedule.sources.length, 4, 'frame scheduler includes video, audio, camera, and microphone sources');
+assert.equal(frameSchedule.sinks.includes('sink:recording'), true, 'frame scheduler targets MP4 sink metadata');
+const recordingCommand = createMp4RecordingCommand(mediaPipeline, 'recordings/test.mp4', { executable: 'ffmpeg', env: {} });
+assert.equal(recordingCommand.args.includes('-movflags'), true, 'MP4 recording command enables faststart flags');
+assert.equal(recordingCommand.outputs[0], 'recordings/test.mp4', 'MP4 recording command declares output');
+const rtmpCommand = createRtmpCommand(mediaPipeline, 'rtmp://example.test/live/key', { executable: 'ffmpeg', env: {} });
+assert.equal(rtmpCommand.args.includes('-f'), true, 'RTMP command models output container');
+assert.equal(rtmpCommand.metadata.initiallyStubbed, true, 'RTMP output remains an explicit Phase 2.1 stub');
+const graphMappedPipeline = mapProductionGraphSources({ revision: 122, scenes: [{ sources: [{ id: 'camera-a', type: 'video', name: 'Camera A' }] }] });
+assert.equal(graphMappedPipeline.sources[0]?.graphSourceId, 'camera-a', 'production graph source metadata maps to media runtime source');
+const ffmpegMediaAdapter = createFFmpegMediaRuntimeAdapter({ executable: 'ffmpeg', env: {} });
+const ffmpegPipelineState = await ffmpegMediaAdapter.createPipeline(mediaPipeline);
+assert.equal(ffmpegPipelineState.containsMediaPayloads, false, 'FFmpeg media runtime state never serializes media payloads');
+const ffmpegRecordingState = await ffmpegMediaAdapter.recordMp4(mediaPipeline, 'recordings/test.mp4');
+assert.equal(ffmpegRecordingState.state, 'recording', 'FFmpeg adapter creates basic recording pipeline');
+const ffmpegRtmpState = await ffmpegMediaAdapter.streamRtmp(mediaPipeline, 'rtmp://example.test/live/key');
+assert.equal(ffmpegRtmpState.events[0]?.type, 'rtmp_stubbed', 'FFmpeg adapter exposes RTMP as stubbed output abstraction');
+await ffmpegMediaAdapter.stop();

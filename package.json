@@ -14,7 +14,8 @@
     "db:migrate": "dotenv -- pnpm --filter @ubos/db exec prisma migrate dev --schema prisma/schema.prisma",
     "db:studio": "dotenv -- pnpm --filter @ubos/db exec prisma studio --schema prisma/schema.prisma",
     "test": "pnpm --filter @ubos/shared test",
-    "release:report": "node scripts/generate-release-report.mjs"
+    "release:report": "node scripts/generate-release-report.mjs",
+    "media:demo": "node scripts/media-runtime-demo.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",
