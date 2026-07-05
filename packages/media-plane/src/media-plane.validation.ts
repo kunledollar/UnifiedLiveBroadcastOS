@@ -239,6 +239,10 @@ import {
   createHighPassFilterProcessor,
   createLowPassFilterProcessor,
   createAudioMixerDemo,
+  createPreviewOutput,
+  createProgramOutput,
+  OutputPipelineManager,
+  createPreviewProgramOutputDemo,
 } from './index.js';
 
 const command = (
@@ -2061,5 +2065,51 @@ assert.equal(audioMixer.getSnapshot().state, 'stopped', 'audio mixer supports st
 const mixerDemo = await createAudioMixerDemo();
 assert.equal(mixerDemo.outputs.length, 1, 'audio mixer demo mixes multiple synthetic sources to the program bus');
 assert.equal(mixerDemo.snapshot.events.some((event) => event.type === 'buffer_mixed'), true, 'audio mixer demo emits runtime status events');
+
+
+// UBOS 2.0 Phase 2.10 preview and program output pipeline validation
+const previewClock = createClock({ frameRate: 30 });
+const programClock = createClock({ frameRate: 30 });
+const previewCompositor = createSceneCompositor({ id: 'compositor:preview:phase-2-10', sceneId: 'scene:preview', mediaClock: previewClock });
+previewCompositor.addLayer(createCompositorRenderLayer({ id: 'preview-camera', label: 'Preview Camera', source: { type: 'video', sourceId: 'camera:preview', metadata: {} }, position: { x: 0, y: 0 }, size: { width: 1280, height: 720 }, zIndex: 0 }));
+const programCompositor = createSceneCompositor({ id: 'compositor:program:phase-2-10', sceneId: 'scene:program', mediaClock: programClock });
+programCompositor.addLayer(createCompositorRenderLayer({ id: 'program-camera', label: 'Program Camera', source: { type: 'video', sourceId: 'camera:program', metadata: {} }, position: { x: 0, y: 0 }, size: { width: 1920, height: 1080 }, zIndex: 0 }));
+const previewMixerBuffer = new RingAudioBuffer(4);
+const programMixerBuffer = new RingAudioBuffer(4);
+previewMixerBuffer.push(createSyntheticAudioFrame({ id: 'preview:tone:0', sourceId: 'tone:preview', frequencyHz: 330 }));
+programMixerBuffer.push(createSyntheticAudioFrame({ id: 'program:tone:0', sourceId: 'tone:program', frequencyHz: 660 }));
+const previewMixer = createAudioMixer({ id: 'mixer:preview:phase-2-10', mediaClock: previewClock });
+previewMixer.addChannel({ id: 'channel:preview', buffer: previewMixerBuffer, controls: { gain: 1, mute: false, solo: false, pan: 0 } });
+previewMixer.addBus({ id: 'bus:preview', label: 'Preview monitor', channels: 2, sampleRate: 48000 });
+previewMixer.addRoute({ id: 'route:preview', inputChannelId: 'channel:preview', outputBusId: 'bus:preview', gain: 1, enabled: true });
+const programMixer = createAudioMixer({ id: 'mixer:program:phase-2-10', mediaClock: programClock });
+programMixer.addChannel({ id: 'channel:program', buffer: programMixerBuffer, controls: { gain: 1, mute: false, solo: false, pan: 0 } });
+programMixer.addBus({ id: 'bus:program', label: 'Program master', channels: 2, sampleRate: 48000 });
+programMixer.addRoute({ id: 'route:program', inputChannelId: 'channel:program', outputBusId: 'bus:program', gain: 1, enabled: true });
+const previewOutputEvents: string[] = [];
+const previewOutput = createPreviewOutput({ id: 'output:preview:phase-2-10', sceneId: 'scene:preview', compositor: previewCompositor, audioMixer: previewMixer, audioBusId: 'bus:preview', mediaClock: previewClock, videoSurface: { width: 1280, height: 720 } });
+previewOutput.onStatus((event) => previewOutputEvents.push(event.type));
+const programOutput = createProgramOutput({ id: 'output:program:phase-2-10', sceneId: 'scene:program', compositor: programCompositor, audioMixer: programMixer, audioBusId: 'bus:program', mediaClock: programClock, videoSurface: { width: 1920, height: 1080 } });
+const outputManager = new OutputPipelineManager({ preview: previewOutput, program: programOutput });
+outputManager.initializeAll();
+outputManager.startAll();
+const outputFrames = outputManager.renderAll();
+assert.equal(outputFrames.preview.state, 'rendering', 'preview output renders through manager');
+assert.equal(outputFrames.program.state, 'rendering', 'program output renders through manager');
+assert.equal(outputFrames.preview.renderState.sceneId, 'scene:preview', 'preview output owns independent preview scene');
+assert.equal(outputFrames.program.renderState.sceneId, 'scene:program', 'program output owns independent program scene');
+assert.equal(outputFrames.preview.videoSurface.containsRuntimeHandles, false, 'preview video surface is metadata-only');
+assert.equal(outputFrames.program.audioBus.containsRuntimeHandles, false, 'program audio bus is metadata-only');
+assert.equal(outputFrames.preview.renderState.audioFrames.length, 1, 'preview output presents mixed audio with video');
+assert.equal(outputFrames.program.renderState.audioFrames.length, 1, 'program output presents mixed audio with video');
+assert.equal(typeof outputFrames.preview.renderState.synchronizedPresentationMs, 'number', 'preview output exposes synchronized presentation timestamp');
+assert.equal(outputFrames.program.containsMediaPayloads, false, 'program output runtime state excludes media payloads');
+assert.equal(previewOutputEvents.includes('frame_presented'), true, 'preview output emits runtime status events');
+outputManager.pauseAll();
+assert.equal(outputManager.getSnapshot().preview?.state, 'paused', 'output manager pauses outputs');
+outputManager.stopAll();
+assert.equal(outputManager.getSnapshot().program?.state, 'stopped', 'output manager stops outputs');
+const outputDemo = await createPreviewProgramOutputDemo();
+assert.equal(outputDemo.description.includes('Preview and Program'), true, 'preview/program output demo describes simultaneous rendering');
 
 assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');

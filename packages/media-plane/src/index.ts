@@ -1180,4 +1180,5 @@ export * from './high-availability/index.js';
 export { ProductionEngine, PipelineScheduler as ProductionPipelineScheduler, SynchronizationManager, ResourceAllocator as ProductionResourceAllocator, ProductionRecovery, isProductionEngineEnabled, createProductionEngine } from './production-engine/index.js';
 export type { ProductionSession, ExecutionStatistics, ExecutionManifest, ExecutionDiagnostics, ExecutionHistory, ExecutionSnapshot, ExecutionCheckpoint, ProductionHealth, ProductionMetrics, ProductionEngineDashboard, ProductionRuntimeName, ProductionAction, EngineEvent, PipelineDependency, PipelineStep, ScheduledFrame, ClockSample, SynchronizationReport } from './production-engine/index.js';
 export * from './media-runtime/index.js';
+export * from './output-pipeline.js';
 export * from './media-runtime/ffmpeg/index.js';
