@@ -220,6 +220,9 @@ import {
   createFFmpegVideoDecoder,
   buildFFprobeFrameMetadataArgs,
   createFFmpegDecodeCommandPreview,
+  createVideoCaptureSource,
+  FFmpegDeviceCaptureBackend,
+  createVideoCaptureDevice,
 } from './index.js';
 
 const command = (
@@ -1889,3 +1892,45 @@ await new Promise((resolve) => setTimeout(resolve, 25));
 assert.equal(['failed', 'running'].includes(missingRuntime.manager.getProcess()?.state ?? missingProcess.state), true, 'FFmpeg real process layer tolerates missing binaries without throwing');
 assert.equal(missingRuntime.createManifest().containsPipes, false, 'FFmpeg real process manifest excludes stdio pipes');
 await missingRuntime.manager.kill();
+
+
+// UBOS 2.0 Phase 2.7 live video source capture validation
+const captureBackend = new FFmpegDeviceCaptureBackend([
+  createVideoCaptureDevice({
+    id: 'camera:test:virtual',
+    label: 'Validation Virtual Camera',
+    kind: 'virtual_camera',
+    backend: 'ffmpeg-device-capture',
+    capabilities: [
+      { width: 1920, height: 1080, frameRate: 30, pixelFormat: 'nv12', label: '1080p30 NV12', metadata: {} },
+      { width: 1280, height: 720, frameRate: 60, pixelFormat: 'mjpeg', label: '720p60 MJPEG', metadata: {} },
+    ],
+    metadata: { platformNeutral: true },
+  }),
+]);
+const captureSource = createVideoCaptureSource({ id: 'capture:phase-2-7', backend: captureBackend, graphRevision: 127 });
+const captureDevices = await captureSource.discoverDevices();
+assert.equal(captureDevices.length, 1, 'video capture discovery returns devices');
+assert.equal(captureDevices[0]?.containsRuntimeHandles, false, 'video capture devices are serializable metadata');
+assert.equal(captureDevices[0]?.capabilities[0]?.width, 1920, 'camera capabilities expose resolution');
+assert.equal(captureDevices[0]?.capabilities[0]?.frameRate, 30, 'camera capabilities expose frame rate');
+assert.equal(captureDevices[0]?.capabilities[0]?.pixelFormat, 'nv12', 'camera capabilities expose pixel format');
+await captureSource.selectDevice('camera:test:virtual', { width: 1280, height: 720, frameRate: 60, pixelFormat: 'mjpeg' });
+assert.equal(captureSource.getSnapshot().selectedCapability?.label, '720p60 MJPEG', 'video capture source selects requested device capability');
+await captureSource.start();
+assert.equal(captureSource.getSnapshot().state, 'capturing', 'video capture enters capturing lifecycle');
+const capturedFrame = captureSource.captureFrame();
+assert.equal(capturedFrame.metadataOnly, true, 'captured camera frames are metadata-only');
+assert.equal(capturedFrame.containsFrameData, false, 'captured camera frames do not expose frame payloads');
+assert.equal(capturedFrame.width, 1280, 'captured frame uses selected capability width');
+const captureRender = captureSource.renderLatestFrame();
+assert.equal(captureRender.renderFrame.layers.length, 1, 'captured camera frame is composited as a render layer');
+assert.equal(captureRender.gpu?.renderPass?.frame.resources[0]?.kind, 'texture', 'captured camera frame integrates with renderer texture metadata');
+captureSource.pause();
+assert.equal(captureSource.getSnapshot().state, 'paused', 'video capture supports paused lifecycle');
+captureSource.resume();
+assert.equal(captureSource.getSnapshot().state, 'capturing', 'video capture supports resume lifecycle');
+await captureSource.stop();
+assert.equal(captureSource.getSnapshot().state, 'stopped', 'video capture supports stopped lifecycle');
+assert.equal(captureSource.getStatusEvents().some((event) => event.type === 'frame_captured'), true, 'video capture emits runtime status events');
+assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');
