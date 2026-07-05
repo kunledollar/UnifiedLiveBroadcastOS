@@ -1,0 +1,18 @@
+import { EnterpriseAdminRuntime, EnterpriseAdminValidator, defaultUsageQuota, type OrganizationManifest, type LicenseManifest } from './index.js';
+
+const now = '2026-07-05T00:00:00.000Z';
+const user = { id: 'user-owner', tenantId: 'tenant-main', displayName: 'Owner', roles: ['owner' as const], status: 'active' as const };
+const tenant = { id: 'tenant-main', organizationId: 'org-main', name: 'Main Tenant', isolationMode: 'dedicated_metadata' as const, status: 'active' as const, quotas: defaultUsageQuota, users: [user], workspaces: [{ id: 'workspace-live', tenantId: 'tenant-main', name: 'Live Ops', status: 'active' as const, region: 'us-east' }] };
+const manifest: OrganizationManifest = { organizations: [{ id: 'org-main', name: 'UBOS Network', type: 'enterprise', status: 'active', ownerId: 'user-owner', regions: ['us-east'], workspaces: tenant.workspaces, teams: [{ id: 'team-prod', tenantId: 'tenant-main', name: 'Production', userIds: ['user-owner'] }], policies: { admin: [{ id: 'policy-admin', name: 'Admin approval', enabled: true, scope: 'organization', rules: ['approval_required'] }], compliance: [{ id: 'policy-compliance', name: 'Audit retention', framework: 'internal', enabled: true, retentionDays: 365, controls: ['audit_serialization'] }], quota: [{ id: 'quota-main', name: 'Enterprise quota', quotas: defaultUsageQuota, warningThresholdPercent: 80, hardLimit: true }] }, licensePlan: 'enterprise', createdAt: now, updatedAt: now }], tenants: [tenant], departments: [{ id: 'dept-prod', organizationId: 'org-main', name: 'Production' }], auditTrails: [{ id: 'audit-main', organizationId: 'org-main', events: [{ id: 'event-1', actorId: 'user-owner', action: 'organization.created', targetType: 'organization', targetId: 'org-main', createdAt: now }] }], approvals: [{ id: 'approval-1', requestedBy: 'user-owner', approverIds: ['user-owner'], status: 'approved', reason: 'bootstrap', createdAt: now }] };
+const license: LicenseManifest = { plan: 'enterprise', seats: [{ id: 'seat-1', plan: 'enterprise', status: 'allocated', assignedUserId: 'user-owner' }], allocations: [{ id: 'allocation-1', tenantId: 'tenant-main', userId: 'user-owner', seatId: 'seat-1', plan: 'enterprise', allocatedAt: now }], subscription: { id: 'sub-1', plan: 'enterprise', status: 'active', renewalPolicy: 'metadata_only', seats: 1 }, billingProfile: { id: 'billing-meta-1', organizationId: 'org-main', billingContactId: 'user-owner', billingRegion: 'US' } };
+
+const runtime = new EnterpriseAdminRuntime(manifest);
+if (!runtime.getOrganization('org-main')) throw new Error('organization creation failed');
+if (!manifest.tenants[0]) throw new Error('tenant creation failed');
+if (!EnterpriseAdminValidator.validateRole(user.roles[0] ?? '')) throw new Error('user role assignment failed');
+if (runtime.createDashboard('org-main', license).seatUsage.allocated !== 1) throw new Error('license allocation failed');
+if (EnterpriseAdminValidator.validateQuota({ ...defaultUsageQuota, maxUsers: -1 }).length === 0) throw new Error('quota validation failed');
+if (EnterpriseAdminValidator.validateManifest({ ...manifest, organizations: [{ ...manifest.organizations[0]!, licensePlan: 'bad' as never }] }).length === 0) throw new Error('plan validation failed');
+if (!runtime.serializeAuditTrail('org-main').includes('organization.created')) throw new Error('audit serialization failed');
+if (EnterpriseAdminValidator.validateManifest({ ...manifest, organizations: [{ ...manifest.organizations[0]!, password: 'nope' } as never] }).length === 0) throw new Error('unsafe field rejection failed');
+console.log('enterprise-admin validation passed');

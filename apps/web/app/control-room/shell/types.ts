@@ -17,7 +17,8 @@ export type NavItemId =
   | 'cluster'
   | 'plugins'
   | 'cloud'
-  | 'analytics';
+  | 'analytics'
+  | 'enterprise-admin';
 
 export type DockTabId =
   'audio' | 'layers' | 'graphics' | 'media' | 'replay' | 'collaboration' | 'automation' | 'logs';
@@ -44,4 +45,5 @@ export type OperationsTabId =
   | 'cluster'
   | 'plugins'
   | 'cloud'
-  | 'analytics';
+  | 'analytics'
+  | 'enterprise-admin';
