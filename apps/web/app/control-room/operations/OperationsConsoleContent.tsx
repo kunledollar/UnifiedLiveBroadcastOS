@@ -44,6 +44,7 @@ import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
 import { RecordingRuntimePanel } from './RecordingRuntimePanel';
 import { SecurityPanel } from './SecurityPanel';
+import { MonitoringPanel } from './MonitoringPanel';
 import type { DeviceAction, DeviceState } from '../devices/device-state';
 import { createDeviceManifest } from '@ubos/shared';
 import { createInitialDeviceState } from '../devices/device-state';
@@ -203,6 +204,7 @@ export function OperationsConsoleContent({
       </div>
     ),
     security: <SecurityPanel />,
+    monitoring: <MonitoringPanel />,
     recording: recordingRuntimeState ? (
       <RecordingRuntimePanel state={recordingRuntimeState} />
     ) : (

@@ -12,7 +12,8 @@ export type NavItemId =
   | 'compositor'
   | 'runtime'
   | 'recording'
-  | 'security';
+  | 'security'
+  | 'monitoring';
 
 export type DockTabId =
   'audio' | 'layers' | 'graphics' | 'media' | 'replay' | 'collaboration' | 'automation' | 'logs';
@@ -33,4 +34,5 @@ export type OperationsTabId =
   | 'compositor'
   | 'runtime'
   | 'recording'
-  | 'security';
+  | 'security'
+  | 'monitoring';
