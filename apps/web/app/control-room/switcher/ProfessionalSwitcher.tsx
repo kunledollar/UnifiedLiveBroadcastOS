@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { BroadcastPanel, cn } from '@ubos/ui';
 import type { ProductionSwitchingState, TransitionType } from '@ubos/shared';
 import { HardwareButton, HardwareButtonGroup } from './HardwareButton';
@@ -26,6 +27,8 @@ export function ProfessionalSwitcher({
   transitionReady,
   programLocked,
   automationMode,
+  compactChrome = false,
+  detailsDefaultOpen = false,
   onTake,
   onCut,
   onAuto,
@@ -46,6 +49,8 @@ export function ProfessionalSwitcher({
   transitionReady: boolean;
   programLocked: boolean;
   automationMode: 'manual' | 'automation';
+  compactChrome?: boolean;
+  detailsDefaultOpen?: boolean;
   onTake: () => void;
   onCut: () => void;
   onAuto: () => void;
@@ -56,6 +61,11 @@ export function ProfessionalSwitcher({
   className?: string;
 }) {
   const ready = switcherReady && !transitionActive;
+  const [detailsOpen, setDetailsOpen] = useState(detailsDefaultOpen);
+
+  useEffect(() => {
+    setDetailsOpen(detailsDefaultOpen);
+  }, [detailsDefaultOpen]);
 
   return (
     <BroadcastPanel
@@ -78,7 +88,7 @@ export function ProfessionalSwitcher({
             previewSceneName={previewSceneName}
             transitionType={productionState.transitionType}
             durationMs={productionState.transitionDuration}
-            className="hidden md:flex"
+            className={cn('hidden md:flex', compactChrome && 'lg:hidden')}
           />
           <SwitcherStatusBar
             switcherReady={switcherReady}
@@ -116,7 +126,16 @@ export function ProfessionalSwitcher({
             value={productionState.transitionDuration}
             transitionType={productionState.transitionType}
             onChange={onDurationChange}
+            variant="full"
             className="hidden xl:block"
+          />
+
+          <TransitionDurationControl
+            value={productionState.transitionDuration}
+            transitionType={productionState.transitionType}
+            onChange={onDurationChange}
+            variant="compact"
+            className="hidden md:block xl:hidden"
           />
 
           <HardwareButtonGroup label="Navigate">
@@ -132,22 +151,38 @@ export function ProfessionalSwitcher({
           </HardwareButtonGroup>
         </div>
 
-        {/* Row 3: Progress, feedback, history, shortcuts */}
-        <div className="grid min-h-0 shrink-0 grid-cols-1 gap-ubos-2 md:grid-cols-2 xl:grid-cols-4">
-          <TransitionProgress
-            active={transitionActive}
-            durationMs={productionState.transitionDuration}
-          />
-          <OperatorFeedback message={feedbackLabel} programSceneName={programSceneName} />
-          <SwitcherHistory items={transitionHistory} className="hidden md:block" />
-          <ShortcutStrip className="hidden lg:block" />
-        </div>
+        {/* Row 3: Collapsible details — progress, feedback, history, shortcuts */}
+        <details
+          className="group min-h-0 shrink-0"
+          open={detailsOpen}
+          onToggle={(event) => setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)}
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 py-1 text-ubos-metadata font-semibold uppercase tracking-wide text-ubos-fg-muted hover:bg-ubos-slate hover:text-ubos-fg-secondary">
+            <span aria-hidden="true" className="transition-transform group-open:rotate-90">
+              ▸
+            </span>
+            Details
+            <span className="font-normal normal-case tracking-normal text-ubos-fg-disabled">
+              — progress, feedback, history, shortcuts
+            </span>
+          </summary>
+          <div className="mt-ubos-2 grid min-h-0 grid-cols-1 gap-ubos-2 md:grid-cols-2 xl:grid-cols-4">
+            <TransitionProgress
+              active={transitionActive}
+              durationMs={productionState.transitionDuration}
+            />
+            <OperatorFeedback message={feedbackLabel} programSceneName={programSceneName} />
+            <SwitcherHistory items={transitionHistory} className="hidden md:block" />
+            <ShortcutStrip className="hidden lg:block" />
+          </div>
+        </details>
 
         <TransitionDurationControl
           value={productionState.transitionDuration}
           transitionType={productionState.transitionType}
           onChange={onDurationChange}
-          className="xl:hidden"
+          variant="compact"
+          className="md:hidden"
         />
 
         <SwitcherStatusBar

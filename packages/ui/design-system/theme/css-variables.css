@@ -94,7 +94,7 @@
   --ubos-operations-width: 18rem;
   --ubos-switcher-height: 11.5rem;
   --ubos-dock-height: 2.75rem;
-  --ubos-dock-content-height: 6.5rem;
+  --ubos-dock-content-height: 10rem;
   --ubos-dock-total-height: calc(var(--ubos-dock-height) + var(--ubos-dock-content-height));
 
   /* Motion */

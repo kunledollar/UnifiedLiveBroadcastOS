@@ -87,6 +87,7 @@ import {
   createMockAuthorityScenario,
 } from '@ubos/shared';
 import {
+  type CSSProperties,
   type ReactNode,
   useCallback,
   useEffect,
@@ -123,6 +124,17 @@ import { CenterProgramWorkspace } from './shell/CenterProgramWorkspace';
 import { RightOperationsConsole } from './shell/RightOperationsConsole';
 import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
 import { BottomDock } from './shell/BottomDock';
+import {
+  DOCK_TOTAL_DEFAULT_PX,
+  DOCK_TAB_HEIGHT_PX,
+  clampDockContentHeight,
+  dockContentFromTotal,
+  preferredDockContentHeight,
+  shouldShowBottomDock,
+  shouldShowRightConsole,
+  statusBarHeightForLayout,
+  switcherHeightForLayout,
+} from './shell/control-room-layout';
 import { LeftNavPanel } from './browsers';
 import { DigitalAudioConsole, DockPanelEmpty } from './audio-console';
 import { OperationsConsoleContent } from './operations';
@@ -136,7 +148,9 @@ import {
   WorkspaceCenterLayout,
   WorkspaceLayout,
   WorkspaceSelector,
+  LayoutFocusSelector,
   workspaceProfiles,
+  type LayoutFocusMode,
   type ProfessionalWorkspaceId,
   type SafeAreaToggles,
 } from './workspaces';
@@ -1475,6 +1489,8 @@ type ControlRoomWorkspaceState = {
   splitRatio: number;
   sizes: { left: number; center: number; right: number; dock: number; operations: number };
   safeAreaToggles: SafeAreaToggles;
+  compactChrome: boolean;
+  layoutFocus: LayoutFocusMode;
 };
 
 const controlRoomViewStorageKey = 'ubos.controlRoom.viewMode';
@@ -1484,8 +1500,10 @@ const factoryWorkspace: ControlRoomWorkspaceState = {
   selectedWorkspace: defaultWorkspaceId,
   viewMode: workspaceProfiles.director.defaultViewMode,
   splitRatio: 0.72,
-  sizes: { left: 288, center: 640, right: 352, dock: 220, operations: 288 },
+  sizes: { left: 288, center: 640, right: 352, dock: DOCK_TOTAL_DEFAULT_PX, operations: 288 },
   safeAreaToggles: defaultSafeAreaToggles,
+  compactChrome: false,
+  layoutFocus: 'full',
 };
 
 function normalizeControlRoomWorkspace(
@@ -1506,6 +1524,8 @@ function normalizeControlRoomWorkspace(
     ),
     safeAreaToggles: { ...defaultSafeAreaToggles, ...value?.safeAreaToggles },
     sizes: { ...factoryWorkspace.sizes, ...value?.sizes },
+    compactChrome: value?.compactChrome ?? factoryWorkspace.compactChrome,
+    layoutFocus: value?.layoutFocus ?? factoryWorkspace.layoutFocus,
   };
 }
 
@@ -1821,6 +1841,40 @@ export function SceneWorkspace({
       viewMode: profile.viewMode,
     }));
     window.localStorage.setItem(controlRoomViewStorageKey, profile.viewMode);
+  };
+
+  const selectLayoutFocus = (layoutFocus: LayoutFocusMode) => {
+    setWorkspace((current) => {
+      const contentHeight = preferredDockContentHeight(
+        layoutFocus,
+        dockContentFromTotal(current.sizes.dock),
+      );
+      return {
+        ...current,
+        layoutFocus,
+        sizes: {
+          ...current.sizes,
+          dock: DOCK_TAB_HEIGHT_PX + contentHeight,
+        },
+      };
+    });
+    if (layoutFocus === 'audio') {
+      setActiveBottomDock('audio');
+    }
+  };
+
+  const toggleCompactChrome = () => {
+    setWorkspace((current) => ({ ...current, compactChrome: !current.compactChrome }));
+  };
+
+  const handleDockContentHeightChange = (contentHeightPx: number) => {
+    setWorkspace((current) => ({
+      ...current,
+      sizes: {
+        ...current.sizes,
+        dock: DOCK_TAB_HEIGHT_PX + clampDockContentHeight(contentHeightPx),
+      },
+    }));
   };
 
   const saveWorkspace = () =>
@@ -2532,7 +2586,18 @@ export function SceneWorkspace({
 
   const toolsMenu = (
     <div className="flex items-center gap-1">
+      <LayoutFocusSelector selected={workspace.layoutFocus} onSelect={selectLayoutFocus} />
       <WorkspaceSelector selected={selectedWorkspace} onSelect={selectProfessionalWorkspace} />
+      <label className="flex h-6 cursor-pointer items-center gap-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
+        <input
+          type="checkbox"
+          checked={workspace.compactChrome}
+          onChange={toggleCompactChrome}
+          className="h-3 w-3 accent-ubos-selection"
+          aria-label="Toggle compact chrome"
+        />
+        <span>Compact</span>
+      </label>
       <details className="group relative">
         <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
           Tools
@@ -3092,15 +3157,26 @@ export function SceneWorkspace({
     </>
   );
 
+  const dockContentHeightPx = preferredDockContentHeight(
+    workspace.layoutFocus,
+    dockContentFromTotal(workspace.sizes.dock),
+  );
+  const showBottomDock = shouldShowBottomDock(workspace.layoutFocus);
+  const showRightConsole = shouldShowRightConsole(workspace.layoutFocus);
+  const layoutStyle = {
+    '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
+    '--ubos-switcher-height': switcherHeightForLayout(workspace.layoutFocus, workspace.compactChrome),
+    '--ubos-dock-content-height': `${dockContentHeightPx}px`,
+    '--ubos-dock-total-height': `${DOCK_TAB_HEIGHT_PX + dockContentHeightPx}px`,
+  } as CSSProperties;
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden" style={layoutStyle}>
       <BroadcastStatusBar
         sessionName="Launch Day"
         isLive={activeRouteCount > 0}
         isRecording={false}
         runTime={formatElapsed(elapsedSeconds)}
-        programSceneName={programScene.name}
-        previewSceneName={previewScene.name}
         clock={clock}
         transitionActive={transitionActive}
         fps={safeHealthMetrics.fps}
@@ -3115,6 +3191,7 @@ export function SceneWorkspace({
         })}
         deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
         engineStatusLabel="Unavailable"
+        compactChrome={workspace.compactChrome}
         toolsMenu={toolsMenu}
       />
 
@@ -3145,19 +3222,11 @@ export function SceneWorkspace({
             </div>
           }
           statusFooter={
-            <div className="flex flex-wrap items-center gap-2 font-mono text-ubos-metadata text-ubos-fg-muted">
-              <span className="ubos-truncate">
-                Workspace: {workspaceProfiles[selectedWorkspace].label}
-              </span>
-              <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
-              <span className="ubos-truncate">History: {lastTransitionLabel}</span>
-              <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
-              <span className="ubos-truncate">Program: {programScene.name}</span>
-              <span className="hidden h-4 w-px bg-ubos-border-subtle sm:block" />
-              <span className={transitionActive ? 'text-ubos-warning-text' : 'text-ubos-success-text'}>
-                {transitionActive ? 'Transition active' : 'No warnings'}
-              </span>
-            </div>
+            workspace.compactChrome ? null : transitionActive ? (
+              <div className="font-mono text-ubos-metadata text-ubos-warning-text">
+                Transition in progress
+              </div>
+            ) : null
           }
         >
           <WorkspaceLayout workspaceId={selectedWorkspace}>
@@ -3178,12 +3247,14 @@ export function SceneWorkspace({
           </WorkspaceLayout>
         </CenterProgramWorkspace>
 
-        <RightOperationsConsole
-          tabs={operationsTabsResolved}
-          activeTab={activeOperationsTab}
-          onTabChange={setActiveOperationsTab}
-          previewSlot={previewMonitor}
-        />
+        {showRightConsole ? (
+          <RightOperationsConsole
+            tabs={operationsTabsResolved}
+            activeTab={activeOperationsTab}
+            onTabChange={setActiveOperationsTab}
+            previewSlot={previewMonitor}
+          />
+        ) : null}
       </div>
 
       <ProfessionalSwitcherBar>
@@ -3203,6 +3274,8 @@ export function SceneWorkspace({
           automationMode={
             productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'
           }
+          compactChrome={workspace.compactChrome}
+          detailsDefaultOpen={!workspace.compactChrome && workspace.layoutFocus === 'full'}
           onTake={() => switchProgram(productionState.transitionType)}
           onCut={() => switchProgram('cut')}
           onAuto={() => switchProgram('fade')}
@@ -3239,9 +3312,16 @@ export function SceneWorkspace({
         />
       </ProfessionalSwitcherBar>
 
-      <BottomDock activeTab={activeBottomDock} onTabChange={setActiveBottomDock}>
-        {bottomDockContent}
-      </BottomDock>
+      {showBottomDock ? (
+        <BottomDock
+          activeTab={activeBottomDock}
+          onTabChange={setActiveBottomDock}
+          contentHeightPx={dockContentHeightPx}
+          onContentHeightChange={handleDockContentHeightChange}
+        >
+          {bottomDockContent}
+        </BottomDock>
+      ) : null}
     </div>
   );
 }
