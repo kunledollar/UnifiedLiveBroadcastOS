@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-
 export function nextDuplicateName(originalName: string, existingNames: Iterable<string>) {
   const base = originalName.replace(/(?: Copy(?: \d+)?)$/u, '');
   const names = new Set(existingNames);
@@ -111,7 +110,8 @@ export enum MediaRouteType {
 }
 export type MediaLayoutPreset =
   'full_screen' | 'side_by_side' | 'picture_in_picture' | '2x2_grid' | 'speaker_focus';
-export type SceneSourceType = 'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio' | 'guest';
+export type SceneSourceType =
+  'camera' | 'screen' | 'media' | 'overlay' | 'browser' | 'audio' | 'guest';
 export type BroadcastCanvas = {
   id: string;
   label: string;
@@ -477,20 +477,60 @@ export * from './broadcast-automation/index.js';
 export * from './broadcast-ai/index.js';
 export * from './broadcast-distribution/index.js';
 export * from './broadcast-devices/index.js';
-export type { ProductionExecutionRequest, ProductionExecutionResult, GraphMutationPlan, GraphMutation, ExecutionPolicy, EngineTransactionRecord, EngineSnapshotRecord } from './production-engine/execution-result.js';
+export type {
+  ProductionExecutionRequest,
+  ProductionExecutionResult,
+  GraphMutationPlan,
+  GraphMutation,
+  ExecutionPolicy,
+  EngineTransactionRecord,
+  EngineSnapshotRecord,
+} from './production-engine/execution-result.js';
 export { dispatchProductionCommand } from './production-engine/command-dispatcher.js';
 export { executeProductionCommand } from './production-engine/executor.js';
-export { createGraphMutationPlan, isPhase17CommandSupported, commandContainsUnsafePayload } from './production-engine/graph-adapter.js';
+export {
+  createGraphMutationPlan,
+  isPhase17CommandSupported,
+  commandContainsUnsafePayload,
+} from './production-engine/graph-adapter.js';
 export { createEngineSnapshot } from './production-engine/snapshot-manager.js';
-export { createEngineTransaction, InMemoryEngineTransactionLog } from './production-engine/transaction-log.js';
+export {
+  createEngineTransaction,
+  InMemoryEngineTransactionLog,
+} from './production-engine/transaction-log.js';
 export { recordExecutionEvents } from './production-engine/event-recorder.js';
 export { resolveExecutionDependencies } from './production-engine/dependency-resolver.js';
 export { resolveResourceLocks } from './production-engine/lock-resolver.js';
 export { reconstructExecutionReplay } from './production-engine/replay-reconstructor.js';
 // Back-compat explicit production engine exports remain available below.
 export { PRODUCTION_ENGINE_SCHEMA_VERSION } from './production-engine/types.js';
-export type { EngineSubsystem, EngineActionStatus, ResourceLockState, ResourceType, HistoryKind, VersionedEngineMetadata, EngineAction, EngineTransaction, DependencyNode, DependencyGraph, ResourceLock, EventSubscription, ExecutionQueue, EngineTimeline, EngineSnapshot, EngineHistoryItem, EngineState, EngineManifest } from './production-engine/types.js';
-export { sanitizeEngineId, sanitizeEngineText, validateNoRuntimeHandles, validateVersionedMetadata, serializeEngineMetadata } from './production-engine/validation.js';
+export type {
+  EngineSubsystem,
+  EngineActionStatus,
+  ResourceLockState,
+  ResourceType,
+  HistoryKind,
+  VersionedEngineMetadata,
+  EngineAction,
+  EngineTransaction,
+  DependencyNode,
+  DependencyGraph,
+  ResourceLock,
+  EventSubscription,
+  ExecutionQueue,
+  EngineTimeline,
+  EngineSnapshot,
+  EngineHistoryItem,
+  EngineState,
+  EngineManifest,
+} from './production-engine/types.js';
+export {
+  sanitizeEngineId,
+  sanitizeEngineText,
+  validateNoRuntimeHandles,
+  validateVersionedMetadata,
+  serializeEngineMetadata,
+} from './production-engine/validation.js';
 export type { EngineValidationIssue } from './production-engine/validation.js';
 export { createProductionEngineManifest } from './production-engine/manifest.js';
 
@@ -499,10 +539,65 @@ export * from './compositor/index.js';
 
 export * from './runtime-switching/index.js';
 
-export { MediaRuntime, MediaPlaybackSession, MediaRuntimeDispatcher, MediaRuntimeExecutor, MediaRuntimeQueue, MediaRuntimeHistory, NullMediaPlaybackAdapter, BrowserMediaPlaybackAdapter, createMediaRuntime, createMediaRuntimeState, createMediaRuntimeSnapshot, createMediaPlaybackCommand } from './runtime-media/index.js';
-export type { MediaRuntimeState, MediaPlaybackCommand, MediaPlaybackEvent, MediaPlaylistRuntime, MediaClipRuntime, MediaRuntimeSnapshot, MediaRuntimeHealth, MediaRuntimeMetrics, MediaPlaybackAdapter, MediaPlaybackAdapterResult, MediaPlaybackCommandType, MediaPlaybackEventType } from './runtime-media/index.js';
+export {
+  MediaRuntime,
+  MediaPlaybackSession,
+  MediaRuntimeDispatcher,
+  MediaRuntimeExecutor,
+  MediaRuntimeQueue,
+  MediaRuntimeHistory,
+  NullMediaPlaybackAdapter,
+  BrowserMediaPlaybackAdapter,
+  createMediaRuntime,
+  createMediaRuntimeState,
+  createMediaRuntimeSnapshot,
+  createMediaPlaybackCommand,
+} from './runtime-media/index.js';
+export type {
+  MediaRuntimeState,
+  MediaPlaybackCommand,
+  MediaPlaybackEvent,
+  MediaPlaylistRuntime,
+  MediaClipRuntime,
+  MediaRuntimeSnapshot,
+  MediaRuntimeHealth,
+  MediaRuntimeMetrics,
+  MediaPlaybackAdapter,
+  MediaPlaybackAdapterResult,
+  MediaPlaybackCommandType,
+  MediaPlaybackEventType,
+} from './runtime-media/index.js';
 
-export { AudioRuntime, AudioPlaybackSession, AudioRuntimeDispatcher, AudioRuntimeExecutor, AudioRuntimeQueue, AudioRuntimeHistory, NullAudioDSPAdapter, WebAudioDSPAdapter, createAudioRuntime, createAudioRuntimeState, createAudioRuntimeSnapshot, createAudioRuntimeCommand } from './runtime-audio/index.js';
-export type { AudioRuntimeState, AudioRuntimeCommand, AudioRuntimeCommandType, AudioChannelRuntime, AudioBusRuntime, AudioMixRuntime, AudioRoutingRuntime, AudioMonitorRuntime, AudioRuntimeSnapshot, AudioRuntimeHealth, AudioRuntimeMetrics, AudioDSPAdapter, AudioDSPAdapterStatus } from './runtime-audio/index.js';
+export {
+  AudioRuntime,
+  AudioPlaybackSession,
+  AudioRuntimeDispatcher,
+  AudioRuntimeExecutor,
+  AudioRuntimeQueue,
+  AudioRuntimeHistory,
+  NullAudioDSPAdapter,
+  WebAudioDSPAdapter,
+  createAudioRuntime,
+  createAudioRuntimeState,
+  createAudioRuntimeSnapshot,
+  createAudioRuntimeCommand,
+} from './runtime-audio/index.js';
+export type {
+  AudioRuntimeState,
+  AudioRuntimeCommand,
+  AudioRuntimeCommandType,
+  AudioChannelRuntime,
+  AudioBusRuntime,
+  AudioMixRuntime,
+  AudioRoutingRuntime,
+  AudioMonitorRuntime,
+  AudioRuntimeSnapshot,
+  AudioRuntimeHealth,
+  AudioRuntimeMetrics,
+  AudioDSPAdapter,
+  AudioDSPAdapterStatus,
+} from './runtime-audio/index.js';
 
 export * from './runtime-webrtc/index.js';
+export * from './runtime-recording/index.js';
+export * from './runtime-render/index.js';
