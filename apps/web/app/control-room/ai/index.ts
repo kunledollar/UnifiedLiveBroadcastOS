@@ -13,3 +13,4 @@ export {
   type AIState,
 } from './ai-state';
 export * from './ai-utils';
+export { SuggestionCenterPanel } from './SuggestionCenterPanel';

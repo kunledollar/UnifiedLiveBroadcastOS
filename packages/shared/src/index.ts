@@ -493,3 +493,5 @@ export type { EngineSubsystem, EngineActionStatus, ResourceLockState, ResourceTy
 export { sanitizeEngineId, sanitizeEngineText, validateNoRuntimeHandles, validateVersionedMetadata, serializeEngineMetadata } from './production-engine/validation.js';
 export type { EngineValidationIssue } from './production-engine/validation.js';
 export { createProductionEngineManifest } from './production-engine/manifest.js';
+
+export * from './intelligent-broadcast-operations/index.js';
