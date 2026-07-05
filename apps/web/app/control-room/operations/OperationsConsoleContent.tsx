@@ -9,6 +9,9 @@ import type {
   MediaRoute,
   Scene,
   StreamHealthMetric,
+  RuntimeHealth,
+  RuntimeSnapshot,
+  RuntimeState,
 } from '@ubos/shared';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import type { AIAction, AIState } from '../ai/ai-state';
@@ -30,6 +33,7 @@ import type { DistributionAction, DistributionState } from '../distribution/dist
 import { createDistributionManifest } from '@ubos/shared';
 import { createInitialDistributionState } from '../distribution/distribution-state';
 import { DevicePanel } from '../devices/DevicePanel';
+import { RuntimeDashboard } from '../runtime/RuntimeDashboard';
 import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import type { DeviceAction, DeviceState } from '../devices/device-state';
@@ -72,6 +76,9 @@ export function OperationsConsoleContent({
   onDistributionDispatch,
   deviceState,
   onDeviceDispatch,
+  runtimeState,
+  runtimeHealth,
+  runtimeSnapshots,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -108,6 +115,9 @@ export function OperationsConsoleContent({
   onDistributionDispatch?: (action: DistributionAction) => void;
   deviceState?: DeviceState;
   onDeviceDispatch?: (action: DeviceAction) => void;
+  runtimeState?: RuntimeState;
+  runtimeHealth?: RuntimeHealth;
+  runtimeSnapshots?: RuntimeSnapshot[];
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -170,6 +180,9 @@ export function OperationsConsoleContent({
       ),
     engine: <EngineWorkspace compact />,
     compositor: <CompositorPanel />,
+    runtime: runtimeState && runtimeHealth ? (
+      <RuntimeDashboard state={runtimeState} health={runtimeHealth} snapshots={runtimeSnapshots ?? []} />
+    ) : null,
     health: (
       <HealthPanel
         streamMetrics={streamHealthMetrics}

@@ -7,12 +7,16 @@ export function SwitcherStatusBar({
   transitionReady,
   programLocked,
   automationMode,
+  runtimeStatus = 'idle',
+  queueSize = 0,
   className,
 }: {
   switcherReady: boolean;
   transitionReady: boolean;
   programLocked: boolean;
   automationMode: 'manual' | 'automation';
+  runtimeStatus?: 'idle' | 'executing' | 'transition_active' | 'locked' | 'error';
+  queueSize?: number;
   className?: string;
 }) {
   return (
@@ -29,6 +33,10 @@ export function SwitcherStatusBar({
       <StatusBadge variant="neutral">
         {automationMode === 'manual' ? 'Manual' : 'Automation'}
       </StatusBadge>
+      <StatusBadge variant={runtimeStatus === 'idle' ? 'neutral' : 'warning'}>
+        Runtime {runtimeStatus === 'idle' ? 'Idle' : runtimeStatus === 'executing' ? 'Executing' : runtimeStatus === 'transition_active' ? 'Transition Active' : runtimeStatus === 'locked' ? 'Locked' : 'Error'}
+      </StatusBadge>
+      <StatusBadge variant={queueSize ? 'warning' : 'neutral'}>Queue {queueSize}</StatusBadge>
     </div>
   );
 }
