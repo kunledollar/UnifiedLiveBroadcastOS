@@ -2554,6 +2554,7 @@ export function SceneWorkspace({
       'team',
       'automation',
       'devices',
+      'compositor',
       'inspector',
       'routing',
       'outputs',

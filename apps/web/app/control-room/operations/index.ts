@@ -11,3 +11,4 @@ export { LogsPanelContainer } from './LogsPanelContainer';
 export { AIPanel } from './AIPanel';
 export { PreviewPanel } from './PreviewPanel';
 export { HostDevicesSection } from './HostDevicesSection';
+export { CompositorPanel } from './CompositorPanel';

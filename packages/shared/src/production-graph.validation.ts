@@ -1251,3 +1251,28 @@ assert(providerRegistry.list()[0]?.id === 'local-placeholder', 'Phase 18 provide
 assert(createAnalyticsInsights(iboGraph).length >= 3, 'Phase 18 analytics engine emits dashboard insights');
 const graphWithIboSuggestions = addSuggestionsToGraph(iboGraph, iboSuggestions.slice(0, 1));
 assert(Object.keys(graphWithIboSuggestions.agentSuggestions).length === 1, 'Phase 18 suggestions flow through Production Graph');
+
+import {
+  createCompositorManifest,
+  deserializeCompositorManifest,
+  renderFrameSchema,
+  renderGraphSchema,
+  renderStatisticsSchema,
+  serializeCompositorManifest,
+  shaderDefinitionSchema,
+  transitionDefinitionSchema,
+  effectDefinitionSchema,
+  compositionLayerSchema,
+  validateCompositorManifest,
+} from './compositor/index.js';
+
+const compositorManifest = createCompositorManifest();
+assert(validateCompositorManifest(compositorManifest).length === 0, 'Compositor manifest validates');
+assert(compositionLayerSchema.safeParse(compositorManifest.compositor.composition.layers[0]).success, 'Layer validation succeeds');
+assert(renderGraphSchema.safeParse(compositorManifest.compositor.graph).success, 'Render graph validation succeeds');
+assert(transitionDefinitionSchema.safeParse(compositorManifest.compositor.composition.transitions[0]).success, 'Transition validation succeeds');
+assert(effectDefinitionSchema.safeParse(compositorManifest.compositor.composition.effects[0]).success, 'Effect validation succeeds');
+assert(shaderDefinitionSchema.safeParse(compositorManifest.shaders[0]).success, 'Shader validation succeeds');
+assert(renderStatisticsSchema.safeParse(compositorManifest.compositor.statistics).success, 'Render statistics validation succeeds');
+assert(deserializeCompositorManifest(serializeCompositorManifest(compositorManifest)).containsRuntimeHandles === false, 'Compositor serialization round-trip succeeds');
+assert(renderFrameSchema.safeParse({ id: 'frame-0', name: 'Frame 0', version: '19.0.0', description: 'Frame metadata only.', metadataOnly: true, frameNumber: 0, timestamp: new Date(0).toISOString(), resolution: { width: 1920, height: 1080 }, frameRate: 60, colorSpace: 'rec709', pixelFormat: 'rgba8-metadata', dropped: false, presented: false }).success, 'Render frame validation succeeds');

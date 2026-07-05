@@ -31,6 +31,7 @@ import { createDistributionManifest } from '@ubos/shared';
 import { createInitialDistributionState } from '../distribution/distribution-state';
 import { DevicePanel } from '../devices/DevicePanel';
 import { EngineWorkspace } from '../engine';
+import { CompositorPanel } from './CompositorPanel';
 import type { DeviceAction, DeviceState } from '../devices/device-state';
 import { createDeviceManifest } from '@ubos/shared';
 import { createInitialDeviceState } from '../devices/device-state';
@@ -168,6 +169,7 @@ export function OperationsConsoleContent({
         />
       ),
     engine: <EngineWorkspace compact />,
+    compositor: <CompositorPanel />,
     health: (
       <HealthPanel
         streamMetrics={streamHealthMetrics}

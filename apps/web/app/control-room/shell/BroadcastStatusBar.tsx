@@ -151,6 +151,15 @@ export function BroadcastStatusBar({
         {transitionActive ? 'Transition' : 'Ready'}
       </StatusBadge>
 
+      <div className="hidden shrink-0 items-center gap-1 xl:flex">
+        <TelemetryBadge label="Renderer" value="Unavailable" variant="neutral" />
+        <TelemetryBadge label="GPU" value="Unavailable" variant="neutral" />
+        <TelemetryBadge label="Layers" value="Metadata" variant="neutral" />
+        <TelemetryBadge label="Effects" value="Metadata" variant="neutral" />
+        <TelemetryBadge label="Output" value="Unavailable" variant="neutral" />
+        <TelemetryBadge label="Frame Queue" value="Unavailable" variant="neutral" />
+      </div>
+
       <HealthMenu
         fps={fps}
         cpu={cpu}
