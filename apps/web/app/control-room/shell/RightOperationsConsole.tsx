@@ -12,7 +12,7 @@ const tabOrder: OperationsTabId[] = [
   'engine',
   'compositor',
   'runtime',
-  'runtime',
+  'recording',
   'inspector',
   'routing',
   'outputs',
@@ -30,6 +30,7 @@ const tabLabels: Record<OperationsTabId, string> = {
   engine: 'Engine',
   compositor: 'Compositor',
   runtime: 'Runtime',
+  recording: 'Recording',
   inspector: 'Inspector',
   routing: 'Routing',
   outputs: 'Outputs',
@@ -98,8 +99,15 @@ export function RightOperationsConsole({
         })}
       </nav>
 
-      <BroadcastPanel variant="inset" padding={false} className="min-h-0 min-w-0 flex-1 border-0 shadow-none">
-        <div className="ubos-scroll h-full overflow-y-auto overflow-x-hidden p-ubos-2" role="tabpanel">
+      <BroadcastPanel
+        variant="inset"
+        padding={false}
+        className="min-h-0 min-w-0 flex-1 border-0 shadow-none"
+      >
+        <div
+          className="ubos-scroll h-full overflow-y-auto overflow-x-hidden p-ubos-2"
+          role="tabpanel"
+        >
           {active?.content}
         </div>
       </BroadcastPanel>

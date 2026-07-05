@@ -14,6 +14,7 @@ import type {
   RuntimeState,
   MediaRuntimeState,
   MediaRuntimeHealth,
+  RecordingRuntimeState,
 } from '@ubos/shared';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import type { AIAction, AIState } from '../ai/ai-state';
@@ -41,6 +42,7 @@ import { createMediaRuntimeState } from '@ubos/shared';
 import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
+import { RecordingRuntimePanel } from './RecordingRuntimePanel';
 import type { DeviceAction, DeviceState } from '../devices/device-state';
 import { createDeviceManifest } from '@ubos/shared';
 import { createInitialDeviceState } from '../devices/device-state';
@@ -86,6 +88,7 @@ export function OperationsConsoleContent({
   runtimeSnapshots,
   mediaRuntimeState,
   mediaRuntimeHealth,
+  recordingRuntimeState,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -127,17 +130,13 @@ export function OperationsConsoleContent({
   runtimeSnapshots?: RuntimeSnapshot[];
   mediaRuntimeState?: MediaRuntimeState;
   mediaRuntimeHealth?: MediaRuntimeHealth;
+  recordingRuntimeState?: RecordingRuntimeState;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
   return {
     guests: (
-      <GuestsPanel
-        guests={guests}
-        invites={invites}
-        broadcastId={broadcastId}
-        routes={routes}
-      />
+      <GuestsPanel guests={guests} invites={invites} broadcastId={broadcastId} routes={routes} />
     ),
     inspector: (
       <>
@@ -151,18 +150,15 @@ export function OperationsConsoleContent({
           warnings={warnings}
           {...(graphRevision !== undefined ? { graphRevision } : {})}
           {...(routeInfo.programRouteName ? { programRouteName: routeInfo.programRouteName } : {})}
-          {...(routeInfo.verticalRouteName ? { verticalRouteName: routeInfo.verticalRouteName } : {})}
+          {...(routeInfo.verticalRouteName
+            ? { verticalRouteName: routeInfo.verticalRouteName }
+            : {})}
         />
         <HostDevicesSection />
       </>
     ),
     routing: (
-      <RoutingPanel
-        guests={guests}
-        routes={routes}
-        scenes={scenes}
-        broadcastId={broadcastId}
-      />
+      <RoutingPanel guests={guests} routes={routes} scenes={scenes} broadcastId={broadcastId} />
     ),
     outputs:
       distributionState && onDistributionDispatch ? (
@@ -191,10 +187,24 @@ export function OperationsConsoleContent({
     compositor: <CompositorPanel />,
     runtime: (
       <div className="space-y-ubos-2">
-        {runtimeState && runtimeHealth ? <RuntimeDashboard state={runtimeState} health={runtimeHealth} snapshots={runtimeSnapshots ?? []} /> : null}
-        <MediaRuntimePanel state={mediaRuntimeState ?? createMediaRuntimeState()} health={mediaRuntimeHealth ?? createMediaRuntimeState().health} />
+        {runtimeState && runtimeHealth ? (
+          <RuntimeDashboard
+            state={runtimeState}
+            health={runtimeHealth}
+            snapshots={runtimeSnapshots ?? []}
+          />
+        ) : null}
+        <MediaRuntimePanel
+          state={mediaRuntimeState ?? createMediaRuntimeState()}
+          health={mediaRuntimeHealth ?? createMediaRuntimeState().health}
+        />
         <RuntimeRenderPanel />
       </div>
+    ),
+    recording: recordingRuntimeState ? (
+      <RecordingRuntimePanel state={recordingRuntimeState} />
+    ) : (
+      <RecordingRuntimePanel />
     ),
     health: (
       <HealthPanel
@@ -211,11 +221,7 @@ export function OperationsConsoleContent({
     ),
     preview: <PreviewPanel monitor={previewMonitor} />,
     logs: (
-      <LogsPanelContainer
-        workspaceId={workspaceId}
-        broadcastId={broadcastId}
-        messages={messages}
-      />
+      <LogsPanelContainer workspaceId={workspaceId} broadcastId={broadcastId} messages={messages} />
     ),
     ai:
       aiState && onAIDispatch ? (

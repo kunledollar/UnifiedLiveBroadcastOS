@@ -10,17 +10,11 @@ export type NavItemId =
   | 'settings'
   | 'engine'
   | 'compositor'
-  | 'runtime';
+  | 'runtime'
+  | 'recording';
 
 export type DockTabId =
-  | 'audio'
-  | 'layers'
-  | 'graphics'
-  | 'media'
-  | 'replay'
-  | 'collaboration'
-  | 'automation'
-  | 'logs';
+  'audio' | 'layers' | 'graphics' | 'media' | 'replay' | 'collaboration' | 'automation' | 'logs';
 
 export type OperationsTabId =
   | 'guests'
@@ -36,4 +30,5 @@ export type OperationsTabId =
   | 'devices'
   | 'engine'
   | 'compositor'
-  | 'runtime';
+  | 'runtime'
+  | 'recording';
