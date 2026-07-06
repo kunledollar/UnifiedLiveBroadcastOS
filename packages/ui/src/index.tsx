@@ -654,12 +654,36 @@ function sourceMonitorState(source: SceneSource) {
       tone: 'success' as const,
     };
   }
+  const runtimeStatus = String(source.settings?.runtimeStatus ?? '');
+  const runtimeMessage =
+    typeof source.settings?.message === 'string' ? source.settings.message : undefined;
   switch (source.type) {
     case 'camera':
+      if (runtimeStatus === 'live')
+        return {
+          title: 'Camera Live',
+          subtitle: 'Browser MediaStream is active.',
+          badge: 'LIVE',
+          tone: 'live' as const,
+        };
+      if (runtimeStatus === 'connecting')
+        return {
+          title: 'Connecting',
+          subtitle: 'Requesting browser camera stream.',
+          badge: 'CONNECTING',
+          tone: 'warning' as const,
+        };
+      if (runtimeStatus === 'unavailable')
+        return {
+          title: 'Camera Error',
+          subtitle: runtimeMessage ?? 'Browser camera stream failed.',
+          badge: 'ERROR',
+          tone: 'danger' as const,
+        };
       return {
-        title: 'Waiting for Camera',
-        subtitle: 'Select or connect a camera input.',
-        badge: 'CAMERA',
+        title: 'Permission required',
+        subtitle: 'Allow camera access to start browser media.',
+        badge: 'PERMISSION',
         tone: 'warning' as const,
       };
     case 'screen':
@@ -843,9 +867,12 @@ export function SourceManager({
                   tone={
                     source.settings?.runtimeStatus === 'unavailable'
                       ? 'danger'
-                      : source.settings?.runtimeStatus === 'permission_required'
+                      : source.settings?.runtimeStatus === 'permission_required' ||
+                          source.settings?.runtimeStatus === 'connecting'
                         ? 'warning'
-                        : 'neutral'
+                        : source.settings?.runtimeStatus === 'live'
+                          ? 'live'
+                          : 'neutral'
                   }
                 >
                   {String(
@@ -1258,7 +1285,17 @@ function RoutedVideo({ stream }: { stream?: MediaStream | undefined }) {
   return (
     <video
       ref={(element) => {
-        if (element && element.srcObject !== stream) element.srcObject = stream;
+        if (element && element.srcObject !== stream) {
+          console.info('[UBOS media runtime] attaching stream', {
+            target: 'compositor',
+            streamId: stream.id,
+            active: stream.active,
+          });
+          element.srcObject = stream;
+          void element
+            .play()
+            .catch((error) => console.error('[UBOS media runtime] video play failed', error));
+        }
       }}
       autoPlay
       muted
