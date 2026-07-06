@@ -2,28 +2,18 @@
 
 import type { ReactNode } from 'react';
 import type { DockTabId } from '../shell/types';
+import { broadcastWorkspaceTabs, workspaceTabLabel } from '../broadcast-workspaces';
 import { DockablePanel } from './DockablePanel';
 
-const dockTabLabels: Record<DockTabId, string> = {
-  audio: 'Audio',
-  layers: 'Layers',
-  graphics: 'Graphics',
+const legacyDockTabLabels: Partial<Record<DockTabId, string>> = {
   media: 'Media',
-  replay: 'Replay',
   collaboration: 'Team',
-  automation: 'ROS',
-  logs: 'Inspector',
 };
 
 const dockTabs: DockTabId[] = [
-  'audio',
-  'layers',
-  'graphics',
+  ...broadcastWorkspaceTabs.map((tab) => tab.id),
   'media',
-  'replay',
   'collaboration',
-  'automation',
-  'logs',
 ];
 
 export function BottomWorkspaceDeck({
@@ -45,10 +35,12 @@ export function BottomWorkspaceDeck({
   onToggleUndock: () => void;
   title?: string;
 }) {
+  const activeLabel = legacyDockTabLabels[activeTab] ?? workspaceTabLabel(activeTab);
+
   return (
     <DockablePanel
       title={title}
-      subtitle={dockTabLabels[activeTab]}
+      subtitle={activeLabel}
       collapsed={collapsed}
       undocked={undocked ?? false}
       onToggleCollapse={onToggleCollapse}
@@ -63,6 +55,7 @@ export function BottomWorkspaceDeck({
         >
           {dockTabs.map((tab) => {
             const selected = activeTab === tab;
+            const label = legacyDockTabLabels[tab] ?? workspaceTabLabel(tab);
             return (
               <button
                 key={tab}
@@ -76,12 +69,14 @@ export function BottomWorkspaceDeck({
                     : 'text-slate-500 hover:bg-white/5 hover:text-slate-300'
                 }`}
               >
-                {dockTabLabels[tab]}
+                {label}
               </button>
             );
           })}
         </nav>
-        <div className="ubos-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
+        {!collapsed ? (
+          <div className="ubos-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
+        ) : null}
       </div>
     </DockablePanel>
   );

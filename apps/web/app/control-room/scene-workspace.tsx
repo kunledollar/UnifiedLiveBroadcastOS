@@ -127,6 +127,13 @@ import {
   type MonitorStatusInfo,
 } from './broadcast-command-center';
 import {
+  ProductionGraphTreeSummary,
+  RoutingPatchMatrix,
+  SystemStatusWorkspace,
+  buildSystemStatusMetrics,
+  normalizeDockTabId,
+} from './broadcast-workspaces';
+import {
   type RoutingMatrixEdge,
   type DiagnosticMetric,
 } from './workspace-canvas';
@@ -151,6 +158,8 @@ import {
 import { LeftNavPanel } from './browsers';
 import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
+import { LogsPanel } from './operations/LogsPanel';
+import { RoutingPanel } from './operations/RoutingPanel';
 import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
 import type {
   BrowserStreamingPanelState,
@@ -2149,7 +2158,7 @@ export function SceneWorkspace({
     const profile = applyWorkspaceProfile(id);
     setActiveNav(profile.activeNav);
     setActiveOperationsTab(profile.activeOperationsTab);
-    setActiveBottomDock(profile.activeBottomDock);
+    setActiveBottomDock(normalizeDockTabId(profile.activeBottomDock));
     setWorkspace((current) => ({
       ...current,
       selectedWorkspace: profile.selectedWorkspace,
@@ -3899,9 +3908,49 @@ export function SceneWorkspace({
     [activeCameraStream, smokeMedia.screenStream, smokeMedia.stream],
   );
 
+  const routingEdges = useMemo<RoutingMatrixEdge[]>(
+    () =>
+      mediaRoutes.map((route) => {
+        const gain =
+          typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
+        return {
+          id: route.id,
+          sourceId: route.sourceId ?? route.id,
+          sourceLabel: route.displayName,
+          destinationId: route.routeType,
+          destinationLabel: route.routeType.replace(/_/g, ' '),
+          active: route.isActive,
+          ...(gain !== undefined ? { gain } : {}),
+        };
+      }),
+    [mediaRoutes],
+  );
+
+  const diagnosticsMetrics = useMemo<DiagnosticMetric[]>(
+    () =>
+      buildSystemStatusMetrics({
+        fps: String(safeHealthMetrics.fps),
+        cpu: String(safeHealthMetrics.cpu),
+        dropped: String(safeHealthMetrics.dropped),
+        upload: String(safeHealthMetrics.upload),
+        recordingState,
+        streamingLifecycle: streamingState.lifecycle,
+        activeRouteCount,
+        graph: productionGraphSession.graph,
+        pipelineHealth: productionPipeline.health,
+      }),
+    [
+      safeHealthMetrics,
+      recordingState,
+      streamingState.lifecycle,
+      activeRouteCount,
+      productionGraphSession.graph,
+      productionPipeline.health,
+    ],
+  );
+
   const bottomDockContent = (
     <>
-      {activeBottomDock === 'audio' ? <ProfessionalAudioMixer sources={mixerSources} /> : null}
       {activeBottomDock === 'layers' ? (
         activeScene.sources.length ? (
           <div className="grid gap-1 px-ubos-2 py-ubos-2 text-ubos-caption text-ubos-fg-secondary">
@@ -3922,6 +3971,9 @@ export function SceneWorkspace({
             <DockPanelEmpty message="No layers in preview scene." />
           </div>
         )
+      ) : null}
+      {activeBottomDock === 'audio' ? (
+        <ProfessionalAudioMixer sources={mixerSources} compact />
       ) : null}
       {activeBottomDock === 'graphics' ? (
         <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
@@ -4017,6 +4069,97 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
+      {activeBottomDock === 'replay' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <ReplayWorkspace
+            replayBuffer={previewSceneMediaComposition.replayBuffer}
+            replayClips={previewSceneMediaComposition.replayClips}
+            selectedReplayClipId={selectedReplayClipId}
+            onSelectReplayClip={setSelectedReplayClipId}
+            onSendToPreview={(clipId) =>
+              dispatchMedia({ type: 'SEND_REPLAY_TO_PREVIEW', sceneId: previewScene.id, clipId })
+            }
+            onTakeLive={(clipId) =>
+              dispatchMedia({ type: 'TAKE_REPLAY_TO_PROGRAM', sceneId: previewScene.id, clipId })
+            }
+            onAddSampleClip={() =>
+              dispatchMedia({
+                type: 'ADD_REPLAY_CLIP',
+                sceneId: previewScene.id,
+                clip: {
+                  id: `replay-${Date.now()}`,
+                  sourceId: 'program-feed',
+                  name: 'Sample Replay Clip',
+                  startTimeMs: 0,
+                  endTimeMs: 5000,
+                  durationMs: 5000,
+                  speed: 1,
+                  markers: [],
+                  angle: 'A',
+                  programState: 'idle',
+                  previewState: 'idle',
+                  status: 'ready',
+                },
+              })
+            }
+            className="h-full"
+          />
+        </div>
+      ) : null}
+      {activeBottomDock === 'automation' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <AutomationPanel
+            state={automationState}
+            dispatch={dispatchAutomation}
+            className="h-full"
+          />
+        </div>
+      ) : null}
+      {activeBottomDock === 'routing' ? (
+        <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
+          <RoutingPatchMatrix edges={routingEdges} className="max-h-40 shrink-0" />
+          <div className="min-h-0 flex-1 overflow-hidden px-ubos-2 pb-ubos-2">
+            <RoutingPanel
+              broadcastId={broadcastId}
+              guests={guests}
+              scenes={sorted}
+              routes={mediaRoutes}
+            />
+          </div>
+        </div>
+      ) : null}
+      {activeBottomDock === 'production-graph' ? (
+        <div className="space-y-2 px-ubos-2 py-ubos-2">
+          <ProductionGraphTreeSummary session={productionGraphSession} />
+          <ProductionGraphInspector session={productionGraphSession} />
+          <MediaExecutionInspector
+            engine={mediaExecutionEngine}
+            graph={productionGraphSession.graph}
+          />
+        </div>
+      ) : null}
+      {activeBottomDock === 'logs' ? (
+        <div className="space-y-2 px-ubos-2 py-ubos-2">
+          <LogsPanel messages={messages} />
+          {productionGraphSession.eventLog.length ? (
+            <div className="rounded-ubos-sm border border-white/6 bg-ubos-midnight p-2">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-ubos-fg-muted">
+                Graph Events
+              </p>
+              <ul className="max-h-32 space-y-1 overflow-y-auto text-[10px] text-ubos-fg-secondary">
+                {productionGraphSession.eventLog.slice(-12).map((event, index) => (
+                  <li key={`${event.type}-${index}`} className="font-mono">
+                    rev {event.graphRevision} · {event.type}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {activeBottomDock === 'system-status' ? (
+        <SystemStatusWorkspace metrics={diagnosticsMetrics} />
+      ) : null}
       {activeBottomDock === 'media' ? (
         <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
           <MediaPreviewControls
@@ -4086,43 +4229,6 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
-      {activeBottomDock === 'replay' ? (
-        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
-          <ReplayWorkspace
-            replayBuffer={previewSceneMediaComposition.replayBuffer}
-            replayClips={previewSceneMediaComposition.replayClips}
-            selectedReplayClipId={selectedReplayClipId}
-            onSelectReplayClip={setSelectedReplayClipId}
-            onSendToPreview={(clipId) =>
-              dispatchMedia({ type: 'SEND_REPLAY_TO_PREVIEW', sceneId: previewScene.id, clipId })
-            }
-            onTakeLive={(clipId) =>
-              dispatchMedia({ type: 'TAKE_REPLAY_TO_PROGRAM', sceneId: previewScene.id, clipId })
-            }
-            onAddSampleClip={() =>
-              dispatchMedia({
-                type: 'ADD_REPLAY_CLIP',
-                sceneId: previewScene.id,
-                clip: {
-                  id: `replay-${Date.now()}`,
-                  sourceId: 'program-feed',
-                  name: 'Sample Replay Clip',
-                  startTimeMs: 0,
-                  endTimeMs: 5000,
-                  durationMs: 5000,
-                  speed: 1,
-                  markers: [],
-                  angle: 'A',
-                  programState: 'idle',
-                  previewState: 'idle',
-                  status: 'ready',
-                },
-              })
-            }
-            className="h-full"
-          />
-        </div>
-      ) : null}
       {activeBottomDock === 'collaboration' ? (
         <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
           <TeamPanel
@@ -4130,24 +4236,6 @@ export function SceneWorkspace({
             conflictCount={authorityDiagnostics.conflicts.length}
             dispatch={dispatchCollaboration}
             className="h-full"
-          />
-        </div>
-      ) : null}
-      {activeBottomDock === 'automation' ? (
-        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
-          <AutomationPanel
-            state={automationState}
-            dispatch={dispatchAutomation}
-            className="h-full"
-          />
-        </div>
-      ) : null}
-      {activeBottomDock === 'logs' ? (
-        <div className="space-y-2 px-ubos-2 py-ubos-2">
-          <ProductionGraphInspector session={productionGraphSession} />
-          <MediaExecutionInspector
-            engine={mediaExecutionEngine}
-            graph={productionGraphSession.graph}
           />
         </div>
       ) : null}
@@ -4484,60 +4572,6 @@ export function SceneWorkspace({
     ),
   } satisfies Record<typeof professionalRightTab, ReactNode>;
 
-  const routingEdges = useMemo<RoutingMatrixEdge[]>(
-    () =>
-      mediaRoutes.map((route) => {
-        const gain =
-          typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
-        return {
-          id: route.id,
-          sourceId: route.sourceId ?? route.id,
-          sourceLabel: route.displayName,
-          destinationId: route.routeType,
-          destinationLabel: route.routeType.replace(/_/g, ' '),
-          active: route.isActive,
-          ...(gain !== undefined ? { gain } : {}),
-        };
-      }),
-    [mediaRoutes],
-  );
-
-  const diagnosticsMetrics = useMemo<DiagnosticMetric[]>(
-    () => [
-      { label: 'FPS', value: String(safeHealthMetrics.fps), status: 'neutral' },
-      { label: 'CPU', value: String(safeHealthMetrics.cpu), status: 'neutral' },
-      { label: 'Dropped', value: String(safeHealthMetrics.dropped), status: 'neutral' },
-      { label: 'Upload', value: String(safeHealthMetrics.upload), status: 'neutral' },
-      {
-        label: 'Graph Rev',
-        value: String(productionGraphSession.graph.metadata.revision),
-        status: 'good',
-      },
-      {
-        label: 'Recording',
-        value: recordingState,
-        status: recordingState === 'recording' ? 'warning' : 'neutral',
-      },
-      {
-        label: 'Streaming',
-        value: streamingState.lifecycle,
-        status: streamingState.lifecycle === 'streaming' ? 'good' : 'neutral',
-      },
-      {
-        label: 'Routes',
-        value: `${activeRouteCount} active`,
-        status: activeRouteCount > 0 ? 'good' : 'neutral',
-      },
-    ],
-    [
-      safeHealthMetrics,
-      productionGraphSession.graph.metadata.revision,
-      recordingState,
-      streamingState.lifecycle,
-      activeRouteCount,
-    ],
-  );
-
   const monitorTelemetry = useMemo(
     () =>
       deriveMonitorTelemetry({
@@ -4754,7 +4788,7 @@ export function SceneWorkspace({
       activeOperationsTab={activeOperationsTab}
       activeDockTab={activeBottomDock}
       onOperationsTabChange={setActiveOperationsTab}
-      onDockTabChange={setActiveBottomDock}
+      onDockTabChange={(tab) => setActiveBottomDock(normalizeDockTabId(tab))}
       onWorkspaceModeApplied={applyMenuWorkspaceMode}
       onLayoutFocusChange={selectLayoutFocus}
       onToggleCompactChrome={toggleCompactChrome}

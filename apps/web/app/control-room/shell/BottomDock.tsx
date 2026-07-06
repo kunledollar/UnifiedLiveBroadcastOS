@@ -3,6 +3,7 @@
 import { useCallback, useRef, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Dock, DockTab, cn, ubosTypographyClasses } from '@ubos/ui';
 import type { DockTabId } from './types';
+import { broadcastWorkspaceTabs } from '../broadcast-workspaces';
 import {
   DOCK_CONTENT_DEFAULT_PX,
   DOCK_CONTENT_MAX_PX,
@@ -12,14 +13,9 @@ import {
 } from './control-room-layout';
 
 const dockTabs: Array<{ id: DockTabId; label: string }> = [
-  { id: 'audio', label: 'Audio' },
-  { id: 'layers', label: 'Layers' },
-  { id: 'graphics', label: 'Graphics' },
-  { id: 'replay', label: 'Replay' },
+  ...broadcastWorkspaceTabs.map((tab) => ({ id: tab.id, label: tab.label })),
   { id: 'media', label: 'Media' },
   { id: 'collaboration', label: 'Team' },
-  { id: 'automation', label: 'ROS' },
-  { id: 'logs', label: 'Logs' },
 ];
 
 export function BottomDock({

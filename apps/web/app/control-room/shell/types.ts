@@ -22,7 +22,17 @@ export type NavItemId =
   | 'enterprise-admin';
 
 export type DockTabId =
-  'audio' | 'layers' | 'graphics' | 'media' | 'replay' | 'collaboration' | 'automation' | 'logs';
+  | 'audio'
+  | 'layers'
+  | 'graphics'
+  | 'replay'
+  | 'automation'
+  | 'routing'
+  | 'production-graph'
+  | 'logs'
+  | 'system-status'
+  | 'media'
+  | 'collaboration';
 
 export type OperationsTabId =
   | 'guests'

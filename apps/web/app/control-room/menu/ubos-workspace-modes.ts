@@ -32,6 +32,7 @@ const allDocksVisible: Partial<Record<UbosDockPanelId, boolean>> = {
   'monitor-wall': false,
   timeline: true,
   logs: true,
+  'system-status': true,
 };
 
 export const ubosWorkspaceModes: Record<UbosWorkspaceModeId, UbosWorkspaceModeDefinition> = {

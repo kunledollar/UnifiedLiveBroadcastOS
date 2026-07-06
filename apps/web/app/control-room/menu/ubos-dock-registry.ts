@@ -7,18 +7,36 @@ export const UBOS_DOCK_PANEL_LIST: UbosDockPanelDefinition[] = [
   { id: 'audio-channels', label: 'Audio Channels', zone: 'right', operationsTab: 'routing' },
   { id: 'scene-transitions', label: 'Scene Transitions', zone: 'center' },
   { id: 'replay', label: 'Replay', zone: 'bottom', dockTab: 'replay', navItem: 'replay' },
-  { id: 'media', label: 'Media', zone: 'bottom', dockTab: 'media', navItem: 'media' },
+  { id: 'media', label: 'Media', zone: 'bottom', dockTab: 'graphics', navItem: 'media' },
   { id: 'graphics', label: 'Graphics', zone: 'bottom', dockTab: 'graphics', navItem: 'graphics' },
   { id: 'guests', label: 'Guests', zone: 'right', operationsTab: 'guests' },
   { id: 'inspector', label: 'Inspector', zone: 'right', operationsTab: 'inspector' },
-  { id: 'pipeline-inspector', label: 'Pipeline Inspector', zone: 'floating' },
-  { id: 'broadcast-io', label: 'Broadcast I/O', zone: 'right', operationsTab: 'routing' },
+  {
+    id: 'pipeline-inspector',
+    label: 'Production Graph',
+    zone: 'bottom',
+    dockTab: 'production-graph',
+  },
+  {
+    id: 'broadcast-io',
+    label: 'Routing Matrix',
+    zone: 'bottom',
+    dockTab: 'routing',
+    operationsTab: 'routing',
+  },
   { id: 'streaming', label: 'Streaming', zone: 'right', operationsTab: 'streaming' },
   { id: 'recording', label: 'Recording', zone: 'right', operationsTab: 'recording' },
   { id: 'automation', label: 'Automation', zone: 'bottom', dockTab: 'automation' },
   { id: 'monitor-wall', label: 'Monitor Wall', zone: 'right', operationsTab: 'monitoring' },
   { id: 'timeline', label: 'Timeline', zone: 'bottom', dockTab: 'layers' },
   { id: 'logs', label: 'Logs', zone: 'bottom', dockTab: 'logs', operationsTab: 'logs' },
+  {
+    id: 'system-status',
+    label: 'System Status',
+    zone: 'bottom',
+    dockTab: 'system-status',
+    operationsTab: 'health',
+  },
 ];
 
 export const ubosDockPanelRegistry: Record<UbosDockPanelId, UbosDockPanelDefinition> =
@@ -33,7 +51,6 @@ const ZONE_PANELS: Record<string, UbosDockPanelId[]> = {
     'audio-channels',
     'guests',
     'inspector',
-    'broadcast-io',
     'streaming',
     'recording',
     'monitor-wall',
@@ -46,9 +63,12 @@ const ZONE_PANELS: Record<string, UbosDockPanelId[]> = {
     'automation',
     'timeline',
     'logs',
+    'broadcast-io',
+    'pipeline-inspector',
+    'system-status',
   ],
   center: ['scene-transitions'],
-  floating: ['pipeline-inspector'],
+  floating: [],
 };
 
 export function isZoneVisible(
