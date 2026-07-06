@@ -1702,5 +1702,58 @@ export * from './production-switcher.js';
 export * from './transition-renderer.js';
 export * from './graphics-engine.js';
 
-export { TransportManager, createTransportManager, createDemoTransportWorkflow, transportProtocols } from './transport-layer.js';
-export type { BroadcastTransportProtocol, TransportBackendDescriptor, TransportHealth, TransportProtocolModel, TransportRuntimeBindings, TransportRuntimeEvent, TransportRuntimeEventType, TransportSession, TransportSessionLifecycle, TransportSessionMetadata, TransportManagerSnapshot, CreateTransportSessionInput, UpdateTransportMetricsInput, RemoteProductionBinding } from './transport-layer.js';
+export {
+  TransportManager,
+  createTransportManager,
+  createDemoTransportWorkflow,
+  transportProtocols,
+} from './transport-layer.js';
+export type {
+  BroadcastTransportProtocol,
+  TransportBackendDescriptor,
+  TransportHealth,
+  TransportProtocolModel,
+  TransportRuntimeBindings,
+  TransportRuntimeEvent,
+  TransportRuntimeEventType,
+  TransportSession,
+  TransportSessionLifecycle,
+  TransportSessionMetadata,
+  TransportManagerSnapshot,
+  CreateTransportSessionInput,
+  UpdateTransportMetricsInput,
+  RemoteProductionBinding,
+} from './transport-layer.js';
+
+export {
+  DiagnosticsManager,
+  PerformanceProfiler,
+  HealthMonitor as DiagnosticsHealthMonitor,
+  createDiagnosticsManager,
+  createDiagnosticsDemo,
+} from './diagnostics/index.js';
+export type {
+  DiagnosticsSeverity,
+  PipelineHealthState,
+  TracePhase,
+  CpuUtilizationMetadata,
+  GpuUtilizationMetadata,
+  MemoryUsageMetadata,
+  FrameTimingStatistics,
+  AudioLatencyMetrics,
+  RenderLatencyMetrics,
+  RuntimeMetricsModel,
+  PipelineHealth,
+  ExecutionTraceEvent,
+  PerformanceEvent,
+  DiagnosticsAlert,
+  DiagnosticsSnapshot,
+} from './diagnostics/index.js';
+export {
+  createRemoteProductionManager,
+  createGuestSession,
+  createGreenRoom,
+  createTallyState,
+  createIFBState,
+  createDemoGuestWorkflow,
+} from './remote-production.js';
