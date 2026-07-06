@@ -313,6 +313,41 @@ function isLiveMediaStream(stream: MediaStream | null | undefined): stream is Me
   );
 }
 
+const SMOKE_CAMERA_SOURCE_ID = 'ubos-smoke-camera';
+
+function findFirstLiveVideoStream(streams: Record<string, MediaStream>): MediaStream | null {
+  for (const stream of Object.values(streams)) {
+    if (isLiveMediaStream(stream)) return stream;
+  }
+  return null;
+}
+
+function findSourceName(
+  sourceId: string,
+  scenes: Scene[],
+): string | undefined {
+  for (const scene of scenes) {
+    const source = scene.sources.find((item) => item.id === sourceId);
+    if (source) return source.name;
+  }
+  return undefined;
+}
+
+function toMixerSourceType(
+  type: string | undefined,
+): 'camera' | 'screen' | 'media' | 'browser' | 'guest' | 'master' {
+  if (
+    type === 'screen' ||
+    type === 'media' ||
+    type === 'browser' ||
+    type === 'guest' ||
+    type === 'master'
+  ) {
+    return type;
+  }
+  return 'camera';
+}
+
 function pauseVideoSafely(video: HTMLVideoElement, details?: Record<string, unknown>): void {
   try {
     video.pause();
@@ -2246,7 +2281,6 @@ export function SceneWorkspace({
     [startTransition, setScenes],
   );
   const smokeMedia = useMediaCapture();
-  const [activeCameraStream, setActiveCameraStream] = useState<MediaStream | null>(null);
   const [programStreamOnAir, setProgramStreamOnAir] = useState(false);
   const [cameraCaptureError, setCameraCaptureError] = useState('');
   const [liveSourceStreams, setLiveSourceStreams] = useState<Record<string, MediaStream>>({});
@@ -2525,6 +2559,65 @@ export function SceneWorkspace({
     [patchCaptureSourceStatus, refresh, retainLiveSourceStream, scenes],
   );
 
+  const startCameraCapture = useCallback(
+    async (sourceId: string) => {
+      patchCaptureSourceStatus('connecting', sourceId);
+      setCameraCaptureError('');
+      if (!navigator.mediaDevices?.getUserMedia) {
+        patchCaptureSourceStatus(
+          'unavailable',
+          sourceId,
+          'Camera capture is not supported in this browser.',
+        );
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (isLiveMediaStream(stream)) {
+          retainLiveSourceStream(sourceId, stream);
+          const videoTrack = stream.getVideoTracks()[0];
+          const settings = videoTrack?.getSettings();
+          refresh(
+            scenes.map((scene) => ({
+              ...scene,
+              sources: scene.sources.map((source) =>
+                source.id === sourceId
+                  ? {
+                      ...source,
+                      settings: {
+                        ...source.settings,
+                        runtimeStatus: 'live',
+                        captureState: 'live',
+                        sourceKind: 'camera',
+                        audioEnabled: stream.getAudioTracks().length > 0,
+                        ...(settings?.width && settings?.height
+                          ? { resolution: `${settings.width}x${settings.height}` }
+                          : {}),
+                        ...(settings?.frameRate ? { fps: Math.round(settings.frameRate) } : {}),
+                      },
+                    }
+                  : source,
+              ),
+            })),
+          );
+        } else {
+          const failureReason = 'getUserMedia did not return an active camera stream.';
+          patchCaptureSourceStatus('unavailable', sourceId, failureReason);
+          setCameraCaptureError(failureReason);
+        }
+      } catch (error) {
+        const failureReason = describeCaptureError(error);
+        patchCaptureSourceStatus(
+          isAbortError(error) ? 'permission_required' : 'unavailable',
+          sourceId,
+          failureReason,
+        );
+        setCameraCaptureError(failureReason);
+      }
+    },
+    [patchCaptureSourceStatus, refresh, retainLiveSourceStream, scenes],
+  );
+
   const startSmokeCapture = useCallback(
     async (sourceId: string) => {
       patchCaptureSourceStatus('connecting', sourceId);
@@ -2565,10 +2658,14 @@ export function SceneWorkspace({
   const programCameraStream = programCameraSourceId
     ? liveSourceStreams[programCameraSourceId]
     : null;
-  const directCameraLive = isLiveMediaStream(activeCameraStream);
-  const previewStreamToShow = previewCameraStream ?? (directCameraLive ? activeCameraStream : null);
+  const firstLiveVideoStream = useMemo(
+    () => findFirstLiveVideoStream(liveSourceStreams),
+    [liveSourceStreams],
+  );
+  const directCameraLive = isLiveMediaStream(firstLiveVideoStream);
+  const previewStreamToShow = previewCameraStream ?? firstLiveVideoStream;
   const programStreamToShow =
-    programCameraStream ?? (directCameraLive && programStreamOnAir ? activeCameraStream : null);
+    programCameraStream ?? (directCameraLive && programStreamOnAir ? firstLiveVideoStream : null);
   const previewHasCameraSource = Boolean(previewCameraSourceId) || directCameraLive;
   const programHasCameraSource =
     Boolean(programCameraSourceId) || (directCameraLive && programStreamOnAir);
@@ -2576,7 +2673,7 @@ export function SceneWorkspace({
   const liveProgramVisible = isLiveMediaStream(programStreamToShow);
 
   const createProgramRecordingStream = useCallback(() => {
-    const directStream = programStreamToShow ?? (programStreamOnAir ? activeCameraStream : null);
+    const directStream = programStreamToShow ?? (programStreamOnAir ? firstLiveVideoStream : null);
     if (isLiveMediaStream(directStream)) {
       return {
         stream: directStream,
@@ -2593,11 +2690,15 @@ export function SceneWorkspace({
     const captured = programVideo?.captureStream?.() ?? programVideo?.mozCaptureStream?.();
     if (captured?.getVideoTracks().length) {
       const mixed = new MediaStream(captured.getVideoTracks());
+      const addedTrackIds = new Set(mixed.getAudioTracks().map((track) => track.id));
       Object.values(liveSourceStreamsRef.current).forEach((stream) => {
         stream
           .getAudioTracks()
-          .filter((track) => track.readyState === 'live')
-          .forEach((track) => mixed.addTrack(track));
+          .filter((track) => track.readyState === 'live' && !addedTrackIds.has(track.id))
+          .forEach((track) => {
+            mixed.addTrack(track);
+            addedTrackIds.add(track.id);
+          });
       });
       return {
         stream: mixed,
@@ -2606,7 +2707,7 @@ export function SceneWorkspace({
     }
     return null;
   }, [
-    activeCameraStream,
+    firstLiveVideoStream,
     programLiveVideoSource?.type,
     programScene.sources,
     programStreamOnAir,
@@ -2757,7 +2858,7 @@ export function SceneWorkspace({
   );
 
   useEffect(() => {
-    const stream = previewStreamToShow ?? activeCameraStream ?? smokeMedia.stream;
+    const stream = previewStreamToShow ?? firstLiveVideoStream;
     if (!stream?.getAudioTracks().length) {
       setAudioLevel(0);
       return;
@@ -2785,33 +2886,19 @@ export function SceneWorkspace({
       source.disconnect();
       void audioContext.close();
     };
-  }, [activeCameraStream, previewStreamToShow, smokeMedia.stream]);
+  }, [firstLiveVideoStream, previewStreamToShow]);
   const liveAudioChannels = useMemo<AudioChannel[]>(() => {
-    const channelsFromDirect: AudioChannel[] =
-      activeCameraStream &&
-      activeCameraStream.getAudioTracks().some((track) => track.readyState === 'live')
-        ? [
-            {
-              id: 'live-direct-camera',
-              label: 'Live Camera Mic',
-              level: audioLevel,
-              muted: false,
-              kind: 'mic' as const,
-            },
-          ]
-        : [];
     const entries = Object.entries(liveSourceStreams).filter(([, stream]) =>
       stream.getAudioTracks().some((track) => track.readyState === 'live'),
     );
-    const channelsFromMap = entries.map(([sourceId, stream]) => ({
+    return entries.map(([sourceId]) => ({
       id: `live-${sourceId}`,
-      label: `Live Source Audio (${sourceId.slice(0, 8)})`,
+      label: findSourceName(sourceId, sorted) ?? `Live Source (${sourceId.slice(0, 8)})`,
       level: audioLevel,
       muted: false,
       kind: 'mic' as const,
     }));
-    return channelsFromDirect.length ? channelsFromDirect : channelsFromMap;
-  }, [activeCameraStream, audioLevel, liveSourceStreams]);
+  }, [audioLevel, liveSourceStreams, sorted]);
 
   const effectiveAudioChannels = useMemo(
     () => [...channels, ...liveAudioChannels],
@@ -2979,7 +3066,7 @@ export function SceneWorkspace({
       window.setTimeout(() => setTransitionActive(false), Math.max(duration, 250));
     }
     refresh(sorted.map((scene) => ({ ...scene, isActive: scene.id === next.programSceneId })));
-    if (isLiveMediaStream(activeCameraStream)) {
+    if (isLiveMediaStream(previewStreamToShow)) {
       setProgramStreamOnAir(true);
     }
     persistProductionState(next, type === 'fade' ? 'fade' : type === 'cut' ? 'cut' : 'take');
@@ -3137,41 +3224,9 @@ export function SceneWorkspace({
   };
 
   const activateDirectCamera = useCallback(async () => {
-    activeCameraStream?.getTracks().forEach((track) => track.stop());
     setProgramStreamOnAir(false);
-    setCameraCaptureError('');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      setActiveCameraStream(stream);
-      if (stream.active) {
-        updateActiveSources((sources) =>
-          sources.map((source) =>
-            source.type === 'camera' || source.type === 'audio'
-              ? {
-                  ...source,
-                  settings: { ...source.settings, runtimeStatus: 'live' },
-                }
-              : source,
-          ),
-        );
-      } else {
-        setCameraCaptureError('Stream received but stream.active is false');
-      }
-    } catch (error) {
-      const lastError = describeCaptureError(error);
-      setCameraCaptureError(lastError);
-      updateActiveSources((sources) =>
-        sources.map((source) =>
-          source.type === 'camera' || source.type === 'audio'
-            ? {
-                ...source,
-                settings: { ...source.settings, runtimeStatus: 'unavailable', message: lastError },
-              }
-            : source,
-        ),
-      );
-    }
-  }, [activeCameraStream, updateActiveSources]);
+    await startCameraCapture(SMOKE_CAMERA_SOURCE_ID);
+  }, [startCameraCapture]);
 
   const graphicsAssets = useMemo(
     () => assets.filter((asset) => ['overlay', 'lower_third', 'background'].includes(asset.type)),
@@ -3186,6 +3241,11 @@ export function SceneWorkspace({
   const previewSceneComposition = useMemo(
     () => ensureSceneComposition(graphicsState.compositions, previewScene.id),
     [graphicsState.compositions, previewScene.id],
+  );
+
+  const programSceneComposition = useMemo(
+    () => ensureSceneComposition(graphicsState.compositions, programScene.id),
+    [graphicsState.compositions, programScene.id],
   );
 
   const previewSceneMediaComposition = useMemo(
@@ -3663,7 +3723,7 @@ export function SceneWorkspace({
       healthFps: safeHealthMetrics.fps,
       showSafeAreas,
       safeAreaToggles,
-      programGraphicsLayers: previewSceneComposition.layers.filter(
+      programGraphicsLayers: programSceneComposition.layers.filter(
         (layer) => layer.programState === 'live',
       ),
       previewGraphicsLayers: previewSceneComposition.layers.filter(
@@ -3717,6 +3777,7 @@ export function SceneWorkspace({
       showSafeAreas,
       safeAreaToggles,
       previewSceneComposition,
+      programSceneComposition,
       programMediaOverlayItems,
       previewMediaOverlayItems,
       previewSceneMediaComposition.replayBuffer,
@@ -3725,27 +3786,32 @@ export function SceneWorkspace({
     ],
   );
 
-  const mixerSources = useMemo(
-    () => [
-      {
-        id: 'camera',
-        name: 'Camera Microphone',
-        type: 'camera' as const,
-        stream: activeCameraStream ?? smokeMedia.stream,
-      },
-      {
-        id: 'screen',
-        name: 'Screen Audio',
-        type: 'screen' as const,
-        stream: smokeMedia.screenStream,
-      },
+  const mixerSources = useMemo(() => {
+    const liveEntries = Object.entries(liveSourceStreams)
+      .filter(([, stream]) =>
+        stream.getAudioTracks().some((track) => track.readyState === 'live'),
+      )
+      .map(([sourceId, stream]) => {
+        const source = sorted
+          .flatMap((scene) => scene.sources)
+          .find((item) => item.id === sourceId);
+        return {
+          id: sourceId,
+          name: source?.name ?? findSourceName(sourceId, sorted) ?? `Source ${sourceId.slice(0, 8)}`,
+          type: toMixerSourceType(source?.type),
+          stream,
+        };
+      });
+
+    const staticChannels = [
       { id: 'media', name: 'Media Playback', type: 'media' as const, stream: null },
       { id: 'browser', name: 'Browser Source', type: 'browser' as const, stream: null },
       { id: 'guest', name: 'Guest Audio', type: 'guest' as const, stream: null },
       { id: 'master', name: 'Master Output', type: 'master' as const, stream: null },
-    ],
-    [activeCameraStream, smokeMedia.screenStream, smokeMedia.stream],
-  );
+    ];
+
+    return liveEntries.length > 0 ? [...liveEntries, ...staticChannels] : staticChannels;
+  }, [liveSourceStreams, sorted]);
 
   const routingEdges = useMemo<RoutingMatrixEdge[]>(
     () =>
@@ -3908,7 +3974,7 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
-        if (input.type === 'camera') void activateDirectCamera();
+        if (input.type === 'camera') void startCameraCapture(tempSource.id);
         else if (input.type === 'screen') void startScreenCapture(tempSource.id);
         else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
@@ -4520,7 +4586,7 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
-        if (input.type === 'camera') void activateDirectCamera();
+        if (input.type === 'camera') void startCameraCapture(tempSource.id);
         else if (input.type === 'screen') void startScreenCapture(tempSource.id);
         else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
@@ -4635,7 +4701,9 @@ export function SceneWorkspace({
           <SmokeCheck label="Camera active" ok={directCameraLive} />
           <SmokeCheck
             label="Microphone active"
-            ok={Boolean(activeCameraStream?.getAudioTracks().some((t) => t.readyState === 'live'))}
+            ok={Boolean(
+              firstLiveVideoStream?.getAudioTracks().some((t) => t.readyState === 'live'),
+            )}
           />
           <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
           <SmokeCheck label="Program visible" ok={liveProgramVisible} />
@@ -4672,9 +4740,8 @@ export function SceneWorkspace({
             type="button"
             className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
             onClick={() => {
-              activeCameraStream?.getTracks().forEach((track) => track.stop());
+              Object.keys(liveSourceStreams).forEach((sourceId) => stopLiveSourceStream(sourceId));
               smokeMedia.stopAll();
-              setActiveCameraStream(null);
               setProgramStreamOnAir(false);
               setLiveSourceStreams({});
               setCameraCaptureError('');
@@ -4788,7 +4855,7 @@ export function SceneWorkspace({
       graph={productionGraphSession.graph}
       healthFps={safeHealthMetrics.fps}
       showSafeAreas={showSafeAreas}
-      graphicsLayers={previewSceneComposition.layers.filter(
+      graphicsLayers={programSceneComposition.layers.filter(
         (layer) => layer.programState === 'live',
       )}
       mediaOverlayItems={programMediaOverlayItems}

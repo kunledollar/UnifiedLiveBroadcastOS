@@ -86,8 +86,8 @@ export const soloStreamerPreset = buildPreset(
     defaultNavItem: 'scenes',
     defaultOperationsTab: 'streaming',
     defaultDockTab: 'audio',
-    programFlexWeight: 72,
-    previewFlexWeight: 28,
+    programFlexWeight: 78,
+    previewFlexWeight: 22,
   },
 );
 
@@ -117,8 +117,8 @@ export const technicalDirectorPreset = buildPreset(
     defaultNavItem: 'scenes',
     defaultOperationsTab: 'routing',
     defaultDockTab: 'layers',
-    programFlexWeight: 64,
-    previewFlexWeight: 36,
+    programFlexWeight: 72,
+    previewFlexWeight: 28,
   },
 );
 

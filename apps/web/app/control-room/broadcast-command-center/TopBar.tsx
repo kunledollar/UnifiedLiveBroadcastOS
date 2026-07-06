@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { cn } from '@ubos/ui';
+import { broadcastSurfaces } from './broadcast-theme';
 import { UbosMenuBar, type UbosDockLayoutState, type UbosWorkspaceModeId } from '../menu';
 import type { LayoutFocusMode } from '../workspaces/workspace-types';
 import type { UbosDockPanelId } from '../menu';
@@ -51,10 +52,7 @@ export function TopBar({
 }) {
   return (
     <header
-      className={cn(
-        'flex shrink-0 flex-col border-b border-ubos-border-subtle bg-[#020408]',
-        className,
-      )}
+      className={cn('flex shrink-0 flex-col border-b', broadcastSurfaces.header, className)}
     >
       {statusBar}
       <UbosMenuBar

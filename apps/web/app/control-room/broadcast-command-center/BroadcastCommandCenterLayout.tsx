@@ -16,6 +16,7 @@ import {
 import type { LayoutFocusMode } from '../workspaces/workspace-types';
 import { applyWorkspaceProfile } from '../workspaces';
 import { BottomWorkspaceDock, bottomWorkspaceTabBarHeightPx } from './BottomWorkspaceDock';
+import { broadcastQuickAction, broadcastSurfaces } from './broadcast-theme';
 import { CenterProgramPreviewDeck, type MonitorStatusInfo } from './CenterProgramPreviewDeck';
 import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
 import { LeftCommandRail } from './LeftCommandRail';
@@ -133,7 +134,12 @@ export function BroadcastCommandCenterLayout({
 
   const leftWidth = showLeft ? (leftCollapsed ? 56 : (canvasState.zones.left?.flexWeight ?? 260)) : 0;
   const rightWidth = showRight ? (rightCollapsed ? 56 : (canvasState.zones.right?.flexWeight ?? 320)) : 0;
-  const bottomExpandedHeight = canvasState.zones.bottom?.flexWeight ?? 140;
+  const bottomExpandedHeight =
+    layoutFocus === 'audio'
+      ? Math.max(canvasState.zones.bottom?.flexWeight ?? 140, 200)
+      : layoutFocus === 'switcher'
+        ? Math.min(canvasState.zones.bottom?.flexWeight ?? 140, 100)
+        : (canvasState.zones.bottom?.flexWeight ?? 140);
   const bottomHeight = showBottom
     ? bottomCollapsed
       ? bottomWorkspaceTabBarHeightPx()
@@ -255,7 +261,7 @@ export function BroadcastCommandCenterLayout({
 
   return (
     <div
-      className="flex h-full min-h-0 flex-col overflow-hidden bg-[#020408] text-xs text-ubos-fg-secondary"
+      className={cn('flex h-full min-h-0 flex-col overflow-hidden text-sm', broadcastSurfaces.app)}
       style={layoutStyle}
     >
       <TopBar
@@ -319,32 +325,36 @@ export function BroadcastCommandCenterLayout({
             switcherContent={showSwitcher ? switcherContent : null}
             programFlexWeight={preset.programFlexWeight}
             previewFlexWeight={preset.previewFlexWeight}
+            layoutFocus={layoutFocus}
+            compactChrome={compactChrome}
             className="min-h-0 flex-1"
           />
 
-          <div className="flex shrink-0 items-center gap-1 px-0.5 pb-0.5">
-            <button
-              type="button"
-              onClick={() => openBottomWorkspace('system-status', 'system-status')}
-              className="rounded-ubos-sm border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300 hover:bg-cyan-500/20"
-            >
-              System Status
-            </button>
-            <button
-              type="button"
-              onClick={() => openBottomWorkspace('broadcast-io', 'routing')}
-              className="rounded-ubos-sm border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-300 hover:bg-indigo-500/20"
-            >
-              Routing Matrix
-            </button>
-            <button
-              type="button"
-              onClick={() => openBottomWorkspace('pipeline-inspector', 'production-graph')}
-              className="rounded-ubos-sm border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-300 hover:bg-indigo-500/20"
-            >
-              Production Graph
-            </button>
-          </div>
+          {layoutFocus !== 'switcher' ? (
+            <div className="flex shrink-0 flex-wrap items-center gap-1 px-0.5 pb-0.5">
+              <button
+                type="button"
+                onClick={() => openBottomWorkspace('system-status', 'system-status')}
+                className={broadcastQuickAction}
+              >
+                System Status
+              </button>
+              <button
+                type="button"
+                onClick={() => openBottomWorkspace('broadcast-io', 'routing')}
+                className={broadcastQuickAction}
+              >
+                Routing Matrix
+              </button>
+              <button
+                type="button"
+                onClick={() => openBottomWorkspace('pipeline-inspector', 'production-graph')}
+                className={broadcastQuickAction}
+              >
+                Production Graph
+              </button>
+            </div>
+          ) : null}
         </div>
 
         {showRight ? (
