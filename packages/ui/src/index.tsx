@@ -1,3 +1,5 @@
+'use client';
+
 import { SceneType } from '@ubos/shared';
 import type {
   AudioChannel,
@@ -742,6 +744,71 @@ function sourceMonitorState(source: SceneSource) {
 }
 
 
+function browserUrlFromSource(source: SceneSource) {
+  const rawUrl = source.settings?.url;
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function SourceBrowserRuntime({ source }: { source: SceneSource }) {
+  const url = browserUrlFromSource(source);
+  const [status, setStatus] = useState<'loading' | 'live' | 'failed' | 'offline'>(
+    source.isVisible ? 'loading' : 'offline',
+  );
+  const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(
+    typeof source.settings?.lastLoadedAt === 'string' ? source.settings.lastLoadedAt : null,
+  );
+  if (!url) {
+    return (
+      <MonitorStateScreen
+        title="Invalid Browser URL"
+        subtitle="Enter a valid http:// or https:// URL for this Browser source."
+        icon="🌐"
+        badge="FAILED"
+        tone="danger"
+      />
+    );
+  }
+  return (
+    <div className="absolute inset-0 bg-black">
+      <iframe
+        key={`${source.id}:${url}:${String(source.settings?.reloadNonce ?? '0')}`}
+        src={url}
+        title={source.name}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+        referrerPolicy="no-referrer"
+        loading="eager"
+        className="h-full w-full border-0 bg-white"
+        onLoad={() => {
+          setStatus('live');
+          setLastLoadedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        }}
+        onError={() => setStatus('failed')}
+      />
+      <div className="pointer-events-none absolute inset-x-2 bottom-2 z-30 rounded bg-black/70 px-2 py-1 text-[10px] font-bold text-white ring-1 ring-white/10">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate">{url}</span>
+          <span className={status === 'live' ? 'text-emerald-200' : status === 'failed' ? 'text-rose-200' : 'text-amber-200'}>
+            {status.toUpperCase()}
+          </span>
+        </div>
+        <div className="mt-0.5 flex items-center justify-between gap-2 text-white/65">
+          <span>{source.muted || source.settings?.muted !== false ? 'Muted' : 'Audio enabled'}</span>
+          <span>{lastLoadedAt ? `Loaded ${lastLoadedAt}` : 'Loading…'}</span>
+        </div>
+        <p className="mt-0.5 text-amber-100/80">
+          If this page stays blank, it may block iframe embedding. Use another URL or screen capture.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 function SourceMediaRuntime({ source, muted = false, className = '' }: { source: SceneSource; muted?: boolean; className?: string }) {
   const url = typeof source.settings?.mediaUrl === 'string' ? source.settings.mediaUrl : undefined;
   const kind = source.settings?.mediaKind === 'image' ? 'image' : source.settings?.mediaKind === 'video' ? 'video' : undefined;
@@ -785,7 +852,7 @@ function SourceMonitorPreview({ source }: { source: SceneSource }) {
     <div
       className={`relative mt-3 aspect-video overflow-hidden rounded-lg border ${theme.ring} bg-black`}
     >
-      <SourceMediaRuntime source={source} muted className="absolute inset-0 z-0 h-full w-full" />
+      {source.type === 'browser' ? <SourceBrowserRuntime source={source} /> : <SourceMediaRuntime source={source} muted className="absolute inset-0 z-0 h-full w-full" />}
       {!source.settings?.mediaUrl ? (
       <MonitorStateScreen
         title={state.title}
@@ -1700,10 +1767,10 @@ function SourceMediaLayers({ sources }: { sources: SceneSource[] }) {
   return (
     <>
       {sortedVisibleSources(sources)
-        .filter((source) => source.type === 'media' && source.settings?.mediaUrl)
+        .filter((source) => (source.type === 'media' && source.settings?.mediaUrl) || source.type === 'browser')
         .map((source, index) => (
           <div key={source.id} className="absolute inset-0 z-[18] bg-black" style={{ zIndex: 18 + index }}>
-            <SourceMediaRuntime source={source} />
+            {source.type === 'browser' ? <SourceBrowserRuntime source={source} /> : <SourceMediaRuntime source={source} />}
           </div>
         ))}
     </>

@@ -28,6 +28,8 @@ export function BroadcastButton({
   size = 'md',
   active = false,
   className,
+  type,
+  formAction,
   ...props
 }: ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: BroadcastButtonVariant;
@@ -36,7 +38,8 @@ export function BroadcastButton({
 }) {
   return (
     <button
-      type="button"
+      type={formAction ? type : (type ?? 'button')}
+      formAction={formAction}
       className={cn(
         'inline-flex items-center justify-center gap-ubos-2 rounded-ubos-sm border font-semibold',
         'transition-colors duration-ubos-fast ease-ubos-default',
