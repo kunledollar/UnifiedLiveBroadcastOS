@@ -109,6 +109,7 @@ export function ProgramMonitor({
   automationModeLabel,
   role = 'program',
   compact = false,
+  deckMode = false,
 }: {
   scene: Scene;
   routes: MediaRoute[];
@@ -134,6 +135,7 @@ export function ProgramMonitor({
   automationModeLabel?: string;
   role?: 'program' | 'preview';
   compact?: boolean;
+  deckMode?: boolean;
 }) {
   const telemetry = deriveMonitorTelemetry({
     routes,
@@ -154,8 +156,8 @@ export function ProgramMonitor({
       fill={!compact}
       compact={compact}
       tally={role === 'preview' ? 'preview' : 'program'}
-      label={scene.name}
       aspectRatio="16/9"
+      {...(deckMode ? { header: <></> } : { label: scene.name })}
       {...(role === 'program' && telemetry.isLive ? { liveIndicator: true } : {})}
       {...(warning ? { warning } : {})}
       {...(emptyMessage ? { emptyMessage } : {})}
@@ -167,16 +169,18 @@ export function ProgramMonitor({
       {...(showVerticalGuide !== undefined ? { showVerticalGuide } : {})}
       {...(showFourThreeGuide !== undefined ? { showFourThreeGuide } : {})}
       {...(showPlatformCrop !== undefined ? { showPlatformCrop } : {})}
-      metadata={
-        compact
-          ? [{ label: 'Scene', value: scene.name }]
-          : [
-              { label: 'Res', value: telemetry.resolution },
-              { label: 'FPS', value: telemetry.fps },
-              { label: 'Out', value: telemetry.outputStatus },
-            ]
-      }
-      {...(compact
+      {...(deckMode
+        ? {}
+        : {
+            metadata: compact
+              ? [{ label: 'Scene', value: scene.name }]
+              : [
+                  { label: 'Res', value: telemetry.resolution },
+                  { label: 'FPS', value: telemetry.fps },
+                  { label: 'Out', value: telemetry.outputStatus },
+                ],
+          })}
+      {...(compact || deckMode
         ? {}
         : {
             footer: (

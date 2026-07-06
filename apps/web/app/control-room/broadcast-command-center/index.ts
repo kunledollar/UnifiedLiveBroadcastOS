@@ -2,7 +2,8 @@ export { BroadcastCommandCenterLayout } from './BroadcastCommandCenterLayout';
 export type { BroadcastCommandCenterLayoutProps } from './BroadcastCommandCenterLayout';
 export { TopBar } from './TopBar';
 export { LeftCommandRail } from './LeftCommandRail';
-export { CenterProgramPreviewDeck } from './CenterProgramPreviewDeck';
+import { CenterProgramPreviewDeck } from './CenterProgramPreviewDeck';
+export type { MonitorStatusInfo } from './CenterProgramPreviewDeck';
 export { RightOperationsDock } from './RightOperationsDock';
 export { BottomWorkspaceDock } from './BottomWorkspaceDock';
 export {

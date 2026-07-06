@@ -6,7 +6,7 @@ import type { RoutingMatrixEdge, WorkspacePresetId } from '../workspace-canvas/t
 import type { DiagnosticMetric } from '../workspace-canvas/SystemDiagnosticsPanel';
 import { useWorkspaceCanvasState } from '../workspace-canvas/useWorkspaceCanvasState';
 import { BottomWorkspaceDock } from './BottomWorkspaceDock';
-import { CenterProgramPreviewDeck } from './CenterProgramPreviewDeck';
+import { CenterProgramPreviewDeck, type MonitorStatusInfo } from './CenterProgramPreviewDeck';
 import { DiagnosticsSummary, FloatingDiagnosticsPanel } from './FloatingDiagnosticsPanel';
 import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
 import { FloatingRoutingMatrixPanel } from './FloatingRoutingMatrixPanel';
@@ -23,8 +23,8 @@ export type BroadcastCommandCenterLayoutProps = {
   sourceDockContent: ReactNode;
   programMonitor: ReactNode;
   previewMonitor: ReactNode;
-  programLabel: string;
-  previewLabel: string;
+  programStatus: MonitorStatusInfo;
+  previewStatus: MonitorStatusInfo;
   switcherContent: ReactNode;
   routingEdges: RoutingMatrixEdge[];
   audioMixerContent: ReactNode;
@@ -50,8 +50,8 @@ export function BroadcastCommandCenterLayout({
   sourceDockContent,
   programMonitor,
   previewMonitor,
-  programLabel,
-  previewLabel,
+  programStatus,
+  previewStatus,
   switcherContent,
   routingEdges,
   diagnosticsMetrics,
@@ -84,9 +84,9 @@ export function BroadcastCommandCenterLayout({
   const [showFloatingRouting, setShowFloatingRouting] = useState(false);
   const [showFloatingGraph, setShowFloatingGraph] = useState(false);
 
-  const leftWidth = state.zones.left?.collapsed ? 56 : (state.zones.left?.flexWeight ?? 280);
-  const rightWidth = state.zones.right?.collapsed ? 56 : (state.zones.right?.flexWeight ?? 360);
-  const bottomHeight = state.zones.bottom?.collapsed ? 40 : (state.zones.bottom?.flexWeight ?? 200);
+  const leftWidth = state.zones.left?.collapsed ? 56 : (state.zones.left?.flexWeight ?? 260);
+  const rightWidth = state.zones.right?.collapsed ? 56 : (state.zones.right?.flexWeight ?? 320);
+  const bottomHeight = state.zones.bottom?.collapsed ? 40 : (state.zones.bottom?.flexWeight ?? 168);
 
   const handleOpsTabChange = (tab: OperationsTabId) => {
     setActiveOperationsTab(tab);
@@ -113,9 +113,9 @@ export function BroadcastCommandCenterLayout({
       />
 
       <div
-        className="grid min-h-0 flex-1 gap-1.5 overflow-hidden p-1.5"
+        className="grid min-h-0 flex-1 gap-1 overflow-hidden p-1"
         style={{
-          gridTemplateColumns: `${leftWidth}px minmax(0, 1fr) ${rightWidth}px`,
+          gridTemplateColumns: `${leftWidth}px minmax(0, 1.6fr) ${rightWidth}px`,
           gridTemplateRows: `minmax(0, 1fr) ${bottomHeight}px`,
         }}
       >
@@ -131,19 +131,19 @@ export function BroadcastCommandCenterLayout({
           />
         </div>
 
-        <div className="flex min-h-0 flex-col gap-1.5 overflow-hidden">
+        <div className="flex min-h-0 flex-col gap-0.5 overflow-hidden">
           <CenterProgramPreviewDeck
             programMonitor={programMonitor}
             previewMonitor={previewMonitor}
-            programLabel={programLabel}
-            previewLabel={previewLabel}
+            programStatus={programStatus}
+            previewStatus={previewStatus}
             switcherContent={switcherContent}
             programFlexWeight={preset.programFlexWeight}
             previewFlexWeight={preset.previewFlexWeight}
             className="min-h-0 flex-1"
           />
 
-          <div className="flex shrink-0 items-center gap-1 px-1">
+          <div className="flex shrink-0 items-center gap-1 px-0.5 pb-0.5">
             <button
               type="button"
               onClick={() => setShowFloatingDiagnostics((value) => !value)}

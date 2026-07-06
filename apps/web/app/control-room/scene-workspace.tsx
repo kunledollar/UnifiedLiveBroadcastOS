@@ -1,6 +1,6 @@
 'use client';
 
-import { getTallyState } from '@ubos/ui';
+import { cn, getTallyState } from '@ubos/ui';
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
@@ -124,6 +124,7 @@ import {
 } from './media-route-actions';
 import {
   BroadcastCommandCenterLayout,
+  type MonitorStatusInfo,
 } from './broadcast-command-center';
 import {
   type RoutingMatrixEdge,
@@ -174,6 +175,7 @@ import {
 import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
 import { PreviewMonitorCompact, ProgramMonitor } from './workspace/OutputViewRenderer';
 import {
+  deriveMonitorTelemetry,
   normalizeOutputViewMode,
   outputViewModes,
   type OutputViewMode,
@@ -285,6 +287,11 @@ function getFirstVisibleLiveVideoSource(scene: Scene): SceneSource | null {
       (source) => (source.type === 'camera' || source.type === 'screen') && source.isVisible,
     ) ?? null
   );
+}
+
+function getPrimarySourceName(scene: Scene): string {
+  const visible = scene.sources.find((source) => source.isVisible);
+  return visible?.name ?? scene.name;
 }
 
 function isLiveMediaStream(stream: MediaStream | null | undefined): stream is MediaStream {
@@ -423,6 +430,7 @@ function LiveMediaMonitor({
   role,
   sourceId,
   sourceType,
+  deckMode = false,
 }: {
   title: string;
   sceneName: string;
@@ -431,6 +439,7 @@ function LiveMediaMonitor({
   role: 'program' | 'preview';
   sourceId?: string | null;
   sourceType?: SceneSourceType | null | undefined;
+  deckMode?: boolean;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
@@ -458,7 +467,11 @@ function LiveMediaMonitor({
   }, [active, role, sourceId, stream]);
   return (
     <div
-      className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border ${role === 'program' ? 'border-red-500/50' : 'border-emerald-400/50'} bg-black`}
+      className={cn(
+        'relative flex h-full min-h-0 flex-col overflow-hidden bg-black',
+        !deckMode &&
+          `rounded-xl border ${role === 'program' ? 'border-red-500/50' : 'border-emerald-400/50'}`,
+      )}
     >
       <video
         ref={videoRef}
@@ -473,17 +486,19 @@ function LiveMediaMonitor({
           Add/start a camera source to see live video here.
         </div>
       ) : null}
-      <div className="relative z-30 mt-auto flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
-        <span className={role === 'program' ? 'text-red-200' : 'text-emerald-100'}>{title}</span>
-        {sourceType === 'screen' ? (
-          <span className="rounded bg-sky-500/20 px-2 py-0.5 text-sky-100">SCREEN LIVE</span>
-        ) : sourceType === 'camera' ? (
-          <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-100">
-            CAMERA LIVE
-          </span>
-        ) : null}
-        <span className="text-slate-300">{sceneName}</span>
-      </div>
+      {!deckMode ? (
+        <div className="relative z-30 mt-auto flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
+          <span className={role === 'program' ? 'text-red-200' : 'text-emerald-100'}>{title}</span>
+          {sourceType === 'screen' ? (
+            <span className="rounded bg-sky-500/20 px-2 py-0.5 text-sky-100">SCREEN LIVE</span>
+          ) : sourceType === 'camera' ? (
+            <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-100">
+              CAMERA LIVE
+            </span>
+          ) : null}
+          <span className="text-slate-300">{sceneName}</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -4578,6 +4593,58 @@ export function SceneWorkspace({
     ],
   );
 
+  const monitorTelemetry = useMemo(
+    () =>
+      deriveMonitorTelemetry({
+        routes: mediaRoutes,
+        graph: productionGraphSession.graph,
+        healthFps: safeHealthMetrics.fps,
+      }),
+    [mediaRoutes, productionGraphSession.graph, safeHealthMetrics.fps],
+  );
+
+  const programMonitorStatus = useMemo<MonitorStatusInfo>(
+    () => ({
+      resolution: monitorTelemetry.resolution,
+      fps: monitorTelemetry.fps,
+      sourceName: liveProgramVisible
+        ? (programLiveVideoSource?.name ?? getPrimarySourceName(programScene))
+        : getPrimarySourceName(programScene),
+      state: liveProgramVisible ? 'live' : 'program',
+      audioLevel: liveProgramVisible ? audioLevel : null,
+      audioMuted: false,
+    }),
+    [
+      monitorTelemetry.fps,
+      monitorTelemetry.resolution,
+      liveProgramVisible,
+      programLiveVideoSource?.name,
+      programScene,
+      audioLevel,
+    ],
+  );
+
+  const previewMonitorStatus = useMemo<MonitorStatusInfo>(
+    () => ({
+      resolution: monitorTelemetry.resolution,
+      fps: monitorTelemetry.fps,
+      sourceName: livePreviewVisible
+        ? (previewLiveVideoSource?.name ?? getPrimarySourceName(previewScene))
+        : getPrimarySourceName(previewScene),
+      state: livePreviewVisible ? 'live' : 'preview',
+      audioLevel: livePreviewVisible ? audioLevel : null,
+      audioMuted: false,
+    }),
+    [
+      monitorTelemetry.fps,
+      monitorTelemetry.resolution,
+      livePreviewVisible,
+      previewLiveVideoSource?.name,
+      previewScene,
+      audioLevel,
+    ],
+  );
+
   const programMonitorNode = liveProgramVisible ? (
     <LiveMediaMonitor
       title="Program"
@@ -4587,6 +4654,7 @@ export function SceneWorkspace({
       role="program"
       sourceId={programCameraSourceId}
       sourceType={programLiveVideoSource?.type}
+      deckMode
     />
   ) : (
     <ProgramMonitor
@@ -4601,6 +4669,7 @@ export function SceneWorkspace({
         (layer) => layer.programState === 'live',
       )}
       mediaOverlayItems={programMediaOverlayItems}
+      deckMode
     />
   );
 
@@ -4613,6 +4682,7 @@ export function SceneWorkspace({
       role="preview"
       sourceId={previewCameraSourceId}
       sourceType={previewLiveVideoSource?.type}
+      deckMode
     />
   ) : (
     <ProgramMonitor
@@ -4628,6 +4698,7 @@ export function SceneWorkspace({
       )}
       mediaOverlayItems={previewMediaOverlayItems}
       role="preview"
+      deckMode
     />
   );
 
@@ -4728,8 +4799,8 @@ export function SceneWorkspace({
       sourceDockContent={leftNavContent}
       programMonitor={programMonitorNode}
       previewMonitor={previewMonitorNode}
-      programLabel={programScene.name}
-      previewLabel={previewScene.name}
+      programStatus={programMonitorStatus}
+      previewStatus={previewMonitorStatus}
       switcherContent={switcherNode}
       routingEdges={routingEdges}
       audioMixerContent={<ProfessionalAudioMixer sources={mixerSources} />}
