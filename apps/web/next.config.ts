@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next';
 const nextConfig: NextConfig = {
-  transpilePackages: ['@ubos/ui', '@ubos/shared'],
+  transpilePackages: ['@ubos/ui', '@ubos/shared', '@ubos/db'],
   webpack(config) {
     config.resolve.extensionAlias = { ...config.resolve.extensionAlias, '.js': ['.ts', '.tsx', '.js'] };
     return config;
