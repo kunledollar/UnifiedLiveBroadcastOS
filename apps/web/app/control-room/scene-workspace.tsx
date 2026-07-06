@@ -122,6 +122,11 @@ import {
   resetDemoProductionState,
   setRouteMuted,
 } from './media-route-actions';
+import {
+  WorkspaceCanvas,
+  type RoutingMatrixEdge,
+  type DiagnosticMetric,
+} from './workspace-canvas';
 import { ProfessionalSwitcher } from './switcher';
 import { BroadcastStatusBar } from './shell/BroadcastStatusBar';
 import { LeftNavigationRail } from './shell/LeftNavigationRail';
@@ -4517,241 +4522,215 @@ export function SceneWorkspace({
     ),
   } satisfies Record<typeof professionalRightTab, ReactNode>;
 
+  const routingEdges = useMemo<RoutingMatrixEdge[]>(
+    () =>
+      mediaRoutes.map((route) => {
+        const gain =
+          typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
+        return {
+          id: route.id,
+          sourceId: route.sourceId ?? route.id,
+          sourceLabel: route.displayName,
+          destinationId: route.routeType,
+          destinationLabel: route.routeType.replace(/_/g, ' '),
+          active: route.isActive,
+          ...(gain !== undefined ? { gain } : {}),
+        };
+      }),
+    [mediaRoutes],
+  );
+
+  const diagnosticsMetrics = useMemo<DiagnosticMetric[]>(
+    () => [
+      { label: 'FPS', value: String(safeHealthMetrics.fps), status: 'neutral' },
+      { label: 'CPU', value: String(safeHealthMetrics.cpu), status: 'neutral' },
+      { label: 'Dropped', value: String(safeHealthMetrics.dropped), status: 'neutral' },
+      { label: 'Upload', value: String(safeHealthMetrics.upload), status: 'neutral' },
+      {
+        label: 'Graph Rev',
+        value: String(productionGraphSession.graph.metadata.revision),
+        status: 'good',
+      },
+      {
+        label: 'Recording',
+        value: recordingState,
+        status: recordingState === 'recording' ? 'warning' : 'neutral',
+      },
+      {
+        label: 'Streaming',
+        value: streamingState.lifecycle,
+        status: streamingState.lifecycle === 'streaming' ? 'good' : 'neutral',
+      },
+      {
+        label: 'Routes',
+        value: `${activeRouteCount} active`,
+        status: activeRouteCount > 0 ? 'good' : 'neutral',
+      },
+    ],
+    [
+      safeHealthMetrics,
+      productionGraphSession.graph.metadata.revision,
+      recordingState,
+      streamingState.lifecycle,
+      activeRouteCount,
+    ],
+  );
+
+  const programMonitorNode = liveProgramVisible ? (
+    <LiveMediaMonitor
+      title="Program"
+      sceneName={programScene.name}
+      stream={programStreamToShow}
+      active={liveProgramVisible}
+      role="program"
+      sourceId={programCameraSourceId}
+      sourceType={programLiveVideoSource?.type}
+    />
+  ) : (
+    <ProgramMonitor
+      scene={programScene}
+      routes={mediaRoutes}
+      layoutPreset={layoutPreset}
+      guests={guests}
+      graph={productionGraphSession.graph}
+      healthFps={safeHealthMetrics.fps}
+      showSafeAreas={showSafeAreas}
+      graphicsLayers={previewSceneComposition.layers.filter(
+        (layer) => layer.programState === 'live',
+      )}
+      mediaOverlayItems={programMediaOverlayItems}
+    />
+  );
+
+  const previewMonitorNode = livePreviewVisible ? (
+    <LiveMediaMonitor
+      title="Preview"
+      sceneName={previewScene.name}
+      stream={previewStreamToShow}
+      active={livePreviewVisible}
+      role="preview"
+      sourceId={previewCameraSourceId}
+      sourceType={previewLiveVideoSource?.type}
+    />
+  ) : (
+    <ProgramMonitor
+      scene={previewScene}
+      routes={mediaRoutes}
+      layoutPreset={layoutPreset}
+      guests={guests}
+      graph={productionGraphSession.graph}
+      healthFps={safeHealthMetrics.fps}
+      showSafeAreas={showSafeAreas}
+      graphicsLayers={previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview' || layer.programState === 'live',
+      )}
+      mediaOverlayItems={previewMediaOverlayItems}
+      role="preview"
+    />
+  );
+
+  const switcherNode = (
+    <ProfessionalSwitcher
+      productionState={productionState}
+      programSceneName={programScene.name}
+      previewSceneName={previewScene.name}
+      lastTransitionLabel={lastTransitionLabel}
+      feedbackLabel={switcherFeedback}
+      transitionActive={transitionActive}
+      transitionHistory={transitionHistory}
+      switcherReady={!isPending && !transitionActive}
+      transitionReady={!transitionActive}
+      programLocked={authorityDiagnostics.activeLocks.some((lock) => lock.scope === 'program')}
+      automationMode={productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'}
+      runtimeStatus={runtimeView.status}
+      queueSize={runtimeView.executionQueue.length}
+      compactChrome
+      detailsDefaultOpen={false}
+      onTake={() => switchProgram(productionState.transitionType)}
+      onCut={() => switchProgram('cut')}
+      onAuto={() => switchProgram('fade')}
+      onPrevious={() => stageAdjacentScene('previous')}
+      onNext={() => stageAdjacentScene('next')}
+      onTransitionChange={(transitionType) => {
+        const transitionDuration = normalizeTransitionDuration(
+          transitionType,
+          productionState.transitionDuration,
+        );
+        dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
+        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+          durationMs: transitionDuration,
+        });
+        persistProductionState(
+          { ...productionState, transitionType, transitionDuration },
+          'stage',
+        );
+      }}
+      onDurationChange={(transitionDuration) => {
+        const normalizedDuration = normalizeTransitionDuration(
+          productionState.transitionType,
+          transitionDuration,
+          productionState.transitionDuration,
+        );
+        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+          durationMs: normalizedDuration,
+        });
+        persistProductionState(
+          { ...productionState, transitionDuration: normalizedDuration },
+          'stage',
+        );
+      }}
+    />
+  );
+
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#070b12]" style={layoutStyle}>
-      <BroadcastStatusBar
-        sessionName="Launch Day"
-        isLive={activeRouteCount > 0}
-        isRecording={recordingState === 'recording'}
-        runTime={formatElapsed(elapsedSeconds)}
-        clock={clock}
-        transitionActive={transitionActive}
-        fps={safeHealthMetrics.fps}
-        cpu={safeHealthMetrics.cpu}
-        dropped={safeHealthMetrics.dropped}
-        upload={safeHealthMetrics.upload}
-        automationModeLabel={automationModeLabel(automationState.automationMode)}
-        aiStatusLabel={aiStatusLabel(aiState.assistant)}
-        outputHealthLabel={outputHealthSummaryLabel({
-          destinations: distributionState.destinations,
-          health: distributionState.outputHealth,
-        })}
-        deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
-        engineStatusLabel="Unavailable"
-        compactChrome={workspace.compactChrome}
-        toolsMenu={toolsMenu}
-      />
-
-      <main className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_340px] gap-3 overflow-hidden p-3">
-        <aside className="min-h-0 overflow-hidden rounded-2xl border border-ubos-border-subtle bg-ubos-carbon shadow-2xl">
-          <div className="grid grid-cols-2 border-b border-ubos-border-subtle p-2">
-            {(['scenes', 'sources'] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveNav(id)}
-                className={`rounded-ubos-sm px-3 py-2 text-xs font-black uppercase tracking-[0.16em] ${constrainedLeftNav === id ? 'bg-ubos-selection-muted text-ubos-selection-text' : 'text-ubos-fg-muted hover:bg-ubos-midnight'}`}
-              >
-                {id}
-              </button>
-            ))}
-          </div>
-          <div className="ubos-scroll h-[calc(100%-3.25rem)] overflow-y-auto p-2">
-            {professionalLeftContent}
-          </div>
-        </aside>
-
-        <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
-          <div className="grid min-h-0 flex-[1_1_auto] grid-cols-[minmax(0,55fr)_minmax(0,35fr)] gap-3">
-            <div
-              data-ubos-program-monitor="true"
-              className="min-h-0 rounded-2xl border border-red-500/40 bg-black p-2 shadow-[0_0_34px_rgba(220,38,38,0.18)]"
-            >
-              <div className="mb-2 flex items-center justify-between px-1 text-xs font-black uppercase tracking-[0.18em] text-red-200">
-                <span>Program</span>
-                <span>{programScene.name}</span>
-              </div>
-              {liveProgramVisible ? (
-                <LiveMediaMonitor
-                  title="Program"
-                  sceneName={programScene.name}
-                  stream={programStreamToShow}
-                  active={liveProgramVisible}
-                  role="program"
-                  sourceId={programCameraSourceId}
-                  sourceType={programLiveVideoSource?.type}
-                />
-              ) : (
-                <ProgramMonitor
-                  scene={programScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                  graph={productionGraphSession.graph}
-                  healthFps={safeHealthMetrics.fps}
-                  showSafeAreas={showSafeAreas}
-                  graphicsLayers={previewSceneComposition.layers.filter(
-                    (layer) => layer.programState === 'live',
-                  )}
-                  mediaOverlayItems={programMediaOverlayItems}
-                />
-              )}
-            </div>
-            <div className="min-h-0 rounded-2xl border border-emerald-400/40 bg-black p-2 shadow-[0_0_28px_rgba(16,185,129,0.12)]">
-              <div className="mb-2 flex items-center justify-between px-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
-                <span>Preview</span>
-                <span>{previewScene.name}</span>
-              </div>
-              {livePreviewVisible ? (
-                <LiveMediaMonitor
-                  title="Preview"
-                  sceneName={previewScene.name}
-                  stream={previewStreamToShow}
-                  active={livePreviewVisible}
-                  role="preview"
-                  sourceId={previewCameraSourceId}
-                  sourceType={previewLiveVideoSource?.type}
-                />
-              ) : (
-                <ProgramMonitor
-                  scene={previewScene}
-                  routes={mediaRoutes}
-                  layoutPreset={layoutPreset}
-                  guests={guests}
-                  graph={productionGraphSession.graph}
-                  healthFps={safeHealthMetrics.fps}
-                  showSafeAreas={showSafeAreas}
-                  graphicsLayers={previewSceneComposition.layers.filter(
-                    (layer) => layer.previewState === 'preview' || layer.programState === 'live',
-                  )}
-                  mediaOverlayItems={previewMediaOverlayItems}
-                  role="preview"
-                />
-              )}
-            </div>
-          </div>
-
-          <div className="shrink-0 rounded-2xl border border-ubos-border-subtle bg-ubos-graphite/95 shadow-2xl">
-            <ProfessionalSwitcher
-              productionState={productionState}
-              programSceneName={programScene.name}
-              previewSceneName={previewScene.name}
-              lastTransitionLabel={lastTransitionLabel}
-              feedbackLabel={switcherFeedback}
-              transitionActive={transitionActive}
-              transitionHistory={transitionHistory}
-              switcherReady={!isPending && !transitionActive}
-              transitionReady={!transitionActive}
-              programLocked={authorityDiagnostics.activeLocks.some(
-                (lock) => lock.scope === 'program',
-              )}
-              automationMode={
-                productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'
-              }
-              runtimeStatus={runtimeView.status}
-              queueSize={runtimeView.executionQueue.length}
-              compactChrome
-              detailsDefaultOpen={false}
-              onTake={() => switchProgram(productionState.transitionType)}
-              onCut={() => switchProgram('cut')}
-              onAuto={() => switchProgram('fade')}
-              onPrevious={() => stageAdjacentScene('previous')}
-              onNext={() => stageAdjacentScene('next')}
-              onTransitionChange={(transitionType) => {
-                const transitionDuration = normalizeTransitionDuration(
-                  transitionType,
-                  productionState.transitionDuration,
-                );
-                dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
-                dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-                  durationMs: transitionDuration,
-                });
-                persistProductionState(
-                  { ...productionState, transitionType, transitionDuration },
-                  'stage',
-                );
-              }}
-              onDurationChange={(transitionDuration) => {
-                const normalizedDuration = normalizeTransitionDuration(
-                  productionState.transitionType,
-                  transitionDuration,
-                  productionState.transitionDuration,
-                );
-                dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-                  durationMs: normalizedDuration,
-                });
-                persistProductionState(
-                  { ...productionState, transitionDuration: normalizedDuration },
-                  'stage',
-                );
-              }}
-            />
-          </div>
-
-          <div className="grid h-44 shrink-0 grid-cols-3 gap-3 overflow-hidden">
-            {(['audio', 'layers', 'logs'] as const).map((dock) => (
-              <button
-                key={dock}
-                type="button"
-                onClick={() => setActiveBottomDock(dock === 'logs' ? 'logs' : dock)}
-                className={`rounded-2xl border p-3 text-left shadow-xl ${activeBottomDock === dock ? 'border-ubos-selection bg-ubos-selection-muted' : 'border-ubos-border-subtle bg-ubos-carbon hover:bg-ubos-graphite'}`}
-              >
-                <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-ubos-fg-primary">
-                  {dock === 'logs' ? 'Inspector' : dock}
-                </div>
-                <div className="ubos-scroll max-h-28 overflow-hidden text-ubos-caption text-ubos-fg-secondary">
-                  {dock === 'audio' ? (
-                    directCameraLive ? (
-                      <div className="space-y-1">
-                        <div>1 live channel · {audioLevel}%</div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-ubos-midnight">
-                          <div
-                            className="h-full bg-emerald-400 transition-all"
-                            style={{ width: `${audioLevel}%` }}
-                          />
-                        </div>
-                      </div>
-                    ) : (
-                      `${effectiveAudioChannels.length || graphAudioChannels.length || channels.length} channels ready`
-                    )
-                  ) : dock === 'layers' ? (
-                    `${activeScene.sources.length} preview layers`
-                  ) : (
-                    `Graph rev ${productionGraphSession.graph.metadata.revision}`
-                  )}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ubos-border-subtle bg-ubos-carbon shadow-2xl">
-          <div
-            className="grid grid-cols-6 gap-1 border-b border-ubos-border-subtle p-2"
-            role="tablist"
-            aria-label="Right workspace tabs"
-          >
-            {(['guests', 'outputs', 'chat', 'inspector', 'health', 'smoke'] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={professionalRightTab === id}
-                onClick={() => setProfessionalRightTab(id)}
-                className={`rounded-ubos-sm px-1 py-2 text-[10px] font-black uppercase tracking-[0.08em] ${professionalRightTab === id ? 'bg-ubos-selection-muted text-ubos-selection-text' : 'text-ubos-fg-muted hover:bg-ubos-midnight'}`}
-              >
-                {id}
-              </button>
-            ))}
-          </div>
-          <div
-            className="ubos-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2"
-            role="tabpanel"
-          >
-            {rightTabContent[professionalRightTab]}
-          </div>
-        </aside>
-      </main>
-    </div>
+    <WorkspaceCanvas
+      initialPresetId="technical-director"
+      layoutStyle={layoutStyle}
+      statusBar={
+        <BroadcastStatusBar
+          sessionName="Launch Day"
+          isLive={activeRouteCount > 0}
+          isRecording={recordingState === 'recording'}
+          runTime={formatElapsed(elapsedSeconds)}
+          clock={clock}
+          transitionActive={transitionActive}
+          fps={safeHealthMetrics.fps}
+          cpu={safeHealthMetrics.cpu}
+          dropped={safeHealthMetrics.dropped}
+          upload={safeHealthMetrics.upload}
+          automationModeLabel={automationModeLabel(automationState.automationMode)}
+          aiStatusLabel={aiStatusLabel(aiState.assistant)}
+          outputHealthLabel={outputHealthSummaryLabel({
+            destinations: distributionState.destinations,
+            health: distributionState.outputHealth,
+          })}
+          deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
+          engineStatusLabel="Unavailable"
+          compactChrome={workspace.compactChrome}
+          toolsMenu={toolsMenu}
+        />
+      }
+      toolsSlot={toolsMenu}
+      assetTreeContent={leftNavContent}
+      programMonitor={programMonitorNode}
+      previewMonitor={previewMonitorNode}
+      programLabel={programScene.name}
+      previewLabel={previewScene.name}
+      switcherContent={switcherNode}
+      routingEdges={routingEdges}
+      audioMixerContent={<ProfessionalAudioMixer sources={mixerSources} />}
+      audioChannelCount={
+        effectiveAudioChannels.length || graphAudioChannels.length || channels.length
+      }
+      {...(directCameraLive ? { audioLiveLevel: audioLevel } : {})}
+      diagnosticsMetrics={diagnosticsMetrics}
+      operationsTabs={operationsTabsResolved}
+      activeOperationsTab={activeOperationsTab}
+      activeDockTab={activeBottomDock}
+      onOperationsTabChange={setActiveOperationsTab}
+      onDockTabChange={setActiveBottomDock}
+      bottomDeckContent={bottomDockContent}
+      previewSlot={previewMonitor}
+    />
   );
 }
