@@ -15,6 +15,7 @@ import type {
   MediaRuntimeState,
   MediaRuntimeHealth,
   RecordingRuntimeState,
+  ProductionPipelineModel,
 } from '@ubos/shared';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import type { AIAction, AIState } from '../ai/ai-state';
@@ -43,7 +44,11 @@ import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
 import { RecordingRuntimePanel, type BrowserRecordingPanelState } from './RecordingRuntimePanel';
-import { StreamingRuntimePanel, type BrowserStreamingPanelState, type StreamingPanelAction } from './StreamingRuntimePanel';
+import {
+  StreamingRuntimePanel,
+  type BrowserStreamingPanelState,
+  type StreamingPanelAction,
+} from './StreamingRuntimePanel';
 import { SecurityPanel } from './SecurityPanel';
 import { MonitoringPanel } from './MonitoringPanel';
 import { ClusterPanel } from './ClusterPanel';
@@ -103,6 +108,7 @@ export function OperationsConsoleContent({
   onStreamingDispatch,
   onStartBrowserRecording,
   onStopBrowserRecording,
+  pipeline,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -150,6 +156,7 @@ export function OperationsConsoleContent({
   onStreamingDispatch?: (action: StreamingPanelAction) => void;
   onStartBrowserRecording?: () => void;
   onStopBrowserRecording?: () => void;
+  pipeline?: ProductionPipelineModel;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -172,6 +179,7 @@ export function OperationsConsoleContent({
           {...(routeInfo.verticalRouteName
             ? { verticalRouteName: routeInfo.verticalRouteName }
             : {})}
+          {...(pipeline ? { pipeline } : {})}
         />
         <HostDevicesSection />
       </>
@@ -226,8 +234,11 @@ export function OperationsConsoleContent({
     plugins: <PluginPanel />,
     cloud: <CloudPanel />,
     analytics: <AnalyticsPanel />,
-    'enterprise-admin': <EnterpriseAdminPanel />, 
-    streaming: browserStreamingState && onStreamingDispatch ? <StreamingRuntimePanel state={browserStreamingState} dispatch={onStreamingDispatch} /> : null,
+    'enterprise-admin': <EnterpriseAdminPanel />,
+    streaming:
+      browserStreamingState && onStreamingDispatch ? (
+        <StreamingRuntimePanel state={browserStreamingState} dispatch={onStreamingDispatch} />
+      ) : null,
     recording: recordingRuntimeState ? (
       <RecordingRuntimePanel
         state={recordingRuntimeState}

@@ -83,6 +83,7 @@ import {
   type ProductionBroadcastSession,
   type SceneNode,
   type SourceNode,
+  createProductionPipelineModel,
   createMockSyncScenario,
   createSyncSession,
   getStaleClients,
@@ -143,7 +144,10 @@ import { LeftNavPanel } from './browsers';
 import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
-import type { BrowserStreamingPanelState, StreamingPanelAction } from './operations/StreamingRuntimePanel';
+import type {
+  BrowserStreamingPanelState,
+  StreamingPanelAction,
+} from './operations/StreamingRuntimePanel';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
 import {
   applyWorkspaceProfile,
@@ -1920,6 +1924,34 @@ function createProductionGraphSessionFromScenes(input: {
   const previewSceneId = scenesById[input.productionState.previewSceneId]
     ? input.productionState.previewSceneId
     : programSceneId;
+  const overlayEntries = input.scenes.flatMap((scene) =>
+    scene.overlays.map((overlay) => [
+      String(overlay.id),
+      {
+        id: String(overlay.id),
+        name: String(overlay.name ?? 'Graphics Overlay'),
+        enabled: overlay.isVisible !== false,
+        sceneId: scene.id,
+        sourceId: String(overlay.id),
+        metadata: { type: overlay.type, zIndex: overlay.zIndex },
+      },
+    ]),
+  );
+  const audioEntries = Object.values(sourcesById)
+    .filter(
+      (source) => source.type === 'audio' || source.type === 'camera' || source.type === 'guest',
+    )
+    .map((source) => [
+      `mix-${source.id}`,
+      {
+        id: `mix-${source.id}`,
+        label: source.name,
+        gain: 0.8,
+        muted: Boolean(source.muted),
+        sourceId: source.id,
+        metadata: { followsSource: true },
+      },
+    ]);
   const session = createBroadcastSession({
     id: input.broadcastId,
     name: 'Control Room Session',
@@ -1928,10 +1960,52 @@ function createProductionGraphSessionFromScenes(input: {
   });
   return {
     ...session,
+    eventLog: [
+      ...session.eventLog,
+      {
+        id: `${input.broadcastId}:automation-ready`,
+        type: 'WORKSPACE_CHANGED',
+        broadcastSessionId: input.broadcastId,
+        actorId: 'automation-engine',
+        timestamp,
+        commandId: 'system:automation-ready',
+        payload: { macroId: 'macro-opening-roll', action: 'automation_execution' },
+        graphRevision: graph.metadata.revision,
+        previousRevision: graph.metadata.revision,
+        nextRevision: graph.metadata.revision,
+      },
+    ],
     graph: {
       ...graph,
       scenes: scenesById,
       sources: sourcesById,
+      overlays: Object.fromEntries(overlayEntries),
+      audioChannels: Object.fromEntries(audioEntries),
+      destinations: {
+        'stream-primary': {
+          id: 'stream-primary',
+          name: 'Primary Stream',
+          platform: 'rtmp',
+          enabled: true,
+          status: 'ready',
+          metadata: { destination: 'metadata-only' },
+        },
+        'broadcast-sdi-1': {
+          id: 'broadcast-sdi-1',
+          name: 'SDI Program Out',
+          platform: 'broadcast-io',
+          enabled: true,
+          status: 'ready',
+          metadata: { connector: 'SDI-1' },
+        },
+      },
+      recording: { ...graph.recording, metadata: { route: 'program-output' } },
+      automation: {
+        enabled: true,
+        activeMacroIds: ['macro-opening-roll'],
+        metadata: { mode: 'manual-confirm' },
+      },
+      plugins: { ...graph.plugins, replayActive: true, monitorWall: 'program-preview-grid' },
       program: {
         ...graph.program,
         sceneId: programSceneId,
@@ -2142,13 +2216,25 @@ export function SceneWorkspace({
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const [recordingFileSize, setRecordingFileSize] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
-  const [recordingSourceType, setRecordingSourceType] = useState<BrowserRecordingPanelState['sourceType']>('none');
+  const [recordingSourceType, setRecordingSourceType] =
+    useState<BrowserRecordingPanelState['sourceType']>('none');
   const [recordingFilename, setRecordingFilename] = useState<string | null>(null);
-  const [recordingHistory, setRecordingHistory] = useState<BrowserRecordingPanelState['history']>([]);
+  const [recordingHistory, setRecordingHistory] = useState<BrowserRecordingPanelState['history']>(
+    [],
+  );
   const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
   const [streamingState, setStreamingState] = useState<BrowserStreamingPanelState>({
     lifecycle: 'idle',
-    destination: { id: 'stream-destination:default', platform: 'YouTube', rtmpUrl: '', streamKey: '', enabled: true, resolution: '1920x1080', bitrateKbps: 4500, audioBitrateKbps: 160 },
+    destination: {
+      id: 'stream-destination:default',
+      platform: 'YouTube',
+      rtmpUrl: '',
+      streamKey: '',
+      enabled: true,
+      resolution: '1920x1080',
+      bitrateKbps: 4500,
+      audioBitrateKbps: 160,
+    },
     durationMs: 0,
     startedAt: null,
     stoppedAt: null,
@@ -2157,45 +2243,105 @@ export function SceneWorkspace({
     error: null,
     history: [],
     browserOnly: true,
-    adapters: ['BrowserStreamingAdapter', 'FFmpegStreamingAdapter', 'NativeDesktopStreamingAdapter'],
+    adapters: [
+      'BrowserStreamingAdapter',
+      'FFmpegStreamingAdapter',
+      'NativeDesktopStreamingAdapter',
+    ],
   });
   const streamingStartRef = useRef<string | null>(null);
 
-  const validateStreamingDestination = useCallback((destination: BrowserStreamingPanelState['destination']) => {
-    if (!destination.enabled) return 'Enable the streaming destination before starting.';
-    if (!destination.rtmpUrl.trim()) return 'Add an RTMP server URL before starting streaming.';
-    if (!/^rtmps?:\/\/[^\s]+$/i.test(destination.rtmpUrl.trim())) return 'Enter a valid RTMP or RTMPS server URL.';
-    if (!destination.streamKey.trim()) return 'Add a stream key before starting streaming.';
-    return null;
-  }, []);
+  const validateStreamingDestination = useCallback(
+    (destination: BrowserStreamingPanelState['destination']) => {
+      if (!destination.enabled) return 'Enable the streaming destination before starting.';
+      if (!destination.rtmpUrl.trim()) return 'Add an RTMP server URL before starting streaming.';
+      if (!/^rtmps?:\/\/[^\s]+$/i.test(destination.rtmpUrl.trim()))
+        return 'Enter a valid RTMP or RTMPS server URL.';
+      if (!destination.streamKey.trim()) return 'Add a stream key before starting streaming.';
+      return null;
+    },
+    [],
+  );
 
-  const dispatchStreaming = useCallback((action: StreamingPanelAction) => {
-    if (action.type === 'updateDestination') {
-      setStreamingState((current) => ({ ...current, error: null, destination: { ...current.destination, ...action.patch } }));
-      return;
-    }
-    if (action.type === 'start') {
-      setStreamingState((current) => {
-        const error = validateStreamingDestination(current.destination);
-        if (error) return { ...current, lifecycle: 'failed', error };
-        const startedAt = new Date().toISOString();
-        streamingStartRef.current = startedAt;
-        return { ...current, lifecycle: 'preparing', startedAt, stoppedAt: null, durationMs: 0, bitrateEstimateKbps: 0, droppedFrameEstimate: 0, error: 'Browser-only mode cannot transmit RTMP. Lifecycle is simulated until backend/native FFmpeg support is connected.' };
-      });
-      window.setTimeout(() => setStreamingState((current) => current.lifecycle === 'preparing' ? { ...current, lifecycle: 'connecting' } : current), 400);
-      window.setTimeout(() => setStreamingState((current) => current.lifecycle === 'connecting' ? { ...current, lifecycle: 'streaming', bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps } : current), 900);
-      return;
-    }
-    if (action.type === 'stop') {
-      setStreamingState((current) => {
-        const stoppedAt = new Date().toISOString();
-        const startedAt = current.startedAt ?? stoppedAt;
-        const durationMs = Math.max(0, Date.parse(stoppedAt) - Date.parse(startedAt));
-        return { ...current, lifecycle: 'stopped', stoppedAt, durationMs, bitrateEstimateKbps: 0, history: [{ platform: current.destination.platform, startedAt, stoppedAt, durationMs, state: 'stopped' as const, failureReason: null }, ...current.history].slice(0, 10) };
-      });
-    }
-  }, [validateStreamingDestination]);
-
+  const dispatchStreaming = useCallback(
+    (action: StreamingPanelAction) => {
+      if (action.type === 'updateDestination') {
+        setStreamingState((current) => ({
+          ...current,
+          error: null,
+          destination: { ...current.destination, ...action.patch },
+        }));
+        return;
+      }
+      if (action.type === 'start') {
+        setStreamingState((current) => {
+          const error = validateStreamingDestination(current.destination);
+          if (error) return { ...current, lifecycle: 'failed', error };
+          const startedAt = new Date().toISOString();
+          streamingStartRef.current = startedAt;
+          return {
+            ...current,
+            lifecycle: 'preparing',
+            startedAt,
+            stoppedAt: null,
+            durationMs: 0,
+            bitrateEstimateKbps: 0,
+            droppedFrameEstimate: 0,
+            error:
+              'Browser-only mode cannot transmit RTMP. Lifecycle is simulated until backend/native FFmpeg support is connected.',
+          };
+        });
+        window.setTimeout(
+          () =>
+            setStreamingState((current) =>
+              current.lifecycle === 'preparing' ? { ...current, lifecycle: 'connecting' } : current,
+            ),
+          400,
+        );
+        window.setTimeout(
+          () =>
+            setStreamingState((current) =>
+              current.lifecycle === 'connecting'
+                ? {
+                    ...current,
+                    lifecycle: 'streaming',
+                    bitrateEstimateKbps:
+                      current.destination.bitrateKbps + current.destination.audioBitrateKbps,
+                  }
+                : current,
+            ),
+          900,
+        );
+        return;
+      }
+      if (action.type === 'stop') {
+        setStreamingState((current) => {
+          const stoppedAt = new Date().toISOString();
+          const startedAt = current.startedAt ?? stoppedAt;
+          const durationMs = Math.max(0, Date.parse(stoppedAt) - Date.parse(startedAt));
+          return {
+            ...current,
+            lifecycle: 'stopped',
+            stoppedAt,
+            durationMs,
+            bitrateEstimateKbps: 0,
+            history: [
+              {
+                platform: current.destination.platform,
+                startedAt,
+                stoppedAt,
+                durationMs,
+                state: 'stopped' as const,
+                failureReason: null,
+              },
+              ...current.history,
+            ].slice(0, 10),
+          };
+        });
+      }
+    },
+    [validateStreamingDestination],
+  );
 
   const liveSourceStreamsRef = useRef<Record<string, MediaStream>>({});
 
@@ -2385,21 +2531,40 @@ export function SceneWorkspace({
   const createProgramRecordingStream = useCallback(() => {
     const directStream = programStreamToShow ?? (programStreamOnAir ? activeCameraStream : null);
     if (isLiveMediaStream(directStream)) {
-      return { stream: directStream, sourceType: programLiveVideoSource?.type ?? 'camera' } as const;
+      return {
+        stream: directStream,
+        sourceType: programLiveVideoSource?.type ?? 'camera',
+      } as const;
     }
     const programRoot = document.querySelector('[data-ubos-program-monitor=\"true\"]');
-    const programVideo = programRoot?.querySelector('video') as (HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream }) | null;
+    const programVideo = programRoot?.querySelector('video') as
+      | (HTMLVideoElement & {
+          captureStream?: () => MediaStream;
+          mozCaptureStream?: () => MediaStream;
+        })
+      | null;
     const captured = programVideo?.captureStream?.() ?? programVideo?.mozCaptureStream?.();
     if (captured?.getVideoTracks().length) {
       const mixed = new MediaStream(captured.getVideoTracks());
       Object.values(liveSourceStreamsRef.current).forEach((stream) => {
-        stream.getAudioTracks().filter((track) => track.readyState === 'live').forEach((track) => mixed.addTrack(track));
+        stream
+          .getAudioTracks()
+          .filter((track) => track.readyState === 'live')
+          .forEach((track) => mixed.addTrack(track));
       });
-      return { stream: mixed, sourceType: programScene.sources.find((source) => source.isVisible)?.type ?? 'media' } as const;
+      return {
+        stream: mixed,
+        sourceType: programScene.sources.find((source) => source.isVisible)?.type ?? 'media',
+      } as const;
     }
     return null;
-  }, [activeCameraStream, programLiveVideoSource?.type, programScene.sources, programStreamOnAir, programStreamToShow]);
-
+  }, [
+    activeCameraStream,
+    programLiveVideoSource?.type,
+    programScene.sources,
+    programStreamOnAir,
+    programStreamToShow,
+  ]);
 
   const startSmokeRecording = useCallback(() => {
     if (recorderRef.current && recorderRef.current.state !== 'inactive') return;
@@ -2413,7 +2578,9 @@ export function SceneWorkspace({
     const source = createProgramRecordingStream();
     if (!source) {
       setRecordingState('failed');
-      setRecordingError('No capturable Program video is available. Start a camera, screen, or supported media source first.');
+      setRecordingError(
+        'No capturable Program video is available. Start a camera, screen, or supported media source first.',
+      );
       return;
     }
     recordedChunksRef.current = [];
@@ -2437,7 +2604,9 @@ export function SceneWorkspace({
     const stopForEndedSource = () => {
       if (recorder.state === 'recording') recorder.stop();
     };
-    source.stream.getTracks().forEach((track) => track.addEventListener('ended', stopForEndedSource, { once: true }));
+    source.stream
+      .getTracks()
+      .forEach((track) => track.addEventListener('ended', stopForEndedSource, { once: true }));
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) {
         recordedChunksRef.current.push(event.data);
@@ -2451,13 +2620,27 @@ export function SceneWorkspace({
     recorder.onstop = () => {
       const stoppedAt = new Date().toISOString();
       const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-      const durationMs = startedAt ? Date.parse(stoppedAt) - Date.parse(startedAt) : recordingDurationMs;
+      const durationMs = startedAt
+        ? Date.parse(stoppedAt) - Date.parse(startedAt)
+        : recordingDurationMs;
       setRecordedUrl(URL.createObjectURL(blob));
       setRecordingStoppedAt(stoppedAt);
       setRecordingDurationMs(Math.max(0, durationMs));
       setRecordingFileSize(blob.size);
       setRecordingState('completed');
-      setRecordingHistory((history) => [{ filename, durationMs: Math.max(0, durationMs), startedAt, stoppedAt, sourceType: source.sourceType, fileSizeBytes: blob.size }, ...history].slice(0, 10));
+      setRecordingHistory((history) =>
+        [
+          {
+            filename,
+            durationMs: Math.max(0, durationMs),
+            startedAt,
+            stoppedAt,
+            sourceType: source.sourceType,
+            fileSizeBytes: blob.size,
+          },
+          ...history,
+        ].slice(0, 10),
+      );
       recorderRef.current = null;
       recordingStreamRef.current = null;
     };
@@ -2473,11 +2656,17 @@ export function SceneWorkspace({
     }
   }, []);
 
-
-
   useEffect(() => {
     if (streamingState.lifecycle !== 'streaming' || !streamingState.startedAt) return;
-    const tick = () => setStreamingState((current) => ({ ...current, durationMs: Date.now() - Date.parse(streamingState.startedAt!), bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps, droppedFrameEstimate: Math.floor((Date.now() - Date.parse(streamingState.startedAt!)) / 60000) }));
+    const tick = () =>
+      setStreamingState((current) => ({
+        ...current,
+        durationMs: Date.now() - Date.parse(streamingState.startedAt!),
+        bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps,
+        droppedFrameEstimate: Math.floor(
+          (Date.now() - Date.parse(streamingState.startedAt!)) / 60000,
+        ),
+      }));
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
@@ -2491,19 +2680,34 @@ export function SceneWorkspace({
     return () => window.clearInterval(interval);
   }, [recordingStartedAt, recordingState]);
 
-  const browserRecordingPanelState = useMemo<BrowserRecordingPanelState>(() => ({
-    state: recordingState === 'unsupported' ? 'failed' : recordingState,
-    filename: recordingFilename,
-    durationMs: recordingDurationMs,
-    startedAt: recordingStartedAt,
-    stoppedAt: recordingStoppedAt,
-    sourceType: recordingSourceType,
-    fileSizeBytes: recordingFileSize,
-    downloadUrl: recordedUrl,
-    error: recordingError,
-    history: recordingHistory,
-    supported: mediaRecorderSupported,
-  }), [mediaRecorderSupported, recordedUrl, recordingDurationMs, recordingError, recordingFileSize, recordingFilename, recordingHistory, recordingSourceType, recordingStartedAt, recordingState, recordingStoppedAt]);
+  const browserRecordingPanelState = useMemo<BrowserRecordingPanelState>(
+    () => ({
+      state: recordingState === 'unsupported' ? 'failed' : recordingState,
+      filename: recordingFilename,
+      durationMs: recordingDurationMs,
+      startedAt: recordingStartedAt,
+      stoppedAt: recordingStoppedAt,
+      sourceType: recordingSourceType,
+      fileSizeBytes: recordingFileSize,
+      downloadUrl: recordedUrl,
+      error: recordingError,
+      history: recordingHistory,
+      supported: mediaRecorderSupported,
+    }),
+    [
+      mediaRecorderSupported,
+      recordedUrl,
+      recordingDurationMs,
+      recordingError,
+      recordingFileSize,
+      recordingFilename,
+      recordingHistory,
+      recordingSourceType,
+      recordingStartedAt,
+      recordingState,
+      recordingStoppedAt,
+    ],
+  );
 
   useEffect(() => {
     const stream = previewStreamToShow ?? activeCameraStream ?? smokeMedia.stream;
@@ -3155,6 +3359,12 @@ export function SceneWorkspace({
     [productionGraphSession.graph],
   );
 
+  const productionPipeline = useMemo(
+    () =>
+      createProductionPipelineModel(productionGraphSession.graph, productionGraphSession.eventLog),
+    [productionGraphSession.graph, productionGraphSession.eventLog],
+  );
+
   const operationsPanels = useMemo(
     () =>
       OperationsConsoleContent({
@@ -3218,6 +3428,7 @@ export function SceneWorkspace({
         onStreamingDispatch: dispatchStreaming,
         onStartBrowserRecording: startSmokeRecording,
         onStopBrowserRecording: stopSmokeRecording,
+        pipeline: productionPipeline,
       }),
     [
       broadcastId,
@@ -3254,6 +3465,7 @@ export function SceneWorkspace({
       dispatchStreaming,
       startSmokeRecording,
       stopSmokeRecording,
+      productionPipeline,
     ],
   );
 
@@ -3700,8 +3912,18 @@ export function SceneWorkspace({
 
   const mixerSources = useMemo(
     () => [
-      { id: 'camera', name: 'Camera Microphone', type: 'camera' as const, stream: activeCameraStream ?? smokeMedia.stream },
-      { id: 'screen', name: 'Screen Audio', type: 'screen' as const, stream: smokeMedia.screenStream },
+      {
+        id: 'camera',
+        name: 'Camera Microphone',
+        type: 'camera' as const,
+        stream: activeCameraStream ?? smokeMedia.stream,
+      },
+      {
+        id: 'screen',
+        name: 'Screen Audio',
+        type: 'screen' as const,
+        stream: smokeMedia.screenStream,
+      },
       { id: 'media', name: 'Media Playback', type: 'media' as const, stream: null },
       { id: 'browser', name: 'Browser Source', type: 'browser' as const, stream: null },
       { id: 'guest', name: 'Guest Audio', type: 'guest' as const, stream: null },
@@ -3712,9 +3934,7 @@ export function SceneWorkspace({
 
   const bottomDockContent = (
     <>
-      {activeBottomDock === 'audio' ? (
-        <ProfessionalAudioMixer sources={mixerSources} />
-      ) : null}
+      {activeBottomDock === 'audio' ? <ProfessionalAudioMixer sources={mixerSources} /> : null}
       {activeBottomDock === 'layers' ? (
         activeScene.sources.length ? (
           <div className="grid gap-1 px-ubos-2 py-ubos-2 text-ubos-caption text-ubos-fg-secondary">
@@ -4266,7 +4486,11 @@ export function SceneWorkspace({
           <button
             type="button"
             className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
-            disabled={recordingState === 'recording' || recordingState === 'preparing' || recordingState === 'stopping'}
+            disabled={
+              recordingState === 'recording' ||
+              recordingState === 'preparing' ||
+              recordingState === 'stopping'
+            }
             onClick={startSmokeRecording}
           >
             Start WebM REC
@@ -4339,7 +4563,10 @@ export function SceneWorkspace({
 
         <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
           <div className="grid min-h-0 flex-[1_1_auto] grid-cols-[minmax(0,55fr)_minmax(0,35fr)] gap-3">
-            <div data-ubos-program-monitor="true" className="min-h-0 rounded-2xl border border-red-500/40 bg-black p-2 shadow-[0_0_34px_rgba(220,38,38,0.18)]">
+            <div
+              data-ubos-program-monitor="true"
+              className="min-h-0 rounded-2xl border border-red-500/40 bg-black p-2 shadow-[0_0_34px_rgba(220,38,38,0.18)]"
+            >
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-black uppercase tracking-[0.18em] text-red-200">
                 <span>Program</span>
                 <span>{programScene.name}</span>

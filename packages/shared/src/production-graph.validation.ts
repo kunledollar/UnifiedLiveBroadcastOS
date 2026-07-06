@@ -7,6 +7,12 @@ import {
   createInitialProductionGraph,
   getProductionGraphMetadata,
   getProductionGraphRevision,
+  createProductionPipelineModel,
+  validateProductionPipeline,
+  productionMetadataContainsRuntimeHandle,
+  BrowserPipelineAdapter,
+  DesktopPipelineAdapter,
+  ServerPipelineAdapter,
   InMemoryProductionEventLog,
   isGraphRevisionCurrent,
   selectPreviewScene,
@@ -74,7 +80,6 @@ import {
   type UBOSReplaySession,
 } from './replay.js';
 
-
 function assert(condition: unknown, message: string) {
   if (!condition) throw new Error(message);
 }
@@ -127,6 +132,21 @@ assert(
 assert(
   getProductionGraphMetadata(graph).createdAt === graph.createdAt,
   'graph metadata initializes created time',
+);
+const emptyPipelineWarnings = validateProductionPipeline(graph);
+assert(
+  emptyPipelineWarnings.some((warning) => warning.id === 'program-missing'),
+  'pipeline validation detects missing program output',
+);
+assert(
+  productionMetadataContainsRuntimeHandle({ nested: { MediaStream: 'blocked' } }),
+  'pipeline validation detects runtime handle metadata keys',
+);
+assert(
+  new BrowserPipelineAdapter().metadata().metadataOnly &&
+    new DesktopPipelineAdapter().metadata().metadataOnly &&
+    new ServerPipelineAdapter().metadata().metadataOnly,
+  'pipeline adapters are metadata-only placeholders',
 );
 assert(isGraphRevisionCurrent(graph, 0), 'revision current helper accepts matching revision');
 let transition = applyProductionCommand(
@@ -190,10 +210,22 @@ assert(
   'program selector returns scene',
 );
 graph = transition.nextGraph;
+const pipelineModel = createProductionPipelineModel(graph, transition.events);
+assert(pipelineModel.state.programScene === 'scene-a', 'pipeline model tracks program scene');
+assert(
+  pipelineModel.state.outputRouting.some((route) => route.id === 'route-program'),
+  'pipeline model exposes program output route',
+);
+assert(
+  pipelineModel.state.replayRouting.some((route) => route.id === 'route-replay-program'),
+  'pipeline model exposes replay route',
+);
+assert(pipelineModel.containsRuntimeHandles === false, 'pipeline model remains metadata-first');
 transition = applyProductionCommand(graph, command('CUT_TO_PROGRAM', { sceneId: 'scene-a' }));
 assert(transition.nextGraph.program.transitionType === 'cut', 'CUT_TO_PROGRAM sets cut transition');
 assert(
-  !applyProductionCommand(graph, command('SET_PREVIEW_SCENE', { sceneId: 'missing-scene' })).accepted,
+  !applyProductionCommand(graph, command('SET_PREVIEW_SCENE', { sceneId: 'missing-scene' }))
+    .accepted,
   'unknown preview scene is rejected',
 );
 const auto = applyProductionCommand(
@@ -224,27 +256,115 @@ const cutDuration = applyProductionCommand(
   graph,
   command('CUT_TO_PROGRAM', { sceneId: 'scene-a', durationMs: 500 }),
 );
-assert(cutDuration.nextGraph.program.transitionDurationMs === 0, 'CUT_TO_PROGRAM allows zero duration');
+assert(
+  cutDuration.nextGraph.program.transitionDurationMs === 0,
+  'CUT_TO_PROGRAM allows zero duration',
+);
 assert(
   !applyProductionCommand(graph, command('SET_TRANSITION', { transitionType: 'invalid' })).accepted,
   'invalid transition is rejected',
 );
-transition = applyProductionCommand(graph, command('ADD_SOURCE', { id: 'camera-1', name: 'Camera 1', type: 'camera', metadata: { runtimeStatus: 'permission_required' } }));
+transition = applyProductionCommand(
+  graph,
+  command('ADD_SOURCE', {
+    id: 'camera-1',
+    name: 'Camera 1',
+    type: 'camera',
+    metadata: { runtimeStatus: 'permission_required' },
+  }),
+);
 assert(transition.accepted, 'camera source creation accepted');
-assert(transition.nextGraph.sources['camera-1']?.metadata.runtimeStatus === 'permission_required', 'source stores honest runtime metadata');
+assert(
+  transition.nextGraph.sources['camera-1']?.metadata.runtimeStatus === 'permission_required',
+  'source stores honest runtime metadata',
+);
 graph = transition.nextGraph;
-assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'camera-1', name: 'Duplicate', type: 'camera' })).accepted, 'duplicate source IDs rejected');
-assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'bad-source', name: 'Bad', type: 'ndi' })).accepted, 'unknown source type rejected');
-assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'bad-browser', name: 'Bad Browser', type: 'browser', metadata: { url: 'javascript:alert(1)' } })).accepted, 'invalid browser URL rejected');
-assert(!applyProductionCommand(graph, command('ADD_SOURCE', { id: 'bad-handle', name: 'Handle', type: 'camera', metadata: { mediaStream: {} } })).accepted, 'runtime handles rejected from source metadata');
-transition = applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'camera-1', transform: { x: 0, y: 0, width: 1, height: 1, zIndex: 0, opacity: 1, visible: true, locked: false } }));
+assert(
+  !applyProductionCommand(
+    graph,
+    command('ADD_SOURCE', { id: 'camera-1', name: 'Duplicate', type: 'camera' }),
+  ).accepted,
+  'duplicate source IDs rejected',
+);
+assert(
+  !applyProductionCommand(
+    graph,
+    command('ADD_SOURCE', { id: 'bad-source', name: 'Bad', type: 'ndi' }),
+  ).accepted,
+  'unknown source type rejected',
+);
+assert(
+  !applyProductionCommand(
+    graph,
+    command('ADD_SOURCE', {
+      id: 'bad-browser',
+      name: 'Bad Browser',
+      type: 'browser',
+      metadata: { url: 'javascript:alert(1)' },
+    }),
+  ).accepted,
+  'invalid browser URL rejected',
+);
+assert(
+  !applyProductionCommand(
+    graph,
+    command('ADD_SOURCE', {
+      id: 'bad-handle',
+      name: 'Handle',
+      type: 'camera',
+      metadata: { mediaStream: {} },
+    }),
+  ).accepted,
+  'runtime handles rejected from source metadata',
+);
+transition = applyProductionCommand(
+  graph,
+  command('ASSIGN_SOURCE_TO_SCENE', {
+    sceneId: 'scene-a',
+    sourceId: 'camera-1',
+    transform: {
+      x: 0,
+      y: 0,
+      width: 1,
+      height: 1,
+      zIndex: 0,
+      opacity: 1,
+      visible: true,
+      locked: false,
+    },
+  }),
+);
 assert(transition.accepted, 'source attach to scene accepted');
-assert(transition.nextGraph.scenes['scene-a']?.sourceIds.includes('camera-1'), 'scene records attached source layer');
-assert(transition.events[0]?.type === 'SOURCE_ATTACHED_TO_SCENE', 'source attachment records timeline event');
+assert(
+  transition.nextGraph.scenes['scene-a']?.sourceIds.includes('camera-1'),
+  'scene records attached source layer',
+);
+assert(
+  transition.events[0]?.type === 'SOURCE_ATTACHED_TO_SCENE',
+  'source attachment records timeline event',
+);
 graph = transition.nextGraph;
-assert(!applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'missing', sourceId: 'camera-1' })).accepted, 'missing scene attachment rejected');
-assert(!applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'missing-source' })).accepted, 'missing source reference rejected');
-assert(!applyProductionCommand(graph, command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'camera-1' })).accepted, 'duplicate layer reference rejected');
+assert(
+  !applyProductionCommand(
+    graph,
+    command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'missing', sourceId: 'camera-1' }),
+  ).accepted,
+  'missing scene attachment rejected',
+);
+assert(
+  !applyProductionCommand(
+    graph,
+    command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'missing-source' }),
+  ).accepted,
+  'missing source reference rejected',
+);
+assert(
+  !applyProductionCommand(
+    graph,
+    command('ASSIGN_SOURCE_TO_SCENE', { sceneId: 'scene-a', sourceId: 'camera-1' }),
+  ).accepted,
+  'duplicate layer reference rejected',
+);
 
 const rejected = applyProductionCommand(
   graph,
@@ -1034,7 +1154,6 @@ assert(
 );
 console.log('Backpressure validation passed');
 
-
 const replayBaseGraph = createInitialProductionGraph({
   broadcastSessionId: 'replay-session',
   timestamp: '2026-07-01T00:00:00.000Z',
@@ -1070,7 +1189,10 @@ replayTimeline = appendReplayTimelineEvent(replayTimeline, {
   payload: { commandType: replayCreateScene.type },
 });
 assert(replayTimeline.events.length === 1, 'replay timeline appends events immutably');
-assert(replayTimeline.events[0]?.commandId === replayCreateScene.id, 'replay timeline preserves command metadata');
+assert(
+  replayTimeline.events[0]?.commandId === replayCreateScene.id,
+  'replay timeline preserves command metadata',
+);
 const replayCheckpoint = createReplayCheckpoint({
   id: 'checkpoint-0',
   timestamp: replayBaseGraph.createdAt,
@@ -1082,7 +1204,10 @@ const replayCheckpoint = createReplayCheckpoint({
   eventSequence: 0,
   metadata: {},
 });
-assert(validateReplayCheckpoint(replayCheckpoint).valid, 'replay checkpoint validates without raw media');
+assert(
+  validateReplayCheckpoint(replayCheckpoint).valid,
+  'replay checkpoint validates without raw media',
+);
 const laterCheckpoint = createReplayCheckpoint({
   id: 'checkpoint-1',
   timestamp: replayCreateScene.timestamp,
@@ -1099,23 +1224,32 @@ assert(
   'nearest replay checkpoint selection prefers closest prior revision',
 );
 const reconstructed = reconstructGraphFromCheckpoint(replayCheckpoint);
-assert(reconstructed.ok && reconstructed.graph?.metadata.revision === 0, 'graph reconstructs from checkpoint clone');
+assert(
+  reconstructed.ok && reconstructed.graph?.metadata.revision === 0,
+  'graph reconstructs from checkpoint clone',
+);
 const commandReplay = replayCommandsToRevision(replayBaseGraph, [replayCreateScene], 1);
-assert(commandReplay.ok && commandReplay.graph?.metadata.revision === 1, 'command replay reaches target revision');
+assert(
+  commandReplay.ok && commandReplay.graph?.metadata.revision === 1,
+  'command replay reaches target revision',
+);
 assert(replayBaseGraph.metadata.revision === 0, 'replay helpers do not mutate input graph');
 assert(
-  getReplayPlan({
-    id: 'replay-session-model',
-    mode: 'command_replay',
-    status: 'planning',
-    timeline: replayTimeline,
-    checkpoints: [replayCheckpoint],
-    commands: [replayCreateScene],
-    events: replayTransition.events,
-    framePlans: [],
-    createdAt: replayBaseGraph.createdAt,
-    metadata: {},
-  }, { graphRevision: 0 }).checkpointId === 'checkpoint-0',
+  getReplayPlan(
+    {
+      id: 'replay-session-model',
+      mode: 'command_replay',
+      status: 'planning',
+      timeline: replayTimeline,
+      checkpoints: [replayCheckpoint],
+      commands: [replayCreateScene],
+      events: replayTransition.events,
+      framePlans: [],
+      createdAt: replayBaseGraph.createdAt,
+      metadata: {},
+    },
+    { graphRevision: 0 },
+  ).checkpointId === 'checkpoint-0',
   'replay plan includes nearest checkpoint',
 );
 const framePlanA: ReplayableFramePlan = {
@@ -1126,8 +1260,15 @@ const framePlanA: ReplayableFramePlan = {
   plannerRevision: 1,
   steps: [{ kind: 'compose', target: 'program' }],
 };
-const framePlanB: ReplayableFramePlan = { ...framePlanA, id: 'plan-b', steps: [{ kind: 'compose', target: 'program' }] };
-assert(compareFramePlans(framePlanA, framePlanB).valid, 'frame plan comparison accepts deterministic shape');
+const framePlanB: ReplayableFramePlan = {
+  ...framePlanA,
+  id: 'plan-b',
+  steps: [{ kind: 'compose', target: 'program' }],
+};
+assert(
+  compareFramePlans(framePlanA, framePlanB).valid,
+  'frame plan comparison accepts deterministic shape',
+);
 assert(
   !compareFramePlans(framePlanA, { ...framePlanB, frameTimestamp: 1001 }).valid,
   'frame plan comparison detects timestamp divergence',
@@ -1147,9 +1288,19 @@ assert(
   !detectNonReplayablePayload({ mediaStream: { id: 'forbidden' } }).valid,
   'forbidden runtime payload detection rejects media stream keys',
 );
-const audit = summarizeAuditTrail({ commands: [replayCreateScene], events: replayTransition.events });
-assert(audit[0]?.actorId === 'director-1' && audit[0]?.status === 'accepted', 'audit summary includes issuer and status');
-const dryRun = createDryRunReplay({ id: 'dry-run-1', graphRevision: 1, executionMetadata: { planner: 'mock' } });
+const audit = summarizeAuditTrail({
+  commands: [replayCreateScene],
+  events: replayTransition.events,
+});
+assert(
+  audit[0]?.actorId === 'director-1' && audit[0]?.status === 'accepted',
+  'audit summary includes issuer and status',
+);
+const dryRun = createDryRunReplay({
+  id: 'dry-run-1',
+  graphRevision: 1,
+  executionMetadata: { planner: 'mock' },
+});
 assert(dryRun.mode === 'dry_run_execution_replay', 'dry-run replay model is metadata-only');
 console.log('Replay validation passed');
 
@@ -1188,18 +1339,37 @@ const acceptedExecution = dispatchProductionCommand({
   request: phase17Request('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }),
 });
 assert(acceptedExecution.status === 'applied', 'Phase 17 safe command accepted and applied');
-assert(acceptedExecution.graph.metadata.revision === executionGraph.metadata.revision + 1, 'Phase 17 applied command mutates graph revision');
-assert(acceptedExecution.events.some((event) => event.type === 'PREVIEW_SCENE_CHANGED'), 'Phase 17 event recording creates safe command event');
-assert(acceptedExecution.transaction?.status === 'applied', 'Phase 17 transaction log record is created');
-assert(acceptedExecution.snapshot?.containsRuntimeHandles === false, 'Phase 17 snapshot declares no runtime handles');
+assert(
+  acceptedExecution.graph.metadata.revision === executionGraph.metadata.revision + 1,
+  'Phase 17 applied command mutates graph revision',
+);
+assert(
+  acceptedExecution.events.some((event) => event.type === 'PREVIEW_SCENE_CHANGED'),
+  'Phase 17 event recording creates safe command event',
+);
+assert(
+  acceptedExecution.transaction?.status === 'applied',
+  'Phase 17 transaction log record is created',
+);
+assert(
+  acceptedExecution.snapshot?.containsRuntimeHandles === false,
+  'Phase 17 snapshot declares no runtime handles',
+);
 
 const unsafeExecution = dispatchProductionCommand({
   graph: executionGraph,
-  request: phase17Request('ADD_SOURCE', { id: 'unsafe', type: 'camera', metadata: { mediaStream: {} } }),
+  request: phase17Request('ADD_SOURCE', {
+    id: 'unsafe',
+    type: 'camera',
+    metadata: { mediaStream: {} },
+  }),
 });
 assert(unsafeExecution.status === 'rejected', 'Phase 17 unsafe runtime handle rejected');
 
-const unknownExecution = dispatchProductionCommand({ graph: executionGraph, request: phase17Request('UNKNOWN_COMMAND') });
+const unknownExecution = dispatchProductionCommand({
+  graph: executionGraph,
+  request: phase17Request('UNKNOWN_COMMAND'),
+});
 assert(unknownExecution.status === 'rejected', 'Phase 17 unknown command rejected');
 
 const missingDependency = dispatchProductionCommand({
@@ -1211,7 +1381,21 @@ assert(missingDependency.status === 'rejected', 'Phase 17 missing dependency rej
 const blockedExecution = dispatchProductionCommand({
   graph: executionGraph,
   request: phase17Request('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }),
-  locks: [{ id: 'lock-preview', schemaVersion: '16.0.0', label: 'Preview lock', description: 'test', createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z', containsRuntimeHandles: false, resourceType: 'preview_output', owner: 'other', state: 'locked', metadataOnly: true }],
+  locks: [
+    {
+      id: 'lock-preview',
+      schemaVersion: '16.0.0',
+      label: 'Preview lock',
+      description: 'test',
+      createdAt: '2026-07-01T00:00:00.000Z',
+      updatedAt: '2026-07-01T00:00:00.000Z',
+      containsRuntimeHandles: false,
+      resourceType: 'preview_output',
+      owner: 'other',
+      state: 'locked',
+      metadataOnly: true,
+    },
+  ],
 });
 assert(blockedExecution.status === 'blocked', 'Phase 17 locked resource blocked');
 
@@ -1220,37 +1404,113 @@ const dryRunExecution = dispatchProductionCommand({
   request: phase17Request('SET_PREVIEW_SCENE', { sceneId: 'scene-a' }, true),
 });
 assert(dryRunExecution.status === 'dry_run', 'Phase 17 dry run returns dry_run');
-assert(dryRunExecution.graph.metadata.revision === executionGraph.metadata.revision, 'Phase 17 dry run does not mutate graph');
+assert(
+  dryRunExecution.graph.metadata.revision === executionGraph.metadata.revision,
+  'Phase 17 dry run does not mutate graph',
+);
 
 const snapshot = createEngineSnapshot(acceptedExecution.graph);
-assert(JSON.stringify(snapshot).toLowerCase().includes('mediastream') === false, 'Phase 17 snapshot contains no runtime handle names');
+assert(
+  JSON.stringify(snapshot).toLowerCase().includes('mediastream') === false,
+  'Phase 17 snapshot contains no runtime handle names',
+);
 
-const replay = reconstructExecutionReplay({ initialSnapshot: snapshot, events: acceptedExecution.events, transactions: acceptedExecution.transaction ? [acceptedExecution.transaction] : [] });
-assert(replay.graphRevision === acceptedExecution.graphRevisionAfter, 'Phase 17 replay reconstruction handles known events');
-const replayWithUnknown = reconstructExecutionReplay({ initialSnapshot: snapshot, events: [{ ...acceptedExecution.events[0]!, type: 'UNKNOWN_EVENT' as never }] });
-assert(replayWithUnknown.warnings.length === 1 && replayWithUnknown.unsupportedEvents.length === 1, 'Phase 17 replay reconstruction warns on unknown events');
+const replay = reconstructExecutionReplay({
+  initialSnapshot: snapshot,
+  events: acceptedExecution.events,
+  transactions: acceptedExecution.transaction ? [acceptedExecution.transaction] : [],
+});
+assert(
+  replay.graphRevision === acceptedExecution.graphRevisionAfter,
+  'Phase 17 replay reconstruction handles known events',
+);
+const replayWithUnknown = reconstructExecutionReplay({
+  initialSnapshot: snapshot,
+  events: [{ ...acceptedExecution.events[0]!, type: 'UNKNOWN_EVENT' as never }],
+});
+assert(
+  replayWithUnknown.warnings.length === 1 && replayWithUnknown.unsupportedEvents.length === 1,
+  'Phase 17 replay reconstruction warns on unknown events',
+);
 
-import { AgentManager, SuggestionCenter, AutomationRuleEngine, ProviderRegistry, addSuggestionsToGraph, createAnalyticsInsights } from './intelligent-broadcast-operations/index.js';
+import {
+  AgentManager,
+  SuggestionCenter,
+  AutomationRuleEngine,
+  ProviderRegistry,
+  addSuggestionsToGraph,
+  createAnalyticsInsights,
+} from './intelligent-broadcast-operations/index.js';
 
-const iboGraph = createInitialProductionGraph({ broadcastSessionId: 'ibo-validation', name: 'IBO Validation', timestamp: '2026-07-05T00:00:00.000Z' });
+const iboGraph = createInitialProductionGraph({
+  broadcastSessionId: 'ibo-validation',
+  name: 'IBO Validation',
+  timestamp: '2026-07-05T00:00:00.000Z',
+});
 const iboManager = new AgentManager();
-const iboSuggestions = iboManager.observe({ graph: iboGraph, mode: 'manual', timestamp: '2026-07-05T00:00:01.000Z', chatMessages: [{ id: 'q1', author: 'viewer', text: 'What is next?', timestamp: '2026-07-05T00:00:01.000Z' }] });
+const iboSuggestions = iboManager.observe({
+  graph: iboGraph,
+  mode: 'manual',
+  timestamp: '2026-07-05T00:00:01.000Z',
+  chatMessages: [
+    { id: 'q1', author: 'viewer', text: 'What is next?', timestamp: '2026-07-05T00:00:01.000Z' },
+  ],
+});
 assert(iboManager.getStates().length >= 5, 'Phase 18 registers prototype IBO agents');
-assert(iboSuggestions.some((s) => s.agentId === 'agent-moderator'), 'Phase 18 moderator emits chat suggestion metadata');
+assert(
+  iboSuggestions.some((s) => s.agentId === 'agent-moderator'),
+  'Phase 18 moderator emits chat suggestion metadata',
+);
 const iboCenter = new SuggestionCenter();
 iboCenter.ingest(iboSuggestions);
 const acceptedIboCommand = iboCenter.accept(iboSuggestions[0]!.id, 'director');
-assert(!acceptedIboCommand || acceptedIboCommand.metadata?.requiresHumanApproval === true, 'Phase 18 accepted suggestions remain command-gated');
+assert(
+  !acceptedIboCommand || acceptedIboCommand.metadata?.requiresHumanApproval === true,
+  'Phase 18 accepted suggestions remain command-gated',
+);
 iboCenter.reject(iboSuggestions.at(-1)!.id, 'producer');
-assert(iboCenter.list().some((s) => s.status === 'rejected'), 'Phase 18 rejected suggestions are audited');
-const ruleEngine = new AutomationRuleEngine([{ id: 'recording-badge', name: 'Recording badge', enabled: true, trigger: 'recording.starts', condition: {}, commandTemplate: { type: 'SET_PANEL_VISIBILITY', payload: { panelId: 'recording-badge', visible: true } }, createdBy: 'producer' }]);
-assert(ruleEngine.compile('recording.starts', iboGraph).length === 1, 'Phase 18 automation rules compile to Production Commands');
+assert(
+  iboCenter.list().some((s) => s.status === 'rejected'),
+  'Phase 18 rejected suggestions are audited',
+);
+const ruleEngine = new AutomationRuleEngine([
+  {
+    id: 'recording-badge',
+    name: 'Recording badge',
+    enabled: true,
+    trigger: 'recording.starts',
+    condition: {},
+    commandTemplate: {
+      type: 'SET_PANEL_VISIBILITY',
+      payload: { panelId: 'recording-badge', visible: true },
+    },
+    createdBy: 'producer',
+  },
+]);
+assert(
+  ruleEngine.compile('recording.starts', iboGraph).length === 1,
+  'Phase 18 automation rules compile to Production Commands',
+);
 const providerRegistry = new ProviderRegistry();
-providerRegistry.register({ id: 'local-placeholder', name: 'Local Placeholder', supports: ['translation'], complete: async () => ({ text: '', metadata: {} }) });
-assert(providerRegistry.list()[0]?.id === 'local-placeholder', 'Phase 18 provider abstraction registers future providers');
-assert(createAnalyticsInsights(iboGraph).length >= 3, 'Phase 18 analytics engine emits dashboard insights');
+providerRegistry.register({
+  id: 'local-placeholder',
+  name: 'Local Placeholder',
+  supports: ['translation'],
+  complete: async () => ({ text: '', metadata: {} }),
+});
+assert(
+  providerRegistry.list()[0]?.id === 'local-placeholder',
+  'Phase 18 provider abstraction registers future providers',
+);
+assert(
+  createAnalyticsInsights(iboGraph).length >= 3,
+  'Phase 18 analytics engine emits dashboard insights',
+);
 const graphWithIboSuggestions = addSuggestionsToGraph(iboGraph, iboSuggestions.slice(0, 1));
-assert(Object.keys(graphWithIboSuggestions.agentSuggestions).length === 1, 'Phase 18 suggestions flow through Production Graph');
+assert(
+  Object.keys(graphWithIboSuggestions.agentSuggestions).length === 1,
+  'Phase 18 suggestions flow through Production Graph',
+);
 
 import {
   createCompositorManifest,
@@ -1267,12 +1527,55 @@ import {
 } from './compositor/index.js';
 
 const compositorManifest = createCompositorManifest();
-assert(validateCompositorManifest(compositorManifest).length === 0, 'Compositor manifest validates');
-assert(compositionLayerSchema.safeParse(compositorManifest.compositor.composition.layers[0]).success, 'Layer validation succeeds');
-assert(renderGraphSchema.safeParse(compositorManifest.compositor.graph).success, 'Render graph validation succeeds');
-assert(transitionDefinitionSchema.safeParse(compositorManifest.compositor.composition.transitions[0]).success, 'Transition validation succeeds');
-assert(effectDefinitionSchema.safeParse(compositorManifest.compositor.composition.effects[0]).success, 'Effect validation succeeds');
-assert(shaderDefinitionSchema.safeParse(compositorManifest.shaders[0]).success, 'Shader validation succeeds');
-assert(renderStatisticsSchema.safeParse(compositorManifest.compositor.statistics).success, 'Render statistics validation succeeds');
-assert(deserializeCompositorManifest(serializeCompositorManifest(compositorManifest)).containsRuntimeHandles === false, 'Compositor serialization round-trip succeeds');
-assert(renderFrameSchema.safeParse({ id: 'frame-0', name: 'Frame 0', version: '19.0.0', description: 'Frame metadata only.', metadataOnly: true, frameNumber: 0, timestamp: new Date(0).toISOString(), resolution: { width: 1920, height: 1080 }, frameRate: 60, colorSpace: 'rec709', pixelFormat: 'rgba8-metadata', dropped: false, presented: false }).success, 'Render frame validation succeeds');
+assert(
+  validateCompositorManifest(compositorManifest).length === 0,
+  'Compositor manifest validates',
+);
+assert(
+  compositionLayerSchema.safeParse(compositorManifest.compositor.composition.layers[0]).success,
+  'Layer validation succeeds',
+);
+assert(
+  renderGraphSchema.safeParse(compositorManifest.compositor.graph).success,
+  'Render graph validation succeeds',
+);
+assert(
+  transitionDefinitionSchema.safeParse(compositorManifest.compositor.composition.transitions[0])
+    .success,
+  'Transition validation succeeds',
+);
+assert(
+  effectDefinitionSchema.safeParse(compositorManifest.compositor.composition.effects[0]).success,
+  'Effect validation succeeds',
+);
+assert(
+  shaderDefinitionSchema.safeParse(compositorManifest.shaders[0]).success,
+  'Shader validation succeeds',
+);
+assert(
+  renderStatisticsSchema.safeParse(compositorManifest.compositor.statistics).success,
+  'Render statistics validation succeeds',
+);
+assert(
+  deserializeCompositorManifest(serializeCompositorManifest(compositorManifest))
+    .containsRuntimeHandles === false,
+  'Compositor serialization round-trip succeeds',
+);
+assert(
+  renderFrameSchema.safeParse({
+    id: 'frame-0',
+    name: 'Frame 0',
+    version: '19.0.0',
+    description: 'Frame metadata only.',
+    metadataOnly: true,
+    frameNumber: 0,
+    timestamp: new Date(0).toISOString(),
+    resolution: { width: 1920, height: 1080 },
+    frameRate: 60,
+    colorSpace: 'rec709',
+    pixelFormat: 'rgba8-metadata',
+    dropped: false,
+    presented: false,
+  }).success,
+  'Render frame validation succeeds',
+);

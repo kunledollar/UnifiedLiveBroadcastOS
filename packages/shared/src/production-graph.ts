@@ -24,9 +24,10 @@ export function normalizeGraphTransitionDuration(
 ) {
   const raw = typeof value === 'string' && value.trim() === '' ? Number.NaN : Number(value);
   if (transitionType === 'cut') return 0;
-  const safeFallback = Number.isFinite(fallback) && fallback >= MIN_AUTO_TRANSITION_DURATION_MS
-    ? fallback
-    : DEFAULT_TRANSITION_DURATION_MS;
+  const safeFallback =
+    Number.isFinite(fallback) && fallback >= MIN_AUTO_TRANSITION_DURATION_MS
+      ? fallback
+      : DEFAULT_TRANSITION_DURATION_MS;
   if (!Number.isFinite(raw)) return safeFallback;
   return Math.min(Math.max(Math.round(raw), MIN_AUTO_TRANSITION_DURATION_MS), 5000);
 }
@@ -587,23 +588,50 @@ function rejected(
   };
 }
 
-const sourceTypes = ['camera', 'screen', 'media', 'overlay', 'browser', 'audio', 'guest', 'placeholder'] as const;
-const runtimeHandleKeys = ['stream', 'track', 'mediaStream', 'mediaStreamTrack', 'audioContext', 'audioNode', 'file', 'blob', 'buffer', 'handle'];
+const sourceTypes = [
+  'camera',
+  'screen',
+  'media',
+  'overlay',
+  'browser',
+  'audio',
+  'guest',
+  'placeholder',
+] as const;
+const runtimeHandleKeys = [
+  'stream',
+  'track',
+  'mediaStream',
+  'mediaStreamTrack',
+  'audioContext',
+  'audioNode',
+  'file',
+  'blob',
+  'buffer',
+  'handle',
+];
 function metadataContainsRuntimeHandle(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
-  return Object.entries(value as Record<string, unknown>).some(([key, nested]) =>
-    runtimeHandleKeys.includes(key) || metadataContainsRuntimeHandle(nested),
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, nested]) => runtimeHandleKeys.includes(key) || metadataContainsRuntimeHandle(nested),
   );
 }
 function validateSourcePayload(p: Record<string, unknown>) {
   const type = String(p.type ?? '');
-  if (!sourceTypes.includes(type as (typeof sourceTypes)[number])) return `Unknown source type ${type}`;
-  if (p.metadata && metadataContainsRuntimeHandle(p.metadata)) return 'Source metadata cannot contain runtime handles';
-  if (type === 'browser' && typeof (p.metadata as Record<string, unknown> | undefined)?.url === 'string') {
+  if (!sourceTypes.includes(type as (typeof sourceTypes)[number]))
+    return `Unknown source type ${type}`;
+  if (p.metadata && metadataContainsRuntimeHandle(p.metadata))
+    return 'Source metadata cannot contain runtime handles';
+  if (
+    type === 'browser' &&
+    typeof (p.metadata as Record<string, unknown> | undefined)?.url === 'string'
+  ) {
     try {
       const url = new URL(String((p.metadata as Record<string, unknown>).url));
       if (!['http:', 'https:'].includes(url.protocol)) return 'Invalid browser URL';
-    } catch { return 'Invalid browser URL'; }
+    } catch {
+      return 'Invalid browser URL';
+    }
   }
   return undefined;
 }
@@ -665,11 +693,15 @@ export function applyProductionCommand(
     const sourceId = String((command.payload as Record<string, unknown>).sourceId ?? '');
     const sceneError = validateSceneReference(sceneId, 'Source attachment');
     if (sceneError) return rejected(graph, command, [sceneError]);
-    if (!sourceId || !graph.sources[sourceId]) return rejected(graph, command, [`Missing source reference ${sourceId}`]);
-    if (graph.scenes[sceneId]?.sourceIds.includes(sourceId)) return rejected(graph, command, [`Duplicate layer reference ${sourceId}`]);
+    if (!sourceId || !graph.sources[sourceId])
+      return rejected(graph, command, [`Missing source reference ${sourceId}`]);
+    if (graph.scenes[sceneId]?.sourceIds.includes(sourceId))
+      return rejected(graph, command, [`Duplicate layer reference ${sourceId}`]);
   }
   if (command.type === 'SET_TRANSITION') {
-    const transitionType = String((command.payload as Record<string, unknown>).transitionType ?? '');
+    const transitionType = String(
+      (command.payload as Record<string, unknown>).transitionType ?? '',
+    );
     if (!['cut', 'fade', 'dip', 'wipe'].includes(transitionType))
       return rejected(graph, command, [`Invalid transition ${transitionType}`]);
   }
@@ -719,11 +751,13 @@ export function applyProductionCommand(
             transitionType:
               command.type === 'CUT_TO_PROGRAM'
                 ? 'cut'
-                : ((p.transitionType as GraphTransitionType | undefined) ?? graph.program.transitionType),
+                : ((p.transitionType as GraphTransitionType | undefined) ??
+                  graph.program.transitionType),
             transitionDurationMs: normalizeGraphTransitionDuration(
               command.type === 'CUT_TO_PROGRAM'
                 ? 'cut'
-                : ((p.transitionType as GraphTransitionType | undefined) ?? graph.program.transitionType),
+                : ((p.transitionType as GraphTransitionType | undefined) ??
+                    graph.program.transitionType),
               p.durationMs ?? p.transitionDuration,
               graph.program.transitionDurationMs,
             ),
@@ -762,21 +796,63 @@ export function applyProductionCommand(
       break;
     case 'ADD_SOURCE': {
       const id = String(p.id ?? `${command.id}:source`);
-      next = bump({ ...graph, sources: { ...graph.sources, [id]: { id, name: String(p.name ?? 'New Source'), type: String(p.type) as SourceNode['type'], enabled: p.enabled !== false, muted: Boolean(p.muted), metadata: (p.metadata as Record<string, unknown>) ?? {} } } }, command.timestamp);
+      next = bump(
+        {
+          ...graph,
+          sources: {
+            ...graph.sources,
+            [id]: {
+              id,
+              name: String(p.name ?? 'New Source'),
+              type: String(p.type) as SourceNode['type'],
+              enabled: p.enabled !== false,
+              muted: Boolean(p.muted),
+              metadata: (p.metadata as Record<string, unknown>) ?? {},
+            },
+          },
+        },
+        command.timestamp,
+      );
       break;
     }
     case 'UPDATE_SOURCE': {
       const id = String(p.sourceId ?? p.id);
       const current = graph.sources[id];
       if (!current) return rejected(graph, command, [`Unknown source ${id}`]);
-      next = bump({ ...graph, sources: { ...graph.sources, [id]: { ...current, name: typeof p.name === 'string' ? p.name : current.name, enabled: typeof p.enabled === 'boolean' ? p.enabled : current.enabled, metadata: { ...current.metadata, ...((p.metadata as Record<string, unknown>) ?? {}) } } } }, command.timestamp);
+      next = bump(
+        {
+          ...graph,
+          sources: {
+            ...graph.sources,
+            [id]: {
+              ...current,
+              name: typeof p.name === 'string' ? p.name : current.name,
+              enabled: typeof p.enabled === 'boolean' ? p.enabled : current.enabled,
+              metadata: { ...current.metadata, ...((p.metadata as Record<string, unknown>) ?? {}) },
+            },
+          },
+        },
+        command.timestamp,
+      );
       break;
     }
     case 'REMOVE_SOURCE': {
       const id = String(p.sourceId ?? p.id);
       if (!graph.sources[id]) return rejected(graph, command, [`Unknown source ${id}`]);
       const { [id]: _removed, ...sources } = graph.sources;
-      next = bump({ ...graph, sources, scenes: Object.fromEntries(Object.entries(graph.scenes).map(([sceneId, scene]) => [sceneId, { ...scene, sourceIds: scene.sourceIds.filter((sourceId) => sourceId !== id) }])) }, command.timestamp);
+      next = bump(
+        {
+          ...graph,
+          sources,
+          scenes: Object.fromEntries(
+            Object.entries(graph.scenes).map(([sceneId, scene]) => [
+              sceneId,
+              { ...scene, sourceIds: scene.sourceIds.filter((sourceId) => sourceId !== id) },
+            ]),
+          ),
+        },
+        command.timestamp,
+      );
       break;
     }
     case 'ASSIGN_SOURCE_TO_SCENE': {
@@ -784,8 +860,42 @@ export function applyProductionCommand(
       const sourceId = String(p.sourceId);
       const scene = graph.scenes[sceneId];
       if (!scene) return rejected(graph, command, [`Unknown scene ${sceneId}`]);
-      const layers = (Array.isArray(scene.metadata.layers) ? scene.metadata.layers : []) as unknown[];
-      next = bump({ ...graph, scenes: { ...graph.scenes, [sceneId]: { ...scene, sourceIds: [...scene.sourceIds, sourceId], metadata: { ...scene.metadata, layers: [...layers, { sourceId, transform: p.transform ?? { x: 0, y: 0, width: 1, height: 1, zIndex: scene.sourceIds.length, opacity: 1, visible: true, locked: false } }] }, updatedAt: command.timestamp } } }, command.timestamp);
+      const layers = (
+        Array.isArray(scene.metadata.layers) ? scene.metadata.layers : []
+      ) as unknown[];
+      next = bump(
+        {
+          ...graph,
+          scenes: {
+            ...graph.scenes,
+            [sceneId]: {
+              ...scene,
+              sourceIds: [...scene.sourceIds, sourceId],
+              metadata: {
+                ...scene.metadata,
+                layers: [
+                  ...layers,
+                  {
+                    sourceId,
+                    transform: p.transform ?? {
+                      x: 0,
+                      y: 0,
+                      width: 1,
+                      height: 1,
+                      zIndex: scene.sourceIds.length,
+                      opacity: 1,
+                      visible: true,
+                      locked: false,
+                    },
+                  },
+                ],
+              },
+              updatedAt: command.timestamp,
+            },
+          },
+        },
+        command.timestamp,
+      );
       break;
     }
     case 'START_BROADCAST':
@@ -942,9 +1052,11 @@ export function applyProductionCommand(
     default:
       next = bump(graph, command.timestamp);
   }
-  const sourceEvent = command.type === 'ASSIGN_SOURCE_TO_SCENE' ? 'SOURCE_ATTACHED_TO_SCENE' : undefined;
+  const sourceEvent =
+    command.type === 'ASSIGN_SOURCE_TO_SCENE' ? 'SOURCE_ATTACHED_TO_SCENE' : undefined;
   const type =
-    sourceEvent ?? eventTypeByCommand[command.type] ??
+    sourceEvent ??
+    eventTypeByCommand[command.type] ??
     (command.type === 'SET_TRANSITION' || command.type === 'SET_TRANSITION_DURATION'
       ? 'TRANSITION_COMPLETED'
       : 'SOURCE_UPDATED');
@@ -1207,3 +1319,442 @@ export type ProductionPlugin =
   | AIPlugin
   | AnalyticsPlugin
   | ControlSurfacePlugin;
+
+export type PipelineHealthSummary = 'healthy' | 'warning' | 'degraded' | 'failed';
+export type ProductionPipelineAdapterKind = 'browser' | 'desktop' | 'server';
+export interface ProductionRoute {
+  id: StableId;
+  kind:
+    | 'video'
+    | 'audio'
+    | 'recording'
+    | 'streaming'
+    | 'broadcast-io'
+    | 'monitor-wall'
+    | 'guest'
+    | 'replay';
+  sourceId?: StableId | undefined;
+  targetId: StableId;
+  label: string;
+  active: boolean;
+  metadata: Record<string, unknown>;
+}
+export interface ProductionGraphWarning {
+  id: StableId;
+  severity: Exclude<PipelineHealthSummary, 'healthy'>;
+  message: string;
+  entityId?: StableId;
+  entityType?: string;
+}
+export interface ProductionPipelineEvent {
+  id: StableId;
+  type:
+    | 'scene_switch'
+    | 'source_change'
+    | 'graphics_change'
+    | 'replay_event'
+    | 'recording_start'
+    | 'recording_stop'
+    | 'streaming_start'
+    | 'streaming_stop'
+    | 'guest_admit'
+    | 'guest_remove'
+    | 'automation_execution'
+    | 'route_change';
+  label: string;
+  timestamp: string;
+  graphRevision: number;
+  metadata: Record<string, unknown>;
+}
+export interface ProductionGraphState {
+  activeScene?: StableId | undefined;
+  previewScene?: StableId | undefined;
+  programScene?: StableId | undefined;
+  activeSources: StableId[];
+  activeOverlays: StableId[];
+  activeAudioChannels: StableId[];
+  recordingState: RecordingNode['status'];
+  streamingState: 'idle' | 'ready' | 'live' | 'error';
+  outputRouting: ProductionRoute[];
+  guestRouting: ProductionRoute[];
+  replayRouting: ProductionRoute[];
+  automationEvents: ProductionPipelineEvent[];
+}
+export interface ProductionPipelineModel {
+  id: StableId;
+  name: string;
+  graphRevision: number;
+  state: ProductionGraphState;
+  sources: SourceNode[];
+  scenes: SceneNode[];
+  preview?: SceneNode | undefined;
+  program?: SceneNode | undefined;
+  graphicsOverlays: OverlayNode[];
+  audioMixer: AudioNode[];
+  recording: RecordingNode;
+  streaming: DestinationNode[];
+  broadcastIoRoutes: ProductionRoute[];
+  monitorWallRoutes: ProductionRoute[];
+  automation: AutomationNode;
+  eventHistory: ProductionPipelineEvent[];
+  warnings: ProductionGraphWarning[];
+  health: PipelineHealthSummary;
+  containsRuntimeHandles: false;
+  adapters: Array<{
+    id: string;
+    kind: ProductionPipelineAdapterKind;
+    executionEnabled: false;
+    metadataOnly: true;
+    capabilities: string[];
+  }>;
+}
+
+const pipelineRuntimeKeys = [
+  'MediaStream',
+  'MediaRecorder',
+  'AudioContext',
+  'RTCPeerConnection',
+  'PeerConnection',
+  'socket',
+  'transportSocket',
+  'domNode',
+  'iframe',
+  'iframeRef',
+  'element',
+  'node',
+  'stream',
+  'recorder',
+  'audioContext',
+  'peerConnection',
+];
+export function productionMetadataContainsRuntimeHandle(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false;
+  return Object.entries(value as Record<string, unknown>).some(
+    ([key, nested]) =>
+      pipelineRuntimeKeys.includes(key) || productionMetadataContainsRuntimeHandle(nested),
+  );
+}
+function pipelineRoutes(graph: ProductionGraph): ProductionRoute[] {
+  const program = graph.program.sceneId
+    ? [
+        {
+          id: 'route-program',
+          kind: 'video' as const,
+          sourceId: graph.program.sceneId,
+          targetId: 'program-output',
+          label: 'Program output',
+          active: true,
+          metadata: {},
+        },
+      ]
+    : [];
+  const preview = graph.preview.sceneId
+    ? [
+        {
+          id: 'route-preview',
+          kind: 'video' as const,
+          sourceId: graph.preview.sceneId,
+          targetId: 'preview-output',
+          label: 'Preview output',
+          active: true,
+          metadata: {},
+        },
+      ]
+    : [];
+  const audio = Object.values(graph.audioChannels).map((c): ProductionRoute => ({
+    id: `route-audio-${c.id}`,
+    kind: 'audio',
+    sourceId: c.sourceId,
+    targetId: 'audio-mixer',
+    label: `${c.label} → Audio Mixer`,
+    active: !c.muted,
+    metadata: { channelId: c.id },
+  }));
+  const destinations = Object.values(graph.destinations).map((d): ProductionRoute => ({
+    id: `route-destination-${d.id}`,
+    kind: d.platform === 'broadcast-io' ? 'broadcast-io' : 'streaming',
+    targetId: d.id,
+    label: `Program → ${d.name}`,
+    active: d.enabled,
+    metadata: { platform: d.platform, status: d.status },
+  }));
+  const recording: ProductionRoute[] = [
+    {
+      id: 'route-recording-program',
+      kind: 'recording',
+      sourceId: graph.program.sceneId,
+      targetId: 'recording-engine',
+      label: 'Program → Recording',
+      active: graph.recording.status === 'recording',
+      metadata: graph.recording.metadata,
+    },
+  ];
+  const guests = Object.values(graph.guests)
+    .filter((g) => g.sourceId)
+    .map((g): ProductionRoute => ({
+      id: `route-guest-${g.id}`,
+      kind: 'guest',
+      sourceId: g.sourceId,
+      targetId: g.status === 'on_air' ? 'program' : 'green-room',
+      label: `${g.displayName} → ${g.status === 'on_air' ? 'Program' : 'Green Room'}`,
+      active: g.status !== 'removed' && g.status !== 'disconnected',
+      metadata: { guestId: g.id, status: g.status },
+    }));
+  const replay: ProductionRoute[] = [
+    {
+      id: 'route-replay-program',
+      kind: 'replay',
+      sourceId: 'program-output',
+      targetId: 'replay-buffer',
+      label: 'Program → Replay Buffer',
+      active: Boolean(graph.plugins?.replayActive ?? true),
+      metadata: { buffer: 'metadata-only' },
+    },
+  ];
+  const monitor: ProductionRoute[] = [
+    {
+      id: 'route-monitor-wall',
+      kind: 'monitor-wall',
+      sourceId: graph.program.sceneId,
+      targetId: 'monitor-wall',
+      label: 'Program + Preview → Monitor Wall',
+      active: Boolean(graph.program.sceneId || graph.preview.sceneId),
+      metadata: {},
+    },
+  ];
+  return [
+    ...program,
+    ...preview,
+    ...audio,
+    ...destinations,
+    ...recording,
+    ...guests,
+    ...replay,
+    ...monitor,
+  ];
+}
+export function createPipelineEventHistory(
+  graph: ProductionGraph,
+  events: ProductionEvent[] = [],
+): ProductionPipelineEvent[] {
+  const map: Partial<Record<ProductionEventType, ProductionPipelineEvent['type']>> = {
+    PROGRAM_SCENE_CHANGED: 'scene_switch',
+    TRANSITION_COMPLETED: 'scene_switch',
+    PREVIEW_SCENE_CHANGED: 'scene_switch',
+    SOURCE_ADDED: 'source_change',
+    SOURCE_UPDATED: 'source_change',
+    SOURCE_CREATED: 'source_change',
+    SOURCE_ATTACHED_TO_SCENE: 'route_change',
+    SOURCE_REMOVED_FROM_SCENE: 'route_change',
+    RECORDING_STARTED: 'recording_start',
+    RECORDING_STOPPED: 'recording_stop',
+    BROADCAST_STARTED: 'streaming_start',
+    BROADCAST_STOPPED: 'streaming_stop',
+    GUEST_ADDED: 'guest_admit',
+    GUEST_REMOVED: 'guest_remove',
+    WORKSPACE_CHANGED: 'automation_execution',
+  };
+  const history = events.map((event): ProductionPipelineEvent => ({
+    id: event.id,
+    type: map[event.type] ?? 'source_change',
+    label: event.type.replaceAll('_', ' ').toLowerCase(),
+    timestamp: event.timestamp,
+    graphRevision: event.graphRevision,
+    metadata: { commandId: event.commandId, ...event.payload },
+  }));
+  const macros = graph.automation.activeMacroIds.map((macroId, index): ProductionPipelineEvent => ({
+    id: `automation-${macroId}`,
+    type: 'automation_execution',
+    label: `Automation macro ${macroId} armed`,
+    timestamp: graph.updatedAt,
+    graphRevision: graph.metadata.revision,
+    metadata: { macroId, index },
+  }));
+  return [...history, ...macros].slice(-50);
+}
+export function validateProductionPipeline(graph: ProductionGraph): ProductionGraphWarning[] {
+  const routes = pipelineRoutes(graph);
+  const warnings: ProductionGraphWarning[] = [];
+  const routedSourceIds = new Set(routes.map((r) => r.sourceId).filter(Boolean));
+  Object.values(graph.sources).forEach((source) => {
+    if (
+      source.enabled &&
+      !Object.values(graph.scenes).some((scene) => scene.sourceIds.includes(source.id)) &&
+      !routedSourceIds.has(source.id)
+    )
+      warnings.push({
+        id: `source-unrouted-${source.id}`,
+        severity: 'warning',
+        message: `${source.name} exists but is not routed to a scene or output.`,
+        entityId: source.id,
+        entityType: 'source',
+      });
+    if (!source.enabled && routedSourceIds.has(source.id))
+      warnings.push({
+        id: `source-offline-${source.id}`,
+        severity: 'degraded',
+        message: `${source.name} is routed but currently offline or disabled.`,
+        entityId: source.id,
+        entityType: 'source',
+      });
+    if (
+      source.type === 'audio' &&
+      !Object.values(graph.audioChannels).some((c) => c.sourceId === source.id)
+    )
+      warnings.push({
+        id: `audio-unmixed-${source.id}`,
+        severity: 'warning',
+        message: `${source.name} is an audio source without an audio mixer channel.`,
+        entityId: source.id,
+        entityType: 'audio',
+      });
+  });
+  if (!graph.program.sceneId)
+    warnings.push({
+      id: 'program-missing',
+      severity: 'failed',
+      message: 'Program output is missing. Take a scene to Program before recording or streaming.',
+    });
+  if (!graph.preview.sceneId)
+    warnings.push({
+      id: 'preview-missing',
+      severity: 'warning',
+      message: 'Preview output is missing. Select a preview scene before the next take.',
+    });
+  if (graph.recording.status === 'recording' && !graph.program.sceneId)
+    warnings.push({
+      id: 'recording-without-program',
+      severity: 'failed',
+      message: 'Recording is active without a Program output.',
+    });
+  if (graph.status === 'live' && !Object.values(graph.destinations).some((d) => d.enabled))
+    warnings.push({
+      id: 'streaming-without-destination',
+      severity: 'degraded',
+      message: 'Streaming is active without an enabled destination.',
+    });
+  Object.values(graph.overlays).forEach((o) => {
+    if (o.enabled && o.sceneId && !graph.scenes[o.sceneId]?.overlayIds.includes(o.id))
+      warnings.push({
+        id: `overlay-unlayered-${o.id}`,
+        severity: 'warning',
+        message: `${o.name} is assigned but not layered in its scene.`,
+        entityId: o.id,
+        entityType: 'overlay',
+      });
+  });
+  if (graph.plugins?.replayActive === true && !routes.some((r) => r.kind === 'replay' && r.active))
+    warnings.push({
+      id: 'replay-unrouted',
+      severity: 'degraded',
+      message: 'Replay is active but not routed to an output or buffer.',
+    });
+  if (productionMetadataContainsRuntimeHandle(graph))
+    warnings.push({
+      id: 'runtime-handle-persisted',
+      severity: 'failed',
+      message: 'Runtime handles must not be persisted in ProductionGraph metadata.',
+    });
+  return warnings;
+}
+export function summarizeProductionPipelineHealth(
+  warnings: ProductionGraphWarning[],
+): PipelineHealthSummary {
+  if (warnings.some((w) => w.severity === 'failed')) return 'failed';
+  if (warnings.some((w) => w.severity === 'degraded')) return 'degraded';
+  if (warnings.length) return 'warning';
+  return 'healthy';
+}
+export function createProductionPipelineModel(
+  graph: ProductionGraph,
+  events: ProductionEvent[] = [],
+): ProductionPipelineModel {
+  const routes = pipelineRoutes(graph);
+  const warnings = validateProductionPipeline(graph);
+  const eventHistory = createPipelineEventHistory(graph, events);
+  return {
+    id: `pipeline-${graph.id}`,
+    name: 'UBOS 3.14 Unified Production Pipeline',
+    graphRevision: graph.metadata.revision,
+    state: {
+      activeScene: graph.program.sceneId ?? graph.preview.sceneId,
+      previewScene: graph.preview.sceneId,
+      programScene: graph.program.sceneId,
+      activeSources: Object.values(graph.sources)
+        .filter((s) => s.enabled)
+        .map((s) => s.id),
+      activeOverlays: Object.values(graph.overlays)
+        .filter((o) => o.enabled)
+        .map((o) => o.id),
+      activeAudioChannels: Object.values(graph.audioChannels)
+        .filter((c) => !c.muted)
+        .map((c) => c.id),
+      recordingState: graph.recording.status,
+      streamingState:
+        graph.status === 'live'
+          ? 'live'
+          : Object.values(graph.destinations).some((d) => d.enabled)
+            ? 'ready'
+            : 'idle',
+      outputRouting: routes.filter((r) =>
+        ['video', 'recording', 'streaming', 'broadcast-io', 'monitor-wall'].includes(r.kind),
+      ),
+      guestRouting: routes.filter((r) => r.kind === 'guest'),
+      replayRouting: routes.filter((r) => r.kind === 'replay'),
+      automationEvents: eventHistory.filter((e) => e.type === 'automation_execution'),
+    },
+    sources: Object.values(graph.sources),
+    scenes: Object.values(graph.scenes),
+    preview: graph.preview.sceneId ? graph.scenes[graph.preview.sceneId] : undefined,
+    program: graph.program.sceneId ? graph.scenes[graph.program.sceneId] : undefined,
+    graphicsOverlays: Object.values(graph.overlays),
+    audioMixer: Object.values(graph.audioChannels),
+    recording: graph.recording,
+    streaming: Object.values(graph.destinations).filter((d) => d.platform !== 'broadcast-io'),
+    broadcastIoRoutes: routes.filter((r) => r.kind === 'broadcast-io'),
+    monitorWallRoutes: routes.filter((r) => r.kind === 'monitor-wall'),
+    automation: graph.automation,
+    eventHistory,
+    warnings,
+    health: summarizeProductionPipelineHealth(warnings),
+    containsRuntimeHandles: false,
+    adapters: [
+      new BrowserPipelineAdapter().metadata(),
+      new DesktopPipelineAdapter().metadata(),
+      new ServerPipelineAdapter().metadata(),
+    ],
+  };
+}
+export class BrowserPipelineAdapter {
+  metadata() {
+    return {
+      id: 'browser-pipeline-adapter',
+      kind: 'browser' as const,
+      executionEnabled: false as const,
+      metadataOnly: true as const,
+      capabilities: ['camera', 'screen', 'media', 'browser-preview', 'webrtc-guests'],
+    };
+  }
+}
+export class DesktopPipelineAdapter {
+  metadata() {
+    return {
+      id: 'desktop-pipeline-adapter',
+      kind: 'desktop' as const,
+      executionEnabled: false as const,
+      metadataOnly: true as const,
+      capabilities: ['desktop-capture', 'hardware-io', 'local-recording'],
+    };
+  }
+}
+export class ServerPipelineAdapter {
+  metadata() {
+    return {
+      id: 'server-pipeline-adapter',
+      kind: 'server' as const,
+      executionEnabled: false as const,
+      metadataOnly: true as const,
+      capabilities: ['transcoding', 'streaming', 'broadcast-io', 'automation'],
+    };
+  }
+}
