@@ -41,6 +41,7 @@ export function SourceBrowser({
   sourceTypes,
   isPending = false,
   tallyState = 'idle',
+  directCameraLive = false,
   onAdd,
   onRename,
   onDuplicate,
@@ -54,6 +55,7 @@ export function SourceBrowser({
   sourceTypes: SceneSourceType[];
   isPending?: boolean;
   tallyState?: TallyState;
+  directCameraLive?: boolean;
   onAdd?: (input: { sceneId: string; name: string; type: SceneSourceType; url?: string }) => void;
   onRename?: (sourceId: string, name: string) => void;
   onDuplicate?: (sourceId: string) => void;
@@ -154,6 +156,7 @@ export function SourceBrowser({
             sceneName={sceneName}
             guests={guests}
             tallyState={tallyState}
+            directCameraLive={directCameraLive}
             {...(onRename ? { onRename } : {})}
             {...(onDuplicate ? { onDuplicate } : {})}
             {...(onDelete ? { onDelete } : {})}
@@ -171,6 +174,7 @@ function SourceBrowserRow({
   sceneName,
   guests,
   tallyState,
+  directCameraLive = false,
   onRename,
   onDuplicate,
   onDelete,
@@ -181,13 +185,15 @@ function SourceBrowserRow({
   sceneName: string;
   guests: Guest[];
   tallyState: TallyState;
+  directCameraLive?: boolean;
   onRename?: (sourceId: string, name: string) => void;
   onDuplicate?: (sourceId: string) => void;
   onDelete?: (sourceId: string) => void;
   onToggleVisibility?: (sourceId: string) => void;
   onToggleLock?: (sourceId: string) => void;
 }) {
-  const health = deriveSourceHealth(source, guests);
+  const health =
+    directCameraLive && source.type === 'camera' ? 'live' : deriveSourceHealth(source, guests);
   const telemetry = getSourceTelemetry(source);
   const telemetryParts = [
     telemetry.resolution ? `${telemetry.resolution}` : null,

@@ -47,6 +47,7 @@ export function LeftNavPanel({
   onSourceDelete,
   onSourceToggleVisibility,
   onSourceToggleLock,
+  directCameraLive = false,
   onGraphicsAddToScene,
   graphicsTemplates = [],
   mediaAssets = [],
@@ -86,6 +87,7 @@ export function LeftNavPanel({
   onSourceDelete: (sourceId: string) => void;
   onSourceToggleVisibility: (sourceId: string) => void;
   onSourceToggleLock: (sourceId: string) => void;
+  directCameraLive?: boolean;
   onGraphicsAddToScene?: (asset: GraphicsAsset) => void;
   graphicsTemplates?: LowerThirdTemplate[];
   mediaAssets?: MediaAsset[];
@@ -121,6 +123,7 @@ export function LeftNavPanel({
           sourceTypes={sourceTypes}
           isPending={isPending}
           tallyState={tallyState}
+          directCameraLive={directCameraLive}
           onAdd={onSourceAdd}
           onRename={onSourceRename}
           onDuplicate={onSourceDuplicate}

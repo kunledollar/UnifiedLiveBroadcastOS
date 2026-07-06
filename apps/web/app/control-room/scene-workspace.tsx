@@ -280,6 +280,57 @@ type LiveCaptureDiagnostics = {
   failureReason?: string;
 };
 
+type DirectCameraDebug = {
+  permissionRequested: boolean;
+  streamReceived: boolean;
+  streamId: string;
+  videoTracksCount: number;
+  audioTracksCount: number;
+  streamActive: boolean;
+  previewAttached: boolean;
+  programAttached: boolean;
+  lastError: string;
+};
+
+const initialDirectCameraDebug = (): DirectCameraDebug => ({
+  permissionRequested: false,
+  streamReceived: false,
+  streamId: '—',
+  videoTracksCount: 0,
+  audioTracksCount: 0,
+  streamActive: false,
+  previewAttached: false,
+  programAttached: false,
+  lastError: '',
+});
+
+function CameraDebugBox({ debug }: { debug: DirectCameraDebug }) {
+  const rows: Array<{ label: string; value: string }> = [
+    { label: 'permission requested', value: debug.permissionRequested ? 'yes' : 'no' },
+    { label: 'stream received', value: debug.streamReceived ? 'yes' : 'no' },
+    { label: 'stream id', value: debug.streamId || '—' },
+    { label: 'videoTracks count', value: String(debug.videoTracksCount) },
+    { label: 'audioTracks count', value: String(debug.audioTracksCount) },
+    { label: 'stream.active', value: debug.streamActive ? 'true' : 'false' },
+    { label: 'preview attached', value: debug.previewAttached ? 'yes' : 'no' },
+    { label: 'program attached', value: debug.programAttached ? 'yes' : 'no' },
+    { label: 'last error', value: debug.lastError || '—' },
+  ];
+  return (
+    <div className="rounded-ubos-md border border-cyan-400/30 bg-cyan-950/20 p-3 text-[10px] uppercase tracking-[0.12em] text-cyan-100">
+      <div className="mb-2 font-black">Camera debug</div>
+      <div className="grid gap-1">
+        {rows.map((row) => (
+          <div key={row.label} className="flex justify-between gap-2">
+            <span className="text-cyan-300/80">{row.label}</span>
+            <span className="truncate text-right font-mono normal-case">{row.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function describeCaptureError(error: unknown): string {
   if (error instanceof DOMException) return `${error.name}: ${error.message}`;
   if (error instanceof Error) return `${error.name}: ${error.message}`;
@@ -2098,6 +2149,9 @@ export function SceneWorkspace({
     [startTransition, setScenes],
   );
   const smokeMedia = useMediaCapture();
+  const [activeCameraStream, setActiveCameraStream] = useState<MediaStream | null>(null);
+  const [programStreamOnAir, setProgramStreamOnAir] = useState(false);
+  const [directCameraDebug, setDirectCameraDebug] = useState<DirectCameraDebug>(initialDirectCameraDebug);
   const [liveSourceStreams, setLiveSourceStreams] = useState<Record<string, MediaStream>>({});
   const [liveCaptureDiagnostics, setLiveCaptureDiagnostics] = useState<LiveCaptureDiagnostics>({});
   const mergeLiveCaptureDiagnostics = useCallback((patch: Partial<LiveCaptureDiagnostics>) => {
@@ -2117,7 +2171,7 @@ export function SceneWorkspace({
   const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
 
   useEffect(() => {
-    const stream = smokeMedia.stream;
+    const stream = activeCameraStream ?? smokeMedia.stream;
     if (!stream?.getAudioTracks().length) {
       setAudioLevel(0);
       return;
@@ -2145,7 +2199,7 @@ export function SceneWorkspace({
       source.disconnect();
       void audioContext.close();
     };
-  }, [smokeMedia.stream]);
+  }, [activeCameraStream, smokeMedia.stream]);
 
   const patchCaptureSourceStatus = useCallback(
     (runtimeStatus: string, sourceId?: string, message?: string) => {
@@ -2199,7 +2253,8 @@ export function SceneWorkspace({
   }, [mergeLiveCaptureDiagnostics, patchCaptureSourceStatus, smokeMedia]);
 
   const startSmokeRecording = useCallback(() => {
-    if (!smokeMedia.stream || !mediaRecorderSupported) {
+    const stream = activeCameraStream ?? smokeMedia.stream;
+    if (!stream || !mediaRecorderSupported) {
       setRecordingState('unsupported');
       return;
     }
@@ -2209,7 +2264,7 @@ export function SceneWorkspace({
     const recorderOptions = MediaRecorder.isTypeSupported('video/webm')
       ? { mimeType: 'video/webm' }
       : undefined;
-    const recorder = new MediaRecorder(smokeMedia.stream, recorderOptions);
+    const recorder = new MediaRecorder(stream, recorderOptions);
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) recordedChunksRef.current.push(event.data);
     };
@@ -2221,7 +2276,7 @@ export function SceneWorkspace({
     recorder.start();
     recorderRef.current = recorder;
     setRecordingState('recording');
-  }, [mediaRecorderSupported, recordedUrl, smokeMedia.stream]);
+  }, [activeCameraStream, mediaRecorderSupported, recordedUrl, smokeMedia.stream]);
 
   const stopSmokeRecording = useCallback(() => {
     if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
@@ -2239,10 +2294,15 @@ export function SceneWorkspace({
   const programCameraSourceId = getFirstVisibleCameraSourceId(programScene);
   const previewCameraStream = previewCameraSourceId ? liveSourceStreams[previewCameraSourceId] : null;
   const programCameraStream = programCameraSourceId ? liveSourceStreams[programCameraSourceId] : null;
-  const previewHasCameraSource = Boolean(previewCameraSourceId);
-  const programHasCameraSource = Boolean(programCameraSourceId);
-  const livePreviewVisible = isLiveMediaStream(previewCameraStream);
-  const liveProgramVisible = isLiveMediaStream(programCameraStream);
+  const directCameraLive = isLiveMediaStream(activeCameraStream);
+  const previewStreamToShow = (directCameraLive ? activeCameraStream : previewCameraStream) ?? null;
+  const programStreamToShow =
+    (directCameraLive && programStreamOnAir ? activeCameraStream : programCameraStream) ?? null;
+  const previewHasCameraSource = Boolean(previewCameraSourceId) || directCameraLive;
+  const programHasCameraSource = Boolean(programCameraSourceId) || (directCameraLive && programStreamOnAir);
+  const livePreviewVisible = directCameraLive || isLiveMediaStream(previewCameraStream);
+  const liveProgramVisible =
+    (directCameraLive && programStreamOnAir) || isLiveMediaStream(programCameraStream);
   useEffect(() => {
     mergeLiveCaptureDiagnostics({
       previewSourceIdLookup: previewCameraSourceId ?? 'none',
@@ -2251,17 +2311,31 @@ export function SceneWorkspace({
   }, [mergeLiveCaptureDiagnostics, previewCameraSourceId, programCameraSourceId]);
 
   const liveAudioChannels = useMemo<AudioChannel[]>(() => {
+    const channelsFromDirect: AudioChannel[] =
+      activeCameraStream &&
+      activeCameraStream.getAudioTracks().some((track) => track.readyState === 'live')
+        ? [
+            {
+              id: 'live-direct-camera',
+              label: 'Live Camera Mic',
+              level: audioLevel,
+              muted: false,
+              kind: 'mic' as const,
+            },
+          ]
+        : [];
     const entries = Object.entries(liveSourceStreams).filter(([, stream]) =>
       stream.getAudioTracks().some((track) => track.readyState === 'live'),
     );
-    return entries.map(([sourceId, stream]) => ({
+    const channelsFromMap = entries.map(([sourceId, stream]) => ({
       id: `live-${sourceId}`,
       label: `Live Camera Mic (${sourceId.slice(0, 8)})`,
       level: audioLevel,
       muted: false,
       kind: 'mic' as const,
     }));
-  }, [audioLevel, liveSourceStreams]);
+    return channelsFromDirect.length ? channelsFromDirect : channelsFromMap;
+  }, [activeCameraStream, audioLevel, liveSourceStreams]);
 
   const effectiveAudioChannels = useMemo(
     () => [...channels, ...liveAudioChannels],
@@ -2429,6 +2503,9 @@ export function SceneWorkspace({
       window.setTimeout(() => setTransitionActive(false), Math.max(duration, 250));
     }
     refresh(sorted.map((scene) => ({ ...scene, isActive: scene.id === next.programSceneId })));
+    if (isLiveMediaStream(activeCameraStream)) {
+      setProgramStreamOnAir(true);
+    }
     persistProductionState(next, type === 'fade' ? 'fade' : type === 'cut' ? 'cut' : 'take');
   };
 
@@ -2579,6 +2656,80 @@ export function SceneWorkspace({
       ),
     );
   };
+
+  const activateDirectCamera = useCallback(async () => {
+    activeCameraStream?.getTracks().forEach((track) => track.stop());
+    setProgramStreamOnAir(false);
+    setDirectCameraDebug((current) => ({
+      ...current,
+      permissionRequested: true,
+      previewAttached: false,
+      programAttached: false,
+      lastError: '',
+    }));
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setDirectCameraDebug((current) => ({
+        ...current,
+        streamReceived: true,
+        streamId: stream.id,
+        videoTracksCount: stream.getVideoTracks().length,
+        audioTracksCount: stream.getAudioTracks().length,
+        streamActive: stream.active,
+      }));
+      if (stream.active) {
+        setActiveCameraStream(stream);
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.type === 'camera' || source.type === 'audio'
+              ? {
+                  ...source,
+                  settings: { ...source.settings, runtimeStatus: 'live' },
+                }
+              : source,
+          ),
+        );
+      } else {
+        setDirectCameraDebug((current) => ({
+          ...current,
+          lastError: 'Stream received but stream.active is false',
+        }));
+      }
+    } catch (error) {
+      const lastError = describeCaptureError(error);
+      setDirectCameraDebug((current) => ({ ...current, lastError }));
+      updateActiveSources((sources) =>
+        sources.map((source) =>
+          source.type === 'camera' || source.type === 'audio'
+            ? {
+                ...source,
+                settings: { ...source.settings, runtimeStatus: 'unavailable', message: lastError },
+              }
+            : source,
+        ),
+      );
+    }
+  }, [activeCameraStream, updateActiveSources]);
+
+  const handlePreviewVideoEvent = useCallback(
+    (event: Partial<LiveCaptureDiagnostics>) => {
+      mergeLiveCaptureDiagnostics(event);
+      if (event.srcObjectAssigned?.startsWith('preview:') || event.playbackStarted?.startsWith('preview:')) {
+        setDirectCameraDebug((current) => ({ ...current, previewAttached: true }));
+      }
+    },
+    [mergeLiveCaptureDiagnostics],
+  );
+
+  const handleProgramVideoEvent = useCallback(
+    (event: Partial<LiveCaptureDiagnostics>) => {
+      mergeLiveCaptureDiagnostics(event);
+      if (event.srcObjectAssigned?.startsWith('program:') || event.playbackStarted?.startsWith('program:')) {
+        setDirectCameraDebug((current) => ({ ...current, programAttached: true }));
+      }
+    },
+    [mergeLiveCaptureDiagnostics],
+  );
 
   const graphicsAssets = useMemo(
     () => assets.filter((asset) => ['overlay', 'lower_third', 'background'].includes(asset.type)),
@@ -3040,6 +3191,7 @@ export function SceneWorkspace({
       assets={assets}
       mediaRouteCount={mediaRoutes.length}
       isPending={isPending}
+      directCameraLive={directCameraLive}
       onSceneAdd={(data) => {
         const tempScene: Scene = {
           ...activeScene,
@@ -3117,7 +3269,7 @@ export function SceneWorkspace({
           visible: true,
           isVisible: true,
           isLocked: false,
-          settings: {},
+          settings: input.type === 'camera' ? { runtimeStatus: 'connecting' } : {},
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);
@@ -3126,7 +3278,8 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
-        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture(tempSource.id);
+        if (input.type === 'camera') void activateDirectCamera();
+        else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
         });
@@ -3588,6 +3741,7 @@ export function SceneWorkspace({
       assets={assets}
       mediaRouteCount={mediaRoutes.length}
       isPending={isPending}
+      directCameraLive={directCameraLive}
       onSceneAdd={(data) => {
         const tempScene: Scene = {
           ...activeScene,
@@ -3663,7 +3817,7 @@ export function SceneWorkspace({
           visible: true,
           isVisible: true,
           isLocked: false,
-          settings: {},
+          settings: input.type === 'camera' ? { runtimeStatus: 'connecting' } : {},
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);
@@ -3672,7 +3826,8 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
-        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture(tempSource.id);
+        if (input.type === 'camera') void activateDirectCamera();
+        else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
         });
@@ -3781,13 +3936,13 @@ export function SceneWorkspace({
           </p>
         </div>
         <div className="grid gap-1">
-          <SmokeCheck label="Camera active" ok={smokeMedia.cameraReady} />
-          <SmokeCheck label="Microphone active" ok={smokeMedia.microphoneReady} />
+          <SmokeCheck label="Camera active" ok={directCameraLive} />
+          <SmokeCheck label="Microphone active" ok={Boolean(activeCameraStream?.getAudioTracks().some((t) => t.readyState === 'live'))} />
           <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
           <SmokeCheck label="Program visible" ok={liveProgramVisible} />
           <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
           <SmokeCheck label="Recording works" ok={recordingState === 'ready'} />
-          <SmokeCheck label="No console errors" ok={!smokeMedia.errorMessage} />
+          <SmokeCheck label="No console errors" ok={!directCameraDebug.lastError} />
         </div>
         <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
           <div className="mb-2 flex items-center justify-between text-ubos-caption text-ubos-fg-secondary">
@@ -3801,27 +3956,16 @@ export function SceneWorkspace({
             />
           </div>
         </div>
-        <div className="rounded-ubos-md border border-cyan-400/30 bg-cyan-950/20 p-3 text-[10px] uppercase tracking-[0.12em] text-cyan-100">
-          <div className="mb-2 font-black">Live camera debug</div>
-          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-            {Object.entries(liveCaptureDiagnostics).map(([key, value]) => (
-              <div key={key} className="flex justify-between gap-2">
-                <span className="text-cyan-300/80">{key}</span>
-                <span className="truncate text-right font-mono">{String(value)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        {smokeMedia.errorMessage ? (
-          <p className="text-ubos-caption text-ubos-error-text">{smokeMedia.errorMessage}</p>
+        <CameraDebugBox debug={directCameraDebug} />
+        {directCameraDebug.lastError ? (
+          <p className="text-ubos-caption text-ubos-error-text">{directCameraDebug.lastError}</p>
         ) : null}
         <div className="grid grid-cols-2 gap-2">
           <button
             type="button"
             className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
             onClick={() => {
-              const sourceId = previewCameraSourceId ?? programCameraSourceId;
-              if (sourceId) void startSmokeCapture(sourceId);
+              void activateDirectCamera();
             }}
           >
             Start camera + mic
@@ -3830,9 +3974,12 @@ export function SceneWorkspace({
             type="button"
             className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
             onClick={() => {
+              activeCameraStream?.getTracks().forEach((track) => track.stop());
               smokeMedia.stopAll();
+              setActiveCameraStream(null);
+              setProgramStreamOnAir(false);
               setLiveSourceStreams({});
-              mergeLiveCaptureDiagnostics({ failureReason: 'Devices stopped by operator' });
+              setDirectCameraDebug(initialDirectCameraDebug());
             }}
           >
             Stop devices
@@ -3840,7 +3987,7 @@ export function SceneWorkspace({
           <button
             type="button"
             className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
-            disabled={!smokeMedia.stream || recordingState === 'recording'}
+            disabled={(!activeCameraStream && !smokeMedia.stream) || recordingState === 'recording'}
             onClick={startSmokeRecording}
           >
             Start WebM REC
@@ -3922,11 +4069,11 @@ export function SceneWorkspace({
                 <LiveMediaMonitor
                   title="Program"
                   sceneName={programScene.name}
-                  stream={programCameraStream}
+                  stream={programStreamToShow}
                   active={liveProgramVisible}
                   role="program"
                   sourceId={programCameraSourceId}
-                  onVideoEvent={mergeLiveCaptureDiagnostics}
+                  onVideoEvent={handleProgramVideoEvent}
                 />
               ) : (
                 <ProgramMonitor
@@ -3953,11 +4100,11 @@ export function SceneWorkspace({
                 <LiveMediaMonitor
                   title="Preview"
                   sceneName={previewScene.name}
-                  stream={previewCameraStream}
+                  stream={previewStreamToShow}
                   active={livePreviewVisible}
                   role="preview"
                   sourceId={previewCameraSourceId}
-                  onVideoEvent={mergeLiveCaptureDiagnostics}
+                  onVideoEvent={handlePreviewVideoEvent}
                 />
               ) : (
                 <ProgramMonitor
@@ -4047,15 +4194,31 @@ export function SceneWorkspace({
                   {dock === 'logs' ? 'Inspector' : dock}
                 </div>
                 <div className="ubos-scroll max-h-28 overflow-hidden text-ubos-caption text-ubos-fg-secondary">
-                  {dock === 'audio'
-                    ? `${graphAudioChannels.length || channels.length} channels ready`
-                    : dock === 'layers'
-                      ? `${activeScene.sources.length} preview layers`
-                      : `Graph rev ${productionGraphSession.graph.metadata.revision}`}
+                  {dock === 'audio' ? (
+                    directCameraLive ? (
+                      <div className="space-y-1">
+                        <div>1 live channel · {audioLevel}%</div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-ubos-midnight">
+                          <div
+                            className="h-full bg-emerald-400 transition-all"
+                            style={{ width: `${audioLevel}%` }}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      `${effectiveAudioChannels.length || graphAudioChannels.length || channels.length} channels ready`
+                    )
+                  ) : dock === 'layers' ? (
+                    `${activeScene.sources.length} preview layers`
+                  ) : (
+                    `Graph rev ${productionGraphSession.graph.metadata.revision}`
+                  )}
                 </div>
               </button>
             ))}
           </div>
+
+          <CameraDebugBox debug={directCameraDebug} />
         </section>
 
         <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ubos-border-subtle bg-ubos-carbon shadow-2xl">
