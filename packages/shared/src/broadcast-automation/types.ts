@@ -95,6 +95,11 @@ export interface AutomationMacro {
   id: string;
   name: string;
   description?: string;
+  category?: string;
+  favorite?: boolean;
+  hotkey?: string;
+  updatedAt?: string;
+  lastRunAt?: string;
   steps: AutomationMacroStep[];
   mode: AutomationMode;
   status: MacroStatus;
