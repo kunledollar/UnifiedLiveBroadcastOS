@@ -20,11 +20,15 @@ export function BottomWorkspaceDock({
   activeTab,
   onTabChange,
   children,
+  collapsed,
+  onToggleCollapse,
   className,
 }: {
   activeTab: DockTabId;
   onTabChange: (id: DockTabId) => void;
   children: ReactNode;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   className?: string;
 }) {
   const activeLabel = workspaceTabs.find((tab) => tab.id === activeTab)?.label ?? 'Workspace';
@@ -35,6 +39,18 @@ export function BottomWorkspaceDock({
       subtitle={activeLabel}
       accent="route"
       className={cn('min-h-0', className)}
+      headerActions={
+        onToggleCollapse ? (
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="rounded px-1 text-[10px] text-ubos-fg-muted hover:bg-ubos-graphite"
+            aria-label={collapsed ? 'Expand bottom dock' : 'Collapse bottom dock'}
+          >
+            {collapsed ? '▾' : '▴'}
+          </button>
+        ) : null
+      }
     >
       <nav
         className="flex shrink-0 gap-0.5 overflow-x-auto border-b border-white/6 px-2 py-1"
@@ -62,7 +78,9 @@ export function BottomWorkspaceDock({
           );
         })}
       </nav>
-      <div className="ubos-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
+      {!collapsed ? (
+        <div className="ubos-scroll min-h-0 flex-1 overflow-y-auto">{children}</div>
+      ) : null}
     </BroadcastPanelShell>
   );
 }
