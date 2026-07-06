@@ -165,13 +165,12 @@ import {
   SafeAreaControls,
   WorkspaceCenterLayout,
   WorkspaceLayout,
-  WorkspaceSelector,
-  LayoutFocusSelector,
   workspaceProfiles,
   type LayoutFocusMode,
   type ProfessionalWorkspaceId,
   type SafeAreaToggles,
 } from './workspaces';
+import { ubosWorkspaceModes, type UbosWorkspaceModeId } from './menu';
 import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
 import { PreviewMonitorCompact, ProgramMonitor } from './workspace/OutputViewRenderer';
 import {
@@ -2183,6 +2182,18 @@ export function SceneWorkspace({
     setWorkspace((current) => ({ ...current, compactChrome: !current.compactChrome }));
   };
 
+  const setCompactChrome = (compactChrome: boolean) => {
+    setWorkspace((current) => ({ ...current, compactChrome }));
+  };
+
+  const applyMenuWorkspaceMode = (modeId: UbosWorkspaceModeId, compactChrome?: boolean) => {
+    const modeDef = ubosWorkspaceModes[modeId];
+    selectProfessionalWorkspace(modeDef.professionalWorkspaceId);
+    if (compactChrome !== undefined) {
+      setCompactChrome(compactChrome);
+    }
+  };
+
   const handleDockContentHeightChange = (contentHeightPx: number) => {
     setWorkspace((current) => ({
       ...current,
@@ -3541,73 +3552,7 @@ export function SceneWorkspace({
     />
   );
 
-  const toolsMenu = (
-    <div className="flex items-center gap-1">
-      <LayoutFocusSelector selected={workspace.layoutFocus} onSelect={selectLayoutFocus} />
-      <WorkspaceSelector selected={selectedWorkspace} onSelect={selectProfessionalWorkspace} />
-      <label className="flex h-6 cursor-pointer items-center gap-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
-        <input
-          type="checkbox"
-          checked={workspace.compactChrome}
-          onChange={toggleCompactChrome}
-          className="h-3 w-3 accent-ubos-selection"
-          aria-label="Toggle compact chrome"
-        />
-        <span>Compact</span>
-      </label>
-      <details className="group relative">
-        <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
-          Tools
-        </summary>
-        <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-2 text-ubos-caption text-ubos-fg-secondary shadow-ubos-raised">
-          <button
-            type="button"
-            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={saveWorkspace}
-          >
-            Save Workspace
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={restoreWorkspace}
-          >
-            Restore Workspace
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={resetWorkspace}
-          >
-            Reset Workspace
-          </button>
-          <div className="border-t border-ubos-border-subtle pt-1">
-            <button
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => startTransition(async () => seedDemoProductionState())}
-            >
-              Seed demo
-            </button>
-            <button
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => startTransition(async () => simulateDemoProduction())}
-            >
-              Simulate
-            </button>
-            <button
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => startTransition(async () => resetDemoProductionState())}
-            >
-              Reset
-            </button>
-          </div>
-        </div>
-      </details>
-    </div>
-  );
+  const toolsMenu = null;
 
   const leftNavContent = (
     <LeftNavPanel
@@ -4767,8 +4712,9 @@ export function SceneWorkspace({
 
   return (
     <BroadcastCommandCenterLayout
-      initialPresetId="technical-director"
       layoutStyle={layoutStyle}
+      layoutFocus={workspace.layoutFocus}
+      compactChrome={workspace.compactChrome}
       statusBar={
         <BroadcastStatusBar
           sessionName="Launch Day"
@@ -4793,7 +4739,6 @@ export function SceneWorkspace({
           toolsMenu={toolsMenu}
         />
       }
-      toolsSlot={toolsMenu}
       activeNav={activeNav}
       onNavChange={setActiveNav}
       sourceDockContent={leftNavContent}
@@ -4810,6 +4755,15 @@ export function SceneWorkspace({
       activeDockTab={activeBottomDock}
       onOperationsTabChange={setActiveOperationsTab}
       onDockTabChange={setActiveBottomDock}
+      onWorkspaceModeApplied={applyMenuWorkspaceMode}
+      onLayoutFocusChange={selectLayoutFocus}
+      onToggleCompactChrome={toggleCompactChrome}
+      onSaveWorkspace={saveWorkspace}
+      onRestoreWorkspace={restoreWorkspace}
+      onResetWorkspace={resetWorkspace}
+      onSeedDemo={() => startTransition(async () => seedDemoProductionState())}
+      onSimulateDemo={() => startTransition(async () => simulateDemoProduction())}
+      onResetDemo={() => startTransition(async () => resetDemoProductionState())}
       bottomWorkspaceContent={bottomDockContent}
       productionGraphContent={productionGraphPanelContent}
       graphRevision={productionGraphSession.graph.metadata.revision}

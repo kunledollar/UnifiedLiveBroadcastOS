@@ -51,6 +51,8 @@ export function RightOperationsDock({
   onTabChange,
   previewSlot,
   telemetrySlot,
+  collapsed,
+  onToggleCollapse,
   className,
 }: {
   tabs: Array<{ id: OperationsTabId; content: ReactNode }>;
@@ -58,6 +60,8 @@ export function RightOperationsDock({
   onTabChange: (id: OperationsTabId) => void;
   previewSlot?: ReactNode;
   telemetrySlot?: ReactNode;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   className?: string;
 }) {
   const visibleTabs = tabs.filter((tab) => primaryTabs.includes(tab.id));
@@ -82,6 +86,18 @@ export function RightOperationsDock({
         subtitle={tabLabels[activeTab] ?? activeTab}
         accent="neutral"
         className="min-h-0 flex-1"
+        headerActions={
+          onToggleCollapse ? (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="rounded px-1 text-[10px] text-ubos-fg-muted hover:bg-ubos-graphite"
+              aria-label={collapsed ? 'Expand operations dock' : 'Collapse operations dock'}
+            >
+              {collapsed ? '▾' : '▴'}
+            </button>
+          ) : null
+        }
       >
         <nav
           className="grid shrink-0 grid-cols-3 gap-0.5 border-b border-white/6 p-1"
@@ -110,13 +126,17 @@ export function RightOperationsDock({
             );
           })}
         </nav>
-        <div className="ubos-scroll min-h-0 flex-1 overflow-y-auto p-2" role="tabpanel">
-          {active?.content}
-        </div>
-        {previewSlot && activeTab !== 'preview' ? (
-          <div className="mx-2 mb-2 h-24 shrink-0 overflow-hidden rounded border border-ubos-border-subtle">
-            {previewSlot}
-          </div>
+        {!collapsed ? (
+          <>
+            <div className="ubos-scroll min-h-0 flex-1 overflow-y-auto p-2" role="tabpanel">
+              {active?.content}
+            </div>
+            {previewSlot && activeTab !== 'preview' ? (
+              <div className="mx-2 mb-2 h-24 shrink-0 overflow-hidden rounded border border-ubos-border-subtle">
+                {previewSlot}
+              </div>
+            ) : null}
+          </>
         ) : null}
       </BroadcastPanelShell>
     </aside>

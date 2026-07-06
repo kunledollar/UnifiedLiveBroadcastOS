@@ -1,23 +1,30 @@
 'use client';
 
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, type CSSProperties, type ReactNode } from 'react';
+import { cn } from '@ubos/ui';
 import type { DockTabId, NavItemId, OperationsTabId } from '../shell/types';
-import type { RoutingMatrixEdge, WorkspacePresetId } from '../workspace-canvas/types';
+import type { RoutingMatrixEdge } from '../workspace-canvas/types';
 import type { DiagnosticMetric } from '../workspace-canvas/SystemDiagnosticsPanel';
 import { useWorkspaceCanvasState } from '../workspace-canvas/useWorkspaceCanvasState';
+import {
+  isZoneVisible,
+  ubosDockPanelRegistry,
+  useUbosDockLayout,
+  ubosWorkspaceModes,
+  type UbosWorkspaceModeId,
+} from '../menu';
+import type { LayoutFocusMode } from '../workspaces/workspace-types';
+import { applyWorkspaceProfile } from '../workspaces';
 import { BottomWorkspaceDock } from './BottomWorkspaceDock';
 import { CenterProgramPreviewDeck, type MonitorStatusInfo } from './CenterProgramPreviewDeck';
-import { DiagnosticsSummary, FloatingDiagnosticsPanel } from './FloatingDiagnosticsPanel';
+import { DiagnosticsSummary } from './FloatingDiagnosticsPanel';
 import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
-import { FloatingRoutingMatrixPanel } from './FloatingRoutingMatrixPanel';
 import { LeftCommandRail } from './LeftCommandRail';
 import { RightOperationsDock } from './RightOperationsDock';
 import { TopBar } from './TopBar';
 
 export type BroadcastCommandCenterLayoutProps = {
-  initialPresetId?: WorkspacePresetId;
   statusBar: ReactNode;
-  toolsSlot?: ReactNode;
   activeNav: NavItemId;
   onNavChange: (nav: NavItemId) => void;
   sourceDockContent: ReactNode;
@@ -35,16 +42,25 @@ export type BroadcastCommandCenterLayoutProps = {
   graphRevision?: number;
   previewSlot?: ReactNode;
   layoutStyle?: CSSProperties;
+  layoutFocus: LayoutFocusMode;
+  compactChrome: boolean;
   onOperationsTabChange?: (tab: OperationsTabId) => void;
   onDockTabChange?: (tab: DockTabId) => void;
   activeOperationsTab?: OperationsTabId;
   activeDockTab?: DockTabId;
+  onWorkspaceModeApplied?: (mode: UbosWorkspaceModeId, compactChrome?: boolean) => void;
+  onLayoutFocusChange?: (focus: LayoutFocusMode) => void;
+  onToggleCompactChrome?: () => void;
+  onSaveWorkspace?: () => void;
+  onRestoreWorkspace?: () => void;
+  onResetWorkspace?: () => void;
+  onSeedDemo?: () => void;
+  onSimulateDemo?: () => void;
+  onResetDemo?: () => void;
 };
 
 export function BroadcastCommandCenterLayout({
-  initialPresetId = 'technical-director',
   statusBar,
-  toolsSlot,
   activeNav,
   onNavChange,
   sourceDockContent,
@@ -61,32 +77,144 @@ export function BroadcastCommandCenterLayout({
   graphRevision,
   previewSlot,
   layoutStyle,
+  layoutFocus,
+  compactChrome,
   onOperationsTabChange,
   onDockTabChange,
   activeOperationsTab: externalOpsTab,
   activeDockTab: externalDockTab,
+  onWorkspaceModeApplied,
+  onLayoutFocusChange,
+  onToggleCompactChrome,
+  onSaveWorkspace,
+  onRestoreWorkspace,
+  onResetWorkspace,
+  onSeedDemo,
+  onSimulateDemo,
+  onResetDemo,
 }: BroadcastCommandCenterLayoutProps) {
   const {
-    state,
+    state: dockLayout,
+    selectWorkspaceMode,
+    toggleDockPanel,
+    toggleZone,
+    setLayoutLocked,
+    saveLayout: saveDockLayout,
+    resetLayout: resetDockLayout,
+  } = useUbosDockLayout();
+
+  const {
+    state: canvasState,
     preset,
     selectPreset,
-    saveLayout,
-    resetLayout,
+    saveLayout: saveCanvasLayout,
+    resetLayout: resetCanvasLayout,
     setActiveOperationsTab,
     setActiveDockTab,
-  } = useWorkspaceCanvasState(initialPresetId);
+  } = useWorkspaceCanvasState('technical-director');
 
-  const activeOperationsTab = externalOpsTab ?? state.activeOperationsTab;
-  const activeDockTab = externalDockTab ?? state.activeDockTab;
+  const activeOperationsTab = externalOpsTab ?? canvasState.activeOperationsTab;
+  const activeDockTab = externalDockTab ?? canvasState.activeDockTab;
 
-  const [sourceDockCollapsed, setSourceDockCollapsed] = useState(false);
-  const [showFloatingDiagnostics, setShowFloatingDiagnostics] = useState(false);
-  const [showFloatingRouting, setShowFloatingRouting] = useState(false);
-  const [showFloatingGraph, setShowFloatingGraph] = useState(false);
+  const showLeft = isZoneVisible('left', dockLayout.dockPanels);
+  const showRight = isZoneVisible('right', dockLayout.dockPanels);
+  const showBottom = isZoneVisible('bottom', dockLayout.dockPanels);
+  const showSwitcher =
+    dockLayout.dockPanels['scene-transitions']?.visible &&
+    !dockLayout.dockPanels['scene-transitions']?.collapsed;
+  const showFloatingPipeline =
+    dockLayout.dockPanels['pipeline-inspector']?.visible ?? false;
 
-  const leftWidth = state.zones.left?.collapsed ? 56 : (state.zones.left?.flexWeight ?? 260);
-  const rightWidth = state.zones.right?.collapsed ? 56 : (state.zones.right?.flexWeight ?? 320);
-  const bottomHeight = state.zones.bottom?.collapsed ? 40 : (state.zones.bottom?.flexWeight ?? 168);
+  const leftCollapsed = dockLayout.zoneCollapsed.left;
+  const rightCollapsed = dockLayout.zoneCollapsed.right;
+  const bottomCollapsed = dockLayout.zoneCollapsed.bottom;
+
+  const leftWidth = showLeft ? (leftCollapsed ? 56 : (canvasState.zones.left?.flexWeight ?? 260)) : 0;
+  const rightWidth = showRight ? (rightCollapsed ? 56 : (canvasState.zones.right?.flexWeight ?? 320)) : 0;
+  const bottomHeight = showBottom ? (bottomCollapsed ? 36 : (canvasState.zones.bottom?.flexWeight ?? 168)) : 0;
+
+  const handleToggleDockPanel = useCallback(
+    (panelId: Parameters<typeof toggleDockPanel>[0]) => {
+      toggleDockPanel(panelId);
+      const def = ubosDockPanelRegistry[panelId];
+      if (!def) return;
+      const willShow = !dockLayout.dockPanels[panelId]?.visible;
+      if (!willShow) return;
+      if (def.navItem) onNavChange(def.navItem);
+      if (def.operationsTab) {
+        setActiveOperationsTab(def.operationsTab);
+        onOperationsTabChange?.(def.operationsTab);
+      }
+      if (def.dockTab) {
+        setActiveDockTab(def.dockTab);
+        onDockTabChange?.(def.dockTab);
+      }
+    },
+    [
+      toggleDockPanel,
+      dockLayout.dockPanels,
+      onNavChange,
+      setActiveOperationsTab,
+      setActiveDockTab,
+      onOperationsTabChange,
+      onDockTabChange,
+    ],
+  );
+
+  const handleSelectWorkspaceMode = useCallback(
+    (modeId: UbosWorkspaceModeId) => {
+      const modeDef = selectWorkspaceMode(modeId);
+      selectPreset(modeDef.canvasPresetId);
+      const profile = applyWorkspaceProfile(modeDef.professionalWorkspaceId);
+      onNavChange(profile.activeNav);
+      setActiveOperationsTab(profile.activeOperationsTab);
+      setActiveDockTab(profile.activeBottomDock);
+      onOperationsTabChange?.(profile.activeOperationsTab);
+      onDockTabChange?.(profile.activeBottomDock);
+      onWorkspaceModeApplied?.(modeId, modeDef.compactChrome);
+    },
+    [
+      selectWorkspaceMode,
+      selectPreset,
+      onNavChange,
+      setActiveOperationsTab,
+      setActiveDockTab,
+      onOperationsTabChange,
+      onDockTabChange,
+      onWorkspaceModeApplied,
+    ],
+  );
+
+  const handleResetLayout = useCallback(() => {
+    if (dockLayout.layoutLocked) return;
+    const modeDef = resetDockLayout();
+    resetCanvasLayout();
+    selectPreset(modeDef.canvasPresetId);
+    const profile = applyWorkspaceProfile(modeDef.professionalWorkspaceId);
+    onNavChange(profile.activeNav);
+    setActiveOperationsTab(profile.activeOperationsTab);
+    setActiveDockTab(profile.activeBottomDock);
+    onOperationsTabChange?.(profile.activeOperationsTab);
+    onDockTabChange?.(profile.activeBottomDock);
+    onWorkspaceModeApplied?.('director', ubosWorkspaceModes.director.compactChrome);
+  }, [
+    dockLayout.layoutLocked,
+    resetDockLayout,
+    resetCanvasLayout,
+    selectPreset,
+    onNavChange,
+    setActiveOperationsTab,
+    setActiveDockTab,
+    onOperationsTabChange,
+    onDockTabChange,
+    onWorkspaceModeApplied,
+  ]);
+
+  const handleSaveLayout = useCallback(() => {
+    saveDockLayout();
+    saveCanvasLayout();
+    onSaveWorkspace?.();
+  }, [saveDockLayout, saveCanvasLayout, onSaveWorkspace]);
 
   const handleOpsTabChange = (tab: OperationsTabId) => {
     setActiveOperationsTab(tab);
@@ -98,6 +226,16 @@ export function BroadcastCommandCenterLayout({
     onDockTabChange?.(tab);
   };
 
+  const gridColumns = [
+    showLeft ? `${leftWidth}px` : null,
+    'minmax(0, 1fr)',
+    showRight ? `${rightWidth}px` : null,
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  const gridRows = showBottom ? `minmax(0, 1fr) ${bottomHeight}px` : 'minmax(0, 1fr)';
+
   return (
     <div
       className="flex h-full min-h-0 flex-col overflow-hidden bg-[#020408] text-xs text-ubos-fg-secondary"
@@ -105,39 +243,62 @@ export function BroadcastCommandCenterLayout({
     >
       <TopBar
         statusBar={statusBar}
-        activePresetId={state.presetId}
-        onSelectPreset={selectPreset}
-        onSaveLayout={saveLayout}
-        onResetLayout={resetLayout}
-        toolsSlot={toolsSlot}
+        dockLayout={dockLayout}
+        activeWorkspaceMode={dockLayout.workspaceMode}
+        layoutFocus={layoutFocus}
+        compactChrome={compactChrome}
+        onSelectWorkspaceMode={handleSelectWorkspaceMode}
+        onToggleDockPanel={handleToggleDockPanel}
+        onResetLayout={handleResetLayout}
+        onSaveLayout={handleSaveLayout}
+        onToggleLayoutLock={setLayoutLocked}
+        onSelectLayoutFocus={(focus) => onLayoutFocusChange?.(focus)}
+        onToggleCompactChrome={() => onToggleCompactChrome?.()}
+        {...(onSaveWorkspace ? { onSaveWorkspace } : {})}
+        {...(onRestoreWorkspace ? { onRestoreWorkspace } : {})}
+        {...(onResetWorkspace ? { onResetWorkspace } : {})}
+        {...(onSeedDemo ? { onSeedDemo } : {})}
+        {...(onSimulateDemo ? { onSimulateDemo } : {})}
+        {...(onResetDemo ? { onResetDemo } : {})}
       />
 
       <div
         className="grid min-h-0 flex-1 gap-1 overflow-hidden p-1"
         style={{
-          gridTemplateColumns: `${leftWidth}px minmax(0, 1.6fr) ${rightWidth}px`,
-          gridTemplateRows: `minmax(0, 1fr) ${bottomHeight}px`,
+          gridTemplateColumns: gridColumns,
+          gridTemplateRows: gridRows,
         }}
       >
-        <div className="row-span-1 min-h-0 overflow-hidden">
-          <LeftCommandRail
-            activeNav={activeNav}
-            onNavChange={onNavChange}
-            sourceDockContent={sourceDockContent}
-            diagnosticsSlot={<DiagnosticsSummary metrics={diagnosticsMetrics} />}
-            collapsed={sourceDockCollapsed}
-            onToggleCollapse={() => setSourceDockCollapsed((value) => !value)}
-            className="h-full"
-          />
-        </div>
+        {showLeft ? (
+          <div className="row-span-1 min-h-0 overflow-hidden">
+            <LeftCommandRail
+              activeNav={activeNav}
+              onNavChange={onNavChange}
+              sourceDockContent={sourceDockContent}
+              diagnosticsSlot={<DiagnosticsSummary metrics={diagnosticsMetrics} />}
+              collapsed={leftCollapsed}
+              {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('left') } : {})}
+              className="h-full"
+            />
+          </div>
+        ) : null}
 
-        <div className="flex min-h-0 flex-col gap-0.5 overflow-hidden">
+        <div
+          className={cn(
+            'flex min-h-0 flex-col gap-0.5 overflow-hidden',
+            !showLeft && !showRight ? 'col-span-1' : '',
+          )}
+          style={{
+            gridColumn: !showLeft && !showRight ? '1 / -1' : undefined,
+            gridRow: showBottom ? '1' : '1 / -1',
+          }}
+        >
           <CenterProgramPreviewDeck
             programMonitor={programMonitor}
             previewMonitor={previewMonitor}
             programStatus={programStatus}
             previewStatus={previewStatus}
-            switcherContent={switcherContent}
+            switcherContent={showSwitcher ? switcherContent : null}
             programFlexWeight={preset.programFlexWeight}
             previewFlexWeight={preset.previewFlexWeight}
             className="min-h-0 flex-1"
@@ -146,21 +307,21 @@ export function BroadcastCommandCenterLayout({
           <div className="flex shrink-0 items-center gap-1 px-0.5 pb-0.5">
             <button
               type="button"
-              onClick={() => setShowFloatingDiagnostics((value) => !value)}
+              onClick={() => handleToggleDockPanel('logs')}
               className="rounded-ubos-sm border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300 hover:bg-cyan-500/20"
             >
               System Status
             </button>
             <button
               type="button"
-              onClick={() => setShowFloatingRouting((value) => !value)}
+              onClick={() => handleToggleDockPanel('broadcast-io')}
               className="rounded-ubos-sm border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-300 hover:bg-indigo-500/20"
             >
               Routing Matrix
             </button>
             <button
               type="button"
-              onClick={() => setShowFloatingGraph((value) => !value)}
+              onClick={() => handleToggleDockPanel('pipeline-inspector')}
               className="rounded-ubos-sm border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-300 hover:bg-indigo-500/20"
             >
               Production Graph
@@ -168,46 +329,43 @@ export function BroadcastCommandCenterLayout({
           </div>
         </div>
 
-        <div className="row-span-1 min-h-0 overflow-hidden">
-          <RightOperationsDock
-            tabs={operationsTabs}
-            activeTab={activeOperationsTab}
-            onTabChange={handleOpsTabChange}
-            previewSlot={previewSlot}
-            telemetrySlot={<DiagnosticsSummary metrics={diagnosticsMetrics} />}
-            className="h-full"
-          />
-        </div>
+        {showRight ? (
+          <div className="row-span-1 min-h-0 overflow-hidden">
+            <RightOperationsDock
+              tabs={operationsTabs}
+              activeTab={activeOperationsTab}
+              onTabChange={handleOpsTabChange}
+              previewSlot={previewSlot}
+              telemetrySlot={<DiagnosticsSummary metrics={diagnosticsMetrics} />}
+              collapsed={rightCollapsed}
+              {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('right') } : {})}
+              className="h-full"
+            />
+          </div>
+        ) : null}
 
-        <div className="col-span-3 min-h-0 overflow-hidden">
-          <BottomWorkspaceDock
-            activeTab={activeDockTab}
-            onTabChange={handleDockTabChange}
-            className="h-full"
+        {showBottom ? (
+          <div
+            className="min-h-0 overflow-hidden"
+            style={{ gridColumn: '1 / -1', gridRow: showBottom ? '2' : undefined }}
           >
-            {bottomWorkspaceContent}
-          </BottomWorkspaceDock>
-        </div>
+            <BottomWorkspaceDock
+              activeTab={activeDockTab}
+              onTabChange={handleDockTabChange}
+              collapsed={bottomCollapsed}
+              {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('bottom') } : {})}
+              className="h-full"
+            >
+              {!bottomCollapsed ? bottomWorkspaceContent : null}
+            </BottomWorkspaceDock>
+          </div>
+        ) : null}
       </div>
 
-      {showFloatingDiagnostics ? (
-        <FloatingDiagnosticsPanel
-          metrics={diagnosticsMetrics}
-          onClose={() => setShowFloatingDiagnostics(false)}
-        />
-      ) : null}
-
-      {showFloatingRouting ? (
-        <FloatingRoutingMatrixPanel
-          edges={routingEdges}
-          onClose={() => setShowFloatingRouting(false)}
-        />
-      ) : null}
-
-      {showFloatingGraph ? (
+      {showFloatingPipeline ? (
         <FloatingProductionGraphPanel
           {...(graphRevision !== undefined ? { revision: graphRevision } : {})}
-          onClose={() => setShowFloatingGraph(false)}
+          onClose={() => handleToggleDockPanel('pipeline-inspector')}
         >
           {productionGraphContent}
         </FloatingProductionGraphPanel>
