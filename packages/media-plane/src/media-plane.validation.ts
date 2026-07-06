@@ -100,6 +100,9 @@ import {
   isRealStreamingEnabled,
   validateStreamingDestination,
   createStreamingRuntimeManifest,
+  createStreamingPipeline as createStreamingPipelineV2,
+  createDemoStreamingSession,
+  streamingProviders,
   createMultiviewPlan,
   validateMultiviewPlan,
   buildTileLayout,
@@ -2143,6 +2146,57 @@ assert.equal(phase213RecordingPipeline.getSession(recordingSession.id)?.state, '
 assert.equal(recordingEvents.includes('recording_started'), true, 'recording pipeline emits runtime events');
 assert.equal(phase213RecordingPipeline.getSnapshot().backend.mode, 'metadata_only', 'recording pipeline preserves backend independence');
 assert.equal(phase213RecordingPipeline.getSnapshot().containsMediaPayloads, false, 'recording pipeline excludes media payloads');
+
+// UBOS 2.0 Phase 2.14 streaming pipeline validation
+const streamingClock214 = createClock({ frameRate: 30 });
+const streamingScheduler214 = new FrameScheduler(streamingClock214);
+const streamingEvents214: string[] = [];
+const phase214StreamingPipeline = createStreamingPipelineV2({ id: 'streaming-pipeline:phase-2-14' });
+phase214StreamingPipeline.onRuntimeEvent((event) => streamingEvents214.push(event.type));
+const streamingSession214 = phase214StreamingPipeline.createSession({ id: 'streaming-session:phase-2-14', destination: { kind: 'rtmps', provider: 'youtube', label: 'YouTube primary', endpointUrl: 'rtmps://a.rtmps.youtube.com/live2/STREAM_KEY', streamKeyRef: 'secret://youtube/primary' }, programOutput, audioMixer: programMixer, mediaClock: streamingClock214, frameScheduler: streamingScheduler214, targetBitrateKbps: 6000, latencyEstimateMs: 1800 });
+assert.equal(streamingSession214.state, 'idle', 'streaming session starts idle');
+assert.equal(streamingSession214.destination.provider, 'youtube', 'streaming destination models YouTube provider');
+assert.equal(streamingSession214.destination.kind, 'rtmps', 'streaming destination supports RTMPS');
+assert.equal(streamingSession214.destination.containsStreamKeys, false, 'streaming destination excludes stream keys');
+assert.equal(streamingSession214.source.programOutputId, programOutput.id, 'streaming session binds ProgramOutput identity');
+assert.equal(streamingSession214.source.audioMixerId, programMixer.id, 'streaming session binds AudioMixer identity');
+phase214StreamingPipeline.prepare(streamingSession214.id);
+assert.equal(phase214StreamingPipeline.getSession(streamingSession214.id)?.state, 'preparing', 'streaming lifecycle supports preparing');
+phase214StreamingPipeline.connect(streamingSession214.id);
+assert.equal(phase214StreamingPipeline.getSession(streamingSession214.id)?.state, 'connecting', 'streaming lifecycle supports connecting');
+phase214StreamingPipeline.start(streamingSession214.id);
+const streamingTick214 = streamingScheduler214.createTick();
+phase214StreamingPipeline.publishProgramFrame(streamingSession214.id, streamingTick214);
+phase214StreamingPipeline.publishAudioFrame(streamingSession214.id, 960, streamingTick214);
+const activeStream214 = phase214StreamingPipeline.getSession(streamingSession214.id)!;
+assert.equal(activeStream214.state, 'streaming', 'streaming lifecycle supports streaming');
+assert.equal(activeStream214.metadata.bitrateKbps, 6000, 'streaming metadata tracks bitrate');
+assert.equal(activeStream214.metadata.videoFramesPublished, 1, 'streaming metadata tracks video frames');
+assert.equal(activeStream214.metadata.audioSamplesPublished, 960, 'streaming metadata tracks audio samples');
+assert.equal(activeStream214.metadata.droppedFrames, streamingTick214.diagnostics?.droppedFrames ?? 0, 'streaming metadata tracks dropped frames');
+assert.equal(activeStream214.metadata.latencyEstimateMs, 1800, 'streaming metadata tracks latency estimate');
+assert.equal(activeStream214.clock.containsRuntimeHandles, false, 'streaming session synchronizes with serializable MediaClock state');
+assert.equal(activeStream214.scheduler.metadataOnly, true, 'streaming pipeline integrates FrameScheduler metadata');
+phase214StreamingPipeline.reconnect(streamingSession214.id, 'validation reconnect');
+assert.equal(phase214StreamingPipeline.getSession(streamingSession214.id)?.metadata.reconnectCount, 1, 'streaming metadata tracks reconnect count');
+phase214StreamingPipeline.stop(streamingSession214.id);
+assert.equal(phase214StreamingPipeline.getSession(streamingSession214.id)?.state, 'stopped', 'streaming lifecycle supports stopped');
+const failedStream214 = phase214StreamingPipeline.fail(streamingSession214.id, 'validation failure');
+assert.equal(failedStream214.state, 'failed', 'streaming lifecycle supports failed');
+assert.equal(streamingEvents214.includes('streaming_started'), true, 'streaming pipeline emits runtime events');
+assert.equal(phase214StreamingPipeline.getSnapshot().backend.mode, 'metadata_only', 'streaming pipeline preserves backend independence');
+assert.equal(phase214StreamingPipeline.getSnapshot().backend.transmitsNetworkPackets, false, 'streaming pipeline does not perform real RTMP transmission');
+assert.equal(phase214StreamingPipeline.getSnapshot().containsEncodedPackets, false, 'streaming snapshot excludes encoded packets');
+assert.equal(streamingProviders.some((p) => p.id === 'twitch'), true, 'streaming provider model includes Twitch');
+assert.equal(streamingProviders.some((p) => p.id === 'facebook'), true, 'streaming provider model includes Facebook');
+assert.equal(streamingProviders.some((p) => p.id === 'linkedin'), true, 'streaming provider model includes LinkedIn');
+assert.equal(streamingProviders.some((p) => p.id === 'tiktok'), true, 'streaming provider model includes TikTok');
+const customStream214 = phase214StreamingPipeline.createSession({ id: 'streaming-session:custom', destination: { kind: 'custom', provider: 'custom', label: 'Custom endpoint', endpointUrl: 'udp://encoder-placeholder.local/live' }, programOutput, audioMixer: programMixer, mediaClock: streamingClock214, frameScheduler: streamingScheduler214 });
+assert.equal(customStream214.destination.kind, 'custom', 'streaming destination supports custom endpoint metadata');
+const rtmpStream214 = phase214StreamingPipeline.createSession({ id: 'streaming-session:rtmp', destination: { kind: 'rtmp', provider: 'twitch', label: 'Twitch RTMP', endpointUrl: 'rtmp://live.twitch.tv/app/STREAM_KEY' }, programOutput, audioMixer: programMixer, mediaClock: streamingClock214, frameScheduler: streamingScheduler214 });
+assert.equal(rtmpStream214.destination.kind, 'rtmp', 'streaming destination supports RTMP');
+const streamingDemo214 = await createDemoStreamingSession({ programOutput, audioMixer: programMixer, mediaClock: streamingClock214, frameScheduler: streamingScheduler214 });
+assert.equal(streamingDemo214.session.state, 'stopped', 'demo streaming session completes lifecycle');
 const movSession = phase213RecordingPipeline.createSession({ id: 'recording-session:mov', container: 'mov', programOutput, audioMixer: programMixer, mediaClock: recordingClock, frameScheduler: recordingScheduler });
 assert.equal(movSession.container, 'mov', 'recording pipeline supports MOV container');
 const mkvSession = phase213RecordingPipeline.createSession({ id: 'recording-session:mkv', container: 'mkv', programOutput, audioMixer: programMixer, mediaClock: recordingClock, frameScheduler: recordingScheduler });
