@@ -248,7 +248,11 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-function warnMediaDiagnostic(message: string, error: unknown, details?: Record<string, unknown>): void {
+function warnMediaDiagnostic(
+  message: string,
+  error: unknown,
+  details?: Record<string, unknown>,
+): void {
   if (isAbortError(error)) {
     return;
   }
@@ -261,14 +265,17 @@ function describeCaptureError(error: unknown): string {
   return String(error);
 }
 
-function getFirstVisibleCameraSourceId(scene: Scene): string | null {
-  return scene.sources.find((source) => source.type === 'camera' && source.isVisible)?.id ?? null;
+function getFirstVisibleLiveVideoSource(scene: Scene): SceneSource | null {
+  return (
+    scene.sources.find(
+      (source) => (source.type === 'camera' || source.type === 'screen') && source.isVisible,
+    ) ?? null
+  );
 }
 
 function isLiveMediaStream(stream: MediaStream | null | undefined): stream is MediaStream {
   return Boolean(
-    stream?.active &&
-      stream.getVideoTracks().some((track) => track.readyState === 'live'),
+    stream?.active && stream.getVideoTracks().some((track) => track.readyState === 'live'),
   );
 }
 
@@ -312,7 +319,11 @@ function assignVideoStreamSafely(
     }
     video.srcObject = stream;
   } catch (error) {
-    warnMediaDiagnostic(stream ? 'video stream attach failed' : 'video stream cleanup failed', error, details);
+    warnMediaDiagnostic(
+      stream ? 'video stream attach failed' : 'video stream cleanup failed',
+      error,
+      details,
+    );
   }
 }
 
@@ -397,6 +408,7 @@ function LiveMediaMonitor({
   active,
   role,
   sourceId,
+  sourceType,
 }: {
   title: string;
   sceneName: string;
@@ -404,6 +416,7 @@ function LiveMediaMonitor({
   active: boolean;
   role: 'program' | 'preview';
   sourceId?: string | null;
+  sourceType?: SceneSourceType | null | undefined;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
@@ -448,6 +461,13 @@ function LiveMediaMonitor({
       ) : null}
       <div className="relative z-30 mt-auto flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
         <span className={role === 'program' ? 'text-red-200' : 'text-emerald-100'}>{title}</span>
+        {sourceType === 'screen' ? (
+          <span className="rounded bg-sky-500/20 px-2 py-0.5 text-sky-100">SCREEN LIVE</span>
+        ) : sourceType === 'camera' ? (
+          <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-100">
+            CAMERA LIVE
+          </span>
+        ) : null}
         <span className="text-slate-300">{sceneName}</span>
       </div>
     </div>
@@ -2115,36 +2135,20 @@ export function SceneWorkspace({
   const recordedChunksRef = useRef<Blob[]>([]);
   const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
 
+  const liveSourceStreamsRef = useRef<Record<string, MediaStream>>({});
+
   useEffect(() => {
-    const stream = activeCameraStream ?? smokeMedia.stream;
-    if (!stream?.getAudioTracks().length) {
-      setAudioLevel(0);
-      return;
-    }
-    const AudioContextConstructor =
-      window.AudioContext ||
-      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioContextConstructor) return;
-    const audioContext = new AudioContextConstructor();
-    const analyser = audioContext.createAnalyser();
-    analyser.fftSize = 256;
-    const source = audioContext.createMediaStreamSource(stream);
-    source.connect(analyser);
-    const data = new Uint8Array(analyser.frequencyBinCount);
-    let frame = 0;
-    const tick = () => {
-      analyser.getByteTimeDomainData(data);
-      const peak = data.reduce((max, value) => Math.max(max, Math.abs(value - 128)), 0);
-      setAudioLevel(Math.min(100, Math.round((peak / 64) * 100)));
-      frame = window.requestAnimationFrame(tick);
-    };
-    tick();
-    return () => {
-      window.cancelAnimationFrame(frame);
-      source.disconnect();
-      void audioContext.close();
-    };
-  }, [activeCameraStream, smokeMedia.stream]);
+    liveSourceStreamsRef.current = liveSourceStreams;
+  }, [liveSourceStreams]);
+
+  useEffect(
+    () => () => {
+      Object.values(liveSourceStreamsRef.current).forEach((stream) => {
+        stream.getTracks().forEach((track) => track.stop());
+      });
+    },
+    [],
+  );
 
   const patchCaptureSourceStatus = useCallback(
     (runtimeStatus: string, sourceId?: string, message?: string) => {
@@ -2152,7 +2156,8 @@ export function SceneWorkspace({
         scenes.map((scene) => ({
           ...scene,
           sources: scene.sources.map((source) =>
-            (source.type === 'camera' || source.type === 'audio') && (!sourceId || source.id === sourceId)
+            (source.type === 'camera' || source.type === 'screen' || source.type === 'audio') &&
+            (!sourceId || source.id === sourceId)
               ? {
                   ...source,
                   settings: {
@@ -2169,23 +2174,123 @@ export function SceneWorkspace({
     [refresh, scenes],
   );
 
-  const startSmokeCapture = useCallback(async (sourceId: string) => {
-    patchCaptureSourceStatus('connecting', sourceId);
-    try {
-      const stream = await smokeMedia.startPreview({ withAudio: true });
-      if (isLiveMediaStream(stream)) {
-        setLiveSourceStreams((current) => ({ ...current, [sourceId]: stream }));
-        patchCaptureSourceStatus('live', sourceId);
-      } else {
-        const failureReason =
-          smokeMedia.getLastErrorMessage() || 'getUserMedia did not return an active camera stream.';
+  const stopLiveSourceStream = useCallback((sourceId: string) => {
+    setLiveSourceStreams((current) => {
+      const stream = current[sourceId];
+      if (!stream) return current;
+      stream.getTracks().forEach((track) => track.stop());
+      const { [sourceId]: _removed, ...remaining } = current;
+      return remaining;
+    });
+  }, []);
+
+  const markLiveSourceOffline = useCallback(
+    (sourceId: string, message = 'Capture track ended') => {
+      setLiveSourceStreams((current) => {
+        const { [sourceId]: _removed, ...remaining } = current;
+        return remaining;
+      });
+      patchCaptureSourceStatus('offline', sourceId, message);
+    },
+    [patchCaptureSourceStatus],
+  );
+
+  const retainLiveSourceStream = useCallback(
+    (sourceId: string, stream: MediaStream) => {
+      setLiveSourceStreams((current) => {
+        current[sourceId]?.getTracks().forEach((track) => track.stop());
+        return { ...current, [sourceId]: stream };
+      });
+      stream.getTracks().forEach((track) => {
+        track.addEventListener('ended', () => markLiveSourceOffline(sourceId), { once: true });
+      });
+    },
+    [markLiveSourceOffline],
+  );
+
+  const startScreenCapture = useCallback(
+    async (sourceId: string) => {
+      patchCaptureSourceStatus('connecting', sourceId);
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        patchCaptureSourceStatus(
+          'unavailable',
+          sourceId,
+          'Display capture is not supported in this browser.',
+        );
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+        if (isLiveMediaStream(stream)) {
+          retainLiveSourceStream(sourceId, stream);
+          const videoTrack = stream.getVideoTracks()[0];
+          const settings = videoTrack?.getSettings();
+          refresh(
+            scenes.map((scene) => ({
+              ...scene,
+              sources: scene.sources.map((source) =>
+                source.id === sourceId
+                  ? {
+                      ...source,
+                      settings: {
+                        ...source.settings,
+                        runtimeStatus: 'live',
+                        captureState: 'live',
+                        sourceKind: 'screen',
+                        audioEnabled: stream.getAudioTracks().length > 0,
+                        ...(settings?.width && settings?.height
+                          ? { resolution: `${settings.width}x${settings.height}` }
+                          : {}),
+                        ...(settings?.frameRate ? { fps: Math.round(settings.frameRate) } : {}),
+                      },
+                    }
+                  : source,
+              ),
+            })),
+          );
+        } else {
+          patchCaptureSourceStatus(
+            'unavailable',
+            sourceId,
+            'getDisplayMedia did not return a live display stream.',
+          );
+        }
+      } catch (error) {
+        const failureReason = describeCaptureError(error);
+        patchCaptureSourceStatus(
+          isAbortError(error) ? 'permission_required' : 'unavailable',
+          sourceId,
+          failureReason,
+        );
+      }
+    },
+    [patchCaptureSourceStatus, refresh, retainLiveSourceStream, scenes],
+  );
+
+  const startSmokeCapture = useCallback(
+    async (sourceId: string) => {
+      patchCaptureSourceStatus('connecting', sourceId);
+      try {
+        const stream = await smokeMedia.startPreview({ withAudio: true });
+        if (isLiveMediaStream(stream)) {
+          retainLiveSourceStream(sourceId, stream);
+          patchCaptureSourceStatus('live', sourceId);
+        } else {
+          const failureReason =
+            smokeMedia.getLastErrorMessage() ||
+            'getUserMedia did not return an active camera stream.';
+          patchCaptureSourceStatus('unavailable', sourceId, failureReason);
+        }
+      } catch (error) {
+        const failureReason = describeCaptureError(error);
         patchCaptureSourceStatus('unavailable', sourceId, failureReason);
       }
-    } catch (error) {
-      const failureReason = describeCaptureError(error);
-      patchCaptureSourceStatus('unavailable', sourceId, failureReason);
-    }
-  }, [patchCaptureSourceStatus, smokeMedia]);
+    },
+    [patchCaptureSourceStatus, retainLiveSourceStream, smokeMedia],
+  );
 
   const startSmokeRecording = useCallback(() => {
     const stream = activeCameraStream ?? smokeMedia.stream;
@@ -2225,20 +2330,56 @@ export function SceneWorkspace({
   const previewScene =
     sorted.find((scene) => scene.id === productionState.previewSceneId) ?? programScene;
   const activeScene = previewScene;
-  const previewCameraSourceId = getFirstVisibleCameraSourceId(previewScene);
-  const programCameraSourceId = getFirstVisibleCameraSourceId(programScene);
-  const previewCameraStream = previewCameraSourceId ? liveSourceStreams[previewCameraSourceId] : null;
-  const programCameraStream = programCameraSourceId ? liveSourceStreams[programCameraSourceId] : null;
+  const previewLiveVideoSource = getFirstVisibleLiveVideoSource(previewScene);
+  const programLiveVideoSource = getFirstVisibleLiveVideoSource(programScene);
+  const previewCameraSourceId = previewLiveVideoSource?.id ?? null;
+  const programCameraSourceId = programLiveVideoSource?.id ?? null;
+  const previewCameraStream = previewCameraSourceId
+    ? liveSourceStreams[previewCameraSourceId]
+    : null;
+  const programCameraStream = programCameraSourceId
+    ? liveSourceStreams[programCameraSourceId]
+    : null;
   const directCameraLive = isLiveMediaStream(activeCameraStream);
-  const previewStreamToShow = (directCameraLive ? activeCameraStream : previewCameraStream) ?? null;
+  const previewStreamToShow = previewCameraStream ?? (directCameraLive ? activeCameraStream : null);
   const programStreamToShow =
-    (directCameraLive && programStreamOnAir ? activeCameraStream : programCameraStream) ?? null;
+    programCameraStream ?? (directCameraLive && programStreamOnAir ? activeCameraStream : null);
   const previewHasCameraSource = Boolean(previewCameraSourceId) || directCameraLive;
-  const programHasCameraSource = Boolean(programCameraSourceId) || (directCameraLive && programStreamOnAir);
-  const livePreviewVisible = directCameraLive || isLiveMediaStream(previewCameraStream);
-  const liveProgramVisible =
-    (directCameraLive && programStreamOnAir) || isLiveMediaStream(programCameraStream);
+  const programHasCameraSource =
+    Boolean(programCameraSourceId) || (directCameraLive && programStreamOnAir);
+  const livePreviewVisible = isLiveMediaStream(previewStreamToShow);
+  const liveProgramVisible = isLiveMediaStream(programStreamToShow);
 
+  useEffect(() => {
+    const stream = previewStreamToShow ?? activeCameraStream ?? smokeMedia.stream;
+    if (!stream?.getAudioTracks().length) {
+      setAudioLevel(0);
+      return;
+    }
+    const AudioContextConstructor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    const audioContext = new AudioContextConstructor();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let frame = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      const peak = data.reduce((max, value) => Math.max(max, Math.abs(value - 128)), 0);
+      setAudioLevel(Math.min(100, Math.round((peak / 64) * 100)));
+      frame = window.requestAnimationFrame(tick);
+    };
+    tick();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      source.disconnect();
+      void audioContext.close();
+    };
+  }, [activeCameraStream, previewStreamToShow, smokeMedia.stream]);
   const liveAudioChannels = useMemo<AudioChannel[]>(() => {
     const channelsFromDirect: AudioChannel[] =
       activeCameraStream &&
@@ -2258,7 +2399,7 @@ export function SceneWorkspace({
     );
     const channelsFromMap = entries.map(([sourceId, stream]) => ({
       id: `live-${sourceId}`,
-      label: `Live Camera Mic (${sourceId.slice(0, 8)})`,
+      label: `Live Source Audio (${sourceId.slice(0, 8)})`,
       level: audioLevel,
       muted: false,
       kind: 'mic' as const,
@@ -2622,7 +2763,6 @@ export function SceneWorkspace({
       );
     }
   }, [activeCameraStream, updateActiveSources]);
-
 
   const graphicsAssets = useMemo(
     () => assets.filter((asset) => ['overlay', 'lower_third', 'background'].includes(asset.type)),
@@ -3162,7 +3302,10 @@ export function SceneWorkspace({
           visible: true,
           isVisible: true,
           isLocked: false,
-          settings: input.type === 'camera' ? { runtimeStatus: 'connecting' } : {},
+          settings:
+            input.type === 'camera' || input.type === 'screen'
+              ? { runtimeStatus: 'connecting' }
+              : {},
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);
@@ -3172,6 +3315,7 @@ export function SceneWorkspace({
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
         if (input.type === 'camera') void activateDirectCamera();
+        else if (input.type === 'screen') void startScreenCapture(tempSource.id);
         else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
@@ -3211,6 +3355,7 @@ export function SceneWorkspace({
         });
       }}
       onSourceDelete={(sourceId) => {
+        stopLiveSourceStream(sourceId);
         updateActiveSources((sources) =>
           sources
             .filter((source) => source.id !== sourceId)
@@ -3710,7 +3855,10 @@ export function SceneWorkspace({
           visible: true,
           isVisible: true,
           isLocked: false,
-          settings: input.type === 'camera' ? { runtimeStatus: 'connecting' } : {},
+          settings:
+            input.type === 'camera' || input.type === 'screen'
+              ? { runtimeStatus: 'connecting' }
+              : {},
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);
@@ -3720,6 +3868,7 @@ export function SceneWorkspace({
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
         if (input.type === 'camera') void activateDirectCamera();
+        else if (input.type === 'screen') void startScreenCapture(tempSource.id);
         else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
@@ -3759,6 +3908,7 @@ export function SceneWorkspace({
         });
       }}
       onSourceDelete={(sourceId) => {
+        stopLiveSourceStream(sourceId);
         updateActiveSources((sources) =>
           sources
             .filter((source) => source.id !== sourceId)
@@ -3830,7 +3980,10 @@ export function SceneWorkspace({
         </div>
         <div className="grid gap-1">
           <SmokeCheck label="Camera active" ok={directCameraLive} />
-          <SmokeCheck label="Microphone active" ok={Boolean(activeCameraStream?.getAudioTracks().some((t) => t.readyState === 'live'))} />
+          <SmokeCheck
+            label="Microphone active"
+            ok={Boolean(activeCameraStream?.getAudioTracks().some((t) => t.readyState === 'live'))}
+          />
           <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
           <SmokeCheck label="Program visible" ok={liveProgramVisible} />
           <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
@@ -3965,6 +4118,7 @@ export function SceneWorkspace({
                   active={liveProgramVisible}
                   role="program"
                   sourceId={programCameraSourceId}
+                  sourceType={programLiveVideoSource?.type}
                 />
               ) : (
                 <ProgramMonitor
@@ -3995,6 +4149,7 @@ export function SceneWorkspace({
                   active={livePreviewVisible}
                   role="preview"
                   sourceId={previewCameraSourceId}
+                  sourceType={previewLiveVideoSource?.type}
                 />
               ) : (
                 <ProgramMonitor

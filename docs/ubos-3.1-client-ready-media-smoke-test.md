@@ -32,3 +32,25 @@ RTMP streaming remains unavailable in the browser-only smoke test. UBOS labels R
 ## Architecture note
 
 The browser media stream is intentionally a runtime handle held in the client component. Scene and source records remain metadata-first: camera sources are still represented as UBOS scene-source metadata, while the actual `MediaStream` stays local to the browser runtime.
+
+## UBOS 3.2 Screen Capture workflow
+
+UBOS 3.2 adds production-grade browser display capture to the same client-ready runtime path used by camera sources while keeping the Production Graph metadata-only.
+
+1. Open `/control-room`, select the **Sources** tab, and click **+ Screen**.
+2. The browser permission picker should appear. Choose **Entire Screen**, **Window**, or **Browser Tab**. Chrome, Edge, and Firefox expose these choices through their native `navigator.mediaDevices.getDisplayMedia()` dialog.
+3. Allow tab/browser audio when the picker offers it. UBOS stores only source metadata in scene state; the live `MediaStream` remains in local runtime state.
+4. The selected display appears in **Preview** with a **SCREEN LIVE** badge.
+5. Press **CUT**, **TAKE**, or **AUTO**. Program displays the same display-capture stream when the preview scene is promoted.
+6. If display audio is available, the Smoke audio meter should move.
+7. Stop sharing from the browser sharing indicator. UBOS detects ended display tracks, removes the runtime stream handle, and changes the source to **Offline**.
+8. Delete the screen source. UBOS stops all tracks for that source so no display-capture `MediaStream` leaks.
+
+Updated checklist additions:
+
+8. **+ Screen** opens the display-capture permission dialog.
+9. Entire Screen, Window, and Browser Tab selections preview correctly.
+10. Program receives the screen source after CUT, TAKE, and AUTO.
+11. Screen/tab audio meters when the browser provides an audio track.
+12. Stopping sharing changes the source to Offline.
+13. Deleting the source stops capture tracks and leaves no console errors.
