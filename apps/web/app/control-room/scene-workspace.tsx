@@ -3306,7 +3306,19 @@ export function SceneWorkspace({
             input.settings ??
             (input.type === 'camera' || input.type === 'screen'
               ? { runtimeStatus: 'connecting' }
-              : {}),
+              : input.type === 'browser'
+                ? {
+                    runtimeStatus: input.url ? 'loading' : 'failed',
+                    url: input.url ?? null,
+                    muted: true,
+                    lastLoadedAt: null,
+                    message: input.url
+                      ? 'Browser source is loading.'
+                      : 'Enter a valid http:// or https:// URL for this Browser source.',
+                    iframeBlockedWarning:
+                      'Some sites block iframe embedding. If the preview stays blank, try another page or use screen capture.',
+                  }
+                : {}),
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);
@@ -3377,6 +3389,39 @@ export function SceneWorkspace({
         startTransition(async () => {
           await toggleSourceVisibility(sourceId);
         });
+      }}
+      onReloadBrowserSource={(sourceId) => {
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.id === sourceId
+              ? {
+                  ...source,
+                  settings: {
+                    ...source.settings,
+                    runtimeStatus: 'loading',
+                    reloadNonce: Date.now(),
+                    lastLoadedAt: null,
+                  },
+                }
+              : source,
+          ),
+        );
+      }}
+      onSourceToggleMute={(sourceId) => {
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.id === sourceId
+              ? {
+                  ...source,
+                  muted: !(source.muted || source.settings?.muted !== false),
+                  settings: {
+                    ...source.settings,
+                    muted: !(source.muted || source.settings?.muted !== false),
+                  },
+                }
+              : source,
+          ),
+        );
       }}
       onSourceToggleLock={(sourceId) => {
         updateActiveSources((sources) =>
@@ -3860,7 +3905,19 @@ export function SceneWorkspace({
             input.settings ??
             (input.type === 'camera' || input.type === 'screen'
               ? { runtimeStatus: 'connecting' }
-              : {}),
+              : input.type === 'browser'
+                ? {
+                    runtimeStatus: input.url ? 'loading' : 'failed',
+                    url: input.url ?? null,
+                    muted: true,
+                    lastLoadedAt: null,
+                    message: input.url
+                      ? 'Browser source is loading.'
+                      : 'Enter a valid http:// or https:// URL for this Browser source.',
+                    iframeBlockedWarning:
+                      'Some sites block iframe embedding. If the preview stays blank, try another page or use screen capture.',
+                  }
+                : {}),
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);

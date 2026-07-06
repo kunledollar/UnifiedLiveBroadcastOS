@@ -47,6 +47,8 @@ export function LeftNavPanel({
   onSourceDelete,
   onSourceToggleVisibility,
   onSourceToggleLock,
+  onReloadBrowserSource,
+  onSourceToggleMute,
   directCameraLive = false,
   onGraphicsAddToScene,
   graphicsTemplates = [],
@@ -88,6 +90,8 @@ export function LeftNavPanel({
   onSourceDelete: (sourceId: string) => void;
   onSourceToggleVisibility: (sourceId: string) => void;
   onSourceToggleLock: (sourceId: string) => void;
+  onReloadBrowserSource?: (sourceId: string) => void;
+  onSourceToggleMute?: (sourceId: string) => void;
   directCameraLive?: boolean;
   onGraphicsAddToScene?: (asset: GraphicsAsset) => void;
   graphicsTemplates?: LowerThirdTemplate[];
@@ -131,6 +135,8 @@ export function LeftNavPanel({
           onDelete={onSourceDelete}
           onToggleVisibility={onSourceToggleVisibility}
           onToggleLock={onSourceToggleLock}
+          {...(onReloadBrowserSource ? { onReloadBrowserSource } : {})}
+          {...(onSourceToggleMute ? { onToggleMute: onSourceToggleMute } : {})}
         />
       );
     case 'media':

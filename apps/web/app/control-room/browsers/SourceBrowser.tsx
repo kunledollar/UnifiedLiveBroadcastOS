@@ -48,6 +48,8 @@ export function SourceBrowser({
   onDelete,
   onToggleVisibility,
   onToggleLock,
+  onReloadBrowserSource,
+  onToggleMute,
 }: {
   scene: Scene;
   sceneName: string;
@@ -62,10 +64,15 @@ export function SourceBrowser({
   onDelete?: (sourceId: string) => void;
   onToggleVisibility?: (sourceId: string) => void;
   onToggleLock?: (sourceId: string) => void;
+  onReloadBrowserSource?: (sourceId: string) => void;
+  onToggleMute?: (sourceId: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<SceneSourceType | 'all'>('all');
   const [healthFilter, setHealthFilter] = useState<SourceHealthFilter>('all');
+  const [browserUrl, setBrowserUrl] = useState('https://example.com');
+  const [browserUrlError, setBrowserUrlError] = useState('');
+  const [showBrowserUrlForm, setShowBrowserUrlForm] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const importMediaFiles = (fileList: FileList | File[]) => {
@@ -152,20 +159,70 @@ export function SourceBrowser({
               disabled={isPending}
               onClick={() => {
                 if (type === 'media') { fileInputRef.current?.click(); return; }
-                const url =
-                  type === 'browser'
-                    ? window.prompt('Browser source URL', 'https://example.com')
-                    : null;
+                if (type === 'browser') {
+                  setShowBrowserUrlForm(true);
+                  setBrowserUrlError('');
+                  return;
+                }
                 onAdd?.({
                   sceneId: scene.id,
                   name: `${getSourceTypeLabel(type)} Source`,
                   type,
-                  ...(url ? { url } : {}),
                 });
               }}
             />
           ))}
       </div>
+
+      {showBrowserUrlForm ? (
+        <form
+          className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-ubos-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const rawUrl = browserUrl.trim();
+            let normalizedUrl: string;
+            try {
+              const parsed = new URL(rawUrl);
+              if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('protocol');
+              normalizedUrl = parsed.toString();
+            } catch {
+              setBrowserUrlError('Enter a valid http:// or https:// URL for this Browser source.');
+              return;
+            }
+            onAdd?.({
+              sceneId: scene.id,
+              name: 'Browser Source',
+              type: 'browser',
+              url: normalizedUrl,
+              settings: {
+                runtimeStatus: 'loading',
+                url: normalizedUrl,
+                muted: true,
+                lastLoadedAt: null,
+                iframeBlockedWarning: 'Some sites block iframe embedding. If the preview stays blank, try another page or use screen capture.',
+              },
+            });
+            setShowBrowserUrlForm(false);
+            setBrowserUrlError('');
+          }}
+        >
+          <label className="block text-ubos-metadata font-bold text-ubos-fg-secondary" htmlFor="browser-source-url">
+            Browser source URL
+          </label>
+          <div className="mt-1 flex gap-1">
+            <input
+              id="browser-source-url"
+              value={browserUrl}
+              onChange={(event) => setBrowserUrl(event.currentTarget.value)}
+              className="min-w-0 flex-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-2 py-1 text-ubos-caption text-ubos-fg-primary"
+              placeholder="https://example.com"
+            />
+            <button type="submit" disabled={isPending} className="rounded-ubos-sm border border-ubos-border-subtle bg-transparent px-1.5 text-ubos-metadata font-semibold text-ubos-fg-secondary hover:bg-ubos-midnight disabled:opacity-40">Add</button>
+            <RowIconButton label="Cancel" onClick={() => { setShowBrowserUrlForm(false); setBrowserUrlError(''); }} />
+          </div>
+          {browserUrlError ? <p className="mt-1 text-ubos-metadata text-ubos-error-text">{browserUrlError}</p> : null}
+        </form>
+      ) : null}
 
       <BrowserToolbar
         search={search}
@@ -207,6 +264,8 @@ export function SourceBrowser({
             {...(onDelete ? { onDelete } : {})}
             {...(onToggleVisibility ? { onToggleVisibility } : {})}
             {...(onToggleLock ? { onToggleLock } : {})}
+            {...(onReloadBrowserSource ? { onReloadBrowserSource } : {})}
+            {...(onToggleMute ? { onToggleMute } : {})}
           />
         ))}
       </AssetList>
@@ -225,6 +284,8 @@ function SourceBrowserRow({
   onDelete,
   onToggleVisibility,
   onToggleLock,
+  onReloadBrowserSource,
+  onToggleMute,
 }: {
   source: SceneSource;
   sceneName: string;
@@ -236,6 +297,8 @@ function SourceBrowserRow({
   onDelete?: (sourceId: string) => void;
   onToggleVisibility?: (sourceId: string) => void;
   onToggleLock?: (sourceId: string) => void;
+  onReloadBrowserSource?: (sourceId: string) => void;
+  onToggleMute?: (sourceId: string) => void;
 }) {
   const health =
     directCameraLive && source.type === 'camera' ? 'live' : deriveSourceHealth(source, guests);
@@ -273,6 +336,15 @@ function SourceBrowserRow({
             label={source.isLocked ? 'Unlock' : 'Lock'}
             onClick={() => onToggleLock?.(source.id)}
           />
+          {source.type === 'browser' ? (
+            <RowIconButton label="Reload" onClick={() => onReloadBrowserSource?.(source.id)} />
+          ) : null}
+          {source.type === 'browser' ? (
+            <RowIconButton
+              label={source.muted || source.settings?.muted !== false ? 'Unmute' : 'Mute'}
+              onClick={() => onToggleMute?.(source.id)}
+            />
+          ) : null}
           <RowIconButton label="Dup" onClick={() => onDuplicate?.(source.id)} />
           <RowIconButton
             label="Ren"
