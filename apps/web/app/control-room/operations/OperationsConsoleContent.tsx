@@ -43,6 +43,7 @@ import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
 import { RecordingRuntimePanel, type BrowserRecordingPanelState } from './RecordingRuntimePanel';
+import { StreamingRuntimePanel, type BrowserStreamingPanelState, type StreamingPanelAction } from './StreamingRuntimePanel';
 import { SecurityPanel } from './SecurityPanel';
 import { MonitoringPanel } from './MonitoringPanel';
 import { ClusterPanel } from './ClusterPanel';
@@ -98,6 +99,8 @@ export function OperationsConsoleContent({
   mediaRuntimeHealth,
   recordingRuntimeState,
   browserRecordingState,
+  browserStreamingState,
+  onStreamingDispatch,
   onStartBrowserRecording,
   onStopBrowserRecording,
 }: {
@@ -143,6 +146,8 @@ export function OperationsConsoleContent({
   mediaRuntimeHealth?: MediaRuntimeHealth;
   recordingRuntimeState?: RecordingRuntimeState;
   browserRecordingState?: BrowserRecordingPanelState;
+  browserStreamingState?: BrowserStreamingPanelState;
+  onStreamingDispatch?: (action: StreamingPanelAction) => void;
   onStartBrowserRecording?: () => void;
   onStopBrowserRecording?: () => void;
 }) {
@@ -222,6 +227,7 @@ export function OperationsConsoleContent({
     cloud: <CloudPanel />,
     analytics: <AnalyticsPanel />,
     'enterprise-admin': <EnterpriseAdminPanel />, 
+    streaming: browserStreamingState && onStreamingDispatch ? <StreamingRuntimePanel state={browserStreamingState} dispatch={onStreamingDispatch} /> : null,
     recording: recordingRuntimeState ? (
       <RecordingRuntimePanel
         state={recordingRuntimeState}
