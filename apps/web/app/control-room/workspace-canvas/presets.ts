@@ -70,8 +70,8 @@ export const soloStreamerPreset = buildPreset(
     zones: [
       zone('left', 'Assets', ['asset-tree'], 220),
       zone('center', 'Monitors', ['split-monitor', 'switcher'], 1),
-      zone('right', 'Operations', ['operations-dock'], 280),
-      zone('bottom', 'Deck', ['audio-mixer', 'bottom-deck'], 160),
+      zone('right', 'Operations', ['operations-dock'], 260),
+      zone('bottom', 'Deck', ['audio-mixer', 'bottom-deck'], 148),
     ],
     panels: [
       basePanels.assetTree,
@@ -86,8 +86,8 @@ export const soloStreamerPreset = buildPreset(
     defaultNavItem: 'scenes',
     defaultOperationsTab: 'streaming',
     defaultDockTab: 'audio',
-    programFlexWeight: 70,
-    previewFlexWeight: 30,
+    programFlexWeight: 72,
+    previewFlexWeight: 28,
   },
 );
 
@@ -99,10 +99,10 @@ export const technicalDirectorPreset = buildPreset(
   'technical-director',
   {
     zones: [
-      zone('left', 'Assets', ['asset-tree'], 260),
+      zone('left', 'Assets', ['asset-tree'], 240),
       zone('center', 'Monitors', ['split-monitor', 'switcher', 'stream-patch'], 1),
-      zone('right', 'Operations', ['operations-dock'], 340),
-      zone('bottom', 'Deck', ['audio-mixer', 'system-diagnostics', 'bottom-deck'], 180),
+      zone('right', 'Operations', ['operations-dock'], 300),
+      zone('bottom', 'Deck', ['audio-mixer', 'system-diagnostics', 'bottom-deck'], 160),
     ],
     panels: [
       basePanels.assetTree,
@@ -117,8 +117,8 @@ export const technicalDirectorPreset = buildPreset(
     defaultNavItem: 'scenes',
     defaultOperationsTab: 'routing',
     defaultDockTab: 'layers',
-    programFlexWeight: 55,
-    previewFlexWeight: 35,
+    programFlexWeight: 64,
+    previewFlexWeight: 36,
   },
 );
 
@@ -179,8 +179,8 @@ export const graphicsOperatorPreset = buildPreset(
     defaultNavItem: 'graphics',
     defaultOperationsTab: 'compositor',
     defaultDockTab: 'graphics',
-    programFlexWeight: 60,
-    previewFlexWeight: 40,
+    programFlexWeight: 66,
+    previewFlexWeight: 34,
   },
 );
 
@@ -210,8 +210,8 @@ export const replayOperatorPreset = buildPreset(
     defaultNavItem: 'replay',
     defaultOperationsTab: 'preview',
     defaultDockTab: 'replay',
-    programFlexWeight: 65,
-    previewFlexWeight: 35,
+    programFlexWeight: 68,
+    previewFlexWeight: 32,
   },
 );
 
@@ -241,8 +241,8 @@ export const producerPreset = buildPreset(
     defaultNavItem: 'scenes',
     defaultOperationsTab: 'automation',
     defaultDockTab: 'automation',
-    programFlexWeight: 50,
-    previewFlexWeight: 35,
+    programFlexWeight: 62,
+    previewFlexWeight: 38,
   },
 );
 
