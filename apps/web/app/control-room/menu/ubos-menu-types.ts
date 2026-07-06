@@ -19,7 +19,8 @@ export type UbosDockPanelId =
   | 'automation'
   | 'monitor-wall'
   | 'timeline'
-  | 'logs';
+  | 'logs'
+  | 'system-status';
 
 export type UbosDockZone = 'left' | 'right' | 'bottom' | 'center' | 'floating';
 

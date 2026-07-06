@@ -102,7 +102,7 @@ export const technicalDirectorPreset = buildPreset(
       zone('left', 'Assets', ['asset-tree'], 240),
       zone('center', 'Monitors', ['split-monitor', 'switcher', 'stream-patch'], 1),
       zone('right', 'Operations', ['operations-dock'], 300),
-      zone('bottom', 'Deck', ['audio-mixer', 'system-diagnostics', 'bottom-deck'], 160),
+      zone('bottom', 'Deck', ['audio-mixer', 'system-diagnostics', 'bottom-deck'], 140),
     ],
     panels: [
       basePanels.assetTree,

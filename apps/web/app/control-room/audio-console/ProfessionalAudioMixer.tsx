@@ -66,9 +66,11 @@ function sourceKindLabel(type: MixerSourceType) {
 export function ProfessionalAudioMixer({
   sources,
   className,
+  compact = false,
 }: {
   sources: MixerSource[];
   className?: string;
+  compact?: boolean;
 }) {
   const [metadata, setMetadata] = useState<Record<string, ChannelMetadata>>(() =>
     Object.fromEntries(sources.map((source) => [source.id, createDefaultMetadata(source.type)])),
@@ -210,57 +212,85 @@ export function ProfessionalAudioMixer({
 
   return (
     <BroadcastPanel variant="inset" padding={false} className={cn('h-full border-0 shadow-none', className)}>
-      <div className="flex h-full min-h-0 flex-col gap-ubos-2 px-ubos-2 py-ubos-2">
-        <div className="flex shrink-0 flex-wrap items-center gap-ubos-2">
-          <span className={cn(ubosTypographyClasses.section, 'text-ubos-fg-primary')}>Professional Audio Mixer</span>
-          <StatusBadge variant="neutral">Web Audio API</StatusBadge>
-          <StatusBadge variant={meters.master?.clipping ? 'warning' : 'neutral'}>Master {meters.master?.peak ?? 0}%</StatusBadge>
-        </div>
+      <div className={cn('flex h-full min-h-0 flex-col gap-ubos-2 px-ubos-2 py-ubos-2', compact && 'py-1')}>
+        {!compact ? (
+          <div className="flex shrink-0 flex-wrap items-center gap-ubos-2">
+            <span className={cn(ubosTypographyClasses.section, 'text-ubos-fg-primary')}>Professional Audio Mixer</span>
+            <StatusBadge variant="neutral">Web Audio API</StatusBadge>
+            <StatusBadge variant={meters.master?.clipping ? 'warning' : 'neutral'}>Master {meters.master?.peak ?? 0}%</StatusBadge>
+          </div>
+        ) : (
+          <div className="flex shrink-0 items-center justify-between gap-2">
+            <span className="text-[10px] font-bold uppercase tracking-wide text-ubos-fg-primary">Mixer</span>
+            <StatusBadge variant={meters.master?.clipping ? 'warning' : 'neutral'}>M {meters.master?.peak ?? 0}%</StatusBadge>
+          </div>
+        )}
         <div className="ubos-scroll flex min-h-0 flex-1 gap-ubos-2 overflow-x-auto">
           {sources.map((source) => {
             const meta = metadata[source.id] ?? createDefaultMetadata(source.type);
             const meter = meters[source.id] ?? emptyMeter();
             const effectivelyMuted = meta.mute || (soloActive && !meta.solo && source.type !== 'master');
             return (
-              <div key={source.id} className="flex w-36 shrink-0 flex-col gap-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon p-2">
+              <div
+                key={source.id}
+                className={cn(
+                  'flex shrink-0 flex-col gap-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon p-2',
+                  compact ? 'w-24' : 'w-36',
+                )}
+              >
                 <div>
                   <p className="ubos-truncate text-xs font-bold uppercase text-ubos-fg-primary" title={source.name}>{source.name}</p>
-                  <p className="text-[0.625rem] uppercase text-ubos-fg-muted">{sourceKindLabel(source.type)}</p>
-                  <p className="font-mono text-[0.625rem] text-ubos-fg-secondary">Peak {meter.peak}%</p>
+                  {!compact ? (
+                    <>
+                      <p className="text-[0.625rem] uppercase text-ubos-fg-muted">{sourceKindLabel(source.type)}</p>
+                      <p className="font-mono text-[0.625rem] text-ubos-fg-secondary">Peak {meter.peak}%</p>
+                    </>
+                  ) : (
+                    <p className="font-mono text-[0.625rem] text-ubos-fg-muted">{meter.peak}%</p>
+                  )}
                 </div>
-                <div className="flex justify-center gap-2">
+                <div className="flex justify-center gap-1">
                   <AudioMeter level={effectivelyMuted ? 0 : meter.left} muted={effectivelyMuted} />
                   <AudioMeter level={effectivelyMuted ? 0 : meter.right} muted={effectivelyMuted} />
                 </div>
-                {meter.clipping ? <span className="rounded bg-ubos-program/20 px-1 text-center text-[0.625rem] font-bold text-ubos-program">CLIPPING</span> : null}
-                <label className="grid gap-1 text-[0.625rem] uppercase text-ubos-fg-muted">Gain {Math.round(meta.gain * 100)}%
-                  <input type="range" min={0} max={2} step={0.01} value={meta.gain} onChange={(event) => updateChannel(source, { gain: Number(event.target.value) }, 'gain changed')} />
+                {meter.clipping ? <span className="rounded bg-ubos-program/20 px-1 text-center text-[0.625rem] font-bold text-ubos-program">CLIP</span> : null}
+                <label className="grid gap-0.5 text-[0.625rem] uppercase text-ubos-fg-muted">
+                  {compact ? `G${Math.round(meta.gain * 100)}` : `Gain ${Math.round(meta.gain * 100)}%`}
+                  <input type="range" min={0} max={2} step={0.01} value={meta.gain} onChange={(event) => updateChannel(source, { gain: Number(event.target.value) }, 'gain changed')} className="h-1" />
                 </label>
-                <label className="grid gap-1 text-[0.625rem] uppercase text-ubos-fg-muted">Pan {meta.balance.toFixed(2)}
-                  <input type="range" min={-1} max={1} step={0.01} value={meta.balance} onChange={(event) => updateChannel(source, { balance: Number(event.target.value) }, 'balance changed')} />
-                </label>
+                {!compact ? (
+                  <label className="grid gap-1 text-[0.625rem] uppercase text-ubos-fg-muted">Pan {meta.balance.toFixed(2)}
+                    <input type="range" min={-1} max={1} step={0.01} value={meta.balance} onChange={(event) => updateChannel(source, { balance: Number(event.target.value) }, 'balance changed')} />
+                  </label>
+                ) : null}
                 <div className="grid grid-cols-2 gap-1">
-                  <button type="button" onClick={() => updateChannel(source, { mute: !meta.mute }, meta.mute ? 'mute cleared' : 'muted')} className={cn('rounded border px-1 py-0.5 text-[0.625rem]', meta.mute ? 'border-ubos-program text-ubos-program' : 'border-ubos-border-subtle')}>Mute</button>
-                  <button type="button" onClick={() => updateChannel(source, { solo: !meta.solo }, meta.solo ? 'solo cleared' : 'soloed')} className={cn('rounded border px-1 py-0.5 text-[0.625rem]', meta.solo ? 'border-ubos-warning text-ubos-warning' : 'border-ubos-border-subtle')}>Solo</button>
+                  <button type="button" onClick={() => updateChannel(source, { mute: !meta.mute }, meta.mute ? 'mute cleared' : 'muted')} className={cn('rounded border px-1 py-0.5 text-[0.625rem]', meta.mute ? 'border-ubos-program text-ubos-program' : 'border-ubos-border-subtle')}>M</button>
+                  <button type="button" onClick={() => updateChannel(source, { solo: !meta.solo }, meta.solo ? 'solo cleared' : 'soloed')} className={cn('rounded border px-1 py-0.5 text-[0.625rem]', meta.solo ? 'border-ubos-warning text-ubos-warning' : 'border-ubos-border-subtle')}>S</button>
                 </div>
-                <div className="grid grid-cols-2 gap-1 text-[0.625rem]">
-                  {routes.map((route) => (
-                    <label key={route} className="flex items-center gap-1 uppercase text-ubos-fg-muted">
-                      <input type="checkbox" checked={meta.routing[route]} onChange={(event) => updateChannel(source, { routing: { ...meta.routing, [route]: event.target.checked } }, `${route} route changed`)} />{route.slice(0, 3)}
-                    </label>
-                  ))}
-                </div>
-                <div className="rounded bg-ubos-midnight p-1 text-[0.625rem] text-ubos-fg-muted">
-                  <p>{meter.sampleRate ? `${meter.sampleRate} Hz` : 'No runtime node'}</p>
-                  <p>{meter.channels} ch · muted {String(meta.mute)}</p>
-                </div>
+                {!compact ? (
+                  <>
+                    <div className="grid grid-cols-2 gap-1 text-[0.625rem]">
+                      {routes.map((route) => (
+                        <label key={route} className="flex items-center gap-1 uppercase text-ubos-fg-muted">
+                          <input type="checkbox" checked={meta.routing[route]} onChange={(event) => updateChannel(source, { routing: { ...meta.routing, [route]: event.target.checked } }, `${route} route changed`)} />{route.slice(0, 3)}
+                        </label>
+                      ))}
+                    </div>
+                    <div className="rounded bg-ubos-midnight p-1 text-[0.625rem] text-ubos-fg-muted">
+                      <p>{meter.sampleRate ? `${meter.sampleRate} Hz` : 'No runtime node'}</p>
+                      <p>{meter.channels} ch · muted {String(meta.mute)}</p>
+                    </div>
+                  </>
+                ) : null}
               </div>
             );
           })}
-          <div className="w-56 shrink-0 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight p-2">
-            <p className="text-xs font-bold uppercase">Audio History</p>
-            {history.length ? history.map((entry) => <p key={entry.id} className="mt-1 text-[0.625rem] text-ubos-fg-muted">{entry.channel}: {entry.event}</p>) : <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">No events yet.</p>}
-          </div>
+          {!compact ? (
+            <div className="w-56 shrink-0 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight p-2">
+              <p className="text-xs font-bold uppercase">Audio History</p>
+              {history.length ? history.map((entry) => <p key={entry.id} className="mt-1 text-[0.625rem] text-ubos-fg-muted">{entry.channel}: {entry.event}</p>) : <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">No events yet.</p>}
+            </div>
+          ) : null}
         </div>
       </div>
     </BroadcastPanel>

@@ -15,7 +15,7 @@ import {
 } from '../menu';
 import type { LayoutFocusMode } from '../workspaces/workspace-types';
 import { applyWorkspaceProfile } from '../workspaces';
-import { BottomWorkspaceDock } from './BottomWorkspaceDock';
+import { BottomWorkspaceDock, bottomWorkspaceTabBarHeightPx } from './BottomWorkspaceDock';
 import { CenterProgramPreviewDeck, type MonitorStatusInfo } from './CenterProgramPreviewDeck';
 import { DiagnosticsSummary } from './FloatingDiagnosticsPanel';
 import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
@@ -122,8 +122,7 @@ export function BroadcastCommandCenterLayout({
   const showSwitcher =
     dockLayout.dockPanels['scene-transitions']?.visible &&
     !dockLayout.dockPanels['scene-transitions']?.collapsed;
-  const showFloatingPipeline =
-    dockLayout.dockPanels['pipeline-inspector']?.visible ?? false;
+  const showFloatingPipeline = false;
 
   const leftCollapsed = dockLayout.zoneCollapsed.left;
   const rightCollapsed = dockLayout.zoneCollapsed.right;
@@ -131,7 +130,12 @@ export function BroadcastCommandCenterLayout({
 
   const leftWidth = showLeft ? (leftCollapsed ? 56 : (canvasState.zones.left?.flexWeight ?? 260)) : 0;
   const rightWidth = showRight ? (rightCollapsed ? 56 : (canvasState.zones.right?.flexWeight ?? 320)) : 0;
-  const bottomHeight = showBottom ? (bottomCollapsed ? 36 : (canvasState.zones.bottom?.flexWeight ?? 168)) : 0;
+  const bottomExpandedHeight = canvasState.zones.bottom?.flexWeight ?? 140;
+  const bottomHeight = showBottom
+    ? bottomCollapsed
+      ? bottomWorkspaceTabBarHeightPx()
+      : bottomExpandedHeight
+    : 0;
 
   const handleToggleDockPanel = useCallback(
     (panelId: Parameters<typeof toggleDockPanel>[0]) => {
@@ -226,6 +230,16 @@ export function BroadcastCommandCenterLayout({
     onDockTabChange?.(tab);
   };
 
+  const openBottomWorkspace = (panelId: Parameters<typeof toggleDockPanel>[0], tab: DockTabId) => {
+    if (!dockLayout.dockPanels[panelId]?.visible) {
+      toggleDockPanel(panelId);
+    }
+    if (bottomCollapsed) {
+      toggleZone('bottom');
+    }
+    handleDockTabChange(tab);
+  };
+
   const gridColumns = [
     showLeft ? `${leftWidth}px` : null,
     'minmax(0, 1fr)',
@@ -307,21 +321,21 @@ export function BroadcastCommandCenterLayout({
           <div className="flex shrink-0 items-center gap-1 px-0.5 pb-0.5">
             <button
               type="button"
-              onClick={() => handleToggleDockPanel('logs')}
+              onClick={() => openBottomWorkspace('system-status', 'system-status')}
               className="rounded-ubos-sm border border-cyan-500/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-cyan-300 hover:bg-cyan-500/20"
             >
               System Status
             </button>
             <button
               type="button"
-              onClick={() => handleToggleDockPanel('broadcast-io')}
+              onClick={() => openBottomWorkspace('broadcast-io', 'routing')}
               className="rounded-ubos-sm border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-300 hover:bg-indigo-500/20"
             >
               Routing Matrix
             </button>
             <button
               type="button"
-              onClick={() => handleToggleDockPanel('pipeline-inspector')}
+              onClick={() => openBottomWorkspace('pipeline-inspector', 'production-graph')}
               className="rounded-ubos-sm border border-indigo-500/30 bg-indigo-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-indigo-300 hover:bg-indigo-500/20"
             >
               Production Graph
@@ -353,10 +367,12 @@ export function BroadcastCommandCenterLayout({
               activeTab={activeDockTab}
               onTabChange={handleDockTabChange}
               collapsed={bottomCollapsed}
-              {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('bottom') } : {})}
+              {...(!dockLayout.layoutLocked
+                ? { onToggleCollapse: () => toggleZone('bottom') }
+                : {})}
               className="h-full"
             >
-              {!bottomCollapsed ? bottomWorkspaceContent : null}
+              {bottomWorkspaceContent}
             </BottomWorkspaceDock>
           </div>
         ) : null}
