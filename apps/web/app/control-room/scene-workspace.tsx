@@ -123,7 +123,9 @@ import {
   setRouteMuted,
 } from './media-route-actions';
 import {
-  WorkspaceCanvas,
+  BroadcastCommandCenterLayout,
+} from './broadcast-command-center';
+import {
   type RoutingMatrixEdge,
   type DiagnosticMetric,
 } from './workspace-canvas';
@@ -4682,8 +4684,18 @@ export function SceneWorkspace({
     />
   );
 
+  const productionGraphPanelContent = (
+    <div className="space-y-2 p-2">
+      <ProductionGraphInspector session={productionGraphSession} />
+      <MediaExecutionInspector
+        engine={mediaExecutionEngine}
+        graph={productionGraphSession.graph}
+      />
+    </div>
+  );
+
   return (
-    <WorkspaceCanvas
+    <BroadcastCommandCenterLayout
       initialPresetId="technical-director"
       layoutStyle={layoutStyle}
       statusBar={
@@ -4711,7 +4723,9 @@ export function SceneWorkspace({
         />
       }
       toolsSlot={toolsMenu}
-      assetTreeContent={leftNavContent}
+      activeNav={activeNav}
+      onNavChange={setActiveNav}
+      sourceDockContent={leftNavContent}
       programMonitor={programMonitorNode}
       previewMonitor={previewMonitorNode}
       programLabel={programScene.name}
@@ -4719,17 +4733,15 @@ export function SceneWorkspace({
       switcherContent={switcherNode}
       routingEdges={routingEdges}
       audioMixerContent={<ProfessionalAudioMixer sources={mixerSources} />}
-      audioChannelCount={
-        effectiveAudioChannels.length || graphAudioChannels.length || channels.length
-      }
-      {...(directCameraLive ? { audioLiveLevel: audioLevel } : {})}
       diagnosticsMetrics={diagnosticsMetrics}
       operationsTabs={operationsTabsResolved}
       activeOperationsTab={activeOperationsTab}
       activeDockTab={activeBottomDock}
       onOperationsTabChange={setActiveOperationsTab}
       onDockTabChange={setActiveBottomDock}
-      bottomDeckContent={bottomDockContent}
+      bottomWorkspaceContent={bottomDockContent}
+      productionGraphContent={productionGraphPanelContent}
+      graphRevision={productionGraphSession.graph.metadata.revision}
       previewSlot={previewMonitor}
     />
   );
