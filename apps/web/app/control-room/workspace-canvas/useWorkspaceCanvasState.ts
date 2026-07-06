@@ -4,9 +4,13 @@ import { useCallback, useEffect, useState } from 'react';
 import type { DockTabId, NavItemId, OperationsTabId } from '../shell/types';
 import {
   applyPresetToState,
+  adjustMonitorSplit,
+  adjustZoneFlexWeight,
   loadWorkspaceCanvasLocally,
   resetWorkspaceCanvasLocally,
   saveWorkspaceCanvasLocally,
+  setMonitorSplit,
+  setZoneFlexWeight,
   togglePanelCollapsed,
   togglePanelUndocked,
 } from './persistence';
@@ -70,6 +74,22 @@ export function useWorkspaceCanvasState(initialPresetId?: WorkspacePresetId) {
     setState((current) => ({ ...current, activeDockTab }));
   }, []);
 
+  const resizeZone = useCallback((zoneId: 'left' | 'right' | 'bottom', delta: number) => {
+    setState((current) => adjustZoneFlexWeight(current, zoneId, delta));
+  }, []);
+
+  const resizeZoneTo = useCallback((zoneId: 'left' | 'right' | 'bottom', flexWeight: number) => {
+    setState((current) => setZoneFlexWeight(current, zoneId, flexWeight));
+  }, []);
+
+  const resizeMonitorSplit = useCallback((deltaProgramWeight: number) => {
+    setState((current) => adjustMonitorSplit(current, deltaProgramWeight));
+  }, []);
+
+  const setMonitorSplitWeights = useCallback((programFlexWeight: number) => {
+    setState((current) => setMonitorSplit(current, programFlexWeight));
+  }, []);
+
   const preset = getWorkspacePreset(state.presetId);
 
   return {
@@ -84,5 +104,9 @@ export function useWorkspaceCanvasState(initialPresetId?: WorkspacePresetId) {
     setActiveNavItem,
     setActiveOperationsTab,
     setActiveDockTab,
+    resizeZone,
+    resizeZoneTo,
+    resizeMonitorSplit,
+    setMonitorSplitWeights,
   };
 }

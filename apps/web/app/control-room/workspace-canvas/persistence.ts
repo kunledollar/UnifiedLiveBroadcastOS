@@ -1,4 +1,14 @@
 import {
+  DOCK_CONTENT_MAX_PX,
+  DOCK_CONTENT_MIN_PX,
+  LEFT_RAIL_MAX_PX,
+  LEFT_RAIL_MIN_PX,
+  MONITOR_SPLIT_MAX_PROGRAM,
+  MONITOR_SPLIT_MIN_PROGRAM,
+  RIGHT_OPS_MAX_PX,
+  RIGHT_OPS_MIN_PX,
+} from '../shell/control-room-layout';
+import {
   WORKSPACE_CANVAS_STORAGE_KEY,
   WORKSPACE_CANVAS_VERSION,
   type WorkspaceCanvasSnapshot,
@@ -23,6 +33,8 @@ export function createWorkspaceCanvasSnapshot(state: WorkspaceCanvasState): Work
     activeNavItem: state.activeNavItem,
     activeOperationsTab: state.activeOperationsTab,
     activeDockTab: state.activeDockTab,
+    programFlexWeight: state.programFlexWeight,
+    previewFlexWeight: state.previewFlexWeight,
     updatedAt: new Date().toISOString(),
   };
 }
@@ -51,6 +63,8 @@ export function loadWorkspaceCanvasLocally(): WorkspaceCanvasState | null {
       activeNavItem: parsed.activeNavItem ?? fallback.activeNavItem,
       activeOperationsTab: parsed.activeOperationsTab ?? fallback.activeOperationsTab,
       activeDockTab: parsed.activeDockTab ?? fallback.activeDockTab,
+      programFlexWeight: parsed.programFlexWeight ?? fallback.programFlexWeight,
+      previewFlexWeight: parsed.previewFlexWeight ?? fallback.previewFlexWeight,
     };
   } catch {
     window.localStorage.removeItem(WORKSPACE_CANVAS_STORAGE_KEY);
@@ -122,4 +136,62 @@ export function toggleZoneCollapsed(
       [zoneId]: { ...zone, collapsed: !zone.collapsed },
     },
   };
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+export function setZoneFlexWeight(
+  state: WorkspaceCanvasState,
+  zoneId: 'left' | 'right' | 'bottom',
+  flexWeight: number,
+): WorkspaceCanvasState {
+  const zone = state.zones[zoneId];
+  if (!zone) return state;
+
+  const bounds =
+    zoneId === 'left'
+      ? { min: LEFT_RAIL_MIN_PX, max: LEFT_RAIL_MAX_PX }
+      : zoneId === 'right'
+        ? { min: RIGHT_OPS_MIN_PX, max: RIGHT_OPS_MAX_PX }
+        : { min: DOCK_CONTENT_MIN_PX, max: DOCK_CONTENT_MAX_PX };
+
+  return {
+    ...state,
+    zones: {
+      ...state.zones,
+      [zoneId]: { ...zone, flexWeight: clamp(flexWeight, bounds.min, bounds.max) },
+    },
+  };
+}
+
+export function setMonitorSplit(
+  state: WorkspaceCanvasState,
+  programFlexWeight: number,
+): WorkspaceCanvasState {
+  const program = clamp(programFlexWeight, MONITOR_SPLIT_MIN_PROGRAM, MONITOR_SPLIT_MAX_PROGRAM);
+  const preview = 100 - program;
+  return {
+    ...state,
+    programFlexWeight: program,
+    previewFlexWeight: preview,
+  };
+}
+
+export function adjustZoneFlexWeight(
+  state: WorkspaceCanvasState,
+  zoneId: 'left' | 'right' | 'bottom',
+  delta: number,
+): WorkspaceCanvasState {
+  const zone = state.zones[zoneId];
+  if (!zone) return state;
+  return setZoneFlexWeight(state, zoneId, zone.flexWeight + delta);
+}
+
+export function adjustMonitorSplit(
+  state: WorkspaceCanvasState,
+  deltaProgramWeight: number,
+): WorkspaceCanvasState {
+  return setMonitorSplit(state, state.programFlexWeight + deltaProgramWeight);
 }

@@ -57,19 +57,21 @@ export function useUbosDockLayout() {
     saveDockLayoutLocally(state);
   }, [state, hydrated]);
 
-  const selectWorkspaceMode = useCallback((modeId: UbosWorkspaceModeId) => {
-    setState(applyWorkspaceModeToDockLayout(modeId));
-    return ubosWorkspaceModes[modeId];
-  }, []);
-
   const toggleDockPanel = useCallback((panelId: UbosDockPanelId) => {
+    if (state.layoutLocked) return;
     setState((current) => toggleDockPanelVisibility(current, panelId));
-  }, []);
+  }, [state.layoutLocked]);
 
   const toggleZone = useCallback((zone: 'left' | 'right' | 'bottom') => {
     if (state.layoutLocked) return;
     setState((current) => toggleZoneCollapsed(current, zone));
   }, [state.layoutLocked]);
+
+  const selectWorkspaceMode = useCallback((modeId: UbosWorkspaceModeId) => {
+    if (state.layoutLocked) return ubosWorkspaceModes[state.workspaceMode];
+    setState(applyWorkspaceModeToDockLayout(modeId));
+    return ubosWorkspaceModes[modeId];
+  }, [state.layoutLocked, state.workspaceMode]);
 
   const setLayoutLocked = useCallback((locked: boolean) => {
     setState((current) => ({ ...current, layoutLocked: locked }));

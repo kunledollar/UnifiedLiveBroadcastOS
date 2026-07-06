@@ -104,6 +104,8 @@ export type WorkspaceCanvasState = {
   activeNavItem: NavItemId;
   activeOperationsTab: OperationsTabId;
   activeDockTab: DockTabId;
+  programFlexWeight: number;
+  previewFlexWeight: number;
 };
 
 export const WORKSPACE_CANVAS_STORAGE_KEY = 'ubos.controlRoom.workspaceCanvas.v315';
@@ -118,5 +120,7 @@ export type WorkspaceCanvasSnapshot = {
   activeNavItem: NavItemId;
   activeOperationsTab: OperationsTabId;
   activeDockTab: DockTabId;
+  programFlexWeight?: number;
+  previewFlexWeight?: number;
   updatedAt: string;
 };

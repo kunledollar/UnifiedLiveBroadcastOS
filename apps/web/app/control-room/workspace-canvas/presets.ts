@@ -272,5 +272,7 @@ export function createCanvasStateFromPreset(preset: WorkspacePreset): WorkspaceC
     activeNavItem: preset.defaultNavItem,
     activeOperationsTab: preset.defaultOperationsTab,
     activeDockTab: preset.defaultDockTab,
+    programFlexWeight: preset.programFlexWeight,
+    previewFlexWeight: preset.previewFlexWeight,
   };
 }
