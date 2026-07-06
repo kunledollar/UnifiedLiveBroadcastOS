@@ -140,7 +140,7 @@ import {
   switcherHeightForLayout,
 } from './shell/control-room-layout';
 import { LeftNavPanel } from './browsers';
-import { DigitalAudioConsole, DockPanelEmpty } from './audio-console';
+import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
 import type { BrowserStreamingPanelState, StreamingPanelAction } from './operations/StreamingRuntimePanel';
@@ -3696,14 +3696,22 @@ export function SceneWorkspace({
     ],
   );
 
+  const mixerSources = useMemo(
+    () => [
+      { id: 'camera', name: 'Camera Microphone', type: 'camera' as const, stream: activeCameraStream ?? smokeMedia.stream },
+      { id: 'screen', name: 'Screen Audio', type: 'screen' as const, stream: smokeMedia.screenStream },
+      { id: 'media', name: 'Media Playback', type: 'media' as const, stream: null },
+      { id: 'browser', name: 'Browser Source', type: 'browser' as const, stream: null },
+      { id: 'guest', name: 'Guest Audio', type: 'guest' as const, stream: null },
+      { id: 'master', name: 'Master Output', type: 'master' as const, stream: null },
+    ],
+    [activeCameraStream, smokeMedia.screenStream, smokeMedia.stream],
+  );
+
   const bottomDockContent = (
     <>
       {activeBottomDock === 'audio' ? (
-        <DigitalAudioConsole
-          channels={effectiveAudioChannels}
-          graphChannels={graphAudioChannels}
-          recordingActive={recordingActive}
-        />
+        <ProfessionalAudioMixer sources={mixerSources} />
       ) : null}
       {activeBottomDock === 'layers' ? (
         activeScene.sources.length ? (

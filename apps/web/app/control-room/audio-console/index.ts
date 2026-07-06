@@ -7,3 +7,4 @@ export { ChannelStatus } from './ChannelStatus';
 export { AudioGroups } from './AudioGroups';
 export { DockPanelEmpty, DockPanelTags } from './DockPanels';
 export * from './audio-console-utils';
+export { ProfessionalAudioMixer } from './ProfessionalAudioMixer';
