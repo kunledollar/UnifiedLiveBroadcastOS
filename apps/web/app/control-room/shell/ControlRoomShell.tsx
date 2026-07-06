@@ -1,3 +1,4 @@
+import { DesktopPlatformPanel } from '../desktop-platform-panel';
 import { SceneWorkspace } from '../scene-workspace';
 import type {
   AudioChannel,
@@ -42,6 +43,7 @@ export function ControlRoomShell({
 }) {
   return (
     <main className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
+      <DesktopPlatformPanel />
       <SceneWorkspace
         initialScenes={scenes}
         initialProductionState={productionState}

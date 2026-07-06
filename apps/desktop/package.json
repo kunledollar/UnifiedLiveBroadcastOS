@@ -1,0 +1,13 @@
+{
+  "name": "@ubos/desktop",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "pnpm --filter @ubos/web dev",
+    "build": "cargo build --manifest-path src-tauri/Cargo.toml",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "desktop:demo": "pnpm --filter @ubos/web dev"
+  }
+}
