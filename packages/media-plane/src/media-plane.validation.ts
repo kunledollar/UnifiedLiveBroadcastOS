@@ -101,6 +101,7 @@ import {
   validateStreamingDestination,
   createStreamingRuntimeManifest,
   createMultiviewPlan,
+  createMultiviewLayout,
   validateMultiviewPlan,
   buildTileLayout,
   updateMultiviewTile,
@@ -111,6 +112,9 @@ import {
   summarizeConfidenceStatus,
   validateConfidenceSignals,
   MultiviewStore,
+  MultiviewManager,
+  collectRuntimeDiagnostics,
+  createDemoMultiviewLayout,
   createWebRTCTransportPlan,
   validateWebRTCTransportPlan,
   createWebRTCSession,
@@ -639,6 +643,29 @@ multiviewStore.setMultiviewPlan(multiviewPlan);
 multiviewStore.setConfidenceMonitor(confidenceMonitor);
 assert.equal(multiviewStore.getTileById(multiviewPlan.tiles[0]!.id)?.id, multiviewPlan.tiles[0]!.id, 'multiview store gets tile by id');
 assert.equal(multiviewStore.getTilesByType('program').length, 1, 'multiview store filters tiles by type');
+
+const customMultiviewLayout = createMultiviewLayout({ id: 'validation-multiview-layout', name: 'Validation Multiview', preset: 'custom_grid', tileCount: 8, grid: { columns: 4, rows: 2, gapPx: 12 } });
+const runtimeDiagnostics = collectRuntimeDiagnostics();
+assert.equal(runtimeDiagnostics.containsRuntimeHandles, false, 'multiview diagnostics are backend independent metadata');
+const multiviewManager = new MultiviewManager();
+const managedPlan = multiviewManager.loadLayout(streamingGraph, customMultiviewLayout, [
+  { kind: 'program', label: 'PGM' },
+  { kind: 'preview', label: 'PVW' },
+  { kind: 'camera', id: 'camera-a', label: 'CAM A' },
+  { kind: 'media', id: 'media-a', label: 'MEDIA A' },
+  { kind: 'audio_meter', label: 'AUDIO' },
+  { kind: 'recording', label: 'REC' },
+  { kind: 'streaming', label: 'STREAM' },
+  { kind: 'runtime_diagnostics', label: 'DIAG' },
+]);
+assert.equal(managedPlan.layout.grid.columns, 4, 'multiview manager supports custom grid layouts');
+assert.equal(managedPlan.tiles.some((tile) => tile.tally === 'program'), true, 'multiview tiles include tally indication');
+assert.equal(managedPlan.tiles.every((tile) => tile.overlays.some((overlay) => overlay.kind === 'safe_title')), true, 'multiview tiles include safe title overlays');
+const managedSnapshot = multiviewManager.renderSnapshot(streamingGraph);
+assert.equal(managedSnapshot.events.some((event) => event.type === 'multiview_layout_loaded'), true, 'multiview manager emits runtime events');
+const demoMultiview = await createDemoMultiviewLayout();
+assert.equal(demoMultiview.layout.tileCount, 8, 'demo multiview layout exposes eight monitoring tiles');
+
 const multiviewMock = new MockMediaExecutionAdapter({ latencyMs: 1 });
 const multiviewMockResult = multiviewMock.execute({ id: 'mock-multiview', type: 'BUILD_MULTIVIEW_PLAN', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: streamingGraph.metadata.revision, payload: { preset: 'quad', frameId: 82 } }, streamingGraph);
 assert.equal(multiviewMockResult.success, true, 'mock multiview execution intent handling succeeds');
