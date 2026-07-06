@@ -105,3 +105,25 @@ export class MetadataStreamingPipeline implements StreamingPipelineV2 {
 
 export const createStreamingPipeline = (input: { id?: string; backend?: StreamingBackendDescriptor } = {}): StreamingPipelineV2 => new MetadataStreamingPipeline(input.id, input.backend);
 export async function createDemoStreamingSession(input: { programOutput: ProgramOutput; audioMixer: AudioMixer; mediaClock?: MediaClock; frameScheduler?: FrameSchedulerType }) { const clock = input.mediaClock ?? createClock({ frameRate: 30 }); const scheduler = input.frameScheduler ?? new FrameScheduler(clock); const pipeline = createStreamingPipeline({ id: 'streaming-pipeline:demo' }); const session = pipeline.createSession({ id: 'streaming-session:demo', destination: { kind: 'rtmps', provider: 'youtube', label: 'Demo YouTube RTMPS', endpointUrl: 'rtmps://a.rtmps.youtube.com/live2/STREAM_KEY', streamKeyRef: 'secret://youtube/demo' }, programOutput: input.programOutput, audioMixer: input.audioMixer, mediaClock: clock, frameScheduler: scheduler, targetBitrateKbps: 4500, latencyEstimateMs: 2500, metadata: { demo: true } }); pipeline.prepare(session.id); pipeline.connect(session.id); pipeline.start(session.id); const tick = scheduler.createTick(); pipeline.publishProgramFrame(session.id, tick); pipeline.publishAudioFrame(session.id, 480, tick); pipeline.reconnect(session.id, 'Demo reconnect metadata event'); pipeline.stop(session.id); return { pipeline: pipeline.getSnapshot(), session: pipeline.getSession(session.id)!, events: pipeline.getEvents() }; }
+
+// UBOS 3.6 Streaming Engine adapter boundary. These adapters intentionally keep
+// configuration metadata separate from future runtime transport/process handles.
+export type StreamingAdapterKind = 'browser' | 'ffmpeg' | 'native_desktop';
+export interface StreamingAdapterBoundary {
+  readonly id: string;
+  readonly kind: StreamingAdapterKind;
+  readonly label: string;
+  readonly supportsRealRtmpTransport: boolean;
+  readonly requiresBackendOrNativeRuntime: boolean;
+  readonly containsRuntimeHandles: false;
+  describe(): Readonly<Record<string, string | boolean>>;
+}
+abstract class MetadataOnlyStreamingAdapter implements StreamingAdapterBoundary {
+  readonly containsRuntimeHandles = false as const;
+  constructor(readonly id: string, readonly kind: StreamingAdapterKind, readonly label: string, readonly supportsRealRtmpTransport: boolean, readonly requiresBackendOrNativeRuntime: boolean) {}
+  describe() { return Object.freeze({ id: this.id, kind: this.kind, label: this.label, supportsRealRtmpTransport: this.supportsRealRtmpTransport, requiresBackendOrNativeRuntime: this.requiresBackendOrNativeRuntime, containsRuntimeHandles: false }); }
+}
+export class BrowserStreamingAdapter extends MetadataOnlyStreamingAdapter { constructor() { super('streaming-adapter:browser', 'browser', 'BrowserStreamingAdapter', false, true); } }
+export class FFmpegStreamingAdapter extends MetadataOnlyStreamingAdapter { constructor() { super('streaming-adapter:ffmpeg', 'ffmpeg', 'FFmpegStreamingAdapter', true, true); } }
+export class NativeDesktopStreamingAdapter extends MetadataOnlyStreamingAdapter { constructor() { super('streaming-adapter:native-desktop', 'native_desktop', 'NativeDesktopStreamingAdapter', true, true); } }
+export const createStreamingAdapters = () => Object.freeze([new BrowserStreamingAdapter(), new FFmpegStreamingAdapter(), new NativeDesktopStreamingAdapter()] as const);

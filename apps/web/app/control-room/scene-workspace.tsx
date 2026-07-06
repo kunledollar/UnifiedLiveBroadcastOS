@@ -143,6 +143,7 @@ import { LeftNavPanel } from './browsers';
 import { DigitalAudioConsole, DockPanelEmpty } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
+import type { BrowserStreamingPanelState, StreamingPanelAction } from './operations/StreamingRuntimePanel';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
 import {
   applyWorkspaceProfile,
@@ -2144,6 +2145,56 @@ export function SceneWorkspace({
   const [recordingFilename, setRecordingFilename] = useState<string | null>(null);
   const [recordingHistory, setRecordingHistory] = useState<BrowserRecordingPanelState['history']>([]);
   const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
+  const [streamingState, setStreamingState] = useState<BrowserStreamingPanelState>({
+    lifecycle: 'idle',
+    destination: { id: 'stream-destination:default', platform: 'YouTube', rtmpUrl: '', streamKey: '', enabled: true, resolution: '1920x1080', bitrateKbps: 4500, audioBitrateKbps: 160 },
+    durationMs: 0,
+    startedAt: null,
+    stoppedAt: null,
+    bitrateEstimateKbps: 0,
+    droppedFrameEstimate: 0,
+    error: null,
+    history: [],
+    browserOnly: true,
+    adapters: ['BrowserStreamingAdapter', 'FFmpegStreamingAdapter', 'NativeDesktopStreamingAdapter'],
+  });
+  const streamingStartRef = useRef<string | null>(null);
+
+  const validateStreamingDestination = useCallback((destination: BrowserStreamingPanelState['destination']) => {
+    if (!destination.enabled) return 'Enable the streaming destination before starting.';
+    if (!destination.rtmpUrl.trim()) return 'Add an RTMP server URL before starting streaming.';
+    if (!/^rtmps?:\/\/[^\s]+$/i.test(destination.rtmpUrl.trim())) return 'Enter a valid RTMP or RTMPS server URL.';
+    if (!destination.streamKey.trim()) return 'Add a stream key before starting streaming.';
+    return null;
+  }, []);
+
+  const dispatchStreaming = useCallback((action: StreamingPanelAction) => {
+    if (action.type === 'updateDestination') {
+      setStreamingState((current) => ({ ...current, error: null, destination: { ...current.destination, ...action.patch } }));
+      return;
+    }
+    if (action.type === 'start') {
+      setStreamingState((current) => {
+        const error = validateStreamingDestination(current.destination);
+        if (error) return { ...current, lifecycle: 'failed', error };
+        const startedAt = new Date().toISOString();
+        streamingStartRef.current = startedAt;
+        return { ...current, lifecycle: 'preparing', startedAt, stoppedAt: null, durationMs: 0, bitrateEstimateKbps: 0, droppedFrameEstimate: 0, error: 'Browser-only mode cannot transmit RTMP. Lifecycle is simulated until backend/native FFmpeg support is connected.' };
+      });
+      window.setTimeout(() => setStreamingState((current) => current.lifecycle === 'preparing' ? { ...current, lifecycle: 'connecting' } : current), 400);
+      window.setTimeout(() => setStreamingState((current) => current.lifecycle === 'connecting' ? { ...current, lifecycle: 'streaming', bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps } : current), 900);
+      return;
+    }
+    if (action.type === 'stop') {
+      setStreamingState((current) => {
+        const stoppedAt = new Date().toISOString();
+        const startedAt = current.startedAt ?? stoppedAt;
+        const durationMs = Math.max(0, Date.parse(stoppedAt) - Date.parse(startedAt));
+        return { ...current, lifecycle: 'stopped', stoppedAt, durationMs, bitrateEstimateKbps: 0, history: [{ platform: current.destination.platform, startedAt, stoppedAt, durationMs, state: 'stopped' as const, failureReason: null }, ...current.history].slice(0, 10) };
+      });
+    }
+  }, [validateStreamingDestination]);
+
 
   const liveSourceStreamsRef = useRef<Record<string, MediaStream>>({});
 
@@ -2422,6 +2473,14 @@ export function SceneWorkspace({
   }, []);
 
 
+
+  useEffect(() => {
+    if (streamingState.lifecycle !== 'streaming' || !streamingState.startedAt) return;
+    const tick = () => setStreamingState((current) => ({ ...current, durationMs: Date.now() - Date.parse(streamingState.startedAt!), bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps, droppedFrameEstimate: Math.floor((Date.now() - Date.parse(streamingState.startedAt!)) / 60000) }));
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [streamingState.lifecycle, streamingState.startedAt]);
 
   useEffect(() => {
     if (recordingState !== 'recording' || !recordingStartedAt) return;
@@ -3153,6 +3212,8 @@ export function SceneWorkspace({
         runtimeHealth: runtime.session.health(),
         runtimeSnapshots: runtime.session.history.history,
         browserRecordingState: browserRecordingPanelState,
+        browserStreamingState: streamingState,
+        onStreamingDispatch: dispatchStreaming,
         onStartBrowserRecording: startSmokeRecording,
         onStopBrowserRecording: stopSmokeRecording,
       }),
@@ -3187,6 +3248,8 @@ export function SceneWorkspace({
       runtimeView,
       runtime,
       browserRecordingPanelState,
+      streamingState,
+      dispatchStreaming,
       startSmokeRecording,
       stopSmokeRecording,
     ],
@@ -3203,6 +3266,7 @@ export function SceneWorkspace({
       'compositor',
       'runtime',
       'recording',
+      'streaming',
       'security',
       'monitoring',
       'cluster',
