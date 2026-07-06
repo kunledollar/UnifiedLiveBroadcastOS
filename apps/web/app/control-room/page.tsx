@@ -35,8 +35,13 @@ const audioChannels: AudioChannel[] = [];
 const assets: ProductionAsset[] = [
   { id: 'asset-intro', name: 'Intro Sting', type: 'video', status: 'ready' },
   { id: 'asset-lower-third', name: 'Guest Lower Third', type: 'lower_third', status: 'ready' },
-  { id: 'asset-bg', name: 'Gradient Background', type: 'background', status: 'ready' },
-  { id: 'asset-logo', name: 'Sponsor Bug', type: 'overlay', status: 'queued' },
+  { id: 'asset-full-screen', name: 'Full Screen Topic Card', type: 'background', status: 'ready' },
+  { id: 'asset-logo', name: 'PNG / SVG Logo Bug', type: 'overlay', status: 'ready' },
+  { id: 'asset-ticker', name: 'Scrolling News Ticker', type: 'overlay', status: 'queued' },
+  { id: 'asset-clock', name: 'Real Time Countdown Clock', type: 'overlay', status: 'ready' },
+  { id: 'asset-scoreboard', name: 'Home Away Scoreboard', type: 'overlay', status: 'ready' },
+  { id: 'asset-title', name: 'Animated Title Overlay', type: 'overlay', status: 'ready' },
+  { id: 'asset-bg', name: 'Image Overlay Background', type: 'image', status: 'ready' },
 ];
 
 function loadPersistenceDiagnostics() {
