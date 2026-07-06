@@ -244,6 +244,57 @@ import {
   deviceReducer,
 } from './devices';
 
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function logMediaDiagnostic(message: string, details?: Record<string, unknown>): void {
+  console.info(`[UBOS media runtime] ${message}`, details ?? {});
+}
+
+function warnMediaDiagnostic(message: string, error: unknown, details?: Record<string, unknown>): void {
+  if (isAbortError(error)) {
+    console.info(`[UBOS media runtime] ${message}: browser aborted media cleanup`, {
+      ...details,
+      errorName: 'AbortError',
+    });
+    return;
+  }
+  console.warn(`[UBOS media runtime] ${message}`, { ...details, error });
+}
+
+function pauseVideoSafely(video: HTMLVideoElement, details?: Record<string, unknown>): void {
+  try {
+    video.pause();
+  } catch (error) {
+    warnMediaDiagnostic('video pause failed', error, details);
+  }
+}
+
+function assignVideoStreamSafely(
+  video: HTMLVideoElement,
+  stream: MediaStream | null,
+  details?: Record<string, unknown>,
+): void {
+  try {
+    video.srcObject = stream;
+  } catch (error) {
+    warnMediaDiagnostic(stream ? 'video stream attach failed' : 'video stream cleanup failed', error, details);
+  }
+}
+
+function playVideoSafely(video: HTMLVideoElement, details?: Record<string, unknown>): void {
+  try {
+    const playPromise = video.play();
+    if (playPromise) {
+      void playPromise.catch((error) => warnMediaDiagnostic('video play failed', error, details));
+    }
+  } catch (error) {
+    warnMediaDiagnostic('video play failed', error, details);
+  }
+}
+
 function MediaStreamPreview({
   stream,
   muted = true,
@@ -257,11 +308,17 @@ function MediaStreamPreview({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = stream ?? null;
+    const video = videoRef.current;
+    if (!video) return;
+    const details = { target: label, streamId: stream?.id, active: stream?.active };
+    pauseVideoSafely(video, details);
+    assignVideoStreamSafely(video, stream ?? null, details);
+    if (stream) playVideoSafely(video, details);
     return () => {
-      if (videoRef.current) videoRef.current.srcObject = null;
+      pauseVideoSafely(video, { ...details, cleanup: true });
+      assignVideoStreamSafely(video, null, { ...details, cleanup: true });
     };
-  }, [stream]);
+  }, [label, stream]);
   return (
     <div className="overflow-hidden rounded-lg border border-slate-700 bg-black/40">
       <video
@@ -297,19 +354,21 @@ function LiveMediaMonitor({
     const video = videoRef.current;
     if (!video) return;
     const nextStream = active ? stream : null;
-    console.info('[UBOS media runtime] attaching stream', {
+    const details = {
       target: role,
       streamId: nextStream?.id,
       active: nextStream?.active,
-    });
-    video.srcObject = nextStream;
+    };
+    logMediaDiagnostic('attaching stream', details);
+    pauseVideoSafely(video, details);
+    assignVideoStreamSafely(video, nextStream, details);
     if (active && stream) {
-      void video
-        .play()
-        .catch((error) => console.error('[UBOS media runtime] video play failed', error));
+      playVideoSafely(video, details);
     }
     return () => {
-      video.srcObject = null;
+      const cleanupDetails = { ...details, cleanup: true };
+      pauseVideoSafely(video, cleanupDetails);
+      assignVideoStreamSafely(video, null, cleanupDetails);
     };
   }, [active, stream]);
   return (
