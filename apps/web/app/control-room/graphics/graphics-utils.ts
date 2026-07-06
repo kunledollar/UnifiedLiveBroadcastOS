@@ -12,12 +12,13 @@ import { createEmptySceneGraphicsComposition } from '@ubos/shared';
 export const graphicsBrowserCategories: Array<{ id: GraphicsAssetType | 'templates' | 'brand'; label: string }> = [
   { id: 'lower_third', label: 'Lower Thirds' },
   { id: 'logo', label: 'Logos' },
-  { id: 'watermark', label: 'Watermarks' },
+  { id: 'html_overlay', label: 'Full Screen' },
+  { id: 'watermark', label: 'Bugs' },
   { id: 'ticker', label: 'Tickers' },
-  { id: 'countdown', label: 'Countdowns' },
-  { id: 'sponsor_card', label: 'Sponsor Cards' },
+  { id: 'countdown', label: 'Clocks' },
+  { id: 'sponsor_card', label: 'Animated Titles' },
   { id: 'scoreboard', label: 'Scoreboards' },
-  { id: 'image', label: 'Brand Assets' },
+  { id: 'image', label: 'Image Overlays' },
   { id: 'templates', label: 'Templates' },
   { id: 'brand', label: 'Brand Kit' },
 ];
@@ -35,29 +36,80 @@ export function productionAssetToGraphicsAsset(asset: ProductionAsset): Graphics
     queued: 'draft',
     disabled: 'disabled',
   };
+  const lowerName = asset.name.toLowerCase();
+  const inferredType: GraphicsAssetType = lowerName.includes('logo') || lowerName.includes('bug')
+    ? 'logo'
+    : lowerName.includes('ticker')
+      ? 'ticker'
+      : lowerName.includes('clock') || lowerName.includes('countdown')
+        ? 'countdown'
+        : lowerName.includes('scoreboard') || lowerName.includes('score')
+          ? 'scoreboard'
+          : lowerName.includes('full screen')
+            ? 'html_overlay'
+            : lowerName.includes('title')
+              ? 'sponsor_card'
+              : (typeMap[asset.type] ?? 'image');
   const now = new Date().toISOString();
   return {
     id: asset.id,
     name: asset.name,
-    type: typeMap[asset.type] ?? 'image',
+    type: inferredType,
     status: statusMap[asset.status] ?? 'unavailable',
     createdAt: now,
     updatedAt: now,
   };
 }
 
+export const graphicsAnimationPresets = ['fade', 'slide left', 'slide right', 'slide up', 'zoom', 'scale', 'pop', 'dissolve'] as const;
+
+export const graphicsAnimationSpeeds = {
+  fast: 250,
+  medium: 500,
+  slow: 900,
+} as const;
+
+export const builtInLowerThirdTemplateNames = [
+  'News',
+  'Interview',
+  'Sports',
+  'Podcast',
+  'Webinar',
+  'Corporate',
+  'Election',
+  'Weather',
+  'Breaking News',
+  'Minimal',
+] as const;
+
 export function createDefaultLowerThirdTemplate(name = 'New Lower Third'): LowerThirdTemplate {
   return {
-    id: `lt-${Date.now()}`,
+    id: `lt-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-${Date.now()}`,
     name,
-    title: 'Name Surname',
-    subtitle: 'Title or Role',
-    role: 'Host',
+    title: name === 'Breaking News' ? 'Breaking News' : 'Name Surname',
+    subtitle: name === 'Sports' ? 'Score Update' : 'Title or Role',
+    role: name,
     organization: 'Organization',
-    style: { variant: 'broadcast', alignment: 'left' },
-    animation: { type: 'fade', durationMs: 500 },
+    style: {
+      variant: name.toLowerCase(),
+      alignment: 'left',
+      location: 'Studio A',
+      company: 'UBOS',
+      backgroundColor: name === 'Breaking News' ? '#b91c1c' : '#111827',
+      accentColor: name === 'Minimal' ? '#e5e7eb' : '#38bdf8',
+      font: 'Inter',
+      size: 42,
+      opacity: 0.92,
+      padding: 24,
+      safeAreas: { titleSafe: true, actionSafe: true, grid: false },
+    },
+    animation: { type: 'fade', durationMs: graphicsAnimationSpeeds.medium },
     durationMs: 8000,
   };
+}
+
+export function createBuiltInLowerThirdTemplates(): LowerThirdTemplate[] {
+  return builtInLowerThirdTemplateNames.map((name) => createDefaultLowerThirdTemplate(name));
 }
 
 export function createGraphicsLayerFromAsset(
@@ -82,7 +134,17 @@ export function createGraphicsLayerFromAsset(
     timing: { inMs: 0, holdMs: 8000 },
     programState: 'hidden',
     previewState: 'hidden',
-    metadata: {},
+    metadata: {
+      runtimeSeparated: true,
+      routing: 'preview',
+      operation: 'CUT',
+      memory: 'metadata-only',
+      runtimeState: 'idle',
+      logo: { acceptedFormats: ['PNG', 'SVG'], scale: 1, rotation: 0 },
+      ticker: { speed: 'medium', paused: false, direction: 'left', loop: true },
+      clock: { mode: 'real time', timezone: 'UTC' },
+      scoreboard: { home: 'HOME', away: 'AWAY', score: '0-0', period: '1', possession: 'home' },
+    },
   };
 }
 

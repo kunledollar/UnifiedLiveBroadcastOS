@@ -8,6 +8,7 @@ export function GraphicsPreviewControls({
   onSendToPreview,
   onTakeLive,
   onRemoveFromProgram,
+  onAutoBoth,
   onClearPreview,
   onClearProgram,
   className,
@@ -17,6 +18,7 @@ export function GraphicsPreviewControls({
   onSendToPreview?: () => void;
   onTakeLive?: () => void;
   onRemoveFromProgram?: () => void;
+  onAutoBoth?: () => void;
   onClearPreview?: () => void;
   onClearProgram?: () => void;
   className?: string;
@@ -24,16 +26,19 @@ export function GraphicsPreviewControls({
   return (
     <div className={cn('flex flex-wrap items-center gap-ubos-2', className)}>
       <span className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-muted')}>
-        Preview {previewCount} · Program {programCount}
+        Preview {previewCount} · Program {programCount} · Routes: Preview / Program / Both
       </span>
       <BroadcastButton size="sm" variant="secondary" onClick={onSendToPreview}>
-        Send to Preview
+        CUT to Preview
       </BroadcastButton>
       <BroadcastButton size="sm" variant="primary" onClick={onTakeLive}>
-        Take Live
+        TAKE Program
+      </BroadcastButton>
+      <BroadcastButton size="sm" variant="ghost" onClick={onAutoBoth}>
+        AUTO Both
       </BroadcastButton>
       <BroadcastButton size="sm" variant="ghost" onClick={onRemoveFromProgram}>
-        Remove from Program
+        Remove Program
       </BroadcastButton>
       <BroadcastButton size="sm" variant="ghost" onClick={onClearPreview}>
         Clear Preview

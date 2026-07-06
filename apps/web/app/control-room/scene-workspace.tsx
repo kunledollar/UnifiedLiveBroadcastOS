@@ -171,6 +171,7 @@ import {
   GraphicsLayerStack,
   GraphicsPreviewControls,
   GraphicsWorkspace,
+  createBuiltInLowerThirdTemplates,
   createDefaultLowerThirdTemplate,
   ensureSceneComposition,
   graphicsCompositionReducer,
@@ -2867,8 +2868,9 @@ export function SceneWorkspace({
     deviceReducer,
     createInitialDeviceState(deviceManifest),
   );
-  const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
+  const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>(() => [
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
+    ...createBuiltInLowerThirdTemplates(),
   ]);
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
