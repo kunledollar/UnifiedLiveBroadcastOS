@@ -16,7 +16,7 @@ import {
 import type { LayoutFocusMode } from '../workspaces/workspace-types';
 import { applyWorkspaceProfile } from '../workspaces';
 import { BottomWorkspaceDock, bottomWorkspaceTabBarHeightPx } from './BottomWorkspaceDock';
-import { broadcastQuickAction, broadcastSurfaces } from './broadcast-theme';
+import { broadcastSurfaces } from './broadcast-theme';
 import { CenterProgramPreviewDeck, type MonitorStatusInfo } from './CenterProgramPreviewDeck';
 import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
 import { LeftCommandRail } from './LeftCommandRail';
@@ -239,16 +239,6 @@ export function BroadcastCommandCenterLayout({
     onDockTabChange?.(tab);
   };
 
-  const openBottomWorkspace = (panelId: Parameters<typeof toggleDockPanel>[0], tab: DockTabId) => {
-    if (!dockLayout.dockPanels[panelId]?.visible) {
-      toggleDockPanel(panelId);
-    }
-    if (bottomCollapsed) {
-      toggleZone('bottom');
-    }
-    handleDockTabChange(tab);
-  };
-
   const gridColumns = [
     showLeft ? `${leftWidth}px` : null,
     'minmax(0, 1fr)',
@@ -329,32 +319,6 @@ export function BroadcastCommandCenterLayout({
             compactChrome={compactChrome}
             className="min-h-0 flex-1"
           />
-
-          {layoutFocus !== 'switcher' ? (
-            <div className="flex shrink-0 flex-wrap items-center gap-1 px-0.5 pb-0.5">
-              <button
-                type="button"
-                onClick={() => openBottomWorkspace('system-status', 'system-status')}
-                className={broadcastQuickAction}
-              >
-                System Status
-              </button>
-              <button
-                type="button"
-                onClick={() => openBottomWorkspace('broadcast-io', 'routing')}
-                className={broadcastQuickAction}
-              >
-                Routing Matrix
-              </button>
-              <button
-                type="button"
-                onClick={() => openBottomWorkspace('pipeline-inspector', 'production-graph')}
-                className={broadcastQuickAction}
-              >
-                Production Graph
-              </button>
-            </div>
-          ) : null}
         </div>
 
         {showRight ? (

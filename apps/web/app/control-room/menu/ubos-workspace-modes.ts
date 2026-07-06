@@ -13,26 +13,27 @@ export type UbosWorkspaceModeDefinition = {
   compactChrome?: boolean;
 };
 
-const allDocksVisible: Partial<Record<UbosDockPanelId, boolean>> = {
+/** Core production panels shown in Director mode; advanced panels stay in Docks menu. */
+const directorStudioDocks: Partial<Record<UbosDockPanelId, boolean>> = {
   scenes: true,
   sources: true,
   'audio-mixer': true,
-  'audio-channels': true,
   'scene-transitions': true,
-  replay: true,
-  media: true,
-  graphics: true,
-  guests: true,
-  inspector: true,
-  'pipeline-inspector': false,
-  'broadcast-io': true,
   streaming: true,
   recording: true,
-  automation: true,
+  guests: true,
+  inspector: true,
+  'audio-channels': false,
+  replay: false,
+  media: false,
+  graphics: false,
+  'pipeline-inspector': false,
+  'broadcast-io': false,
+  automation: false,
   'monitor-wall': false,
-  timeline: true,
-  logs: true,
-  'system-status': true,
+  timeline: false,
+  logs: false,
+  'system-status': false,
 };
 
 export const ubosWorkspaceModes: Record<UbosWorkspaceModeId, UbosWorkspaceModeDefinition> = {
@@ -42,11 +43,7 @@ export const ubosWorkspaceModes: Record<UbosWorkspaceModeId, UbosWorkspaceModeDe
     description: 'Program-dominant switching with full production controls',
     canvasPresetId: 'technical-director',
     professionalWorkspaceId: 'director',
-    dockVisibility: {
-      ...allDocksVisible,
-      'monitor-wall': false,
-      'pipeline-inspector': false,
-    },
+    dockVisibility: directorStudioDocks,
     zoneCollapsed: { left: false, right: false, bottom: false },
   },
   audio: {

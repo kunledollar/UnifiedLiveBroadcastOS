@@ -73,7 +73,7 @@ function MenuDropdown({
       {open ? (
         <div
           role="menu"
-          className="absolute left-0 top-full z-50 mt-0.5 min-w-52 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon py-1 shadow-ubos-raised"
+          className="absolute left-0 top-full z-50 mt-0.5 max-h-[min(60vh,24rem)] min-w-52 overflow-y-auto rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon py-1 shadow-ubos-raised ubos-scroll"
         >
           {menu.items.map((item, index) => {
             if (item.divider) {
