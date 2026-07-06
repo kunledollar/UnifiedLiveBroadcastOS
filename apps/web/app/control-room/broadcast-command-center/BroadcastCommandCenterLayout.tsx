@@ -22,6 +22,13 @@ import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
 import { LeftCommandRail } from './LeftCommandRail';
 import { RightOperationsDock, type OperationsDockSection } from './RightOperationsDock';
 import { TopBar } from './TopBar';
+import { ZoneResizeHandle } from './ZoneResizeHandle';
+import {
+  LEFT_RAIL_COLLAPSED_PX,
+  LEFT_RAIL_DEFAULT_PX,
+  RIGHT_OPS_COLLAPSED_PX,
+  RIGHT_OPS_DEFAULT_PX,
+} from '../shell/control-room-layout';
 
 export type BroadcastCommandCenterLayoutProps = {
   statusBar: ReactNode;
@@ -115,6 +122,8 @@ export function BroadcastCommandCenterLayout({
     resetLayout: resetCanvasLayout,
     setActiveOperationsTab,
     setActiveDockTab,
+    resizeZone,
+    resizeMonitorSplit,
   } = useWorkspaceCanvasState('technical-director');
 
   const activeOperationsTab = externalOpsTab ?? canvasState.activeOperationsTab;
@@ -131,9 +140,19 @@ export function BroadcastCommandCenterLayout({
   const leftCollapsed = dockLayout.zoneCollapsed.left;
   const rightCollapsed = dockLayout.zoneCollapsed.right;
   const bottomCollapsed = dockLayout.zoneCollapsed.bottom;
+  const layoutLocked = dockLayout.layoutLocked;
+  const canResizeLayout = !layoutLocked;
 
-  const leftWidth = showLeft ? (leftCollapsed ? 56 : (canvasState.zones.left?.flexWeight ?? 260)) : 0;
-  const rightWidth = showRight ? (rightCollapsed ? 56 : (canvasState.zones.right?.flexWeight ?? 320)) : 0;
+  const leftWidth = showLeft
+    ? leftCollapsed
+      ? LEFT_RAIL_COLLAPSED_PX
+      : (canvasState.zones.left?.flexWeight ?? LEFT_RAIL_DEFAULT_PX)
+    : 0;
+  const rightWidth = showRight
+    ? rightCollapsed
+      ? RIGHT_OPS_COLLAPSED_PX
+      : (canvasState.zones.right?.flexWeight ?? RIGHT_OPS_DEFAULT_PX)
+    : 0;
   const bottomExpandedHeight =
     layoutFocus === 'audio'
       ? Math.max(canvasState.zones.bottom?.flexWeight ?? 140, 200)
@@ -145,6 +164,8 @@ export function BroadcastCommandCenterLayout({
       ? bottomWorkspaceTabBarHeightPx()
       : bottomExpandedHeight
     : 0;
+  const programFlexWeight = canvasState.programFlexWeight ?? preset.programFlexWeight;
+  const previewFlexWeight = canvasState.previewFlexWeight ?? preset.previewFlexWeight;
 
   const handleToggleDockPanel = useCallback(
     (panelId: Parameters<typeof toggleDockPanel>[0]) => {
@@ -176,6 +197,7 @@ export function BroadcastCommandCenterLayout({
 
   const handleSelectWorkspaceMode = useCallback(
     (modeId: UbosWorkspaceModeId) => {
+      if (dockLayout.layoutLocked) return;
       const modeDef = selectWorkspaceMode(modeId);
       selectPreset(modeDef.canvasPresetId);
       const profile = applyWorkspaceProfile(modeDef.professionalWorkspaceId);
@@ -187,6 +209,7 @@ export function BroadcastCommandCenterLayout({
       onWorkspaceModeApplied?.(modeId, modeDef.compactChrome);
     },
     [
+      dockLayout.layoutLocked,
       selectWorkspaceMode,
       selectPreset,
       onNavChange,
@@ -239,16 +262,6 @@ export function BroadcastCommandCenterLayout({
     onDockTabChange?.(tab);
   };
 
-  const gridColumns = [
-    showLeft ? `${leftWidth}px` : null,
-    'minmax(0, 1fr)',
-    showRight ? `${rightWidth}px` : null,
-  ]
-    .filter(Boolean)
-    .join(' ');
-
-  const gridRows = showBottom ? `minmax(0, 1fr) ${bottomHeight}px` : 'minmax(0, 1fr)';
-
   return (
     <div
       className={cn('flex h-full min-h-0 flex-col overflow-hidden text-sm', broadcastSurfaces.app)}
@@ -275,77 +288,94 @@ export function BroadcastCommandCenterLayout({
         {...(onResetDemo ? { onResetDemo } : {})}
       />
 
-      <div
-        className="grid min-h-0 flex-1 gap-1 overflow-hidden p-1"
-        style={{
-          gridTemplateColumns: gridColumns,
-          gridTemplateRows: gridRows,
-        }}
-      >
-        {showLeft ? (
-          <div className="row-span-1 min-h-0 overflow-hidden">
-            <LeftCommandRail
-              activeNav={activeNav}
-              onNavChange={onNavChange}
-              sourceDockContent={sourceDockContent}
-              activeSourceDockTab={activeSourceDockTab}
-              onSourceDockTabChange={onSourceDockTabChange}
-              collapsed={leftCollapsed}
-              {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('left') } : {})}
-              className="h-full"
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden p-1">
+        <div className="flex min-h-0 min-w-0 flex-1 overflow-hidden">
+          {showLeft ? (
+            <div
+              className="shrink-0 min-h-0 overflow-hidden"
+              style={{ width: leftWidth }}
+            >
+              <LeftCommandRail
+                activeNav={activeNav}
+                onNavChange={onNavChange}
+                sourceDockContent={sourceDockContent}
+                activeSourceDockTab={activeSourceDockTab}
+                onSourceDockTabChange={onSourceDockTabChange}
+                collapsed={leftCollapsed}
+                {...(canResizeLayout ? { onToggleCollapse: () => toggleZone('left') } : {})}
+                className="h-full"
+              />
+            </div>
+          ) : null}
+
+          {showLeft && !leftCollapsed && canResizeLayout ? (
+            <ZoneResizeHandle
+              orientation="vertical"
+              label="Resize left command rail"
+              onResizeDelta={(delta) => resizeZone('left', delta)}
+            />
+          ) : null}
+
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+            <CenterProgramPreviewDeck
+              programMonitor={programMonitor}
+              previewMonitor={previewMonitor}
+              programStatus={programStatus}
+              previewStatus={previewStatus}
+              switcherContent={showSwitcher ? switcherContent : null}
+              programFlexWeight={programFlexWeight}
+              previewFlexWeight={previewFlexWeight}
+              resizable={canResizeLayout}
+              onMonitorSplitDelta={resizeMonitorSplit}
+              layoutFocus={layoutFocus}
+              compactChrome={compactChrome}
+              className="min-h-0 flex-1"
             />
           </div>
-        ) : null}
 
-        <div
-          className={cn(
-            'flex min-h-0 flex-col gap-0.5 overflow-hidden',
-            !showLeft && !showRight ? 'col-span-1' : '',
-          )}
-          style={{
-            gridColumn: !showLeft && !showRight ? '1 / -1' : undefined,
-            gridRow: showBottom ? '1' : '1 / -1',
-          }}
-        >
-          <CenterProgramPreviewDeck
-            programMonitor={programMonitor}
-            previewMonitor={previewMonitor}
-            programStatus={programStatus}
-            previewStatus={previewStatus}
-            switcherContent={showSwitcher ? switcherContent : null}
-            programFlexWeight={preset.programFlexWeight}
-            previewFlexWeight={preset.previewFlexWeight}
-            layoutFocus={layoutFocus}
-            compactChrome={compactChrome}
-            className="min-h-0 flex-1"
-          />
+          {showRight && !rightCollapsed && canResizeLayout ? (
+            <ZoneResizeHandle
+              orientation="vertical"
+              label="Resize operations dock"
+              onResizeDelta={(delta) => resizeZone('right', -delta)}
+            />
+          ) : null}
+
+          {showRight ? (
+            <div
+              className="shrink-0 min-h-0 overflow-hidden"
+              style={{ width: rightWidth }}
+            >
+              <RightOperationsDock
+                sections={operationsSections}
+                activeTab={activeOperationsTab}
+                onTabChange={handleOpsTabChange}
+                collapsed={rightCollapsed}
+                {...(canResizeLayout ? { onToggleCollapse: () => toggleZone('right') } : {})}
+                className="h-full"
+              />
+            </div>
+          ) : null}
         </div>
 
-        {showRight ? (
-          <div className="row-span-1 min-h-0 overflow-hidden">
-            <RightOperationsDock
-              sections={operationsSections}
-              activeTab={activeOperationsTab}
-              onTabChange={handleOpsTabChange}
-              collapsed={rightCollapsed}
-              {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('right') } : {})}
-              className="h-full"
-            />
-          </div>
+        {showBottom && !bottomCollapsed && canResizeLayout ? (
+          <ZoneResizeHandle
+            orientation="horizontal"
+            label="Resize bottom workspace dock"
+            onResizeDelta={(delta) => resizeZone('bottom', -delta)}
+          />
         ) : null}
 
         {showBottom ? (
           <div
-            className="min-h-0 overflow-hidden"
-            style={{ gridColumn: '1 / -1', gridRow: showBottom ? '2' : undefined }}
+            className="shrink-0 min-h-0 overflow-hidden"
+            style={{ height: bottomHeight }}
           >
             <BottomWorkspaceDock
               activeTab={activeDockTab}
               onTabChange={handleDockTabChange}
               collapsed={bottomCollapsed}
-              {...(!dockLayout.layoutLocked
-                ? { onToggleCollapse: () => toggleZone('bottom') }
-                : {})}
+              {...(canResizeLayout ? { onToggleCollapse: () => toggleZone('bottom') } : {})}
               className="h-full"
             >
               {bottomWorkspaceContent}

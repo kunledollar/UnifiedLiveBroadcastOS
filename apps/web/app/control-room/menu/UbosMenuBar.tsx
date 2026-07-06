@@ -186,12 +186,14 @@ export function UbosMenuBar({
   const dockItems: MenuItem[] = UBOS_DOCK_PANEL_LIST.map((panel) => ({
     label: panel.label,
     checked: dockLayout.dockPanels[panel.id]?.visible ?? false,
+    disabled: dockLayout.layoutLocked,
     onClick: () => onToggleDockPanel(panel.id),
   }));
 
   const workspaceItems: MenuItem[] = ubosWorkspaceModeList.map((mode) => ({
     label: mode.label,
     checked: activeWorkspaceMode === mode.id,
+    disabled: dockLayout.layoutLocked,
     onClick: () => onSelectWorkspaceMode(mode.id),
   }));
 
@@ -363,10 +365,16 @@ export function UbosMenuBar({
             <button
               key={mode.id}
               type="button"
-              title={mode.description}
+              title={
+                dockLayout.layoutLocked
+                  ? 'Unlock layout to change workspace mode'
+                  : mode.description
+              }
+              disabled={dockLayout.layoutLocked}
               onClick={() => onSelectWorkspaceMode(mode.id)}
               className={cn(
                 'rounded-ubos-sm px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors',
+                dockLayout.layoutLocked && 'cursor-not-allowed opacity-50',
                 active
                   ? 'bg-ubos-selection-muted text-ubos-selection-text ring-1 ring-ubos-selection/40'
                   : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',

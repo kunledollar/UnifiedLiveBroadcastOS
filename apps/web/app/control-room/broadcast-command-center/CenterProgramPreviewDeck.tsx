@@ -1,9 +1,10 @@
 'use client';
 
-import { useCallback, useState, type ReactNode } from 'react';
+import { useCallback, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
 import type { LayoutFocusMode } from '../workspaces/workspace-types';
 import { AudioMeter } from '../audio-console/AudioMeter';
+import { ZoneResizeHandle } from './ZoneResizeHandle';
 import {
   broadcastMonitor,
   broadcastSurfaces,
@@ -171,6 +172,8 @@ export function CenterProgramPreviewDeck({
   previewFlexWeight = DEFAULT_PREVIEW_FLEX,
   layoutFocus = 'full',
   compactChrome = false,
+  resizable = false,
+  onMonitorSplitDelta,
   className,
 }: {
   programMonitor: ReactNode;
@@ -182,13 +185,27 @@ export function CenterProgramPreviewDeck({
   previewFlexWeight?: number;
   layoutFocus?: LayoutFocusMode;
   compactChrome?: boolean;
+  resizable?: boolean;
+  onMonitorSplitDelta?: (deltaProgramWeight: number) => void;
   className?: string;
 }) {
   const [fullscreenTarget, setFullscreenTarget] = useState<FullscreenTarget>(null);
+  const monitorsRef = useRef<HTMLDivElement>(null);
 
   const toggleFullscreen = useCallback((target: MonitorRole) => {
     setFullscreenTarget((current) => (current === target ? null : target));
   }, []);
+
+  const handleMonitorResize = useCallback(
+    (deltaPx: number) => {
+      const container = monitorsRef.current;
+      if (!container || !onMonitorSplitDelta) return;
+      const width = container.getBoundingClientRect().width;
+      if (width <= 0) return;
+      onMonitorSplitDelta((deltaPx / width) * 100);
+    },
+    [onMonitorSplitDelta],
+  );
 
   const monitors = {
     program: {
@@ -211,26 +228,50 @@ export function CenterProgramPreviewDeck({
       aria-label="Program and preview monitors"
     >
       <div
+        ref={monitorsRef}
         className={cn(
-          'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden xl:grid',
+          'flex min-h-0 flex-1 flex-col gap-2 overflow-hidden',
           monitorMinHeight,
+          resizable ? 'xl:flex-row xl:gap-0' : 'xl:grid',
         )}
-        style={{ gridTemplateColumns: `${programFlexWeight}fr ${previewFlexWeight}fr` }}
+        style={
+          resizable
+            ? undefined
+            : { gridTemplateColumns: `${programFlexWeight}fr ${previewFlexWeight}fr` }
+        }
       >
-        <MonitorBayCell
-          role="program"
-          monitor={monitors.program.monitor}
-          status={monitors.program.status}
-          fullscreen={false}
-          onToggleFullscreen={() => toggleFullscreen('program')}
-        />
-        <MonitorBayCell
-          role="preview"
-          monitor={monitors.preview.monitor}
-          status={monitors.preview.status}
-          fullscreen={false}
-          onToggleFullscreen={() => toggleFullscreen('preview')}
-        />
+        <div
+          className="min-h-0 min-w-0 flex-1"
+          style={resizable ? { flex: `${programFlexWeight} 1 0%` } : undefined}
+        >
+          <MonitorBayCell
+            role="program"
+            monitor={monitors.program.monitor}
+            status={monitors.program.status}
+            fullscreen={false}
+            onToggleFullscreen={() => toggleFullscreen('program')}
+          />
+        </div>
+        {resizable ? (
+          <ZoneResizeHandle
+            orientation="vertical"
+            label="Resize program and preview"
+            onResizeDelta={handleMonitorResize}
+            className="z-10 hidden shrink-0 xl:block"
+          />
+        ) : null}
+        <div
+          className="min-h-0 min-w-0 flex-1"
+          style={resizable ? { flex: `${previewFlexWeight} 1 0%` } : undefined}
+        >
+          <MonitorBayCell
+            role="preview"
+            monitor={monitors.preview.monitor}
+            status={monitors.preview.status}
+            fullscreen={false}
+            onToggleFullscreen={() => toggleFullscreen('preview')}
+          />
+        </div>
       </div>
 
       {fullscreenTarget ? (
