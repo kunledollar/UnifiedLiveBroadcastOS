@@ -280,12 +280,36 @@ function pauseVideoSafely(video: HTMLVideoElement, details?: Record<string, unkn
   }
 }
 
+function exitPictureInPictureSafely(details?: Record<string, unknown>): void {
+  if (typeof document === 'undefined' || !document.pictureInPictureElement) {
+    return;
+  }
+
+  try {
+    void document.exitPictureInPicture().catch((error) => {
+      warnMediaDiagnostic('picture-in-picture exit failed', error, details);
+    });
+  } catch (error) {
+    warnMediaDiagnostic('picture-in-picture exit failed', error, details);
+  }
+}
+
+function configureInlineVideoPlayback(video: HTMLVideoElement, muted: boolean): void {
+  video.disablePictureInPicture = true;
+  video.playsInline = true;
+  video.muted = muted;
+  video.autoplay = true;
+}
+
 function assignVideoStreamSafely(
   video: HTMLVideoElement,
   stream: MediaStream | null,
   details?: Record<string, unknown>,
 ): void {
   try {
+    if (stream) {
+      exitPictureInPictureSafely(details);
+    }
     video.srcObject = stream;
   } catch (error) {
     warnMediaDiagnostic(stream ? 'video stream attach failed' : 'video stream cleanup failed', error, details);
@@ -336,19 +360,24 @@ function MediaStreamPreview({
     const video = videoRef.current;
     if (!video) return;
     const details = { target: label, streamId: stream?.id, active: stream?.active };
+    configureInlineVideoPlayback(video, muted);
     pauseVideoSafely(video, details);
+    if (stream) {
+      video.onloadedmetadata = () => playVideoSafely(video, details);
+    }
     assignVideoStreamSafely(video, stream ?? null, details);
-    if (stream) playVideoSafely(video, details);
     return () => {
+      video.onloadedmetadata = null;
       pauseVideoSafely(video, { ...details, cleanup: true });
       assignVideoStreamSafely(video, null, { ...details, cleanup: true });
     };
-  }, [label, stream]);
+  }, [label, muted, stream]);
   return (
     <div className="overflow-hidden rounded-lg border border-slate-700 bg-black/40">
       <video
         ref={videoRef}
         autoPlay
+        disablePictureInPicture
         playsInline
         muted={muted}
         className="aspect-video w-full object-cover"
@@ -387,12 +416,14 @@ function LiveMediaMonitor({
       streamId: nextStream?.id,
       active: nextStream?.active,
     };
+    configureInlineVideoPlayback(video, role === 'preview');
     pauseVideoSafely(video, details);
-    assignVideoStreamSafely(video, nextStream, details);
-    if (active && stream) {
-      playVideoSafely(video, details);
+    if (nextStream) {
+      video.onloadedmetadata = () => playVideoSafely(video, details);
     }
+    assignVideoStreamSafely(video, nextStream, details);
     return () => {
+      video.onloadedmetadata = null;
       const cleanupDetails = { ...details, cleanup: true };
       pauseVideoSafely(video, cleanupDetails);
       assignVideoStreamSafely(video, null, cleanupDetails);
@@ -402,13 +433,20 @@ function LiveMediaMonitor({
     <div
       className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border ${role === 'program' ? 'border-red-500/50' : 'border-emerald-400/50'} bg-black`}
     >
-      <video ref={videoRef} autoPlay playsInline muted className="min-h-0 flex-1 object-cover" />
+      <video
+        ref={videoRef}
+        autoPlay
+        disablePictureInPicture
+        playsInline
+        muted={role === 'preview'}
+        className="absolute inset-0 z-[1] h-full w-full object-contain"
+      />
       {!active ? (
-        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-xs uppercase tracking-[0.18em] text-slate-500">
+        <div className="absolute inset-0 z-20 flex items-center justify-center p-6 text-center text-xs uppercase tracking-[0.18em] text-slate-500">
           Add/start a camera source to see live video here.
         </div>
       ) : null}
-      <div className="flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
+      <div className="relative z-30 mt-auto flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
         <span className={role === 'program' ? 'text-red-200' : 'text-emerald-100'}>{title}</span>
         <span className="text-slate-300">{sceneName}</span>
       </div>
