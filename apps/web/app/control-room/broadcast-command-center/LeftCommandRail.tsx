@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { cn } from '@ubos/ui';
+import { broadcastSurfaces } from './broadcast-theme';
 import type { NavItemId, SourceDockTabId } from '../shell/types';
 import { commandRailItems } from './command-rail-constants';
 import { SourceDiagnosticDock } from './SourceDiagnosticDock';
@@ -28,12 +29,16 @@ export function LeftCommandRail({
   return (
     <aside
       className={cn(
-        'flex min-h-0 shrink-0 overflow-hidden border-r border-ubos-border-subtle bg-ubos-carbon',
+        'flex min-h-0 shrink-0 overflow-hidden border-r',
+        broadcastSurfaces.rail,
         className,
       )}
     >
       <nav
-        className="flex w-14 shrink-0 flex-col gap-0.5 border-r border-ubos-border-subtle bg-[#020408] p-1"
+        className={cn(
+          'flex w-14 shrink-0 flex-col gap-0.5 border-r p-1',
+          broadcastSurfaces.rail,
+        )}
         aria-label="Command navigation"
       >
         {commandRailItems.map((item) => {
@@ -46,10 +51,10 @@ export function LeftCommandRail({
               title={item.label}
               onClick={() => onNavChange(item.id)}
               className={cn(
-                'flex flex-col items-center gap-0.5 rounded-ubos-sm px-1 py-1.5 text-[8px] font-bold uppercase tracking-wide transition-colors',
+                'flex flex-col items-center gap-0.5 rounded-ubos-sm px-1 py-1.5 text-[9px] font-bold uppercase tracking-wide transition-colors',
                 active
                   ? 'bg-ubos-selection-muted text-ubos-selection-text'
-                  : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
+                  : 'text-ubos-fg-muted hover:bg-ubos-midnight hover:text-ubos-fg-secondary',
               )}
             >
               <span className="text-sm leading-none" aria-hidden="true">

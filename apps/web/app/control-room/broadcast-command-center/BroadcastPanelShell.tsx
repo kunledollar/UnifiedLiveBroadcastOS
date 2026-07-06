@@ -2,6 +2,7 @@
 
 import type { ReactNode } from 'react';
 import { cn } from '@ubos/ui';
+import { broadcastSurfaces } from './broadcast-theme';
 
 export function BroadcastPanelShell({
   title,
@@ -43,15 +44,21 @@ export function BroadcastPanelShell({
   return (
     <section
       className={cn(
-        'flex min-h-0 min-w-0 flex-col overflow-hidden rounded-ubos-md border bg-[#04070e]',
+        'flex min-h-0 min-w-0 flex-col overflow-hidden rounded-ubos-md border',
+        broadcastSurfaces.panel,
         accentBorder,
         accentGlow,
         className,
       )}
     >
-      <header className="flex shrink-0 items-center justify-between border-b border-white/6 bg-[#060a12]/95 px-ubos-2 py-1">
+      <header
+        className={cn(
+          'flex shrink-0 items-center justify-between border-b px-ubos-2 py-1.5',
+          broadcastSurfaces.panelHeader,
+        )}
+      >
         <div className="min-w-0">
-          <h3 className="truncate text-[10px] font-black uppercase tracking-[0.18em] text-ubos-fg-primary">
+          <h3 className="truncate text-[11px] font-black uppercase tracking-[0.18em] text-ubos-fg-primary">
             {title}
           </h3>
           {subtitle ? (

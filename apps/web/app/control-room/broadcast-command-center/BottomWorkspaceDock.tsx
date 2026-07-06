@@ -4,8 +4,9 @@ import type { ReactNode } from 'react';
 import type { DockTabId } from '../shell/types';
 import { cn } from '@ubos/ui';
 import { broadcastWorkspaceTabs, workspaceTabLabel } from '../broadcast-workspaces';
+import { broadcastDock, broadcastSurfaces } from './broadcast-theme';
 
-const TAB_BAR_HEIGHT_PX = 32;
+const TAB_BAR_HEIGHT_PX = 36;
 
 export function bottomWorkspaceTabBarHeightPx() {
   return TAB_BAR_HEIGHT_PX;
@@ -43,13 +44,19 @@ export function BottomWorkspaceDock({
   return (
     <section
       className={cn(
-        'flex min-h-0 flex-col overflow-hidden rounded border border-white/6 bg-[#04070e]',
+        'flex min-h-0 flex-col overflow-hidden rounded-ubos-md border',
+        broadcastSurfaces.dock,
         className,
       )}
       aria-label="Broadcast workspace dock"
     >
-      <div className="flex shrink-0 items-center gap-1 border-b border-white/6 px-1 py-0.5">
-        <span className="hidden shrink-0 px-1 text-[9px] font-bold uppercase tracking-[0.14em] text-ubos-fg-muted sm:inline">
+      <div
+        className={cn(
+          'flex shrink-0 items-center gap-1.5 border-b px-1.5 py-1',
+          broadcastDock.tabBar,
+        )}
+      >
+        <span className="hidden shrink-0 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ubos-fg-muted sm:inline">
           Workspaces
         </span>
         <nav
@@ -69,12 +76,12 @@ export function BottomWorkspaceDock({
                 id={`workspace-tab-${tab.id}`}
                 onClick={() => handleTabClick(tab.id)}
                 className={cn(
-                  'shrink-0 rounded px-2 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors',
+                  'shrink-0 rounded-ubos-sm px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors',
                   selected
                     ? contentExpanded
-                      ? 'bg-indigo-500/25 text-indigo-200 ring-1 ring-indigo-400/30'
-                      : 'bg-indigo-500/15 text-indigo-300'
-                    : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
+                      ? broadcastDock.tabActive
+                      : 'bg-ubos-selection-muted/70 text-ubos-selection-text'
+                    : broadcastDock.tabInactive,
                 )}
                 title={tab.label}
               >
@@ -88,7 +95,7 @@ export function BottomWorkspaceDock({
           <button
             type="button"
             onClick={onToggleCollapse}
-            className="shrink-0 rounded px-1.5 py-0.5 text-[10px] text-ubos-fg-muted hover:bg-ubos-graphite"
+            className={broadcastDock.collapseButton}
             aria-label={contentExpanded ? 'Collapse active workspace' : 'Expand active workspace'}
             aria-expanded={contentExpanded}
           >
@@ -104,8 +111,8 @@ export function BottomWorkspaceDock({
           aria-labelledby={`workspace-tab-${activeTab}`}
           className="ubos-scroll min-h-0 flex-1 overflow-y-auto"
         >
-          <div className="border-b border-white/4 px-2 py-0.5">
-            <p className="text-[9px] font-bold uppercase tracking-wide text-indigo-300/80">
+          <div className="border-b border-ubos-border-subtle px-2.5 py-1">
+            <p className="text-[10px] font-bold uppercase tracking-wide text-ubos-fg-muted">
               {activeLabel}
             </p>
           </div>

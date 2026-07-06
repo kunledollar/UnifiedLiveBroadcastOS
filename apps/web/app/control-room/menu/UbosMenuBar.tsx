@@ -60,10 +60,10 @@ function MenuDropdown({
         type="button"
         onClick={() => (open ? onClose() : onOpen())}
         className={cn(
-          'rounded-ubos-sm px-2.5 py-1 text-[11px] font-medium transition-colors',
+          'rounded-ubos-sm px-2.5 py-1 text-xs font-medium transition-colors',
           open
             ? 'bg-ubos-selection-muted text-ubos-selection-text'
-            : 'text-ubos-fg-secondary hover:bg-ubos-graphite hover:text-ubos-fg-primary',
+            : 'text-ubos-fg-secondary hover:bg-ubos-midnight hover:text-ubos-fg-primary',
         )}
         aria-expanded={open}
         aria-haspopup="menu"
@@ -340,7 +340,8 @@ export function UbosMenuBar({
   return (
     <nav
       className={cn(
-        'flex shrink-0 items-center gap-0.5 border-b border-ubos-border-subtle bg-[#03060d] px-2 py-0.5',
+        'flex shrink-0 items-center gap-0.5 border-b px-2 py-1',
+        'border-ubos-border-subtle bg-ubos-graphite/60',
         className,
       )}
       aria-label="UBOS application menu"
@@ -355,7 +356,7 @@ export function UbosMenuBar({
         />
       ))}
 
-      <div className="ml-2 flex items-center gap-1 border-l border-ubos-border-subtle pl-2">
+      <div className="ml-2 hidden items-center gap-1 border-l border-ubos-border-subtle pl-2 lg:flex">
         {ubosWorkspaceModeList.map((mode) => {
           const active = activeWorkspaceMode === mode.id;
           return (
