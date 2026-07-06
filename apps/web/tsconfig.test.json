@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist-test",
+    "rootDir": "app",
+    "paths": {
+      "@ubos/shared": ["../../packages/shared/dist/index.js"],
+      "@ubos/shared/*": ["../../packages/shared/dist/*"]
+    }
+  },
+  "include": [
+    "app/control-room/browsers/browser-workflows.test.ts",
+    "app/control-room/browsers/source-browser-utils.ts",
+    "app/control-room/broadcast-command-center/command-rail-constants.ts"
+  ]
+}

@@ -125,6 +125,8 @@ import {
 import {
   BroadcastCommandCenterLayout,
   type MonitorStatusInfo,
+  SourceDockPanel,
+  preferredSourceDockTab,
 } from './broadcast-command-center';
 import { DiagnosticsSummary } from './broadcast-command-center/FloatingDiagnosticsPanel';
 import type { OperationsDockSection } from './broadcast-command-center/RightOperationsDock';
@@ -168,7 +170,7 @@ import type {
   BrowserStreamingPanelState,
   StreamingPanelAction,
 } from './operations/StreamingRuntimePanel';
-import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
+import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from './shell/types';
 import {
   applyWorkspaceProfile,
   defaultSafeAreaToggles,
@@ -3063,7 +3065,8 @@ export function SceneWorkspace({
     [activeRouteCount, multiviewActiveRouteCount, safeHealthMetrics],
   );
 
-  const [activeNav, setActiveNav] = useState<NavItemId>('scenes');
+  const [activeNav, setActiveNav] = useState<NavItemId>('dashboard');
+  const [activeSourceDockTab, setActiveSourceDockTab] = useState<SourceDockTabId>('scenes');
   const [activeBottomDock, setActiveBottomDock] = useState<DockTabId>('audio');
   const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
   const [professionalRightTab, setProfessionalRightTab] = useState<
@@ -3637,9 +3640,157 @@ export function SceneWorkspace({
 
   const toolsMenu = null;
 
+  const graphAudioChannels = useMemo(
+    () => selectAudioChannels(productionGraphSession.graph),
+    [productionGraphSession.graph],
+  );
+
+  const recordingActive = useMemo(
+    () => selectRecordingState(productionGraphSession.graph).status === 'recording',
+    [productionGraphSession.graph],
+  );
+
+  const workspaceMonitorContext = useMemo(
+    () => ({
+      programScene,
+      previewScene,
+      routes: mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      healthMetrics: multiviewHealthMetrics,
+      graph: productionGraphSession.graph,
+      healthFps: safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+      programGraphicsLayers: previewSceneComposition.layers.filter(
+        (layer) => layer.programState === 'live',
+      ),
+      previewGraphicsLayers: previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview',
+      ),
+      programMediaOverlayItems,
+      previewMediaOverlayItems,
+      replayBuffer: previewSceneMediaComposition.replayBuffer,
+      ...(collaborationState.remoteProduction.operators.find(
+        (operator) => operator.role === 'director',
+      )?.name
+        ? {
+            collaborationDirectorName: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.role === 'director',
+            )!.name,
+          }
+        : {}),
+      collaborationLockCount: collaborationState.remoteProduction.locks.filter(
+        (lock) => Date.parse(lock.expiresAt) > Date.now(),
+      ).length,
+      collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
+        (note) => note.status === 'open',
+      ).length,
+      ...(collaborationState.remoteProduction.operators.find((operator) =>
+        operator.currentPanel?.toLowerCase().includes('preview'),
+      )?.name
+        ? {
+            collaborationPreviewChangedBy: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.currentPanel?.toLowerCase().includes('preview'),
+            )!.name,
+          }
+        : {}),
+      ...(getCurrentSegment(automationState.runOfShow)?.name
+        ? { automationCurrentSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
+        : {}),
+      ...(getNextSegment(automationState.runOfShow)?.name
+        ? { automationNextSegmentName: getNextSegment(automationState.runOfShow)!.name }
+        : {}),
+      automationModeLabel: automationModeLabel(automationState.automationMode),
+    }),
+    [
+      programScene,
+      previewScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      multiviewHealthMetrics,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+      previewSceneComposition,
+      programMediaOverlayItems,
+      previewMediaOverlayItems,
+      previewSceneMediaComposition.replayBuffer,
+      collaborationState.remoteProduction,
+      automationState,
+    ],
+  );
+
+  const mixerSources = useMemo(
+    () => [
+      {
+        id: 'camera',
+        name: 'Camera Microphone',
+        type: 'camera' as const,
+        stream: activeCameraStream ?? smokeMedia.stream,
+      },
+      {
+        id: 'screen',
+        name: 'Screen Audio',
+        type: 'screen' as const,
+        stream: smokeMedia.screenStream,
+      },
+      { id: 'media', name: 'Media Playback', type: 'media' as const, stream: null },
+      { id: 'browser', name: 'Browser Source', type: 'browser' as const, stream: null },
+      { id: 'guest', name: 'Guest Audio', type: 'guest' as const, stream: null },
+      { id: 'master', name: 'Master Output', type: 'master' as const, stream: null },
+    ],
+    [activeCameraStream, smokeMedia.screenStream, smokeMedia.stream],
+  );
+
+  const routingEdges = useMemo<RoutingMatrixEdge[]>(
+    () =>
+      mediaRoutes.map((route) => {
+        const gain =
+          typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
+        return {
+          id: route.id,
+          sourceId: route.sourceId ?? route.id,
+          sourceLabel: route.displayName,
+          destinationId: route.routeType,
+          destinationLabel: route.routeType.replace(/_/g, ' '),
+          active: route.isActive,
+          ...(gain !== undefined ? { gain } : {}),
+        };
+      }),
+    [mediaRoutes],
+  );
+
+  const diagnosticsMetrics = useMemo<DiagnosticMetric[]>(
+    () =>
+      buildSystemStatusMetrics({
+        fps: String(safeHealthMetrics.fps),
+        cpu: String(safeHealthMetrics.cpu),
+        dropped: String(safeHealthMetrics.dropped),
+        upload: String(safeHealthMetrics.upload),
+        recordingState,
+        streamingLifecycle: streamingState.lifecycle,
+        activeRouteCount,
+        graph: productionGraphSession.graph,
+        pipelineHealth: productionPipeline.health,
+      }),
+    [
+      safeHealthMetrics,
+      recordingState,
+      streamingState.lifecycle,
+      activeRouteCount,
+      productionGraphSession.graph,
+      productionPipeline.health,
+    ],
+  );
+
   const leftNavContent = (
-    <LeftNavPanel
-      activeNav={activeNav}
+    <SourceDockPanel
+      activeTab={activeSourceDockTab}
       scenes={sorted}
       sceneTypes={sceneTypes}
       guests={guests}
@@ -3654,6 +3805,7 @@ export function SceneWorkspace({
       mediaRouteCount={mediaRoutes.length}
       isPending={isPending}
       directCameraLive={directCameraLive}
+      diagnosticsMetrics={diagnosticsMetrics}
       onSceneAdd={(data) => {
         const tempScene: Scene = {
           ...activeScene,
@@ -3875,154 +4027,6 @@ export function SceneWorkspace({
       onSelectReplayClip={setSelectedReplayClipId}
       onSelectSource={handleSelectSource}
     />
-  );
-
-  const graphAudioChannels = useMemo(
-    () => selectAudioChannels(productionGraphSession.graph),
-    [productionGraphSession.graph],
-  );
-
-  const recordingActive = useMemo(
-    () => selectRecordingState(productionGraphSession.graph).status === 'recording',
-    [productionGraphSession.graph],
-  );
-
-  const workspaceMonitorContext = useMemo(
-    () => ({
-      programScene,
-      previewScene,
-      routes: mediaRoutes,
-      layoutPreset,
-      guests,
-      channels,
-      healthMetrics: multiviewHealthMetrics,
-      graph: productionGraphSession.graph,
-      healthFps: safeHealthMetrics.fps,
-      showSafeAreas,
-      safeAreaToggles,
-      programGraphicsLayers: previewSceneComposition.layers.filter(
-        (layer) => layer.programState === 'live',
-      ),
-      previewGraphicsLayers: previewSceneComposition.layers.filter(
-        (layer) => layer.previewState === 'preview',
-      ),
-      programMediaOverlayItems,
-      previewMediaOverlayItems,
-      replayBuffer: previewSceneMediaComposition.replayBuffer,
-      ...(collaborationState.remoteProduction.operators.find(
-        (operator) => operator.role === 'director',
-      )?.name
-        ? {
-            collaborationDirectorName: collaborationState.remoteProduction.operators.find(
-              (operator) => operator.role === 'director',
-            )!.name,
-          }
-        : {}),
-      collaborationLockCount: collaborationState.remoteProduction.locks.filter(
-        (lock) => Date.parse(lock.expiresAt) > Date.now(),
-      ).length,
-      collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
-        (note) => note.status === 'open',
-      ).length,
-      ...(collaborationState.remoteProduction.operators.find((operator) =>
-        operator.currentPanel?.toLowerCase().includes('preview'),
-      )?.name
-        ? {
-            collaborationPreviewChangedBy: collaborationState.remoteProduction.operators.find(
-              (operator) => operator.currentPanel?.toLowerCase().includes('preview'),
-            )!.name,
-          }
-        : {}),
-      ...(getCurrentSegment(automationState.runOfShow)?.name
-        ? { automationCurrentSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
-        : {}),
-      ...(getNextSegment(automationState.runOfShow)?.name
-        ? { automationNextSegmentName: getNextSegment(automationState.runOfShow)!.name }
-        : {}),
-      automationModeLabel: automationModeLabel(automationState.automationMode),
-    }),
-    [
-      programScene,
-      previewScene,
-      mediaRoutes,
-      layoutPreset,
-      guests,
-      channels,
-      multiviewHealthMetrics,
-      productionGraphSession.graph,
-      safeHealthMetrics.fps,
-      showSafeAreas,
-      safeAreaToggles,
-      previewSceneComposition,
-      programMediaOverlayItems,
-      previewMediaOverlayItems,
-      previewSceneMediaComposition.replayBuffer,
-      collaborationState.remoteProduction,
-      automationState,
-    ],
-  );
-
-  const mixerSources = useMemo(
-    () => [
-      {
-        id: 'camera',
-        name: 'Camera Microphone',
-        type: 'camera' as const,
-        stream: activeCameraStream ?? smokeMedia.stream,
-      },
-      {
-        id: 'screen',
-        name: 'Screen Audio',
-        type: 'screen' as const,
-        stream: smokeMedia.screenStream,
-      },
-      { id: 'media', name: 'Media Playback', type: 'media' as const, stream: null },
-      { id: 'browser', name: 'Browser Source', type: 'browser' as const, stream: null },
-      { id: 'guest', name: 'Guest Audio', type: 'guest' as const, stream: null },
-      { id: 'master', name: 'Master Output', type: 'master' as const, stream: null },
-    ],
-    [activeCameraStream, smokeMedia.screenStream, smokeMedia.stream],
-  );
-
-  const routingEdges = useMemo<RoutingMatrixEdge[]>(
-    () =>
-      mediaRoutes.map((route) => {
-        const gain =
-          typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
-        return {
-          id: route.id,
-          sourceId: route.sourceId ?? route.id,
-          sourceLabel: route.displayName,
-          destinationId: route.routeType,
-          destinationLabel: route.routeType.replace(/_/g, ' '),
-          active: route.isActive,
-          ...(gain !== undefined ? { gain } : {}),
-        };
-      }),
-    [mediaRoutes],
-  );
-
-  const diagnosticsMetrics = useMemo<DiagnosticMetric[]>(
-    () =>
-      buildSystemStatusMetrics({
-        fps: String(safeHealthMetrics.fps),
-        cpu: String(safeHealthMetrics.cpu),
-        dropped: String(safeHealthMetrics.dropped),
-        upload: String(safeHealthMetrics.upload),
-        recordingState,
-        streamingLifecycle: streamingState.lifecycle,
-        activeRouteCount,
-        graph: productionGraphSession.graph,
-        pipelineHealth: productionPipeline.health,
-      }),
-    [
-      safeHealthMetrics,
-      recordingState,
-      streamingState.lifecycle,
-      activeRouteCount,
-      productionGraphSession.graph,
-      productionPipeline.health,
-    ],
   );
 
   const operationsSections = useMemo((): OperationsDockSection[] => {
@@ -4914,8 +4918,23 @@ export function SceneWorkspace({
         />
       }
       activeNav={activeNav}
-      onNavChange={setActiveNav}
+      onNavChange={(nav) => {
+        setActiveNav(nav);
+        const dockTab = preferredSourceDockTab(nav);
+        if (dockTab) setActiveSourceDockTab(dockTab);
+        if (nav === 'production-graph') {
+          setActiveBottomDock(normalizeDockTabId('production-graph'));
+        }
+        if (nav === 'outputs') {
+          setActiveOperationsTab('outputs');
+        }
+        if (nav === 'settings') {
+          setActiveOperationsTab('inspector');
+        }
+      }}
       sourceDockContent={leftNavContent}
+      activeSourceDockTab={activeSourceDockTab}
+      onSourceDockTabChange={setActiveSourceDockTab}
       programMonitor={programMonitorNode}
       previewMonitor={previewMonitorNode}
       programStatus={programMonitorStatus}

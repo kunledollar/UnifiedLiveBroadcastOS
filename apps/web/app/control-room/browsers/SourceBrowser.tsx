@@ -26,6 +26,16 @@ import {
   type SourceHealthFilter,
 } from './source-browser-utils';
 
+const sourceTypeIcons: Record<SceneSourceType, string> = {
+  camera: '📷',
+  screen: '🖥',
+  media: '▣',
+  overlay: '◈',
+  browser: '🌐',
+  audio: '🔊',
+  guest: '◉',
+};
+
 const healthFilters: Array<{ id: SourceHealthFilter; label: string }> = [
   { id: 'all', label: 'All' },
   { id: 'ready', label: 'Ready' },
@@ -40,6 +50,7 @@ export function SourceBrowser({
   guests,
   sourceTypes,
   isPending = false,
+  compact = false,
   tallyState = 'idle',
   directCameraLive = false,
   onAdd,
@@ -58,6 +69,7 @@ export function SourceBrowser({
   guests: Guest[];
   sourceTypes: SceneSourceType[];
   isPending?: boolean;
+  compact?: boolean;
   tallyState?: TallyState;
   directCameraLive?: boolean;
   onAdd?: (input: { sceneId: string; name: string; type: SceneSourceType; url?: string; settings?: Record<string, unknown> }) => void;
@@ -133,10 +145,16 @@ export function SourceBrowser({
   );
 
   return (
-    <BrowserSection title="Sources">
-      <p className="text-ubos-metadata text-ubos-fg-muted">
-        Preview scene: <span className="text-ubos-fg-secondary">{sceneName}</span>
-      </p>
+    <BrowserSection {...(compact ? { className: 'gap-1' } : { title: 'Sources' })}>
+      {!compact ? (
+        <p className="text-ubos-metadata text-ubos-fg-muted">
+          Preview scene: <span className="text-ubos-fg-secondary">{sceneName}</span>
+        </p>
+      ) : (
+        <p className="text-[9px] text-ubos-fg-muted">
+          PVW: <span className="text-ubos-fg-secondary">{sceneName}</span>
+        </p>
+      )}
 
       <input
         ref={fileInputRef}
@@ -150,7 +168,7 @@ export function SourceBrowser({
         }}
       />
       <div
-        className="flex flex-wrap gap-1 rounded-ubos-md border border-dashed border-transparent p-1"
+        className="flex flex-wrap gap-0.5 rounded-ubos-md border border-dashed border-transparent p-0.5"
         onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }}
         onDrop={(event) => { event.preventDefault(); importMediaFiles(event.dataTransfer.files); }}
       >
@@ -159,7 +177,8 @@ export function SourceBrowser({
           .map((type) => (
             <RowIconButton
               key={type}
-              label={`+ ${getSourceTypeLabel(type)}`}
+              label={compact ? getSourceTypeLabel(type) : `+ ${getSourceTypeLabel(type)}`}
+              {...(compact ? { icon: sourceTypeIcons[type], compact: true } : {})}
               disabled={isPending}
               onClick={() => {
                 if (type === 'media') { fileInputRef.current?.click(); return; }
@@ -235,24 +254,27 @@ export function SourceBrowser({
         filters={typeFilters}
         activeFilter={typeFilter}
         onFilterChange={(id) => setTypeFilter(id as SceneSourceType | 'all')}
+        {...(compact ? { className: 'space-y-1' } : {})}
       />
 
-      <div className="flex flex-wrap gap-1">
-        {healthFilters.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => setHealthFilter(item.id)}
-            className={
-              healthFilter === item.id
-                ? 'rounded-ubos-sm bg-ubos-selection-muted px-2 py-0.5 text-ubos-metadata text-ubos-selection-text'
-                : 'rounded-ubos-sm bg-ubos-midnight px-2 py-0.5 text-ubos-metadata text-ubos-fg-muted'
-            }
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
+      {!compact ? (
+        <div className="flex flex-wrap gap-1">
+          {healthFilters.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setHealthFilter(item.id)}
+              className={
+                healthFilter === item.id
+                  ? 'rounded-ubos-sm bg-ubos-selection-muted px-2 py-0.5 text-ubos-metadata text-ubos-selection-text'
+                  : 'rounded-ubos-sm bg-ubos-midnight px-2 py-0.5 text-ubos-metadata text-ubos-fg-muted'
+              }
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <AssetList isEmpty={visibleSources.length === 0} emptyMessage="No sources added">
         {visibleSources.map((source) => (
@@ -263,6 +285,7 @@ export function SourceBrowser({
             guests={guests}
             tallyState={tallyState}
             directCameraLive={directCameraLive}
+            {...(compact ? { compact: true } : {})}
             {...(onRename ? { onRename } : {})}
             {...(onDuplicate ? { onDuplicate } : {})}
             {...(onDelete ? { onDelete } : {})}
@@ -285,6 +308,7 @@ function SourceBrowserRow({
   guests,
   tallyState,
   directCameraLive = false,
+  compact = false,
   onRename,
   onDuplicate,
   onDelete,
@@ -300,6 +324,7 @@ function SourceBrowserRow({
   guests: Guest[];
   tallyState: TallyState;
   directCameraLive?: boolean;
+  compact?: boolean;
   onRename?: (sourceId: string, name: string) => void;
   onDuplicate?: (sourceId: string) => void;
   onDelete?: (sourceId: string) => void;
@@ -313,60 +338,100 @@ function SourceBrowserRow({
   const health =
     directCameraLive && source.type === 'camera' ? 'live' : deriveSourceHealth(source, guests);
   const telemetry = getSourceTelemetry(source);
-  const telemetryParts = [
-    telemetry.resolution ? `${telemetry.resolution}` : null,
-    telemetry.fps ? `${telemetry.fps} fps` : null,
-    telemetry.audioEnabled === true ? 'audio on' : telemetry.audioEnabled === false ? 'audio off' : null,
-  ].filter(Boolean);
+  const telemetryParts = compact
+    ? []
+    : [
+        telemetry.resolution ? `${telemetry.resolution}` : null,
+        telemetry.fps ? `${telemetry.fps} fps` : null,
+        telemetry.audioEnabled === true ? 'audio on' : telemetry.audioEnabled === false ? 'audio off' : null,
+      ].filter(Boolean);
+
+  const statusVariant =
+    health === 'live'
+      ? 'live'
+      : health === 'offline' || health === 'hidden' || health === 'failed'
+        ? 'offline'
+        : health === 'permission_required' || health === 'loading' || health === 'unavailable'
+          ? 'warning'
+          : sourceHealthVariant(health);
+
+  const statusLabel =
+    health === 'live'
+      ? 'Live'
+      : health === 'offline' || health === 'hidden'
+        ? 'Offline'
+        : health === 'permission_required' || health === 'loading' || health === 'unavailable'
+          ? 'Warning'
+          : sourceHealthLabel(health);
 
   return (
     <AssetRow
-      thumbnail={<SceneThumbnail label={getSourceTypeLabel(source.type).slice(0, 3).toUpperCase()} />}
+      thumbnail={
+        <SceneThumbnail
+          label={compact ? sourceTypeIcons[source.type] : getSourceTypeLabel(source.type).slice(0, 3).toUpperCase()}
+          {...(compact ? { compact: true } : {})}
+        />
+      }
       title={source.name}
-      subtitle={`${getSourceTypeLabel(source.type)} · ${sceneName}${telemetryParts.length ? ` · ${telemetryParts.join(' · ')}` : ''}`}
+      subtitle={
+        compact
+          ? getSourceTypeLabel(source.type)
+          : `${getSourceTypeLabel(source.type)} · ${sceneName}${telemetryParts.length ? ` · ${telemetryParts.join(' · ')}` : ''}`
+      }
       selected={selected}
+      {...(compact ? { className: 'gap-1.5 px-1 py-1' } : {})}
       {...(onSelectSource ? { onClick: () => onSelectSource(source.id) } : {})}
       status={
         <div className="flex flex-col items-end gap-0.5">
-          <StatusBadge variant={sourceHealthVariant(health)}>{sourceHealthLabel(health)}</StatusBadge>
-          {source.isVisible ? (
-            <StatusBadge variant={tallyState === 'preview' ? 'preview' : 'neutral'}>
-              {source.isVisible ? 'Visible' : 'Hidden'}
-            </StatusBadge>
-          ) : (
-            <StatusBadge variant="offline">Hidden</StatusBadge>
-          )}
+          <StatusBadge variant={statusVariant} dot={health === 'live'}>
+            {statusLabel}
+          </StatusBadge>
+          <StatusBadge variant={source.isVisible ? (tallyState === 'preview' ? 'preview' : 'neutral') : 'offline'}>
+            {source.isVisible ? 'Visible' : 'Hidden'}
+          </StatusBadge>
         </div>
       }
       action={
         <CompactRowActions>
           <RowIconButton
             label={source.isVisible ? 'Hide' : 'Show'}
+            {...(compact ? { compact: true } : {})}
             onClick={() => onToggleVisibility?.(source.id)}
           />
           <RowIconButton
             label={source.isLocked ? 'Unlock' : 'Lock'}
+            {...(compact ? { compact: true } : {})}
             onClick={() => onToggleLock?.(source.id)}
           />
           {source.type === 'browser' ? (
-            <RowIconButton label="Reload" onClick={() => onReloadBrowserSource?.(source.id)} />
+            <RowIconButton
+              label="Reload"
+              {...(compact ? { compact: true } : {})}
+              onClick={() => onReloadBrowserSource?.(source.id)}
+            />
           ) : null}
           {source.type === 'browser' ? (
             <RowIconButton
               label={source.muted || source.settings?.muted !== false ? 'Unmute' : 'Mute'}
+              {...(compact ? { compact: true } : {})}
               onClick={() => onToggleMute?.(source.id)}
             />
           ) : null}
-          <RowIconButton label="Dup" onClick={() => onDuplicate?.(source.id)} />
-          <RowIconButton
-            label="Ren"
-            onClick={() => {
-              const name = window.prompt('Rename source', source.name);
-              if (name) onRename?.(source.id, name);
-            }}
-          />
+          {!compact ? (
+            <>
+              <RowIconButton label="Dup" onClick={() => onDuplicate?.(source.id)} />
+              <RowIconButton
+                label="Ren"
+                onClick={() => {
+                  const name = window.prompt('Rename source', source.name);
+                  if (name) onRename?.(source.id, name);
+                }}
+              />
+            </>
+          ) : null}
           <RowIconButton
             label="Del"
+            {...(compact ? { compact: true } : {})}
             variant="danger"
             onClick={() => {
               if (window.confirm(`Delete ${source.name}?`)) {

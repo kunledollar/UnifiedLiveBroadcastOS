@@ -1,4 +1,8 @@
 export type NavItemId =
+  | 'dashboard'
+  | 'production-graph'
+  | 'nodes'
+  | 'inputs'
   | 'scenes'
   | 'sources'
   | 'graphics'
@@ -20,6 +24,15 @@ export type NavItemId =
   | 'cloud'
   | 'analytics'
   | 'enterprise-admin';
+
+/** Tabs in the adjacent source / diagnostic dock beside the left command rail. */
+export type SourceDockTabId =
+  | 'scenes'
+  | 'sources'
+  | 'media'
+  | 'graphics'
+  | 'guests'
+  | 'diagnostics';
 
 export type DockTabId =
   | 'audio'
