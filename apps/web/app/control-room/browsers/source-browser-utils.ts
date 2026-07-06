@@ -7,6 +7,7 @@ export type SourceHealthStatus =
   | 'permission_required'
   | 'unavailable'
   | 'mock'
+  | 'live'
   | 'hidden';
 
 const sourceTypeLabels: Record<SceneSourceType, string> = {
@@ -27,6 +28,7 @@ export function deriveSourceHealth(source: SceneSource, guests: Guest[]): Source
   if (!source.isVisible) return 'hidden';
 
   const runtimeStatus = String(source.settings?.runtimeStatus ?? '');
+  if (runtimeStatus === 'live') return 'live';
   if (runtimeStatus === 'mock') return 'mock';
   if (runtimeStatus === 'permission_required') return 'permission_required';
   if (runtimeStatus === 'unavailable') return 'unavailable';
@@ -50,6 +52,8 @@ export function sourceHealthLabel(status: SourceHealthStatus) {
   switch (status) {
     case 'ready':
       return 'Ready';
+    case 'live':
+      return 'Live';
     case 'offline':
       return 'Offline';
     case 'permission_required':
@@ -66,6 +70,7 @@ export function sourceHealthLabel(status: SourceHealthStatus) {
 export function sourceHealthVariant(status: SourceHealthStatus) {
   switch (status) {
     case 'ready':
+    case 'live':
       return 'success' as const;
     case 'mock':
     case 'permission_required':
