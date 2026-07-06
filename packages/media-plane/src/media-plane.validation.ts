@@ -257,6 +257,13 @@ import {
   createOverlay,
   defaultGraphicsTransform,
   createGraphicsOverlayDemo,
+  createHardwareManager,
+  MetadataHardwareAdapter,
+  createHardwareIntegrationDevice,
+  createDeviceCapabilities,
+  supportedHardwareIntegrationVendors,
+  supportedHardwareCategories,
+  createHardwareIntegrationDemo,
 } from './index.js';
 
 const command = (
@@ -2348,6 +2355,44 @@ assert.equal(autoDirectSnapshot.compositorIds.program, 'compositor:program:phase
 const switchDemo = await createProductionSwitcherDemo();
 assert.equal(switchDemo.before.programSceneId, 'scene:host', 'production switcher demo starts with initial program scene');
 assert.equal(switchDemo.after.programSceneId, 'scene:guest', 'production switcher demo promotes preview to program');
+
+// UBOS 2.0 Phase 2.19 hardware integration foundation validation
+const hardwareManager = createHardwareManager({ id: 'hardware-manager:phase-2-19', bindings: { productionSwitcher: switcher, sceneCompositor: programCompositor, streamingPipeline: phase214StreamingPipeline, recordingPipeline: phase213RecordingPipeline, remoteProductionManager: { id: 'remote-production-manager:metadata' }, transportManager: { id: 'transport-manager:metadata' } } });
+const hardwareEvents: string[] = [];
+hardwareManager.onRuntimeEvent((event) => hardwareEvents.push(event.type));
+const integrationHardwareDevices = await hardwareManager.discover();
+assert.equal(integrationHardwareDevices.length >= 5, true, 'hardware manager discovers demo broadcast hardware devices');
+assert.equal(supportedHardwareIntegrationVendors.includes('blackmagic_atem'), true, 'hardware integration models Blackmagic ATEM vendor');
+assert.equal(supportedHardwareIntegrationVendors.includes('x_keys'), true, 'hardware integration models X-Keys vendor');
+assert.equal(supportedHardwareCategories.includes('ptz_camera'), true, 'hardware integration models PTZ camera category');
+const atemDevice = integrationHardwareDevices.find((device) => device.vendor === 'blackmagic_atem')!;
+const connectedHardware = await hardwareManager.connect(atemDevice.id);
+assert.equal(connectedHardware.connection.lifecycle, 'connected', 'hardware lifecycle supports connected');
+assert.equal(connectedHardware.capabilities.supportsTally, true, 'device capabilities describe tally support');
+const heartbeatHardware = await hardwareManager.heartbeat(atemDevice.id);
+assert.equal(typeof heartbeatHardware.heartbeat.lastSeenAt, 'string', 'hardware heartbeat records last seen timestamp');
+const plannedHardwareCommand = hardwareManager.planCommand(atemDevice.id, 'cut', { source: 'control_surface' });
+assert.equal(plannedHardwareCommand.metadata.backendIndependent, true, 'hardware commands are planned as backend-independent metadata');
+const disconnectedHardware = await hardwareManager.disconnect(atemDevice.id);
+assert.equal(disconnectedHardware.connection.lifecycle, 'disconnected', 'hardware lifecycle supports disconnected');
+const failedHardware = hardwareManager.fail(atemDevice.id, 'simulated adapter failure');
+assert.equal(failedHardware.connection.lifecycle, 'failed', 'hardware lifecycle supports failed');
+assert.equal(hardwareManager.getSnapshot().bindings.productionSwitcher, true, 'hardware manager integrates production switcher binding identity');
+assert.equal(hardwareManager.getSnapshot().bindings.sceneCompositor, true, 'hardware manager integrates scene compositor binding identity');
+assert.equal(hardwareManager.getSnapshot().bindings.streamingPipeline, true, 'hardware manager integrates streaming pipeline binding identity');
+assert.equal(hardwareManager.getSnapshot().bindings.recordingPipeline, true, 'hardware manager integrates recording pipeline binding identity');
+assert.equal(hardwareManager.getSnapshot().bindings.remoteProductionManager, true, 'hardware manager integrates remote production manager binding identity');
+assert.equal(hardwareManager.getSnapshot().bindings.transportManager, true, 'hardware manager integrates transport manager binding identity');
+assert.equal(hardwareManager.getSnapshot().containsDeviceHandles, false, 'hardware snapshot excludes physical device handles');
+assert.equal(hardwareEvents.includes('hardware_device_connected'), true, 'hardware manager emits connected runtime event');
+assert.equal(hardwareEvents.includes('hardware_command_planned'), true, 'hardware manager emits command planning runtime event');
+const customHardwareDevice = createHardwareIntegrationDevice({ id: 'hardware-device:vizrt:control', label: 'Vizrt Control Surface', vendor: 'vizrt', category: 'control_surface', model: 'Metadata Panel', capabilities: { supportsButtons: true } });
+assert.equal(customHardwareDevice.containsDeviceHandles, false, 'hardware device model remains backend independent');
+assert.equal(createDeviceCapabilities({ supportsPtz: true }).supportsPtz, true, 'device capabilities helper models PTZ support');
+const demoHardwareAdapter = new MetadataHardwareAdapter('hardware-adapter:test');
+assert.equal(demoHardwareAdapter.categories.includes('audio_interface'), true, 'hardware adapter advertises audio interface category');
+const hardwareDemo = await createHardwareIntegrationDemo({ productionSwitcher: switcher, sceneCompositor: programCompositor });
+assert.equal(hardwareDemo.manager.events.some((event) => event.type === 'hardware_heartbeat'), true, 'hardware integration demo records heartbeat workflow');
 
 
 assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');
