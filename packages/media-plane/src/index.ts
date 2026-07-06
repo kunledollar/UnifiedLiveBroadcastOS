@@ -1173,6 +1173,7 @@ export { AudioRuntime, AudioMixer, AudioMatrix, MixMinusManager, AudioStatistics
 export type { AudioBus as RuntimeAudioBus, AudioChannel as RuntimeAudioChannel, AudioGroup as RuntimeAudioGroup, AudioEffect, AudioMeter, AudioSession, AudioStatistics as RuntimeAudioStatistics, AudioHealth as RuntimeAudioHealth, AudioReplayEvent, MixMinusTarget, AudioBusKind, AudioEffectKind } from './audio-runtime/index.js';
 
 export * from './broadcast-orchestrator/index.js';
+export * from './transport/index.js';
 
 export * from './hardware-runtime/index.js';
 export * from './high-availability/index.js';
