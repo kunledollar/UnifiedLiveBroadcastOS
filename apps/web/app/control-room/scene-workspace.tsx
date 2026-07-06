@@ -296,8 +296,18 @@ function LiveMediaMonitor({
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
-    video.srcObject = active ? stream : null;
-    if (active && stream) void video.play().catch(() => undefined);
+    const nextStream = active ? stream : null;
+    console.info('[UBOS media runtime] attaching stream', {
+      target: role,
+      streamId: nextStream?.id,
+      active: nextStream?.active,
+    });
+    video.srcObject = nextStream;
+    if (active && stream) {
+      void video
+        .play()
+        .catch((error) => console.error('[UBOS media runtime] video play failed', error));
+    }
     return () => {
       video.srcObject = null;
     };
@@ -2008,9 +2018,41 @@ export function SceneWorkspace({
     };
   }, [smokeMedia.stream]);
 
+  const patchCaptureSourceStatus = useCallback(
+    (runtimeStatus: string, message?: string) => {
+      refresh(
+        scenes.map((scene) => ({
+          ...scene,
+          sources: scene.sources.map((source) =>
+            source.type === 'camera' || source.type === 'audio'
+              ? {
+                  ...source,
+                  settings: {
+                    ...source.settings,
+                    runtimeStatus,
+                    ...(message ? { message } : {}),
+                  },
+                }
+              : source,
+          ),
+        })),
+      );
+    },
+    [refresh, scenes],
+  );
+
   const startSmokeCapture = useCallback(async () => {
-    await smokeMedia.startPreview({ withAudio: true });
-  }, [smokeMedia]);
+    patchCaptureSourceStatus('connecting');
+    const stream = await smokeMedia.startPreview({ withAudio: true });
+    if (stream?.active && stream.getVideoTracks().some((track) => track.readyState === 'live')) {
+      patchCaptureSourceStatus('live');
+    } else {
+      patchCaptureSourceStatus(
+        'unavailable',
+        smokeMedia.getLastErrorMessage() || 'getUserMedia did not return an active camera stream.',
+      );
+    }
+  }, [patchCaptureSourceStatus, smokeMedia]);
 
   const startSmokeRecording = useCallback(() => {
     if (!smokeMedia.stream || !mediaRecorderSupported) {
