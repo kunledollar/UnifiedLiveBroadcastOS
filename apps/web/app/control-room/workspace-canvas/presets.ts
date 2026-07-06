@@ -101,7 +101,7 @@ export const technicalDirectorPreset = buildPreset(
     zones: [
       zone('left', 'Assets', ['asset-tree'], 240),
       zone('center', 'Monitors', ['split-monitor', 'switcher', 'stream-patch'], 1),
-      zone('right', 'Operations', ['operations-dock'], 300),
+      zone('right', 'Operations', ['operations-dock'], 280),
       zone('bottom', 'Deck', ['audio-mixer', 'system-diagnostics', 'bottom-deck'], 140),
     ],
     panels: [
@@ -132,7 +132,7 @@ export const audioEngineerPreset = buildPreset(
     zones: [
       zone('left', 'Sources', ['asset-tree'], 240),
       zone('center', 'Monitors', ['split-monitor', 'switcher'], 1),
-      zone('right', 'Operations', ['operations-dock'], 300),
+      zone('right', 'Operations', ['operations-dock'], 280),
       zone('bottom', 'Audio', ['audio-mixer', 'stream-patch', 'bottom-deck'], 220),
     ],
     panels: [
@@ -163,7 +163,7 @@ export const graphicsOperatorPreset = buildPreset(
     zones: [
       zone('left', 'Assets', ['asset-tree'], 260),
       zone('center', 'Monitors', ['split-monitor', 'switcher'], 1),
-      zone('right', 'Operations', ['operations-dock'], 320),
+      zone('right', 'Operations', ['operations-dock'], 280),
       zone('bottom', 'Graphics', ['bottom-deck', 'audio-mixer'], 200),
     ],
     panels: [
@@ -194,7 +194,7 @@ export const replayOperatorPreset = buildPreset(
     zones: [
       zone('left', 'Clips', ['asset-tree'], 280),
       zone('center', 'Monitors', ['split-monitor', 'switcher'], 1),
-      zone('right', 'Operations', ['operations-dock'], 300),
+      zone('right', 'Operations', ['operations-dock'], 280),
       zone('bottom', 'Replay', ['bottom-deck', 'system-diagnostics'], 200),
     ],
     panels: [
@@ -225,7 +225,7 @@ export const producerPreset = buildPreset(
     zones: [
       zone('left', 'Assets', ['asset-tree'], 260),
       zone('center', 'Monitors', ['split-monitor', 'switcher', 'stream-patch'], 1),
-      zone('right', 'Operations', ['operations-dock'], 340),
+      zone('right', 'Operations', ['operations-dock'], 300),
       zone('bottom', 'Production', ['bottom-deck', 'audio-mixer', 'system-diagnostics'], 180),
     ],
     panels: [

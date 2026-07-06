@@ -50,6 +50,8 @@ export function SourceBrowser({
   onToggleLock,
   onReloadBrowserSource,
   onToggleMute,
+  selectedSourceId,
+  onSelectSource,
 }: {
   scene: Scene;
   sceneName: string;
@@ -66,6 +68,8 @@ export function SourceBrowser({
   onToggleLock?: (sourceId: string) => void;
   onReloadBrowserSource?: (sourceId: string) => void;
   onToggleMute?: (sourceId: string) => void;
+  selectedSourceId?: string | null;
+  onSelectSource?: (sourceId: string) => void;
 }) {
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<SceneSourceType | 'all'>('all');
@@ -266,6 +270,8 @@ export function SourceBrowser({
             {...(onToggleLock ? { onToggleLock } : {})}
             {...(onReloadBrowserSource ? { onReloadBrowserSource } : {})}
             {...(onToggleMute ? { onToggleMute } : {})}
+            selected={selectedSourceId === source.id}
+            {...(onSelectSource ? { onSelectSource } : {})}
           />
         ))}
       </AssetList>
@@ -286,6 +292,8 @@ function SourceBrowserRow({
   onToggleLock,
   onReloadBrowserSource,
   onToggleMute,
+  selected = false,
+  onSelectSource,
 }: {
   source: SceneSource;
   sceneName: string;
@@ -299,6 +307,8 @@ function SourceBrowserRow({
   onToggleLock?: (sourceId: string) => void;
   onReloadBrowserSource?: (sourceId: string) => void;
   onToggleMute?: (sourceId: string) => void;
+  selected?: boolean;
+  onSelectSource?: (sourceId: string) => void;
 }) {
   const health =
     directCameraLive && source.type === 'camera' ? 'live' : deriveSourceHealth(source, guests);
@@ -314,6 +324,8 @@ function SourceBrowserRow({
       thumbnail={<SceneThumbnail label={getSourceTypeLabel(source.type).slice(0, 3).toUpperCase()} />}
       title={source.name}
       subtitle={`${getSourceTypeLabel(source.type)} · ${sceneName}${telemetryParts.length ? ` · ${telemetryParts.join(' · ')}` : ''}`}
+      selected={selected}
+      {...(onSelectSource ? { onClick: () => onSelectSource(source.id) } : {})}
       status={
         <div className="flex flex-col items-end gap-0.5">
           <StatusBadge variant={sourceHealthVariant(health)}>{sourceHealthLabel(health)}</StatusBadge>

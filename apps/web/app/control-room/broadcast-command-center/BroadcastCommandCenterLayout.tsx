@@ -17,10 +17,10 @@ import type { LayoutFocusMode } from '../workspaces/workspace-types';
 import { applyWorkspaceProfile } from '../workspaces';
 import { BottomWorkspaceDock, bottomWorkspaceTabBarHeightPx } from './BottomWorkspaceDock';
 import { CenterProgramPreviewDeck, type MonitorStatusInfo } from './CenterProgramPreviewDeck';
-import { DiagnosticsSummary } from './FloatingDiagnosticsPanel';
 import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
+import { DiagnosticsSummary } from './FloatingDiagnosticsPanel';
 import { LeftCommandRail } from './LeftCommandRail';
-import { RightOperationsDock } from './RightOperationsDock';
+import { RightOperationsDock, type OperationsDockSection } from './RightOperationsDock';
 import { TopBar } from './TopBar';
 
 export type BroadcastCommandCenterLayoutProps = {
@@ -36,7 +36,7 @@ export type BroadcastCommandCenterLayoutProps = {
   routingEdges: RoutingMatrixEdge[];
   audioMixerContent: ReactNode;
   diagnosticsMetrics: DiagnosticMetric[];
-  operationsTabs: Array<{ id: OperationsTabId; content: ReactNode }>;
+  operationsSections: OperationsDockSection[];
   bottomWorkspaceContent: ReactNode;
   productionGraphContent?: ReactNode;
   graphRevision?: number;
@@ -71,7 +71,7 @@ export function BroadcastCommandCenterLayout({
   switcherContent,
   routingEdges,
   diagnosticsMetrics,
-  operationsTabs,
+  operationsSections,
   bottomWorkspaceContent,
   productionGraphContent,
   graphRevision,
@@ -346,11 +346,9 @@ export function BroadcastCommandCenterLayout({
         {showRight ? (
           <div className="row-span-1 min-h-0 overflow-hidden">
             <RightOperationsDock
-              tabs={operationsTabs}
+              sections={operationsSections}
               activeTab={activeOperationsTab}
               onTabChange={handleOpsTabChange}
-              previewSlot={previewSlot}
-              telemetrySlot={<DiagnosticsSummary metrics={diagnosticsMetrics} />}
               collapsed={rightCollapsed}
               {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('right') } : {})}
               className="h-full"

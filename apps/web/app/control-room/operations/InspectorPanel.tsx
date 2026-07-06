@@ -3,6 +3,85 @@
 import { ConsoleSection, InspectorRow, StatusBadge } from '@ubos/ui';
 import type { MediaRoute, ProductionPipelineModel, Scene } from '@ubos/shared';
 import { OperationsPanel } from './OperationsChrome';
+import type { OperationsInspectorSelection } from './operations-inspector-selection';
+
+function SelectedItemSection({ selection }: { selection: OperationsInspectorSelection }) {
+  if (!selection) return null;
+
+  if (selection.kind === 'source') {
+    const { source, sceneName } = selection;
+    const fileSize =
+      typeof source.settings?.fileSize === 'number'
+        ? `${(source.settings.fileSize / 1024 / 1024).toFixed(2)} MB`
+        : 'unavailable';
+    return (
+      <ConsoleSection title={`Source · ${source.name}`}>
+        <InspectorRow label="Scene" value={sceneName} />
+        <InspectorRow label="Type" value={source.type} />
+        <InspectorRow label="Visible" value={source.isVisible ? 'yes' : 'hidden'} />
+        <InspectorRow label="Locked" value={source.isLocked ? 'yes' : 'no'} />
+        <InspectorRow
+          label="Runtime"
+          value={String(source.settings?.runtimeStatus ?? 'metadata only')}
+        />
+        {source.settings?.mediaUrl ? (
+          <InspectorRow label="Media URL" value={String(source.settings.mediaUrl)} />
+        ) : null}
+        {source.settings?.resolution ? (
+          <InspectorRow label="Resolution" value={String(source.settings.resolution)} />
+        ) : null}
+        {source.settings?.fps ? (
+          <InspectorRow label="FPS" value={String(source.settings.fps)} />
+        ) : null}
+        {source.settings?.fileSize ? <InspectorRow label="File size" value={fileSize} /> : null}
+      </ConsoleSection>
+    );
+  }
+
+  if (selection.kind === 'route') {
+    const { route } = selection;
+    return (
+      <ConsoleSection title={`Route · ${route.displayName}`}>
+        <InspectorRow label="ID" value={route.id} />
+        <InspectorRow label="On program" value={route.isOnProgram ? 'yes' : 'no'} />
+        <InspectorRow label="Active" value={route.isActive ? 'yes' : 'no'} />
+        <InspectorRow label="Muted" value={route.isMuted ? 'yes' : 'no'} />
+        <InspectorRow label="Pinned" value={route.isPinned ? 'yes' : 'no'} />
+        <InspectorRow label="Guest" value={route.guestId ?? '—'} />
+      </ConsoleSection>
+    );
+  }
+
+  if (selection.kind === 'graphics-layer') {
+    return (
+      <ConsoleSection title={`Graphics Layer · ${selection.layerName}`}>
+        <InspectorRow label="Layer ID" value={selection.layerId} />
+      </ConsoleSection>
+    );
+  }
+
+  if (selection.kind === 'media-asset') {
+    return (
+      <ConsoleSection title={`Media Asset · ${selection.assetName}`}>
+        <InspectorRow label="Asset ID" value={selection.assetId} />
+      </ConsoleSection>
+    );
+  }
+
+  if (selection.kind === 'pipeline-route') {
+    const { route } = selection;
+    return (
+      <ConsoleSection title={`Pipeline · ${route.label}`}>
+        <InspectorRow label="Kind" value={route.kind} />
+        <InspectorRow label="Active" value={route.active ? 'yes' : 'no'} />
+        <InspectorRow label="Source" value={route.sourceId} />
+        <InspectorRow label="Target" value={route.targetId} />
+      </ConsoleSection>
+    );
+  }
+
+  return null;
+}
 
 export function InspectorPanel({
   programScene,
@@ -16,6 +95,7 @@ export function InspectorPanel({
   programRouteName,
   verticalRouteName,
   pipeline,
+  selection = null,
 }: {
   programScene: Scene;
   previewScene: Scene;
@@ -28,6 +108,7 @@ export function InspectorPanel({
   programRouteName?: string | null;
   verticalRouteName?: string | null;
   pipeline?: ProductionPipelineModel;
+  selection?: OperationsInspectorSelection;
 }) {
   const mediaSources = [...previewScene.sources, ...programScene.sources].filter(
     (source, index, all) =>
@@ -37,7 +118,17 @@ export function InspectorPanel({
   );
   return (
     <OperationsPanel title="Inspector">
-      <ConsoleSection title="Session Context">
+      {selection ? (
+        <SelectedItemSection selection={selection} />
+      ) : (
+        <ConsoleSection title="Selection">
+          <p className="text-ubos-metadata text-ubos-fg-muted">
+            Select a source, route, or pipeline item to inspect details.
+          </p>
+        </ConsoleSection>
+      )}
+
+      <ConsoleSection title="Session Context" collapsed={Boolean(selection)}>
         <InspectorRow label="Program scene" value={programScene.name} />
         <InspectorRow label="Preview scene" value={previewScene.name} />
         <InspectorRow
@@ -232,12 +323,6 @@ export function InspectorPanel({
         );
       })}
 
-      <ConsoleSection title="Context Sections" collapsed>
-        <p className="text-ubos-metadata text-ubos-fg-muted">
-          Scene, Source, Guest, Media, and Output detail sections will appear when explicit
-          selection is available. No selection state is active.
-        </p>
-      </ConsoleSection>
     </OperationsPanel>
   );
 }
