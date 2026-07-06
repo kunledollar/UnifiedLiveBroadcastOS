@@ -15,10 +15,15 @@ import {
   createVideoRoutePlan,
   getVideoRouteWarnings,
 } from './routing.js';
+import { type FrameTickEvent } from './sync/index.js';
 import {
-  type FrameTickEvent,
-} from './sync/index.js';
-import { MediaOrchestrationEngine, type MediaExecutionPort, type MediaFramePlan, type MediaIntent, type MediaSubsystemStateSnapshot, type TargetSubsystem } from './orchestration.js';
+  MediaOrchestrationEngine,
+  type MediaExecutionPort,
+  type MediaFramePlan,
+  type MediaIntent,
+  type MediaSubsystemStateSnapshot,
+  type TargetSubsystem,
+} from './orchestration.js';
 import { createClock } from './sync/clock.js';
 import {
   AudioRouteStore,
@@ -210,17 +215,187 @@ export interface MediaExecutionIntent<TPayload = Record<string, unknown>> {
   readonly payload: Readonly<TPayload>;
 }
 
-const videoIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_VIDEO_ROUTE_PLAN','UPDATE_VIDEO_ROUTE','ACTIVATE_VIDEO_ROUTE','DEACTIVATE_VIDEO_ROUTE','ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','ROUTE_MULTIVIEW_VIDEO','ROUTE_RECORDING_VIDEO','ROUTE_STREAM_VIDEO']);
-const audioIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_ROUTE','ACTIVATE_AUDIO_ROUTE','DEACTIVATE_AUDIO_ROUTE','MUTE_AUDIO_ROUTE','UNMUTE_AUDIO_ROUTE','SET_AUDIO_ROUTE_GAIN','BUILD_PROGRAM_MIX','BUILD_STREAM_MIX','BUILD_RECORDING_MIX','BUILD_MONITOR_MIX','BUILD_GUEST_RETURN_MIX','UPDATE_AUDIO_MIX']);
-const renderIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_MULTIVIEW_PLAN','UPDATE_MULTIVIEW','RENDER_MULTIVIEW','VALIDATE_MULTIVIEW','CREATE_CONFIDENCE_MONITOR','UPDATE_CONFIDENCE_STATUS','BUILD_SCENE_COMPOSITION','UPDATE_SCENE_COMPOSITION','RENDER_PROGRAM_COMPOSITION','RENDER_PREVIEW_COMPOSITION','RENDER_MULTIVIEW_COMPOSITION','RENDER_BROWSER_COMPOSITION','START_BROWSER_RENDERER','STOP_BROWSER_RENDERER','UPDATE_BROWSER_RENDER_TARGET','RENDER_FRAME','SELECT_RENDER_BACKEND','CLEAR_RENDER_CACHE','FORCE_FULL_RENDER','UPDATE_RENDER_PERFORMANCE_MODE','REPORT_RENDER_HEALTH','BUILD_BROWSER_RENDER_PLAN','PREPARE_BROWSER_RENDERER','UPDATE_RENDER_SURFACE','UPDATE_RENDER_LAYER','REMOVE_RENDER_LAYER','REQUEST_BROWSER_FRAME','REPORT_RENDERER_HEALTH','FAIL_BROWSER_RENDERER','APPLY_LAYOUT']);
-const webrtcIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_WEBRTC_TRANSPORT_PLAN','PREPARE_WEBRTC_SESSION','START_WEBRTC_SESSION','STOP_WEBRTC_SESSION','ADD_WEBRTC_PEER','REMOVE_WEBRTC_PEER','UPDATE_WEBRTC_PEER','ATTACH_WEBRTC_TRACK','DETACH_WEBRTC_TRACK','HANDLE_WEBRTC_SIGNAL','REPORT_WEBRTC_HEALTH','FAIL_WEBRTC_SESSION']);
-const productionRuntimeIntentTypes = new Set<MediaExecutionIntentType>(['BUILD_PRODUCTION_RUNTIME','START_PRODUCTION_RUNTIME','STOP_PRODUCTION_RUNTIME','PAUSE_PRODUCTION_RUNTIME','RESUME_PRODUCTION_RUNTIME','RESTART_RUNTIME_SUBSYSTEM','REPORT_PRODUCTION_RUNTIME_HEALTH','FAIL_PRODUCTION_RUNTIME','START_FFMPEG_RUNTIME','STOP_FFMPEG_RUNTIME','RESTART_FFMPEG_RUNTIME','REPORT_FFMPEG_RUNTIME','FAIL_FFMPEG_RUNTIME','START_GPU_RUNTIME','STOP_GPU_RUNTIME','RESTART_GPU_RUNTIME','REPORT_GPU_RUNTIME','FAIL_GPU_RUNTIME']);
-const outputIntentTypes = new Set<MediaExecutionIntentType>(['START_STREAM','STOP_STREAM','START_RECORDING','STOP_RECORDING','UPDATE_DESTINATION','BUILD_STREAMING_PLAN','PREPARE_STREAMING','CONNECT_STREAM','PAUSE_STREAM','RESUME_STREAM','FAIL_STREAM','VALIDATE_STREAM_PLAN','BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH','CREATE_RECORDING','PREPARE_RECORDING','PAUSE_RECORDING','RESUME_RECORDING','SPLIT_RECORDING','FINALIZE_RECORDING','ARCHIVE_RECORDING','DELETE_RECORDING','REPORT_RECORDING_HEALTH']);
-const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
-function defaultOrchestrationPriority(type: MediaExecutionIntentType) { const index = orchestrationIntentOrder.indexOf(type); return index === -1 ? 0 : 1000 - index; }
-export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem { if (productionRuntimeIntentTypes.has(type)) return 'sync'; if (webrtcIntentTypes.has(type)) return 'sync'; if (videoIntentTypes.has(type)) return 'video'; if (audioIntentTypes.has(type)) return 'audio'; if (renderIntentTypes.has(type)) return 'render'; if (outputIntentTypes.has(type)) return 'output'; return 'sync'; }
-export function toMediaIntent(intent: MediaExecutionIntent): MediaIntent { const targetSubsystem = subsystemForExecutionType(intent.type); return { id: intent.id, type: targetSubsystem, executionType: intent.type, sourceGraphRevision: intent.graphRevision, dependencies: (intent.payload.dependencies as string[]|undefined) ?? [], priority: Number(intent.payload.priority ?? defaultOrchestrationPriority(intent.type)), targetSubsystem, payload: intent.payload, timingConstraint: typeof intent.payload.frameTimestamp === 'number' ? { requestedFrameTimestamp: intent.payload.frameTimestamp } : {}, submittedAt: intent.timestamp }; }
-export function toExecutionIntent(intent: MediaIntent, frameTimestamp: number): MediaExecutionIntent { return { id: intent.id, type: intent.executionType as MediaExecutionIntentType, timestamp: new Date(frameTimestamp).toISOString(), graphRevision: intent.sourceGraphRevision, payload: { ...intent.payload, frameTimestamp, orchestrationSubsystem: intent.targetSubsystem } }; }
+const videoIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_VIDEO_ROUTE_PLAN',
+  'UPDATE_VIDEO_ROUTE',
+  'ACTIVATE_VIDEO_ROUTE',
+  'DEACTIVATE_VIDEO_ROUTE',
+  'ROUTE_PROGRAM_VIDEO',
+  'ROUTE_PREVIEW_VIDEO',
+  'ROUTE_MULTIVIEW_VIDEO',
+  'ROUTE_RECORDING_VIDEO',
+  'ROUTE_STREAM_VIDEO',
+]);
+const audioIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_AUDIO_ROUTE_PLAN',
+  'UPDATE_AUDIO_ROUTE',
+  'ACTIVATE_AUDIO_ROUTE',
+  'DEACTIVATE_AUDIO_ROUTE',
+  'MUTE_AUDIO_ROUTE',
+  'UNMUTE_AUDIO_ROUTE',
+  'SET_AUDIO_ROUTE_GAIN',
+  'BUILD_PROGRAM_MIX',
+  'BUILD_STREAM_MIX',
+  'BUILD_RECORDING_MIX',
+  'BUILD_MONITOR_MIX',
+  'BUILD_GUEST_RETURN_MIX',
+  'UPDATE_AUDIO_MIX',
+]);
+const renderIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_MULTIVIEW_PLAN',
+  'UPDATE_MULTIVIEW',
+  'RENDER_MULTIVIEW',
+  'VALIDATE_MULTIVIEW',
+  'CREATE_CONFIDENCE_MONITOR',
+  'UPDATE_CONFIDENCE_STATUS',
+  'BUILD_SCENE_COMPOSITION',
+  'UPDATE_SCENE_COMPOSITION',
+  'RENDER_PROGRAM_COMPOSITION',
+  'RENDER_PREVIEW_COMPOSITION',
+  'RENDER_MULTIVIEW_COMPOSITION',
+  'RENDER_BROWSER_COMPOSITION',
+  'START_BROWSER_RENDERER',
+  'STOP_BROWSER_RENDERER',
+  'UPDATE_BROWSER_RENDER_TARGET',
+  'RENDER_FRAME',
+  'SELECT_RENDER_BACKEND',
+  'CLEAR_RENDER_CACHE',
+  'FORCE_FULL_RENDER',
+  'UPDATE_RENDER_PERFORMANCE_MODE',
+  'REPORT_RENDER_HEALTH',
+  'BUILD_BROWSER_RENDER_PLAN',
+  'PREPARE_BROWSER_RENDERER',
+  'UPDATE_RENDER_SURFACE',
+  'UPDATE_RENDER_LAYER',
+  'REMOVE_RENDER_LAYER',
+  'REQUEST_BROWSER_FRAME',
+  'REPORT_RENDERER_HEALTH',
+  'FAIL_BROWSER_RENDERER',
+  'APPLY_LAYOUT',
+]);
+const webrtcIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_WEBRTC_TRANSPORT_PLAN',
+  'PREPARE_WEBRTC_SESSION',
+  'START_WEBRTC_SESSION',
+  'STOP_WEBRTC_SESSION',
+  'ADD_WEBRTC_PEER',
+  'REMOVE_WEBRTC_PEER',
+  'UPDATE_WEBRTC_PEER',
+  'ATTACH_WEBRTC_TRACK',
+  'DETACH_WEBRTC_TRACK',
+  'HANDLE_WEBRTC_SIGNAL',
+  'REPORT_WEBRTC_HEALTH',
+  'FAIL_WEBRTC_SESSION',
+]);
+const productionRuntimeIntentTypes = new Set<MediaExecutionIntentType>([
+  'BUILD_PRODUCTION_RUNTIME',
+  'START_PRODUCTION_RUNTIME',
+  'STOP_PRODUCTION_RUNTIME',
+  'PAUSE_PRODUCTION_RUNTIME',
+  'RESUME_PRODUCTION_RUNTIME',
+  'RESTART_RUNTIME_SUBSYSTEM',
+  'REPORT_PRODUCTION_RUNTIME_HEALTH',
+  'FAIL_PRODUCTION_RUNTIME',
+  'START_FFMPEG_RUNTIME',
+  'STOP_FFMPEG_RUNTIME',
+  'RESTART_FFMPEG_RUNTIME',
+  'REPORT_FFMPEG_RUNTIME',
+  'FAIL_FFMPEG_RUNTIME',
+  'START_GPU_RUNTIME',
+  'STOP_GPU_RUNTIME',
+  'RESTART_GPU_RUNTIME',
+  'REPORT_GPU_RUNTIME',
+  'FAIL_GPU_RUNTIME',
+]);
+const outputIntentTypes = new Set<MediaExecutionIntentType>([
+  'START_STREAM',
+  'STOP_STREAM',
+  'START_RECORDING',
+  'STOP_RECORDING',
+  'UPDATE_DESTINATION',
+  'BUILD_STREAMING_PLAN',
+  'PREPARE_STREAMING',
+  'CONNECT_STREAM',
+  'PAUSE_STREAM',
+  'RESUME_STREAM',
+  'FAIL_STREAM',
+  'VALIDATE_STREAM_PLAN',
+  'BUILD_ENCODER_PLAN',
+  'PREPARE_ENCODER',
+  'START_ENCODER',
+  'PAUSE_ENCODER',
+  'RESUME_ENCODER',
+  'DRAIN_ENCODER',
+  'STOP_ENCODER',
+  'FAIL_ENCODER',
+  'VALIDATE_ENCODER_PLAN',
+  'REPORT_ENCODER_HEALTH',
+  'CREATE_RECORDING',
+  'PREPARE_RECORDING',
+  'PAUSE_RECORDING',
+  'RESUME_RECORDING',
+  'SPLIT_RECORDING',
+  'FINALIZE_RECORDING',
+  'ARCHIVE_RECORDING',
+  'DELETE_RECORDING',
+  'REPORT_RECORDING_HEALTH',
+]);
+const orchestrationIntentOrder: readonly MediaExecutionIntentType[] = [
+  'ROUTE_PROGRAM_VIDEO',
+  'ROUTE_PREVIEW_VIDEO',
+  'BUILD_VIDEO_ROUTE_PLAN',
+  'BUILD_AUDIO_ROUTE_PLAN',
+  'UPDATE_AUDIO_MIX',
+  'UPDATE_SCENE_COMPOSITION',
+  'BUILD_SCENE_COMPOSITION',
+  'UPDATE_DESTINATION',
+  'ROUTE_STREAM_VIDEO',
+  'RENDER_BROWSER_COMPOSITION',
+  'RENDER_FRAME',
+];
+function defaultOrchestrationPriority(type: MediaExecutionIntentType) {
+  const index = orchestrationIntentOrder.indexOf(type);
+  return index === -1 ? 0 : 1000 - index;
+}
+export function subsystemForExecutionType(type: MediaExecutionIntentType): TargetSubsystem {
+  if (productionRuntimeIntentTypes.has(type)) return 'sync';
+  if (webrtcIntentTypes.has(type)) return 'sync';
+  if (videoIntentTypes.has(type)) return 'video';
+  if (audioIntentTypes.has(type)) return 'audio';
+  if (renderIntentTypes.has(type)) return 'render';
+  if (outputIntentTypes.has(type)) return 'output';
+  return 'sync';
+}
+export function toMediaIntent(intent: MediaExecutionIntent): MediaIntent {
+  const targetSubsystem = subsystemForExecutionType(intent.type);
+  return {
+    id: intent.id,
+    type: targetSubsystem,
+    executionType: intent.type,
+    sourceGraphRevision: intent.graphRevision,
+    dependencies: (intent.payload.dependencies as string[] | undefined) ?? [],
+    priority: Number(intent.payload.priority ?? defaultOrchestrationPriority(intent.type)),
+    targetSubsystem,
+    payload: intent.payload,
+    timingConstraint:
+      typeof intent.payload.frameTimestamp === 'number'
+        ? { requestedFrameTimestamp: intent.payload.frameTimestamp }
+        : {},
+    submittedAt: intent.timestamp,
+  };
+}
+export function toExecutionIntent(
+  intent: MediaIntent,
+  frameTimestamp: number,
+): MediaExecutionIntent {
+  return {
+    id: intent.id,
+    type: intent.executionType as MediaExecutionIntentType,
+    timestamp: new Date(frameTimestamp).toISOString(),
+    graphRevision: intent.sourceGraphRevision,
+    payload: { ...intent.payload, frameTimestamp, orchestrationSubsystem: intent.targetSubsystem },
+  };
+}
 
 export interface MediaExecutionAdapterResponse {
   readonly adapterName: string;
@@ -251,8 +426,58 @@ export interface MediaExecutionAdapter {
 
 export interface WebRtcMediaExecutionAdapter extends MediaExecutionAdapter {}
 export * from './adapters/webrtc/index.js';
-export { CompositionStore, createDefaultCanvas, createSceneCompositionFromGraph, diffSceneCompositions, getAddedLayers, getChangedLayers, getCompositionWarnings, getLayoutBounds, getRemovedLayers, hasLayoutChanged, orderRenderLayers, createCompositorStatusEvent, createRenderFrameLayer, createRenderLayer as createCompositorRenderLayer, createRenderLayerFromCompositionLayer, createSceneCompositor, createSceneCompositorFromComposition, validateCanvas, validateLayerBounds, validateSceneComposition } from './compositor/index.js';
-export type { CompositionBackground, CompositionBounds, CompositionCanvas, CompositionCrop, CompositionFitMode, CompositionLayer, CompositionLayoutPreset, CompositionOverlay, CompositionRenderTarget, CompositionSafeArea, CompositionSource, CompositionSourceType, CompositionStyle, CompositionTransform, CompositionValidationIssue, ComposeFrameOptions, RenderFrame, RenderFrameLayer, RenderLayer, RenderLayerGeometry, RenderLayerSource, RenderLayerSourceType, SceneComposition, SceneCompositionOptions, SceneCompositor, SceneCompositorSnapshot, SceneCompositorStatusEvent, SceneCompositorStatusEventType } from './compositor/index.js';
+export {
+  CompositionStore,
+  createDefaultCanvas,
+  createSceneCompositionFromGraph,
+  diffSceneCompositions,
+  getAddedLayers,
+  getChangedLayers,
+  getCompositionWarnings,
+  getLayoutBounds,
+  getRemovedLayers,
+  hasLayoutChanged,
+  orderRenderLayers,
+  createCompositorStatusEvent,
+  createRenderFrameLayer,
+  createRenderLayer as createCompositorRenderLayer,
+  createRenderLayerFromCompositionLayer,
+  createSceneCompositor,
+  createSceneCompositorFromComposition,
+  validateCanvas,
+  validateLayerBounds,
+  validateSceneComposition,
+} from './compositor/index.js';
+export type {
+  CompositionBackground,
+  CompositionBounds,
+  CompositionCanvas,
+  CompositionCrop,
+  CompositionFitMode,
+  CompositionLayer,
+  CompositionLayoutPreset,
+  CompositionOverlay,
+  CompositionRenderTarget,
+  CompositionSafeArea,
+  CompositionSource,
+  CompositionSourceType,
+  CompositionStyle,
+  CompositionTransform,
+  CompositionValidationIssue,
+  ComposeFrameOptions,
+  RenderFrame,
+  RenderFrameLayer,
+  RenderLayer,
+  RenderLayerGeometry,
+  RenderLayerSource,
+  RenderLayerSourceType,
+  SceneComposition,
+  SceneCompositionOptions,
+  SceneCompositor,
+  SceneCompositorSnapshot,
+  SceneCompositorStatusEvent,
+  SceneCompositorStatusEventType,
+} from './compositor/index.js';
 export * from './routing.js';
 export * from './audio-routing/index.js';
 export * from './browser-renderer/index.js';
@@ -328,7 +553,11 @@ export interface MediaExecutionState {
 
 export interface MediaExecutionPlane {
   onGraphTransition(transition: ProductionGraphTransition): Promise<MediaExecutionResult[]>;
-  executeFrameSync(tick: FrameTickEvent, graph: ProductionGraph, intents?: readonly MediaExecutionIntent[]): Promise<MediaExecutionResult[]>;
+  executeFrameSync(
+    tick: FrameTickEvent,
+    graph: ProductionGraph,
+    intents?: readonly MediaExecutionIntent[],
+  ): Promise<MediaExecutionResult[]>;
   getExecutionState(): MediaExecutionState;
   registerAdapter(adapter: MediaExecutionAdapter, metadata?: Partial<AdapterMetadata>): void;
 }
@@ -753,7 +982,10 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       });
       const validation = validateMultiviewPlan(plan);
       this.multiviewStore.setMultiviewPlan(plan);
-      if (intent.type === 'CREATE_CONFIDENCE_MONITOR' || intent.type === 'UPDATE_CONFIDENCE_STATUS') {
+      if (
+        intent.type === 'CREATE_CONFIDENCE_MONITOR' ||
+        intent.type === 'UPDATE_CONFIDENCE_STATUS'
+      ) {
         const monitor = createConfidenceMonitor({ plan });
         this.multiviewStore.setConfidenceMonitor(monitor);
         warnings.push(...validateConfidenceSignals(monitor).warnings);
@@ -765,55 +997,202 @@ export class MockMediaExecutionAdapter implements MediaExecutionAdapter {
       if (!validation.valid) warnings.push(...validation.errors);
     }
 
-    const webRTCIntentTypes: MediaExecutionIntentType[] = ['BUILD_WEBRTC_TRANSPORT_PLAN','PREPARE_WEBRTC_SESSION','START_WEBRTC_SESSION','STOP_WEBRTC_SESSION','ADD_WEBRTC_PEER','REMOVE_WEBRTC_PEER','UPDATE_WEBRTC_PEER','ATTACH_WEBRTC_TRACK','DETACH_WEBRTC_TRACK','HANDLE_WEBRTC_SIGNAL','REPORT_WEBRTC_HEALTH','FAIL_WEBRTC_SESSION'];
+    const webRTCIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_WEBRTC_TRANSPORT_PLAN',
+      'PREPARE_WEBRTC_SESSION',
+      'START_WEBRTC_SESSION',
+      'STOP_WEBRTC_SESSION',
+      'ADD_WEBRTC_PEER',
+      'REMOVE_WEBRTC_PEER',
+      'UPDATE_WEBRTC_PEER',
+      'ATTACH_WEBRTC_TRACK',
+      'DETACH_WEBRTC_TRACK',
+      'HANDLE_WEBRTC_SIGNAL',
+      'REPORT_WEBRTC_HEALTH',
+      'FAIL_WEBRTC_SESSION',
+    ];
     if (!shouldFail && graph && webRTCIntentTypes.includes(intent.type)) {
-      const plan = createWebRTCTransportPlan({ sessionId: String(intent.payload.sessionId ?? graph.broadcastSessionId), role: (intent.payload.role as never) ?? 'host', graphRevision: graph.metadata.revision, now: intent.timestamp });
+      const plan = createWebRTCTransportPlan({
+        sessionId: String(intent.payload.sessionId ?? graph.broadcastSessionId),
+        role: (intent.payload.role as never) ?? 'host',
+        graphRevision: graph.metadata.revision,
+        now: intent.timestamp,
+      });
       const validation = validateWebRTCTransportPlan(plan);
       let session = this.webrtcSession ?? createWebRTCSession(plan);
-      if (intent.type === 'ADD_WEBRTC_PEER') session = addWebRTCPeer(session, createWebRTCPeer({ id: String(intent.payload.peerId ?? 'peer:mock'), role: (intent.payload.peerRole as never) ?? 'guest' }));
-      if (intent.type === 'REMOVE_WEBRTC_PEER') session = removeWebRTCPeer(session, String(intent.payload.peerId ?? 'peer:mock'));
-      if (intent.type === 'UPDATE_WEBRTC_PEER') session = updateWebRTCPeerState(session, String(intent.payload.peerId ?? 'peer:mock'), (intent.payload.connectionState as never) ?? 'connected');
-      if (intent.type === 'ATTACH_WEBRTC_TRACK') session = { ...session, localTrackRefs: [...session.localTrackRefs, createWebRTCMediaTrackRef({ peerId: String(intent.payload.peerId ?? 'local'), trackId: String(intent.payload.trackId ?? 'track:mock'), kind: (intent.payload.kind as never) ?? 'audio', ...(typeof intent.payload.sourceId === 'string' ? { sourceId: intent.payload.sourceId } : {}), ...(typeof intent.payload.guestId === 'string' ? { guestId: intent.payload.guestId } : {}), muted: Boolean(intent.payload.muted), enabled: intent.payload.enabled !== false, connectionState: 'connected', graphRevision: graph.metadata.revision })] };
-      if (intent.type === 'START_WEBRTC_SESSION') session = { ...session, status: plan.enabled ? 'connecting' : 'idle', startedAt: session.startedAt ?? intent.timestamp };
+      if (intent.type === 'ADD_WEBRTC_PEER')
+        session = addWebRTCPeer(
+          session,
+          createWebRTCPeer({
+            id: String(intent.payload.peerId ?? 'peer:mock'),
+            role: (intent.payload.peerRole as never) ?? 'guest',
+          }),
+        );
+      if (intent.type === 'REMOVE_WEBRTC_PEER')
+        session = removeWebRTCPeer(session, String(intent.payload.peerId ?? 'peer:mock'));
+      if (intent.type === 'UPDATE_WEBRTC_PEER')
+        session = updateWebRTCPeerState(
+          session,
+          String(intent.payload.peerId ?? 'peer:mock'),
+          (intent.payload.connectionState as never) ?? 'connected',
+        );
+      if (intent.type === 'ATTACH_WEBRTC_TRACK')
+        session = {
+          ...session,
+          localTrackRefs: [
+            ...session.localTrackRefs,
+            createWebRTCMediaTrackRef({
+              peerId: String(intent.payload.peerId ?? 'local'),
+              trackId: String(intent.payload.trackId ?? 'track:mock'),
+              kind: (intent.payload.kind as never) ?? 'audio',
+              ...(typeof intent.payload.sourceId === 'string'
+                ? { sourceId: intent.payload.sourceId }
+                : {}),
+              ...(typeof intent.payload.guestId === 'string'
+                ? { guestId: intent.payload.guestId }
+                : {}),
+              muted: Boolean(intent.payload.muted),
+              enabled: intent.payload.enabled !== false,
+              connectionState: 'connected',
+              graphRevision: graph.metadata.revision,
+            }),
+          ],
+        };
+      if (intent.type === 'START_WEBRTC_SESSION')
+        session = {
+          ...session,
+          status: plan.enabled ? 'connecting' : 'idle',
+          startedAt: session.startedAt ?? intent.timestamp,
+        };
       if (intent.type === 'STOP_WEBRTC_SESSION') session = { ...session, status: 'closed' };
       this.webrtcSession = session;
-      warnings.push(...validation.warnings, summarizeWebRTCHealth(session).summary, createWebRTCManifest(session).notes[0] ?? 'WebRTC manifest metadata ready');
+      warnings.push(
+        ...validation.warnings,
+        summarizeWebRTCHealth(session).summary,
+        createWebRTCManifest(session).notes[0] ?? 'WebRTC manifest metadata ready',
+      );
       if (!validation.valid) warnings.push(...validation.errors);
     }
 
-    const productionRuntimeIntentTypes: MediaExecutionIntentType[] = ['BUILD_PRODUCTION_RUNTIME','START_PRODUCTION_RUNTIME','STOP_PRODUCTION_RUNTIME','PAUSE_PRODUCTION_RUNTIME','RESUME_PRODUCTION_RUNTIME','RESTART_RUNTIME_SUBSYSTEM','REPORT_PRODUCTION_RUNTIME_HEALTH','FAIL_PRODUCTION_RUNTIME'];
-    if (!shouldFail && productionRuntimeIntentTypes.includes(intent.type)) warnings.push(`Production runtime intent ${intent.type} accepted by mock supervisor boundary`);
+    const productionRuntimeIntentTypes: MediaExecutionIntentType[] = [
+      'BUILD_PRODUCTION_RUNTIME',
+      'START_PRODUCTION_RUNTIME',
+      'STOP_PRODUCTION_RUNTIME',
+      'PAUSE_PRODUCTION_RUNTIME',
+      'RESUME_PRODUCTION_RUNTIME',
+      'RESTART_RUNTIME_SUBSYSTEM',
+      'REPORT_PRODUCTION_RUNTIME_HEALTH',
+      'FAIL_PRODUCTION_RUNTIME',
+    ];
+    if (!shouldFail && productionRuntimeIntentTypes.includes(intent.type))
+      warnings.push(
+        `Production runtime intent ${intent.type} accepted by mock supervisor boundary`,
+      );
 
-    const gpuRuntimeIntentTypes: MediaExecutionIntentType[] = ['START_GPU_RUNTIME','STOP_GPU_RUNTIME','RESTART_GPU_RUNTIME','REPORT_GPU_RUNTIME','FAIL_GPU_RUNTIME'];
+    const gpuRuntimeIntentTypes: MediaExecutionIntentType[] = [
+      'START_GPU_RUNTIME',
+      'STOP_GPU_RUNTIME',
+      'RESTART_GPU_RUNTIME',
+      'REPORT_GPU_RUNTIME',
+      'FAIL_GPU_RUNTIME',
+    ];
     if (!shouldFail && gpuRuntimeIntentTypes.includes(intent.type)) {
-      const pipeline = createGpuPipeline({ id: String(intent.payload.pipelineId ?? 'gpu-pipeline:mock'), graphRevision: graph?.metadata.revision ?? intent.graphRevision });
-      const surface = createGpuSurface({ id: String(intent.payload.surfaceId ?? 'gpu-surface:preview'), graphRevision: graph?.metadata.revision ?? intent.graphRevision });
+      const pipeline = createGpuPipeline({
+        id: String(intent.payload.pipelineId ?? 'gpu-pipeline:mock'),
+        graphRevision: graph?.metadata.revision ?? intent.graphRevision,
+      });
+      const surface = createGpuSurface({
+        id: String(intent.payload.surfaceId ?? 'gpu-surface:preview'),
+        graphRevision: graph?.metadata.revision ?? intent.graphRevision,
+      });
       const session = this.gpuSession ?? createGpuSession({ pipeline, surfaces: [surface] });
       const result = createGpuRuntime(session).execute(intent);
-      this.gpuSession = result.manifest.diagnostics.health.state === 'shutdown' ? { ...session, state: 'shutdown' } : { ...session, state: result.state };
+      this.gpuSession =
+        result.manifest.diagnostics.health.state === 'shutdown'
+          ? { ...session, state: 'shutdown' }
+          : { ...session, state: result.state };
       const manifest = createGpuManifest(this.gpuSession);
-      warnings.push(summarizeGpuHealth(this.gpuSession).warnings[0] ?? `GPU runtime ${manifest.diagnostics.runtimeState} (${manifest.diagnostics.backend})`);
+      warnings.push(
+        summarizeGpuHealth(this.gpuSession).warnings[0] ??
+          `GPU runtime ${manifest.diagnostics.runtimeState} (${manifest.diagnostics.backend})`,
+      );
       if (!result.success) warnings.push(...result.errors);
     }
 
     const encoderIntentTypes: MediaExecutionIntentType[] = [
-      'BUILD_ENCODER_PLAN','PREPARE_ENCODER','START_ENCODER','PAUSE_ENCODER','RESUME_ENCODER','DRAIN_ENCODER','STOP_ENCODER','FAIL_ENCODER','VALIDATE_ENCODER_PLAN','REPORT_ENCODER_HEALTH',
+      'BUILD_ENCODER_PLAN',
+      'PREPARE_ENCODER',
+      'START_ENCODER',
+      'PAUSE_ENCODER',
+      'RESUME_ENCODER',
+      'DRAIN_ENCODER',
+      'STOP_ENCODER',
+      'FAIL_ENCODER',
+      'VALIDATE_ENCODER_PLAN',
+      'REPORT_ENCODER_HEALTH',
     ];
     if (!shouldFail && graph && encoderIntentTypes.includes(intent.type)) {
-      const videoRoutePlan = this.videoRouteStore.getRoutePlan() ?? createVideoRoutePlan(graph, [], { includeRecording: graph.recording.status === 'recording', includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled), includeConfidenceMonitor: true, now: intent.timestamp });
-      const audioRoutePlan = this.audioRouteStore.getRoutePlan() ?? createAudioRoutePlan(graph, { includeRecording: graph.recording.status === 'recording', includeStreams: Object.values(graph.destinations).some((destination) => destination.enabled), includeMonitor: true, includeGuestReturns: true, now: intent.timestamp });
-      const recordingId = typeof intent.payload.recordingId === 'string' ? intent.payload.recordingId : graph.recording.activeRecordingId;
-      const streamId = typeof intent.payload.streamId === 'string' ? intent.payload.streamId : undefined;
-      const plan = createEncoderPlan({ graph, videoRoutePlan, audioRoutePlan, outputId: String(intent.payload.outputId ?? `output:${graph.broadcastSessionId}`), ...(recordingId ? { recordingId } : {}), ...(streamId ? { streamId } : {}), frameId: Number(intent.payload.frameId ?? 0), backend: (intent.payload.backend as never) ?? 'mock' });
+      const videoRoutePlan =
+        this.videoRouteStore.getRoutePlan() ??
+        createVideoRoutePlan(graph, [], {
+          includeRecording: graph.recording.status === 'recording',
+          includeStreams: Object.values(graph.destinations).some(
+            (destination) => destination.enabled,
+          ),
+          includeConfidenceMonitor: true,
+          now: intent.timestamp,
+        });
+      const audioRoutePlan =
+        this.audioRouteStore.getRoutePlan() ??
+        createAudioRoutePlan(graph, {
+          includeRecording: graph.recording.status === 'recording',
+          includeStreams: Object.values(graph.destinations).some(
+            (destination) => destination.enabled,
+          ),
+          includeMonitor: true,
+          includeGuestReturns: true,
+          now: intent.timestamp,
+        });
+      const recordingId =
+        typeof intent.payload.recordingId === 'string'
+          ? intent.payload.recordingId
+          : graph.recording.activeRecordingId;
+      const streamId =
+        typeof intent.payload.streamId === 'string' ? intent.payload.streamId : undefined;
+      const plan = createEncoderPlan({
+        graph,
+        videoRoutePlan,
+        audioRoutePlan,
+        outputId: String(intent.payload.outputId ?? `output:${graph.broadcastSessionId}`),
+        ...(recordingId ? { recordingId } : {}),
+        ...(streamId ? { streamId } : {}),
+        frameId: Number(intent.payload.frameId ?? 0),
+        backend: (intent.payload.backend as never) ?? 'mock',
+      });
       this.encoderStore.setEncoderPlan(plan);
       let result = prepareEncoder(plan);
       if (intent.type === 'START_ENCODER') result = startEncoder(result.session);
-      else if (intent.type === 'PAUSE_ENCODER') result = pauseEncoder(this.encoderSession ?? result.session);
-      else if (intent.type === 'RESUME_ENCODER') result = resumeEncoder(this.encoderSession ?? result.session);
-      else if (intent.type === 'DRAIN_ENCODER') result = drainEncoder(this.encoderSession ?? result.session);
-      else if (intent.type === 'STOP_ENCODER') result = stopEncoder(this.encoderSession ?? result.session);
-      else if (intent.type === 'FAIL_ENCODER') result = failEncoder(this.encoderSession ?? result.session, { code: 'MOCK_ENCODER_FAILURE', message: 'Mock encoder failure', retryable: Boolean(intent.payload.retryable), occurredAt: intent.timestamp, backend: plan.backend });
-      else if (intent.type === 'VALIDATE_ENCODER_PLAN') { const validation = validateEncoderPlan(plan); warnings.push(...validation.warnings); if (!validation.valid) warnings.push(...validation.errors); }
+      else if (intent.type === 'PAUSE_ENCODER')
+        result = pauseEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'RESUME_ENCODER')
+        result = resumeEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'DRAIN_ENCODER')
+        result = drainEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'STOP_ENCODER')
+        result = stopEncoder(this.encoderSession ?? result.session);
+      else if (intent.type === 'FAIL_ENCODER')
+        result = failEncoder(this.encoderSession ?? result.session, {
+          code: 'MOCK_ENCODER_FAILURE',
+          message: 'Mock encoder failure',
+          retryable: Boolean(intent.payload.retryable),
+          occurredAt: intent.timestamp,
+          backend: plan.backend,
+        });
+      else if (intent.type === 'VALIDATE_ENCODER_PLAN') {
+        const validation = validateEncoderPlan(plan);
+        warnings.push(...validation.warnings);
+        if (!validation.valid) warnings.push(...validation.errors);
+      }
       this.encoderSession = result.session;
       warnings.push(...result.warnings, summarizeEncoderHealth(result.session).summary);
     }
@@ -835,7 +1214,9 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
   private lastResults: MediaExecutionResult[] = [];
   private currentGraphRevision = 0;
   private runtimeMode: ExecutionRuntimeMode = globalRuntimeMode;
-  private readonly orchestrationEngine = new MediaOrchestrationEngine(createClock({ frameRate: 30 }));
+  private readonly orchestrationEngine = new MediaOrchestrationEngine(
+    createClock({ frameRate: 30 }),
+  );
   constructor(private logStore = new ExecutionLogStore()) {}
   registerAdapter(adapter: MediaExecutionAdapter, metadata?: Partial<AdapterMetadata>) {
     this.adapterRegistry.register(adapter, metadata);
@@ -879,13 +1260,54 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
   configureMockExecutionLatency(config: Partial<MockExecutionLatencyConfig>) {
     configureMockExecutionLatency(config);
   }
-  async executeFrameSync(tick: FrameTickEvent, graph: ProductionGraph, intents: readonly MediaExecutionIntent[] = []) {
-    const order: readonly MediaExecutionIntentType[] = ['ROUTE_PROGRAM_VIDEO','ROUTE_PREVIEW_VIDEO','BUILD_VIDEO_ROUTE_PLAN','BUILD_AUDIO_ROUTE_PLAN','UPDATE_AUDIO_MIX','UPDATE_SCENE_COMPOSITION','BUILD_SCENE_COMPOSITION','UPDATE_DESTINATION','ROUTE_STREAM_VIDEO','RENDER_BROWSER_COMPOSITION','RENDER_FRAME'];
-    const base = intents.length ? [...intents] : [{ id: `frame-sync:${tick.frameId}`, type: 'EXECUTE_FRAME_SYNC' as const, timestamp: new Date(tick.broadcastTime).toISOString(), graphRevision: graph.metadata.revision, payload: { frameTick: tick } }];
-    const ordered = base.map((intent) => ({ ...intent, payload: { ...intent.payload, frameTick: tick, frameId: tick.frameId, frameTimestamp: tick.timestamp } })).sort((a,b) => order.indexOf(a.type) - order.indexOf(b.type) || a.id.localeCompare(b.id));
+  async executeFrameSync(
+    tick: FrameTickEvent,
+    graph: ProductionGraph,
+    intents: readonly MediaExecutionIntent[] = [],
+  ) {
+    const order: readonly MediaExecutionIntentType[] = [
+      'ROUTE_PROGRAM_VIDEO',
+      'ROUTE_PREVIEW_VIDEO',
+      'BUILD_VIDEO_ROUTE_PLAN',
+      'BUILD_AUDIO_ROUTE_PLAN',
+      'UPDATE_AUDIO_MIX',
+      'UPDATE_SCENE_COMPOSITION',
+      'BUILD_SCENE_COMPOSITION',
+      'UPDATE_DESTINATION',
+      'ROUTE_STREAM_VIDEO',
+      'RENDER_BROWSER_COMPOSITION',
+      'RENDER_FRAME',
+    ];
+    const base = intents.length
+      ? [...intents]
+      : [
+          {
+            id: `frame-sync:${tick.frameId}`,
+            type: 'EXECUTE_FRAME_SYNC' as const,
+            timestamp: new Date(tick.broadcastTime).toISOString(),
+            graphRevision: graph.metadata.revision,
+            payload: { frameTick: tick },
+          },
+        ];
+    const ordered = base
+      .map((intent) => ({
+        ...intent,
+        payload: {
+          ...intent.payload,
+          frameTick: tick,
+          frameId: tick.frameId,
+          frameTimestamp: tick.timestamp,
+        },
+      }))
+      .sort((a, b) => order.indexOf(a.type) - order.indexOf(b.type) || a.id.localeCompare(b.id));
     ordered.forEach((intent) => this.orchestrationEngine.submitIntent(toMediaIntent(intent)));
-    const framePlan = this.orchestrationEngine.planExecutionFrame(tick.timestamp, this.getSubsystemState());
-    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, framePlan.frameTimestamp));
+    const framePlan = this.orchestrationEngine.planExecutionFrame(
+      tick.timestamp,
+      this.getSubsystemState(),
+    );
+    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) =>
+      toExecutionIntent(intent, framePlan.frameTimestamp),
+    );
     this.currentGraphRevision = graph.metadata.revision;
     const results: MediaExecutionResult[] = [];
     for (const intent of this.lastIntents) results.push(await this.dispatchIntent(intent, graph));
@@ -896,7 +1318,9 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
     const intents = translateGraphTransitionToIntents(transition);
     intents.forEach((intent) => this.orchestrationEngine.submitIntent(toMediaIntent(intent)));
     const framePlan = this.orchestrationEngine.planExecutionFrame(0, this.getSubsystemState());
-    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, framePlan.frameTimestamp));
+    this.lastIntents = framePlan.orderedExecutionSteps.map((intent) =>
+      toExecutionIntent(intent, framePlan.frameTimestamp),
+    );
     this.currentGraphRevision = transition.nextRevision;
     intents.forEach((intent) =>
       this.eventStream.emit({
@@ -919,22 +1343,32 @@ export class MediaExecutionEngine implements MediaExecutionPlane, MediaExecution
     void this.onGraphTransition(transition);
   }
   submitVideoOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.videoOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.videoOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   submitAudioOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.audioOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.audioOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   submitRenderOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.renderOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.renderOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   submitOutputOps(plan: MediaFramePlan) {
-    return plan.subsystemBatches.outputOps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    return plan.subsystemBatches.outputOps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
   }
   getSubsystemState(): MediaSubsystemStateSnapshot {
     return { video: 'ready', audio: 'ready', render: 'ready', output: 'ready', sync: 'ready' };
   }
   async executeMediaFramePlan(plan: MediaFramePlan, graph: ProductionGraph) {
-    const intents = plan.orderedExecutionSteps.map((intent) => toExecutionIntent(intent, plan.frameTimestamp));
+    const intents = plan.orderedExecutionSteps.map((intent) =>
+      toExecutionIntent(intent, plan.frameTimestamp),
+    );
     const results: MediaExecutionResult[] = [];
     for (const intent of intents) results.push(await this.dispatchIntent(intent, graph));
     this.lastIntents = intents;
@@ -1166,20 +1600,100 @@ export function summarizeExecutionHealth(health: MediaExecutionHealth) {
 export * from './gpu-runtime/index.js';
 export * from './ffmpeg-runtime/index.js';
 
-export { StreamingPipeline, StreamingSessionManager, StreamingScheduler, StreamingRecovery, StreamingValidator, createStreamingRuntimeManifest, isRealStreamingEnabled, validateStreamingDestination, createStreamingPipeline, createDemoStreamingSession, streamingProviders, MetadataStreamingPipeline } from './streaming-runtime/index.js';
-export type { StreamingJob as RuntimeStreamingJob, StreamingDestination as RuntimeStreamingDestination, StreamingStatistics as RuntimeStreamingStatistics, StreamingHealth as RuntimeStreamingHealth, StreamingManifest as RuntimeStreamingManifest, StreamingPipelineV2, StreamingSession, StreamingDestinationModel, StreamingProviderModel, StreamingSessionMetadata, StreamingRuntimeEvent, StreamingBackendDescriptor } from './streaming-runtime/index.js';
+export {
+  StreamingPipeline,
+  StreamingSessionManager,
+  StreamingScheduler,
+  StreamingRecovery,
+  StreamingValidator,
+  createStreamingRuntimeManifest,
+  isRealStreamingEnabled,
+  validateStreamingDestination,
+  createStreamingPipeline,
+  createDemoStreamingSession,
+  streamingProviders,
+  MetadataStreamingPipeline,
+} from './streaming-runtime/index.js';
+export type {
+  StreamingJob as RuntimeStreamingJob,
+  StreamingDestination as RuntimeStreamingDestination,
+  StreamingStatistics as RuntimeStreamingStatistics,
+  StreamingHealth as RuntimeStreamingHealth,
+  StreamingManifest as RuntimeStreamingManifest,
+  StreamingPipelineV2,
+  StreamingSession,
+  StreamingDestinationModel,
+  StreamingProviderModel,
+  StreamingSessionMetadata,
+  StreamingRuntimeEvent,
+  StreamingBackendDescriptor,
+} from './streaming-runtime/index.js';
 
-export { AudioRuntime, AudioMixer, AudioMatrix, MixMinusManager, AudioStatisticsRuntime, AudioHealthRuntime, AudioRecovery, AudioValidator, createAudioBus, createAudioChannel, createDefaultBuses, isRealAudioEnabled } from './audio-runtime/index.js';
-export type { AudioBus as RuntimeAudioBus, AudioChannel as RuntimeAudioChannel, AudioGroup as RuntimeAudioGroup, AudioEffect, AudioMeter, AudioSession, AudioStatistics as RuntimeAudioStatistics, AudioHealth as RuntimeAudioHealth, AudioReplayEvent, MixMinusTarget, AudioBusKind, AudioEffectKind } from './audio-runtime/index.js';
+export {
+  AudioRuntime,
+  AudioMixer,
+  AudioMatrix,
+  MixMinusManager,
+  AudioStatisticsRuntime,
+  AudioHealthRuntime,
+  AudioRecovery,
+  AudioValidator,
+  createAudioBus,
+  createAudioChannel,
+  createDefaultBuses,
+  isRealAudioEnabled,
+} from './audio-runtime/index.js';
+export type {
+  AudioBus as RuntimeAudioBus,
+  AudioChannel as RuntimeAudioChannel,
+  AudioGroup as RuntimeAudioGroup,
+  AudioEffect,
+  AudioMeter,
+  AudioSession,
+  AudioStatistics as RuntimeAudioStatistics,
+  AudioHealth as RuntimeAudioHealth,
+  AudioReplayEvent,
+  MixMinusTarget,
+  AudioBusKind,
+  AudioEffectKind,
+} from './audio-runtime/index.js';
 
 export * from './broadcast-orchestrator/index.js';
+export * from './transport/index.js';
 
 export * from './hardware-runtime/index.js';
 export * from './hardware-integration.js';
 export * from './high-availability/index.js';
 
-export { ProductionEngine, PipelineScheduler as ProductionPipelineScheduler, SynchronizationManager, ResourceAllocator as ProductionResourceAllocator, ProductionRecovery, isProductionEngineEnabled, createProductionEngine } from './production-engine/index.js';
-export type { ProductionSession, ExecutionStatistics, ExecutionManifest, ExecutionDiagnostics, ExecutionHistory, ExecutionSnapshot, ExecutionCheckpoint, ProductionHealth, ProductionMetrics, ProductionEngineDashboard, ProductionRuntimeName, ProductionAction, EngineEvent, PipelineDependency, PipelineStep, ScheduledFrame, ClockSample, SynchronizationReport } from './production-engine/index.js';
+export {
+  ProductionEngine,
+  PipelineScheduler as ProductionPipelineScheduler,
+  SynchronizationManager,
+  ResourceAllocator as ProductionResourceAllocator,
+  ProductionRecovery,
+  isProductionEngineEnabled,
+  createProductionEngine,
+} from './production-engine/index.js';
+export type {
+  ProductionSession,
+  ExecutionStatistics,
+  ExecutionManifest,
+  ExecutionDiagnostics,
+  ExecutionHistory,
+  ExecutionSnapshot,
+  ExecutionCheckpoint,
+  ProductionHealth,
+  ProductionMetrics,
+  ProductionEngineDashboard,
+  ProductionRuntimeName,
+  ProductionAction,
+  EngineEvent,
+  PipelineDependency,
+  PipelineStep,
+  ScheduledFrame,
+  ClockSample,
+  SynchronizationReport,
+} from './production-engine/index.js';
 export * from './media-runtime/index.js';
 export * from './output-pipeline.js';
 export * from './media-runtime/ffmpeg/index.js';
@@ -1187,3 +1701,6 @@ export * from './media-runtime/ffmpeg/index.js';
 export * from './production-switcher.js';
 export * from './transition-renderer.js';
 export * from './graphics-engine.js';
+
+export { TransportManager, createTransportManager, createDemoTransportWorkflow, transportProtocols } from './transport-layer.js';
+export type { BroadcastTransportProtocol, TransportBackendDescriptor, TransportHealth, TransportProtocolModel, TransportRuntimeBindings, TransportRuntimeEvent, TransportRuntimeEventType, TransportSession, TransportSessionLifecycle, TransportSessionMetadata, TransportManagerSnapshot, CreateTransportSessionInput, UpdateTransportMetricsInput, RemoteProductionBinding } from './transport-layer.js';
