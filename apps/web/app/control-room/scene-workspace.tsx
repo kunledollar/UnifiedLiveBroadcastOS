@@ -142,6 +142,7 @@ import {
 import { LeftNavPanel } from './browsers';
 import { DigitalAudioConsole, DockPanelEmpty } from './audio-console';
 import { OperationsConsoleContent } from './operations';
+import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
 import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
 import {
   applyWorkspaceProfile,
@@ -2128,11 +2129,20 @@ export function SceneWorkspace({
   const [liveSourceStreams, setLiveSourceStreams] = useState<Record<string, MediaStream>>({});
   const [audioLevel, setAudioLevel] = useState(0);
   const [recordingState, setRecordingState] = useState<
-    'idle' | 'recording' | 'ready' | 'unsupported'
+    'idle' | 'preparing' | 'recording' | 'stopping' | 'completed' | 'failed' | 'unsupported'
   >('idle');
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
+  const [recordingStoppedAt, setRecordingStoppedAt] = useState<string | null>(null);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [recordingFileSize, setRecordingFileSize] = useState(0);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [recordingSourceType, setRecordingSourceType] = useState<BrowserRecordingPanelState['sourceType']>('none');
+  const [recordingFilename, setRecordingFilename] = useState<string | null>(null);
+  const [recordingHistory, setRecordingHistory] = useState<BrowserRecordingPanelState['history']>([]);
   const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
 
   const liveSourceStreamsRef = useRef<Record<string, MediaStream>>({});
@@ -2292,36 +2302,6 @@ export function SceneWorkspace({
     [patchCaptureSourceStatus, retainLiveSourceStream, smokeMedia],
   );
 
-  const startSmokeRecording = useCallback(() => {
-    const stream = activeCameraStream ?? smokeMedia.stream;
-    if (!stream || !mediaRecorderSupported) {
-      setRecordingState('unsupported');
-      return;
-    }
-    recordedChunksRef.current = [];
-    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
-    setRecordedUrl(null);
-    const recorderOptions = MediaRecorder.isTypeSupported('video/webm')
-      ? { mimeType: 'video/webm' }
-      : undefined;
-    const recorder = new MediaRecorder(stream, recorderOptions);
-    recorder.ondataavailable = (event) => {
-      if (event.data.size > 0) recordedChunksRef.current.push(event.data);
-    };
-    recorder.onstop = () => {
-      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-      setRecordedUrl(URL.createObjectURL(blob));
-      setRecordingState('ready');
-    };
-    recorder.start();
-    recorderRef.current = recorder;
-    setRecordingState('recording');
-  }, [activeCameraStream, mediaRecorderSupported, recordedUrl, smokeMedia.stream]);
-
-  const stopSmokeRecording = useCallback(() => {
-    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
-  }, []);
-
   const sorted = useMemo(() => [...scenes].sort((a, b) => a.order - b.order), [scenes]);
   const programScene =
     sorted.find((scene) => scene.id === productionState.programSceneId) ??
@@ -2349,6 +2329,121 @@ export function SceneWorkspace({
     Boolean(programCameraSourceId) || (directCameraLive && programStreamOnAir);
   const livePreviewVisible = isLiveMediaStream(previewStreamToShow);
   const liveProgramVisible = isLiveMediaStream(programStreamToShow);
+
+  const createProgramRecordingStream = useCallback(() => {
+    const directStream = programStreamToShow ?? (programStreamOnAir ? activeCameraStream : null);
+    if (isLiveMediaStream(directStream)) {
+      return { stream: directStream, sourceType: programLiveVideoSource?.type ?? 'camera' } as const;
+    }
+    const programRoot = document.querySelector('[data-ubos-program-monitor=\"true\"]');
+    const programVideo = programRoot?.querySelector('video') as (HTMLVideoElement & { captureStream?: () => MediaStream; mozCaptureStream?: () => MediaStream }) | null;
+    const captured = programVideo?.captureStream?.() ?? programVideo?.mozCaptureStream?.();
+    if (captured?.getVideoTracks().length) {
+      const mixed = new MediaStream(captured.getVideoTracks());
+      Object.values(liveSourceStreamsRef.current).forEach((stream) => {
+        stream.getAudioTracks().filter((track) => track.readyState === 'live').forEach((track) => mixed.addTrack(track));
+      });
+      return { stream: mixed, sourceType: programScene.sources.find((source) => source.isVisible)?.type ?? 'media' } as const;
+    }
+    return null;
+  }, [activeCameraStream, programLiveVideoSource?.type, programScene.sources, programStreamOnAir, programStreamToShow]);
+
+
+  const startSmokeRecording = useCallback(() => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') return;
+    if (!mediaRecorderSupported) {
+      setRecordingState('failed');
+      setRecordingError('MediaRecorder is not supported in this browser.');
+      return;
+    }
+    setRecordingState('preparing');
+    setRecordingError(null);
+    const source = createProgramRecordingStream();
+    if (!source) {
+      setRecordingState('failed');
+      setRecordingError('No capturable Program video is available. Start a camera, screen, or supported media source first.');
+      return;
+    }
+    recordedChunksRef.current = [];
+    setRecordingFileSize(0);
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    setRecordedUrl(null);
+    const startedAt = new Date().toISOString();
+    const filename = `ubos-program-${startedAt.replace(/[:.]/g, '-')}.webm`;
+    setRecordingStartedAt(startedAt);
+    setRecordingStoppedAt(null);
+    setRecordingDurationMs(0);
+    setRecordingFilename(filename);
+    setRecordingSourceType(source.sourceType);
+    const recorderOptions = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? { mimeType: 'video/webm;codecs=vp9,opus' }
+      : MediaRecorder.isTypeSupported('video/webm')
+        ? { mimeType: 'video/webm' }
+        : undefined;
+    const recorder = new MediaRecorder(source.stream, recorderOptions);
+    recordingStreamRef.current = source.stream;
+    const stopForEndedSource = () => {
+      if (recorder.state === 'recording') recorder.stop();
+    };
+    source.stream.getTracks().forEach((track) => track.addEventListener('ended', stopForEndedSource, { once: true }));
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+        setRecordingFileSize((size) => size + event.data.size);
+      }
+    };
+    recorder.onerror = () => {
+      setRecordingState('failed');
+      setRecordingError('The browser recording pipeline reported an error.');
+    };
+    recorder.onstop = () => {
+      const stoppedAt = new Date().toISOString();
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const durationMs = startedAt ? Date.parse(stoppedAt) - Date.parse(startedAt) : recordingDurationMs;
+      setRecordedUrl(URL.createObjectURL(blob));
+      setRecordingStoppedAt(stoppedAt);
+      setRecordingDurationMs(Math.max(0, durationMs));
+      setRecordingFileSize(blob.size);
+      setRecordingState('completed');
+      setRecordingHistory((history) => [{ filename, durationMs: Math.max(0, durationMs), startedAt, stoppedAt, sourceType: source.sourceType, fileSizeBytes: blob.size }, ...history].slice(0, 10));
+      recorderRef.current = null;
+      recordingStreamRef.current = null;
+    };
+    recorder.start(1000);
+    recorderRef.current = recorder;
+    setRecordingState('recording');
+  }, [createProgramRecordingStream, mediaRecorderSupported, recordedUrl, recordingDurationMs]);
+
+  const stopSmokeRecording = useCallback(() => {
+    if (recorderRef.current?.state === 'recording') {
+      setRecordingState('stopping');
+      recorderRef.current.stop();
+    }
+  }, []);
+
+
+
+  useEffect(() => {
+    if (recordingState !== 'recording' || !recordingStartedAt) return;
+    const tick = () => setRecordingDurationMs(Date.now() - Date.parse(recordingStartedAt));
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [recordingStartedAt, recordingState]);
+
+  const browserRecordingPanelState = useMemo<BrowserRecordingPanelState>(() => ({
+    state: recordingState === 'unsupported' ? 'failed' : recordingState,
+    filename: recordingFilename,
+    durationMs: recordingDurationMs,
+    startedAt: recordingStartedAt,
+    stoppedAt: recordingStoppedAt,
+    sourceType: recordingSourceType,
+    fileSizeBytes: recordingFileSize,
+    downloadUrl: recordedUrl,
+    error: recordingError,
+    history: recordingHistory,
+    supported: mediaRecorderSupported,
+  }), [mediaRecorderSupported, recordedUrl, recordingDurationMs, recordingError, recordingFileSize, recordingFilename, recordingHistory, recordingSourceType, recordingStartedAt, recordingState, recordingStoppedAt]);
 
   useEffect(() => {
     const stream = previewStreamToShow ?? activeCameraStream ?? smokeMedia.stream;
@@ -3057,6 +3152,9 @@ export function SceneWorkspace({
         runtimeState: runtimeView,
         runtimeHealth: runtime.session.health(),
         runtimeSnapshots: runtime.session.history.history,
+        browserRecordingState: browserRecordingPanelState,
+        onStartBrowserRecording: startSmokeRecording,
+        onStopBrowserRecording: stopSmokeRecording,
       }),
     [
       broadcastId,
@@ -3088,6 +3186,9 @@ export function SceneWorkspace({
       deviceState,
       runtimeView,
       runtime,
+      browserRecordingPanelState,
+      startSmokeRecording,
+      stopSmokeRecording,
     ],
   );
 
@@ -4046,7 +4147,7 @@ export function SceneWorkspace({
           <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
           <SmokeCheck label="Program visible" ok={liveProgramVisible} />
           <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
-          <SmokeCheck label="Recording works" ok={recordingState === 'ready'} />
+          <SmokeCheck label="Recording works" ok={recordingState === 'completed'} />
           <SmokeCheck label="No camera errors" ok={!cameraCaptureError} />
         </div>
         <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
@@ -4091,7 +4192,7 @@ export function SceneWorkspace({
           <button
             type="button"
             className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
-            disabled={(!activeCameraStream && !smokeMedia.stream) || recordingState === 'recording'}
+            disabled={recordingState === 'recording' || recordingState === 'preparing' || recordingState === 'stopping'}
             onClick={startSmokeRecording}
           >
             Start WebM REC
@@ -4109,7 +4210,7 @@ export function SceneWorkspace({
           <a
             className="block rounded-ubos-sm bg-emerald-400 px-2 py-2 text-center text-xs font-black text-slate-950"
             href={recordedUrl}
-            download="ubos-smoke-test.webm"
+            download={recordingFilename ?? 'ubos-smoke-test.webm'}
           >
             Download recorded WebM
           </a>
@@ -4164,7 +4265,7 @@ export function SceneWorkspace({
 
         <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
           <div className="grid min-h-0 flex-[1_1_auto] grid-cols-[minmax(0,55fr)_minmax(0,35fr)] gap-3">
-            <div className="min-h-0 rounded-2xl border border-red-500/40 bg-black p-2 shadow-[0_0_34px_rgba(220,38,38,0.18)]">
+            <div data-ubos-program-monitor="true" className="min-h-0 rounded-2xl border border-red-500/40 bg-black p-2 shadow-[0_0_34px_rgba(220,38,38,0.18)]">
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-black uppercase tracking-[0.18em] text-red-200">
                 <span>Program</span>
                 <span>{programScene.name}</span>
