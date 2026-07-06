@@ -13,4 +13,7 @@ export {
 } from './FloatingDiagnosticsPanel';
 export { FloatingRoutingMatrixPanel } from './FloatingRoutingMatrixPanel';
 export { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
+export { SourceDiagnosticDock } from './SourceDiagnosticDock';
+export { SourceDockPanel } from './SourceDockPanel';
+export { commandRailItems, sourceDockTabs, preferredSourceDockTab } from './command-rail-constants';
 export { BroadcastPanelShell } from './BroadcastPanelShell';

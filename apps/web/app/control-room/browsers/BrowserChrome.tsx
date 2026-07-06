@@ -9,17 +9,21 @@ export function BrowserSection({
   children,
   className,
 }: {
-  title: string;
+  title?: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={cn('flex min-h-0 flex-col gap-ubos-2', className)}>
-      <div className="flex items-center justify-between gap-ubos-2">
-        <h2 className={cn(ubosTypographyClasses.section, 'text-ubos-fg-primary')}>{title}</h2>
-        {action}
-      </div>
+      {title ? (
+        <div className="flex items-center justify-between gap-ubos-2">
+          <h2 className={cn(ubosTypographyClasses.section, 'text-ubos-fg-primary')}>{title}</h2>
+          {action}
+        </div>
+      ) : action ? (
+        <div className="flex justify-end">{action}</div>
+      ) : null}
       {children}
     </section>
   );
@@ -123,11 +127,15 @@ export function RowIconButton({
   onClick,
   disabled = false,
   variant = 'ghost',
+  icon,
+  compact = false,
 }: {
   label: string;
   onClick: () => void;
   disabled?: boolean;
   variant?: 'ghost' | 'danger';
+  icon?: string;
+  compact?: boolean;
 }) {
   return (
     <BroadcastButton
@@ -141,9 +149,18 @@ export function RowIconButton({
       }}
       title={label}
       aria-label={label}
-      className="min-w-0 px-1.5"
+      className={cn('min-w-0', compact ? 'flex-col gap-0 px-1 py-0.5 text-[8px]' : 'px-1.5')}
     >
-      {label}
+      {icon ? (
+        <>
+          <span className="text-xs leading-none" aria-hidden="true">
+            {icon}
+          </span>
+          {compact ? <span>{label}</span> : null}
+        </>
+      ) : (
+        label
+      )}
     </BroadcastButton>
   );
 }
@@ -151,12 +168,19 @@ export function RowIconButton({
 export function SceneThumbnail({
   label,
   tally,
+  compact = false,
 }: {
   label: string;
   tally?: 'program' | 'preview' | null;
+  compact?: boolean;
 }) {
   return (
-    <div className="relative flex h-full w-full items-center justify-center bg-gradient-to-br from-ubos-midnight to-ubos-carbon">
+    <div
+      className={cn(
+        'relative flex h-full w-full items-center justify-center bg-gradient-to-br from-ubos-midnight to-ubos-carbon',
+        compact && 'text-[9px]',
+      )}
+    >
       {tally ? (
         <span
           className={cn(
@@ -188,16 +212,21 @@ export function SceneRowOverflowMenu({
   onRename,
   onDelete,
   deleteDisabled = false,
+  compact = false,
 }: {
   onDuplicate: () => void;
   onRename: () => void;
   onDelete: () => void;
   deleteDisabled?: boolean;
+  compact?: boolean;
 }) {
   return (
     <details className="group relative" onClick={(event) => event.stopPropagation()}>
       <summary
-        className="flex h-7 w-7 cursor-pointer list-none items-center justify-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight text-ubos-metadata font-bold text-ubos-fg-muted hover:bg-ubos-slate hover:text-ubos-fg-secondary"
+        className={cn(
+          'flex cursor-pointer list-none items-center justify-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight font-bold text-ubos-fg-muted hover:bg-ubos-slate hover:text-ubos-fg-secondary',
+          compact ? 'h-5 w-5 text-[10px]' : 'h-7 w-7 text-ubos-metadata',
+        )}
         aria-label="Scene actions"
         onClick={(event) => event.stopPropagation()}
       >

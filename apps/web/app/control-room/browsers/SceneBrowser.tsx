@@ -48,6 +48,7 @@ export function SceneBrowser({
   programSceneId,
   previewSceneId,
   isPending = false,
+  compact = false,
   onAdd,
   onRename,
   onSwitch,
@@ -60,6 +61,7 @@ export function SceneBrowser({
   programSceneId: string;
   previewSceneId: string;
   isPending?: boolean;
+  compact?: boolean;
   onAdd?: (input: { name: string; type: SceneType }) => void;
   onRename?: (sceneId: string, name: string) => void;
   onSwitch?: (sceneId: string) => void;
@@ -84,7 +86,8 @@ export function SceneBrowser({
 
   return (
     <BrowserSection
-      title="Scenes"
+      {...(compact ? { className: 'gap-1' } : {})}
+      {...(!compact ? { title: 'Scenes' } : {})}
       action={
         onAdd ? (
           <BroadcastButton
@@ -96,7 +99,7 @@ export function SceneBrowser({
               if (name) onAdd({ name, type: sceneTypes[0] ?? SceneType.Custom });
             }}
           >
-            + Add
+            {compact ? '+' : '+ Add'}
           </BroadcastButton>
         ) : null
       }
@@ -105,12 +108,17 @@ export function SceneBrowser({
         search={search}
         onSearchChange={setSearch}
         searchPlaceholder="Search scenes"
-        filters={sceneFilters}
+        filters={compact ? sceneFilters.slice(0, 4) : sceneFilters}
         activeFilter={filter}
         onFilterChange={(id) => setFilter(id as SceneBrowserFilter)}
-        sort={sort}
-        onSortChange={(value) => setSort(value as SceneBrowserSort)}
-        sortOptions={sceneSortOptions}
+        {...(!compact
+          ? {
+              sort,
+              onSortChange: (value: string) => setSort(value as SceneBrowserSort),
+              sortOptions: sceneSortOptions,
+            }
+          : {})}
+        {...(compact ? { className: 'space-y-1' } : {})}
       />
 
       <AssetList isEmpty={visibleScenes.length === 0} emptyMessage="No scenes created">
@@ -126,21 +134,50 @@ export function SceneBrowser({
               key={scene.id}
               selected={selected}
               onClick={() => onSwitch?.(scene.id)}
+              {...(compact ? { className: 'gap-1.5 px-1 py-1' } : {})}
               thumbnail={
                 <SceneThumbnail
                   label={String(index + 1)}
                   tally={tally}
+                  {...(compact ? { compact: true } : {})}
                 />
               }
               title={scene.name}
-              subtitle={`${getSceneLayoutLabel(scene)} · ${getSceneTypeLabel(scene)} · ${scene.sources.length} source${scene.sources.length === 1 ? '' : 's'}`}
+              subtitle={
+                compact
+                  ? `${scene.sources.length} src`
+                  : `${getSceneLayoutLabel(scene)} · ${getSceneTypeLabel(scene)} · ${scene.sources.length} source${scene.sources.length === 1 ? '' : 's'}`
+              }
               status={
-                <StatusBadge variant={sceneStatusVariant(status)}>
-                  {sceneStatusLabel(status)}
-                </StatusBadge>
+                <div className="flex flex-col items-end gap-0.5">
+                  {isProgram ? (
+                    <StatusBadge variant="program" dot>
+                      Program
+                    </StatusBadge>
+                  ) : null}
+                  {isPreview && !isProgram ? (
+                    <StatusBadge variant="preview" dot>
+                      Preview
+                    </StatusBadge>
+                  ) : null}
+                  {status === 'offline' || status === 'issues' ? (
+                    <StatusBadge variant="warning">
+                      {status === 'offline' ? 'Offline' : 'Warning'}
+                    </StatusBadge>
+                  ) : status === 'ready' && isProgram ? (
+                    <StatusBadge variant="live" dot>
+                      Live
+                    </StatusBadge>
+                  ) : (
+                    <StatusBadge variant={sceneStatusVariant(status)}>
+                      {sceneStatusLabel(status)}
+                    </StatusBadge>
+                  )}
+                </div>
               }
               action={
                 <SceneRowOverflowMenu
+                  {...(compact ? { compact: true } : {})}
                   onDuplicate={() => onDuplicate?.(scene.id)}
                   onRename={() => {
                     const name = window.prompt('Rename scene', scene.name);

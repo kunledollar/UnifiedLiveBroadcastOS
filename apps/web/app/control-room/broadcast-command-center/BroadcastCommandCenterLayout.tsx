@@ -2,7 +2,7 @@
 
 import { useCallback, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
-import type { DockTabId, NavItemId, OperationsTabId } from '../shell/types';
+import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../shell/types';
 import type { RoutingMatrixEdge } from '../workspace-canvas/types';
 import type { DiagnosticMetric } from '../workspace-canvas/SystemDiagnosticsPanel';
 import { useWorkspaceCanvasState } from '../workspace-canvas/useWorkspaceCanvasState';
@@ -18,7 +18,6 @@ import { applyWorkspaceProfile } from '../workspaces';
 import { BottomWorkspaceDock, bottomWorkspaceTabBarHeightPx } from './BottomWorkspaceDock';
 import { CenterProgramPreviewDeck, type MonitorStatusInfo } from './CenterProgramPreviewDeck';
 import { FloatingProductionGraphPanel } from './FloatingProductionGraphPanel';
-import { DiagnosticsSummary } from './FloatingDiagnosticsPanel';
 import { LeftCommandRail } from './LeftCommandRail';
 import { RightOperationsDock, type OperationsDockSection } from './RightOperationsDock';
 import { TopBar } from './TopBar';
@@ -28,6 +27,8 @@ export type BroadcastCommandCenterLayoutProps = {
   activeNav: NavItemId;
   onNavChange: (nav: NavItemId) => void;
   sourceDockContent: ReactNode;
+  activeSourceDockTab: SourceDockTabId;
+  onSourceDockTabChange: (tab: SourceDockTabId) => void;
   programMonitor: ReactNode;
   previewMonitor: ReactNode;
   programStatus: MonitorStatusInfo;
@@ -64,6 +65,8 @@ export function BroadcastCommandCenterLayout({
   activeNav,
   onNavChange,
   sourceDockContent,
+  activeSourceDockTab,
+  onSourceDockTabChange,
   programMonitor,
   previewMonitor,
   programStatus,
@@ -289,7 +292,8 @@ export function BroadcastCommandCenterLayout({
               activeNav={activeNav}
               onNavChange={onNavChange}
               sourceDockContent={sourceDockContent}
-              diagnosticsSlot={<DiagnosticsSummary metrics={diagnosticsMetrics} />}
+              activeSourceDockTab={activeSourceDockTab}
+              onSourceDockTabChange={onSourceDockTabChange}
               collapsed={leftCollapsed}
               {...(!dockLayout.layoutLocked ? { onToggleCollapse: () => toggleZone('left') } : {})}
               className="h-full"
