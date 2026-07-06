@@ -3303,9 +3303,10 @@ export function SceneWorkspace({
           isVisible: true,
           isLocked: false,
           settings:
-            input.type === 'camera' || input.type === 'screen'
+            input.settings ??
+            (input.type === 'camera' || input.type === 'screen'
               ? { runtimeStatus: 'connecting' }
-              : {},
+              : {}),
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);
@@ -3856,9 +3857,10 @@ export function SceneWorkspace({
           isVisible: true,
           isLocked: false,
           settings:
-            input.type === 'camera' || input.type === 'screen'
+            input.settings ??
+            (input.type === 'camera' || input.type === 'screen'
               ? { runtimeStatus: 'connecting' }
-              : {},
+              : {}),
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);

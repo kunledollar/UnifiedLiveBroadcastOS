@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
   AssetList,
   AssetRow,
@@ -56,7 +56,7 @@ export function SourceBrowser({
   isPending?: boolean;
   tallyState?: TallyState;
   directCameraLive?: boolean;
-  onAdd?: (input: { sceneId: string; name: string; type: SceneSourceType; url?: string }) => void;
+  onAdd?: (input: { sceneId: string; name: string; type: SceneSourceType; url?: string; settings?: Record<string, unknown> }) => void;
   onRename?: (sourceId: string, name: string) => void;
   onDuplicate?: (sourceId: string) => void;
   onDelete?: (sourceId: string) => void;
@@ -66,6 +66,35 @@ export function SourceBrowser({
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<SceneSourceType | 'all'>('all');
   const [healthFilter, setHealthFilter] = useState<SourceHealthFilter>('all');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const importMediaFiles = (fileList: FileList | File[]) => {
+    Array.from(fileList).forEach((file) => {
+      const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+      const kind = file.type.startsWith('video/') || ['mp4', 'mov', 'webm'].includes(ext)
+        ? 'video'
+        : file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif'].includes(ext)
+          ? 'image'
+          : null;
+      if (!kind) return;
+      const mediaUrl = URL.createObjectURL(file);
+      onAdd?.({
+        sceneId: scene.id,
+        name: file.name,
+        type: 'media',
+        settings: {
+          runtimeStatus: 'live',
+          mediaUrl,
+          mediaKind: kind,
+          filename: file.name,
+          fileSize: file.size,
+          fileType: file.type || file.name.split('.').pop()?.toLowerCase(),
+          autoplay: kind === 'video',
+          loop: false,
+        },
+      });
+    });
+  };
 
   const sources = useMemo(
     () => [...scene.sources].sort((a, b) => a.order - b.order),
@@ -98,7 +127,22 @@ export function SourceBrowser({
         Preview scene: <span className="text-ubos-fg-secondary">{sceneName}</span>
       </p>
 
-      <div className="flex flex-wrap gap-1">
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        multiple
+        accept=".mp4,.mov,.webm,.jpg,.jpeg,.png,.gif,video/mp4,video/quicktime,video/webm,image/jpeg,image/png,image/gif"
+        onChange={(event) => {
+          if (event.currentTarget.files) importMediaFiles(event.currentTarget.files);
+          event.currentTarget.value = '';
+        }}
+      />
+      <div
+        className="flex flex-wrap gap-1 rounded-ubos-md border border-dashed border-transparent p-1"
+        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }}
+        onDrop={(event) => { event.preventDefault(); importMediaFiles(event.dataTransfer.files); }}
+      >
         {sourceAddTypes
           .filter((type) => sourceTypes.includes(type))
           .map((type) => (
@@ -107,6 +151,7 @@ export function SourceBrowser({
               label={`+ ${getSourceTypeLabel(type)}`}
               disabled={isPending}
               onClick={() => {
+                if (type === 'media') { fileInputRef.current?.click(); return; }
                 const url =
                   type === 'browser'
                     ? window.prompt('Browser source URL', 'https://example.com')
@@ -240,7 +285,11 @@ function SourceBrowserRow({
             label="Del"
             variant="danger"
             onClick={() => {
-              if (window.confirm(`Delete ${source.name}?`)) onDelete?.(source.id);
+              if (window.confirm(`Delete ${source.name}?`)) {
+                const mediaUrl = typeof source.settings?.mediaUrl === 'string' ? source.settings.mediaUrl : null;
+                if (mediaUrl) URL.revokeObjectURL(mediaUrl);
+                onDelete?.(source.id);
+              }
             }}
           />
         </CompactRowActions>
