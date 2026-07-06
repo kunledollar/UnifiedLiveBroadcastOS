@@ -1662,6 +1662,7 @@ export * from './broadcast-orchestrator/index.js';
 export * from './transport/index.js';
 
 export * from './hardware-runtime/index.js';
+export * from './hardware-integration.js';
 export * from './high-availability/index.js';
 
 export {
