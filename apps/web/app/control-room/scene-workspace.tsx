@@ -264,6 +264,39 @@ function warnMediaDiagnostic(message: string, error: unknown, details?: Record<s
   console.warn(`[UBOS media runtime] ${message}`, { ...details, error });
 }
 
+
+type LiveCaptureDiagnostics = {
+  requestedCamera?: boolean;
+  sourceIdCreated?: string;
+  streamIdReceived?: string;
+  videoTrackCount?: number;
+  audioTrackCount?: number;
+  streamActive?: boolean;
+  sourceIdStored?: string;
+  previewSourceIdLookup?: string;
+  programSourceIdLookup?: string;
+  srcObjectAssigned?: string;
+  playbackStarted?: string;
+  failureReason?: string;
+};
+
+function describeCaptureError(error: unknown): string {
+  if (error instanceof DOMException) return `${error.name}: ${error.message}`;
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return String(error);
+}
+
+function getFirstVisibleCameraSourceId(scene: Scene): string | null {
+  return scene.sources.find((source) => source.type === 'camera' && source.isVisible)?.id ?? null;
+}
+
+function isLiveMediaStream(stream: MediaStream | null | undefined): stream is MediaStream {
+  return Boolean(
+    stream?.active &&
+      stream.getVideoTracks().some((track) => track.readyState === 'live'),
+  );
+}
+
 function pauseVideoSafely(video: HTMLVideoElement, details?: Record<string, unknown>): void {
   try {
     video.pause();
@@ -284,14 +317,31 @@ function assignVideoStreamSafely(
   }
 }
 
-function playVideoSafely(video: HTMLVideoElement, details?: Record<string, unknown>): void {
+function playVideoSafely(
+  video: HTMLVideoElement,
+  details?: Record<string, unknown>,
+  onStarted?: () => void,
+  onFailed?: (reason: string) => void,
+): void {
   try {
     const playPromise = video.play();
     if (playPromise) {
-      void playPromise.catch((error) => warnMediaDiagnostic('video play failed', error, details));
+      void playPromise
+        .then(() => {
+          onStarted?.();
+        })
+        .catch((error) => {
+          const reason = describeCaptureError(error);
+          warnMediaDiagnostic('video play failed', error, details);
+          onFailed?.(reason);
+        });
+      return;
     }
+    onStarted?.();
   } catch (error) {
+    const reason = describeCaptureError(error);
     warnMediaDiagnostic('video play failed', error, details);
+    onFailed?.(reason);
   }
 }
 
@@ -342,12 +392,16 @@ function LiveMediaMonitor({
   stream,
   active,
   role,
+  sourceId,
+  onVideoEvent,
 }: {
   title: string;
   sceneName: string;
   stream: MediaStream | null;
   active: boolean;
   role: 'program' | 'preview';
+  sourceId?: string | null;
+  onVideoEvent?: (event: Partial<LiveCaptureDiagnostics>) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
@@ -356,6 +410,7 @@ function LiveMediaMonitor({
     const nextStream = active ? stream : null;
     const details = {
       target: role,
+      sourceId,
       streamId: nextStream?.id,
       active: nextStream?.active,
     };
@@ -363,14 +418,20 @@ function LiveMediaMonitor({
     pauseVideoSafely(video, details);
     assignVideoStreamSafely(video, nextStream, details);
     if (active && stream) {
-      playVideoSafely(video, details);
+      onVideoEvent?.({ srcObjectAssigned: `${role}:${sourceId ?? 'unknown'}:${stream.id}` });
+      playVideoSafely(
+        video,
+        details,
+        () => onVideoEvent?.({ playbackStarted: `${role}:${sourceId ?? 'unknown'}:${stream.id}` }),
+        (failureReason) => onVideoEvent?.({ failureReason }),
+      );
     }
     return () => {
       const cleanupDetails = { ...details, cleanup: true };
       pauseVideoSafely(video, cleanupDetails);
       assignVideoStreamSafely(video, null, cleanupDetails);
     };
-  }, [active, stream]);
+  }, [active, onVideoEvent, role, sourceId, stream]);
   return (
     <div
       className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border ${role === 'program' ? 'border-red-500/50' : 'border-emerald-400/50'} bg-black`}
@@ -2037,6 +2098,15 @@ export function SceneWorkspace({
     [startTransition, setScenes],
   );
   const smokeMedia = useMediaCapture();
+  const [liveSourceStreams, setLiveSourceStreams] = useState<Record<string, MediaStream>>({});
+  const [liveCaptureDiagnostics, setLiveCaptureDiagnostics] = useState<LiveCaptureDiagnostics>({});
+  const mergeLiveCaptureDiagnostics = useCallback((patch: Partial<LiveCaptureDiagnostics>) => {
+    setLiveCaptureDiagnostics((current) => {
+      const next = { ...current, ...patch };
+      console.info('[UBOS live camera debug]', next);
+      return next;
+    });
+  }, []);
   const [audioLevel, setAudioLevel] = useState(0);
   const [recordingState, setRecordingState] = useState<
     'idle' | 'recording' | 'ready' | 'unsupported'
@@ -2078,12 +2148,12 @@ export function SceneWorkspace({
   }, [smokeMedia.stream]);
 
   const patchCaptureSourceStatus = useCallback(
-    (runtimeStatus: string, message?: string) => {
+    (runtimeStatus: string, sourceId?: string, message?: string) => {
       refresh(
         scenes.map((scene) => ({
           ...scene,
           sources: scene.sources.map((source) =>
-            source.type === 'camera' || source.type === 'audio'
+            (source.type === 'camera' || source.type === 'audio') && (!sourceId || source.id === sourceId)
               ? {
                   ...source,
                   settings: {
@@ -2100,18 +2170,33 @@ export function SceneWorkspace({
     [refresh, scenes],
   );
 
-  const startSmokeCapture = useCallback(async () => {
-    patchCaptureSourceStatus('connecting');
-    const stream = await smokeMedia.startPreview({ withAudio: true });
-    if (stream?.active && stream.getVideoTracks().some((track) => track.readyState === 'live')) {
-      patchCaptureSourceStatus('live');
-    } else {
-      patchCaptureSourceStatus(
-        'unavailable',
-        smokeMedia.getLastErrorMessage() || 'getUserMedia did not return an active camera stream.',
-      );
+  const startSmokeCapture = useCallback(async (sourceId: string) => {
+    mergeLiveCaptureDiagnostics({ requestedCamera: true, sourceIdCreated: sourceId });
+    patchCaptureSourceStatus('connecting', sourceId);
+    try {
+      const stream = await smokeMedia.startPreview({ withAudio: true });
+      mergeLiveCaptureDiagnostics({
+        streamIdReceived: stream?.id ?? 'none',
+        videoTrackCount: stream?.getVideoTracks().length ?? 0,
+        audioTrackCount: stream?.getAudioTracks().length ?? 0,
+        streamActive: stream?.active ?? false,
+      });
+      if (isLiveMediaStream(stream)) {
+        setLiveSourceStreams((current) => ({ ...current, [sourceId]: stream }));
+        mergeLiveCaptureDiagnostics({ sourceIdStored: sourceId });
+        patchCaptureSourceStatus('live', sourceId);
+      } else {
+        const failureReason =
+          smokeMedia.getLastErrorMessage() || 'getUserMedia did not return an active camera stream.';
+        mergeLiveCaptureDiagnostics({ failureReason });
+        patchCaptureSourceStatus('unavailable', sourceId, failureReason);
+      }
+    } catch (error) {
+      const failureReason = describeCaptureError(error);
+      mergeLiveCaptureDiagnostics({ failureReason });
+      patchCaptureSourceStatus('unavailable', sourceId, failureReason);
     }
-  }, [patchCaptureSourceStatus, smokeMedia]);
+  }, [mergeLiveCaptureDiagnostics, patchCaptureSourceStatus, smokeMedia]);
 
   const startSmokeRecording = useCallback(() => {
     if (!smokeMedia.stream || !mediaRecorderSupported) {
@@ -2150,14 +2235,39 @@ export function SceneWorkspace({
   const previewScene =
     sorted.find((scene) => scene.id === productionState.previewSceneId) ?? programScene;
   const activeScene = previewScene;
-  const previewHasCameraSource = previewScene.sources.some(
-    (source) => source.type === 'camera' && source.isVisible,
+  const previewCameraSourceId = getFirstVisibleCameraSourceId(previewScene);
+  const programCameraSourceId = getFirstVisibleCameraSourceId(programScene);
+  const previewCameraStream = previewCameraSourceId ? liveSourceStreams[previewCameraSourceId] : null;
+  const programCameraStream = programCameraSourceId ? liveSourceStreams[programCameraSourceId] : null;
+  const previewHasCameraSource = Boolean(previewCameraSourceId);
+  const programHasCameraSource = Boolean(programCameraSourceId);
+  const livePreviewVisible = isLiveMediaStream(previewCameraStream);
+  const liveProgramVisible = isLiveMediaStream(programCameraStream);
+  useEffect(() => {
+    mergeLiveCaptureDiagnostics({
+      previewSourceIdLookup: previewCameraSourceId ?? 'none',
+      programSourceIdLookup: programCameraSourceId ?? 'none',
+    });
+  }, [mergeLiveCaptureDiagnostics, previewCameraSourceId, programCameraSourceId]);
+
+  const liveAudioChannels = useMemo<AudioChannel[]>(() => {
+    const entries = Object.entries(liveSourceStreams).filter(([, stream]) =>
+      stream.getAudioTracks().some((track) => track.readyState === 'live'),
+    );
+    return entries.map(([sourceId, stream]) => ({
+      id: `live-${sourceId}`,
+      label: `Live Camera Mic (${sourceId.slice(0, 8)})`,
+      level: audioLevel,
+      muted: false,
+      kind: 'mic' as const,
+    }));
+  }, [audioLevel, liveSourceStreams]);
+
+  const effectiveAudioChannels = useMemo(
+    () => [...channels, ...liveAudioChannels],
+    [channels, liveAudioChannels],
   );
-  const programHasCameraSource = programScene.sources.some(
-    (source) => source.type === 'camera' && source.isVisible,
-  );
-  const livePreviewVisible = previewHasCameraSource && smokeMedia.cameraReady;
-  const liveProgramVisible = programHasCameraSource && smokeMedia.cameraReady;
+
   const synchronizedOutputs = ProgramPreviewSynchronizer.fromSwitchingState(productionState);
   const activeSceneTallyState = getTallyState({
     id: activeScene.id,
@@ -3016,7 +3126,7 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
-        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture();
+        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
         });
@@ -3188,7 +3298,7 @@ export function SceneWorkspace({
     <>
       {activeBottomDock === 'audio' ? (
         <DigitalAudioConsole
-          channels={channels}
+          channels={effectiveAudioChannels}
           graphChannels={graphAudioChannels}
           recordingActive={recordingActive}
         />
@@ -3562,7 +3672,7 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
-        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture();
+        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
         });
@@ -3691,6 +3801,17 @@ export function SceneWorkspace({
             />
           </div>
         </div>
+        <div className="rounded-ubos-md border border-cyan-400/30 bg-cyan-950/20 p-3 text-[10px] uppercase tracking-[0.12em] text-cyan-100">
+          <div className="mb-2 font-black">Live camera debug</div>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+            {Object.entries(liveCaptureDiagnostics).map(([key, value]) => (
+              <div key={key} className="flex justify-between gap-2">
+                <span className="text-cyan-300/80">{key}</span>
+                <span className="truncate text-right font-mono">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+        </div>
         {smokeMedia.errorMessage ? (
           <p className="text-ubos-caption text-ubos-error-text">{smokeMedia.errorMessage}</p>
         ) : null}
@@ -3698,14 +3819,21 @@ export function SceneWorkspace({
           <button
             type="button"
             className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
-            onClick={() => void startSmokeCapture()}
+            onClick={() => {
+              const sourceId = previewCameraSourceId ?? programCameraSourceId;
+              if (sourceId) void startSmokeCapture(sourceId);
+            }}
           >
             Start camera + mic
           </button>
           <button
             type="button"
             className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
-            onClick={smokeMedia.stopAll}
+            onClick={() => {
+              smokeMedia.stopAll();
+              setLiveSourceStreams({});
+              mergeLiveCaptureDiagnostics({ failureReason: 'Devices stopped by operator' });
+            }}
           >
             Stop devices
           </button>
@@ -3794,9 +3922,11 @@ export function SceneWorkspace({
                 <LiveMediaMonitor
                   title="Program"
                   sceneName={programScene.name}
-                  stream={smokeMedia.stream}
+                  stream={programCameraStream}
                   active={liveProgramVisible}
                   role="program"
+                  sourceId={programCameraSourceId}
+                  onVideoEvent={mergeLiveCaptureDiagnostics}
                 />
               ) : (
                 <ProgramMonitor
@@ -3823,9 +3953,11 @@ export function SceneWorkspace({
                 <LiveMediaMonitor
                   title="Preview"
                   sceneName={previewScene.name}
-                  stream={smokeMedia.stream}
+                  stream={previewCameraStream}
                   active={livePreviewVisible}
                   role="preview"
+                  sourceId={previewCameraSourceId}
+                  onVideoEvent={mergeLiveCaptureDiagnostics}
                 />
               ) : (
                 <ProgramMonitor
