@@ -1186,3 +1186,6 @@ export * from './media-runtime/ffmpeg/index.js';
 export * from './production-switcher.js';
 export * from './transition-renderer.js';
 export * from './graphics-engine.js';
+
+export { TransportManager, createTransportManager, createDemoTransportWorkflow, transportProtocols } from './transport-layer.js';
+export type { BroadcastTransportProtocol, TransportBackendDescriptor, TransportHealth, TransportProtocolModel, TransportRuntimeBindings, TransportRuntimeEvent, TransportRuntimeEventType, TransportSession, TransportSessionLifecycle, TransportSessionMetadata, TransportManagerSnapshot, CreateTransportSessionInput, UpdateTransportMetricsInput, RemoteProductionBinding } from './transport-layer.js';

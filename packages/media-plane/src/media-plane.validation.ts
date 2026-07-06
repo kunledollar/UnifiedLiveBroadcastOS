@@ -257,6 +257,9 @@ import {
   createOverlay,
   defaultGraphicsTransform,
   createGraphicsOverlayDemo,
+  createTransportManager,
+  createDemoTransportWorkflow,
+  transportProtocols,
 } from './index.js';
 
 const command = (
@@ -2351,3 +2354,50 @@ assert.equal(switchDemo.after.programSceneId, 'scene:guest', 'production switche
 
 
 assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');
+
+
+// UBOS 2.0 Phase 2.18 broadcast transport layer validation
+const transportManager = createTransportManager({ id: 'transport-manager:phase-2-18' });
+const transportEvents: string[] = [];
+transportManager.onRuntimeEvent((event) => transportEvents.push(event.type));
+const transportSession = transportManager.createSession({
+  id: 'transport-session:phase-2-18:webrtc',
+  protocol: 'webrtc',
+  endpoint: 'webrtc://remote-production.example/room?token=super-secret',
+  streamingPipeline: createStreamingPipelineV2({ id: 'streaming-pipeline:transport-validation' }),
+  streamingSessionId: 'streaming-session:transport-validation',
+  remoteProductionManager: { id: 'remote-production-manager:phase-2-18' },
+  mediaClock: programClock,
+  frameScheduler: streamingScheduler214,
+  audioMixer: programMixer,
+  sceneCompositor: programCompositor,
+  programOutput,
+  targetBitrateKbps: 6000,
+  expectedLatencyMs: 90,
+  metadata: { phase: '2.18' },
+});
+assert.equal(transportSession.lifecycle, 'idle', 'transport sessions start idle');
+assert.equal(transportSession.sanitizedEndpoint.includes('super-secret'), false, 'transport endpoint metadata is sanitized');
+transportManager.negotiate(transportSession.id);
+transportManager.connect(transportSession.id);
+transportManager.markConnected(transportSession.id);
+const transportMetrics = transportManager.updateMetrics(transportSession.id, { bitrateKbps: 5900, latencyMs: 95, jitterMs: 8, packetLossPercent: 0.1, tick: streamingScheduler214.createTick(), audioFrames: 1 });
+assert.equal(transportMetrics.metadata.health, 'healthy', 'transport metrics derive healthy state');
+const reconnectingTransport = transportManager.reconnect(transportSession.id, 'validation reconnect');
+assert.equal(reconnectingTransport.lifecycle, 'reconnecting', 'transport supports reconnecting lifecycle');
+assert.equal(reconnectingTransport.metadata.reconnectCount, 1, 'transport tracks reconnect count');
+transportManager.stop(transportSession.id);
+const transportSnapshot = transportManager.getSnapshot();
+assert.equal(transportProtocols.length, 7, 'transport layer models seven professional protocols');
+assert.equal(transportSnapshot.backend.transmitsNetworkPackets, false, 'transport backend is metadata-only');
+assert.equal(transportSnapshot.backend.implementsIce, false, 'transport backend does not implement ICE');
+assert.equal(transportSnapshot.sessions[0]?.bindings.audioMixerId, programMixer.id, 'transport binds AudioMixer identity');
+assert.equal(transportSnapshot.sessions[0]?.bindings.sceneCompositorId, programCompositor.id, 'transport binds SceneCompositor identity');
+assert.equal(transportSnapshot.sessions[0]?.containsEncodedPackets, false, 'transport sessions exclude encoded packets');
+assert.equal(transportEvents.includes('transport_connected'), true, 'transport manager emits runtime events');
+const failedTransport = transportManager.createSession({ id: 'transport-session:phase-2-18:rist', protocol: 'rist', endpoint: 'rist://backup.example/live', mediaClock: programClock });
+transportManager.fail(failedTransport.id, 'validation failure');
+assert.equal(transportManager.getSession(failedTransport.id)?.metadata.health, 'critical', 'failed transport marks critical health');
+const transportDemo = await createDemoTransportWorkflow({ programOutput, audioMixer: programMixer, sceneCompositor: programCompositor, mediaClock: programClock, frameScheduler: streamingScheduler214 });
+assert.equal(transportDemo.session.lifecycle, 'stopped', 'transport demo completes stopped lifecycle');
+assert.equal(transportDemo.manager.events.some((event) => event.type === 'transport_reconnecting'), true, 'transport demo emits reconnect event');
