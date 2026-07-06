@@ -1700,24 +1700,6 @@ export * from './media-runtime/ffmpeg/index.js';
 export * from './production-switcher.js';
 export * from './transition-renderer.js';
 export * from './graphics-engine.js';
-export {
-  createRemoteProductionManager,
-  createGuestSession,
-  createGreenRoom,
-  createTallyState,
-  createIFBState,
-  createDemoGuestWorkflow,
-} from './remote-production.js';
-export type {
-  RemoteProductionManager,
-  GuestSession,
-  GuestLifecycleState,
-  GuestMetadata,
-  GreenRoom,
-  ProducerMessage,
-  TallyState as RemoteProductionTallyState,
-  IFBState,
-  IFBMode,
-  RemoteProductionRuntimeEvent,
-  RemoteProductionSnapshot,
-} from './remote-production.js';
+
+export { TransportManager, createTransportManager, createDemoTransportWorkflow, transportProtocols } from './transport-layer.js';
+export type { BroadcastTransportProtocol, TransportBackendDescriptor, TransportHealth, TransportProtocolModel, TransportRuntimeBindings, TransportRuntimeEvent, TransportRuntimeEventType, TransportSession, TransportSessionLifecycle, TransportSessionMetadata, TransportManagerSnapshot, CreateTransportSessionInput, UpdateTransportMetricsInput, RemoteProductionBinding } from './transport-layer.js';
