@@ -29,7 +29,7 @@
     "diagnostics:demo": "pnpm --filter @ubos/media-plane build && node scripts/diagnostics-demo.mjs",
     "ubos:start": "dotenv -- turbo dev --filter=@ubos/web",
     "ubos:update": "git pull origin main && pnpm install && pnpm db:generate && pnpm db:push",
-    "ubos:clean": "node -e \"for (const p of ['apps/web/.next', '.turbo', 'node_modules/.cache']) require('node:fs').rmSync(p, { recursive: true, force: true })\"",
+    "ubos:clean": "node scripts/clean.mjs",
     "ubos:doctor": "pnpm lint && pnpm typecheck && pnpm test",
     "ubos:browser": "dotenv -- pnpm --filter @ubos/web dev"
   },

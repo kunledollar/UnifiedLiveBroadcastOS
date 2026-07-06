@@ -2,12 +2,10 @@ import type { ProductionGraph } from '../../../shared/src/production-graph.js';
 import { createFailureRecord, type UBOSFailure } from '../../../shared/src/failure-recovery.js';
 import { buildCommand, createFFmpegRuntime, locateFFmpeg, type FFmpegRuntime } from '../ffmpeg-runtime/index.js';
 import { createProductionRuntime, RuntimeSupervisor, type RuntimeSubsystem } from '../production-runtime/index.js';
-import { createClock } from '../sync/clock.js';
-import type { MediaClock } from '../sync/clock.js';
-import { FrameScheduler } from '../sync/index.js';
-import type { AudioMixer } from '../media-runtime/audio-mixer.js';
+import { createClock, type MediaClock } from '../sync/clock.js';
+import { FrameScheduler, type FrameScheduler as FrameSchedulerType, type FrameTickEvent } from '../sync/index.js';
 import type { ProgramOutput } from '../output-pipeline.js';
-import type { FrameScheduler as FrameSchedulerType, FrameTickEvent } from '../sync/index.js';
+import type { AudioMixer } from '../media-runtime/audio-mixer.js';
 
 declare const process: { env: Record<string,string|undefined>; cwd?:()=>string };
 declare const Buffer: { byteLength(input:string): number };

@@ -3,12 +3,10 @@ import { createFFmpegRuntime, buildCommand, locateFFmpeg, type FFmpegRuntime } f
 import { createProductionRuntime, RuntimeSupervisor, type RuntimeSubsystem } from '../production-runtime/index.js';
 import { sanitizeStreamingUrl, redactStreamingDiagnostics } from '../streaming/ffmpeg/index.js';
 import type { StreamingHealth as BaseStreamingHealth } from '../streaming/index.js';
-import { createClock } from '../sync/clock.js';
-import type { MediaClock } from '../sync/clock.js';
-import { FrameScheduler } from '../sync/index.js';
-import type { AudioMixer } from '../media-runtime/audio-mixer.js';
+import { createClock, type MediaClock } from '../sync/clock.js';
+import { FrameScheduler, type FrameScheduler as FrameSchedulerType, type FrameTickEvent } from '../sync/index.js';
 import type { ProgramOutput } from '../output-pipeline.js';
-import type { FrameScheduler as FrameSchedulerType, FrameTickEvent } from '../sync/index.js';
+import type { AudioMixer } from '../media-runtime/audio-mixer.js';
 
 declare const process: { env: Record<string,string|undefined> };
 const now=()=>new Date().toISOString();
