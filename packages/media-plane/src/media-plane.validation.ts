@@ -252,6 +252,11 @@ import {
   createPreviewProgramOutputDemo,
   createProductionSwitcher,
   createProductionSwitcherDemo,
+  createGraphicsEngine,
+  createGraphicsObject,
+  createOverlay,
+  defaultGraphicsTransform,
+  createGraphicsOverlayDemo,
 } from './index.js';
 
 const command = (
@@ -2244,6 +2249,27 @@ outputManager.stopAll();
 assert.equal(outputManager.getSnapshot().program?.state, 'stopped', 'output manager stops outputs');
 const outputDemo = await createPreviewProgramOutputDemo();
 assert.equal(outputDemo.description.includes('Preview and Program'), true, 'preview/program output demo describes simultaneous rendering');
+
+
+// UBOS 2.0 Phase 2.16 graphics and overlay engine validation
+const graphicsCompositor = createSceneCompositor({ id: 'compositor:graphics:phase-2-16', sceneId: 'scene:graphics' });
+const graphicsEngine = createGraphicsEngine({ id: 'graphics-engine:phase-2-16', compositor: graphicsCompositor, renderer: createGpuRuntime(), metadata: { phase: '2.16' } });
+const nameObject = graphicsEngine.addObject(createGraphicsObject({ id: 'name-strap-text', type: 'text', label: 'Name Strap Text', transform: defaultGraphicsTransform({ position: { x: 120, y: 820 }, size: { width: 760, height: 84 }, opacity: 0.95, rotation: 0, visible: true, zOrder: 2000 }), content: { text: 'Jordan Lee', role: 'Host' } }));
+const logoObject = graphicsEngine.addObject(createGraphicsObject({ id: 'bug-logo', type: 'image', label: 'Program Logo', transform: defaultGraphicsTransform({ position: { x: 1680, y: 64 }, size: { width: 160, height: 80 }, opacity: 0.9, zOrder: 2100 }), content: { uri: 'asset://logo.png' } }));
+const graphicsOverlay = graphicsEngine.addOverlay(createOverlay({ id: 'overlay:lower-third', type: 'lower_third', label: 'Lower Third Package', objectIds: [nameObject.id, logoObject.id], metadata: { includes: ['lower_third', 'logo'] } }));
+const graphicsLayers = graphicsEngine.renderOverlay(graphicsOverlay.id);
+assert.equal(graphicsLayers.length, 2, 'graphics overlay renders compositor layers');
+assert.equal(graphicsLayers[0]?.source.type, 'graphics', 'graphics objects use compositor graphics source');
+assert.equal(graphicsCompositor.getOrderedLayers().some((layer) => layer.id === 'graphics:name-strap-text'), true, 'graphics engine integrates with SceneCompositor');
+assert.equal(graphicsEngine.getSnapshot().rendererBackend, 'Mock', 'graphics engine records GPU renderer backend metadata');
+assert.equal(graphicsEngine.getSnapshot().containsRuntimeHandles, false, 'graphics snapshot excludes runtime handles');
+assert.equal(graphicsEngine.getRuntimeEvents().some((event) => event.type === 'overlay_rendered'), true, 'graphics engine emits overlay render events');
+graphicsEngine.updateObject('name-strap-text', { transform: { opacity: 0.5, visible: false } });
+assert.equal(graphicsEngine.getSnapshot().objects.find((object) => object.id === 'name-strap-text')?.transform.opacity, 0.5, 'graphics objects support opacity controls');
+assert.equal(graphicsEngine.getSnapshot().objects.find((object) => object.id === 'name-strap-text')?.transform.visible, false, 'graphics objects support visibility controls');
+const graphicsDemo = createGraphicsOverlayDemo();
+assert.equal(graphicsDemo.layers.length, 4, 'graphics demo includes lower third, logo, QR, and countdown layers');
+assert.equal(graphicsDemo.overlay.metadata.includes instanceof Array, true, 'graphics demo records supported overlay types');
 
 // UBOS 2.0 Phase 2.11 production switching engine validation
 const switchClock = createClock({ frameRate: 30 });

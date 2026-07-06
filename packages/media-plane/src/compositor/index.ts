@@ -69,7 +69,7 @@ export const getRemovedLayers = (previous?: SceneComposition, next?: SceneCompos
 export const hasLayoutChanged = (previous?: SceneComposition, next?: SceneComposition) => diffSceneCompositions(previous, next).layoutChanged;
 export class CompositionStore { private compositions = new Map<CompositionRenderTarget, SceneComposition>(); setComposition(target: CompositionRenderTarget, composition: SceneComposition) { this.compositions.set(target, composition); return composition; } getComposition(target: CompositionRenderTarget) { return this.compositions.get(target); } getCompositionByScene(sceneId: string) { return [...this.compositions.values()].filter((composition) => composition.sceneId === sceneId); } listCompositions() { return [...this.compositions.entries()].map(([target, composition]) => ({ target, composition })); } clearCompositions() { this.compositions.clear(); } }
 
-export type RenderLayerSourceType = 'video' | 'image' | 'solid_color' | 'placeholder';
+export type RenderLayerSourceType = 'video' | 'image' | 'solid_color' | 'placeholder' | 'graphics';
 export type SceneCompositorStatusEventType = 'compositor_created' | 'layer_added' | 'layer_updated' | 'layer_removed' | 'layer_order_changed' | 'canvas_resized' | 'frame_composited' | 'compositor_warning';
 export interface RenderLayerGeometry { readonly position: { readonly x: number; readonly y: number }; readonly size: { readonly width: number; readonly height: number }; readonly rotation: number; }
 export interface RenderLayerSource { readonly type: RenderLayerSourceType; readonly sourceId?: string; readonly color?: string; readonly label?: string; readonly metadata: Record<string, unknown>; }
