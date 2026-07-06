@@ -7,6 +7,7 @@ declare module 'node:path' {
   export function dirname(path: string): string;
   export function join(...paths: string[]): string;
   export function parse(path: string): { root: string };
+  export function resolve(...paths: string[]): string;
 }
 
 declare module 'node:url' {

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, parse } from 'node:path';
+import { dirname, join, parse, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PrismaClient } from '@prisma/client';
 
@@ -47,45 +47,25 @@ function loadEnvFile(envPath: string) {
     if (!key || process.env[key] !== undefined) continue;
 
     const rawValue = match[2] ?? '';
-    const value = rawValue.trim().replace(/^(['"])(.*)\1$/u, '$2');
+    const value = parseEnvValue(rawValue);
     process.env[key] = value;
   }
 }
-
-loadRootEnv();
-
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
-
-const ENV_ASSIGNMENT = /^([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
 
 function parseEnvValue(value: string) {
   const trimmed = value.trim();
   if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) {
     return trimmed.slice(1, -1);
   }
-  return trimmed.replace(/\s+#.*$/, '');
+  return trimmed.replace(/\s+#.*$/u, '');
 }
 
-function getBuiltin<T>(id: string): T {
-  return (process.getBuiltinModule?.(id) ?? Function(`return import(${JSON.stringify(id)})`)()) as T;
-}
-
-function applyDotenvFile(fs: FsLike, path: string) {
-  for (const line of fs.readFileSync(path, 'utf8').split(/\r?\n/)) {
-    const match = line.match(ENV_ASSIGNMENT);
-    if (!match) continue;
-    const key = match[1];
-    const rawValue = match[2];
-    if (key && rawValue !== undefined && process.env[key] === undefined) process.env[key] = parseEnvValue(rawValue);
-  }
-}
-
-function findUpDotenv(fs: FsLike, path: PathLike, start: string) {
-  let current = path.resolve(start);
+function findUpDotenv(start: string) {
+  let current = resolve(start);
   while (true) {
-    const candidate = path.join(current, '.env');
-    if (fs.existsSync(candidate)) return candidate;
-    const parent = path.dirname(current);
+    const candidate = join(current, '.env');
+    if (existsSync(candidate)) return candidate;
+    const parent = dirname(current);
     if (parent === current) return undefined;
     current = parent;
   }
@@ -93,21 +73,19 @@ function findUpDotenv(fs: FsLike, path: PathLike, start: string) {
 
 function loadDatabaseEnv() {
   if (process.env.DATABASE_URL) return;
-  const fs = getBuiltin<FsLike>('fs');
-  const path = getBuiltin<PathLike>('path');
-  const dotenvPath = findUpDotenv(fs, path, process.cwd());
-  if (dotenvPath) applyDotenvFile(fs, dotenvPath);
+  const dotenvPath = findUpDotenv(typeof process.cwd === 'function' ? process.cwd() : dirname(fileURLToPath(import.meta.url)));
+  if (dotenvPath) loadEnvFile(dotenvPath);
 }
 
+loadRootEnv();
 loadDatabaseEnv();
 
-const { PrismaClient } = await import('@prisma/client');
+type PrismaClientType = PrismaClient;
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClientType };
 
 export const prisma: PrismaClientType = globalForPrisma.prisma ?? new PrismaClient();
 
-const nodeEnv = (globalThis as unknown as { process?: { env?: { NODE_ENV?: string } } }).process?.env?.NODE_ENV;
-if (nodeEnv !== 'production') {
+if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma;
 }
