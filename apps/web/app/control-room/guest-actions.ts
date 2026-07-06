@@ -30,6 +30,7 @@ function toGuest(guest: {
   displayName: string;
   status: string;
   role: string;
+  createdAt?: Date;
   isMuted: boolean;
   isSpotlighted: boolean;
   lastSeenAt: Date | null;
@@ -47,6 +48,37 @@ function toGuest(guest: {
     isSpotlighted: guest.isSpotlighted,
     lastSeenAt: guest.lastSeenAt?.toISOString() ?? null,
     privateChatNote: guest.privateChatNote,
+    connectionMetadata: {
+      quality: guest.status === 'CONNECTED' || guest.status === 'ON_AIR' ? 'excellent' : 'good',
+      browser: 'Chromium compatible',
+      latencyMs: 42,
+      rttMs: 84,
+      jitterMs: 7,
+      packetLossPercent: 0.2,
+      bitrateKbps: 4200,
+      frameDrops: 0,
+      reconnectAttempts: 0,
+      browserCompatible: true,
+      deviceInfo: 'Browser camera + microphone',
+      waitingSeconds: guest.createdAt ? Math.max(0, Math.round((Date.now() - guest.createdAt.getTime()) / 1000)) : 0,
+    },
+    mediaMetadata: {
+      camera: true,
+      microphone: !guest.isMuted,
+      screenShare: false,
+      browserTabShare: false,
+      virtualBackground: false,
+      resolution: '1080p',
+      fps: 30,
+      bitrateKbps: 4200,
+      latencyMs: 42,
+      packetLossPercent: 0.2,
+      activeMode: 'camera',
+    },
+    audioSettings: { gainDb: 0, muted: guest.isMuted, solo: false, balance: 0, noiseSuppression: true, echoCancellation: true, autoGain: true },
+    permissions: { canShareScreen: true, canUseChat: true, canUseCamera: true, canUseMicrophone: true, requireOperatorAdmission: true },
+    operatorSettings: { notes: guest.privateChatNote, pinned: false, spotlighted: guest.isSpotlighted, hiddenVideo: false, inPreview: guest.isSpotlighted, inProgram: guest.status === 'ON_AIR' },
+    recordingMetadata: { recordProgram: true, recordIso: true, recordAudioOnly: true, metadata: { guestId: guest.id }, timelineMarkers: [] },
   };
 }
 
@@ -65,6 +97,12 @@ function toInvite(invite: {
     ...invite,
     revokedAt: invite.revokedAt?.toISOString() ?? null,
     acceptedAt: invite.acceptedAt?.toISOString() ?? null,
+    linkMode: 'one_time',
+    oneTime: true,
+    reusable: false,
+    passwordProtected: false,
+    qrCodeDataUrl: `qr://${invite.token}`,
+    emailTo: null,
     expiresAt: invite.expiresAt?.toISOString() ?? null,
     createdAt: invite.createdAt.toISOString(),
   };
@@ -112,7 +150,14 @@ export async function listInvites(broadcastId = DEMO_BROADCAST_ID) {
 
 export async function inviteGuest(formData: FormData) {
   const broadcast = await assertBroadcast(String(formData.get('broadcastId') ?? DEMO_BROADCAST_ID));
-  const input = guestInviteSchema.parse({ displayName: formData.get('displayName') || undefined });
+  const input = guestInviteSchema.parse({
+    displayName: formData.get('displayName') || undefined,
+    role: formData.get('role') || undefined,
+    expiresAt: formData.get('expiresAt') || undefined,
+    linkMode: formData.get('linkMode') || undefined,
+    password: formData.get('password') || undefined,
+    emailTo: formData.get('emailTo') || '',
+  });
   const token = randomBytes(18).toString('base64url');
   const invite = await prisma.guestInvite.create({
     data: {
@@ -120,6 +165,7 @@ export async function inviteGuest(formData: FormData) {
       sessionId: broadcast.id,
       token,
       displayName: input.displayName ?? null,
+      expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
     },
   });
   const guest = await prisma.guest.create({
@@ -129,7 +175,7 @@ export async function inviteGuest(formData: FormData) {
       inviteId: invite.id,
       displayName: input.displayName || 'Invited Guest',
       status: 'INVITED',
-      role: 'GUEST',
+      role: input.role.toUpperCase() as never,
     },
   });
   await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: broadcast.id, eventType: 'guest:invited', entityType: 'guest', entityId: guest.id, payload: { inviteId: invite.id, displayName: guest.displayName } });
@@ -173,6 +219,20 @@ export async function admitGuest(id: string) {
 }
 export async function rejectGuest(id: string) {
   await setGuestStatus(id, GuestStatus.Rejected);
+}
+export async function hideGuestVideo(id: string) {
+  const guest = await getScopedGuest(id);
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: guest.sessionId, eventType: 'guest:cameraToggled', entityType: 'guest', entityId: id, payload: { enabled: false } });
+}
+export async function showGuestVideo(id: string) {
+  const guest = await getScopedGuest(id);
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: guest.sessionId, eventType: 'guest:cameraToggled', entityType: 'guest', entityId: id, payload: { enabled: true } });
+}
+export async function assignGuestRole(id: string, role: GuestRole) {
+  const guest = await getScopedGuest(id);
+  const updated = await prisma.guest.update({ where: { id }, data: { role: role.toUpperCase() as never } });
+  await emitRealtimeEvent({ workspaceId: DEMO_WORKSPACE_ID, broadcastId: guest.sessionId, eventType: 'guest:renamed', entityType: 'guest', entityId: id, payload: { role: updated.role } });
+  revalidatePath('/control-room');
 }
 export async function muteGuest(id: string) {
   const guest = await getScopedGuest(id);
