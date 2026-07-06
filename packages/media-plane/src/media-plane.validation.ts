@@ -137,6 +137,8 @@ import {
   validateWebRTCSignalMessage,
   redactWebRTCDiagnostics,
   createPeerConnection,
+  createDiagnosticsManager,
+  createDiagnosticsDemo,
   mapWebRTCErrorToFailure,
   isRealWebRTCEnabled,
   createOfferMetadata,
@@ -270,6 +272,15 @@ import {
   supportedHardwareIntegrationVendors,
   supportedHardwareCategories,
   createHardwareIntegrationDemo,
+  createRemoteProductionManager,
+  createGuestSession,
+  createGreenRoom,
+  createTallyState,
+  createIFBState,
+  createDemoGuestWorkflow,
+  createTransportManager,
+  createDemoTransportWorkflow,
+  transportProtocols,
 } from './index.js';
 
 const command = (
@@ -5427,50 +5438,172 @@ assert.equal(
   'production switcher integrates program compositor identity',
 );
 const switchDemo = await createProductionSwitcherDemo();
-assert.equal(switchDemo.before.programSceneId, 'scene:host', 'production switcher demo starts with initial program scene');
-assert.equal(switchDemo.after.programSceneId, 'scene:guest', 'production switcher demo promotes preview to program');
+assert.equal(
+  switchDemo.before.programSceneId,
+  'scene:host',
+  'production switcher demo starts with initial program scene',
+);
+assert.equal(
+  switchDemo.after.programSceneId,
+  'scene:guest',
+  'production switcher demo promotes preview to program',
+);
 
 // UBOS 2.0 Phase 2.19 hardware integration foundation validation
-const hardwareManager = createHardwareManager({ id: 'hardware-manager:phase-2-19', bindings: { productionSwitcher: switcher, sceneCompositor: programCompositor, streamingPipeline: phase214StreamingPipeline, recordingPipeline: phase213RecordingPipeline, remoteProductionManager: { id: 'remote-production-manager:metadata' }, transportManager: { id: 'transport-manager:metadata' } } });
+const hardwareManager = createHardwareManager({
+  id: 'hardware-manager:phase-2-19',
+  bindings: {
+    productionSwitcher: switcher,
+    sceneCompositor: programCompositor,
+    streamingPipeline: phase214StreamingPipeline,
+    recordingPipeline: phase213RecordingPipeline,
+    remoteProductionManager: { id: 'remote-production-manager:metadata' },
+    transportManager: { id: 'transport-manager:metadata' },
+  },
+});
 const hardwareEvents: string[] = [];
 hardwareManager.onRuntimeEvent((event) => hardwareEvents.push(event.type));
 const integrationHardwareDevices = await hardwareManager.discover();
-assert.equal(integrationHardwareDevices.length >= 5, true, 'hardware manager discovers demo broadcast hardware devices');
-assert.equal(supportedHardwareIntegrationVendors.includes('blackmagic_atem'), true, 'hardware integration models Blackmagic ATEM vendor');
-assert.equal(supportedHardwareIntegrationVendors.includes('x_keys'), true, 'hardware integration models X-Keys vendor');
-assert.equal(supportedHardwareCategories.includes('ptz_camera'), true, 'hardware integration models PTZ camera category');
-const atemDevice = integrationHardwareDevices.find((device) => device.vendor === 'blackmagic_atem')!;
+assert.equal(
+  integrationHardwareDevices.length >= 5,
+  true,
+  'hardware manager discovers demo broadcast hardware devices',
+);
+assert.equal(
+  supportedHardwareIntegrationVendors.includes('blackmagic_atem'),
+  true,
+  'hardware integration models Blackmagic ATEM vendor',
+);
+assert.equal(
+  supportedHardwareIntegrationVendors.includes('x_keys'),
+  true,
+  'hardware integration models X-Keys vendor',
+);
+assert.equal(
+  supportedHardwareCategories.includes('ptz_camera'),
+  true,
+  'hardware integration models PTZ camera category',
+);
+const atemDevice = integrationHardwareDevices.find(
+  (device) => device.vendor === 'blackmagic_atem',
+)!;
 const connectedHardware = await hardwareManager.connect(atemDevice.id);
-assert.equal(connectedHardware.connection.lifecycle, 'connected', 'hardware lifecycle supports connected');
-assert.equal(connectedHardware.capabilities.supportsTally, true, 'device capabilities describe tally support');
+assert.equal(
+  connectedHardware.connection.lifecycle,
+  'connected',
+  'hardware lifecycle supports connected',
+);
+assert.equal(
+  connectedHardware.capabilities.supportsTally,
+  true,
+  'device capabilities describe tally support',
+);
 const heartbeatHardware = await hardwareManager.heartbeat(atemDevice.id);
-assert.equal(typeof heartbeatHardware.heartbeat.lastSeenAt, 'string', 'hardware heartbeat records last seen timestamp');
-const plannedHardwareCommand = hardwareManager.planCommand(atemDevice.id, 'cut', { source: 'control_surface' });
-assert.equal(plannedHardwareCommand.metadata.backendIndependent, true, 'hardware commands are planned as backend-independent metadata');
+assert.equal(
+  typeof heartbeatHardware.heartbeat.lastSeenAt,
+  'string',
+  'hardware heartbeat records last seen timestamp',
+);
+const plannedHardwareCommand = hardwareManager.planCommand(atemDevice.id, 'cut', {
+  source: 'control_surface',
+});
+assert.equal(
+  plannedHardwareCommand.metadata.backendIndependent,
+  true,
+  'hardware commands are planned as backend-independent metadata',
+);
 const disconnectedHardware = await hardwareManager.disconnect(atemDevice.id);
-assert.equal(disconnectedHardware.connection.lifecycle, 'disconnected', 'hardware lifecycle supports disconnected');
+assert.equal(
+  disconnectedHardware.connection.lifecycle,
+  'disconnected',
+  'hardware lifecycle supports disconnected',
+);
 const failedHardware = hardwareManager.fail(atemDevice.id, 'simulated adapter failure');
 assert.equal(failedHardware.connection.lifecycle, 'failed', 'hardware lifecycle supports failed');
-assert.equal(hardwareManager.getSnapshot().bindings.productionSwitcher, true, 'hardware manager integrates production switcher binding identity');
-assert.equal(hardwareManager.getSnapshot().bindings.sceneCompositor, true, 'hardware manager integrates scene compositor binding identity');
-assert.equal(hardwareManager.getSnapshot().bindings.streamingPipeline, true, 'hardware manager integrates streaming pipeline binding identity');
-assert.equal(hardwareManager.getSnapshot().bindings.recordingPipeline, true, 'hardware manager integrates recording pipeline binding identity');
-assert.equal(hardwareManager.getSnapshot().bindings.remoteProductionManager, true, 'hardware manager integrates remote production manager binding identity');
-assert.equal(hardwareManager.getSnapshot().bindings.transportManager, true, 'hardware manager integrates transport manager binding identity');
-assert.equal(hardwareManager.getSnapshot().containsDeviceHandles, false, 'hardware snapshot excludes physical device handles');
-assert.equal(hardwareEvents.includes('hardware_device_connected'), true, 'hardware manager emits connected runtime event');
-assert.equal(hardwareEvents.includes('hardware_command_planned'), true, 'hardware manager emits command planning runtime event');
-const customHardwareDevice = createHardwareIntegrationDevice({ id: 'hardware-device:vizrt:control', label: 'Vizrt Control Surface', vendor: 'vizrt', category: 'control_surface', model: 'Metadata Panel', capabilities: { supportsButtons: true } });
-assert.equal(customHardwareDevice.containsDeviceHandles, false, 'hardware device model remains backend independent');
-assert.equal(createDeviceCapabilities({ supportsPtz: true }).supportsPtz, true, 'device capabilities helper models PTZ support');
+assert.equal(
+  hardwareManager.getSnapshot().bindings.productionSwitcher,
+  true,
+  'hardware manager integrates production switcher binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.sceneCompositor,
+  true,
+  'hardware manager integrates scene compositor binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.streamingPipeline,
+  true,
+  'hardware manager integrates streaming pipeline binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.recordingPipeline,
+  true,
+  'hardware manager integrates recording pipeline binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.remoteProductionManager,
+  true,
+  'hardware manager integrates remote production manager binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.transportManager,
+  true,
+  'hardware manager integrates transport manager binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().containsDeviceHandles,
+  false,
+  'hardware snapshot excludes physical device handles',
+);
+assert.equal(
+  hardwareEvents.includes('hardware_device_connected'),
+  true,
+  'hardware manager emits connected runtime event',
+);
+assert.equal(
+  hardwareEvents.includes('hardware_command_planned'),
+  true,
+  'hardware manager emits command planning runtime event',
+);
+const customHardwareDevice = createHardwareIntegrationDevice({
+  id: 'hardware-device:vizrt:control',
+  label: 'Vizrt Control Surface',
+  vendor: 'vizrt',
+  category: 'control_surface',
+  model: 'Metadata Panel',
+  capabilities: { supportsButtons: true },
+});
+assert.equal(
+  customHardwareDevice.containsDeviceHandles,
+  false,
+  'hardware device model remains backend independent',
+);
+assert.equal(
+  createDeviceCapabilities({ supportsPtz: true }).supportsPtz,
+  true,
+  'device capabilities helper models PTZ support',
+);
 const demoHardwareAdapter = new MetadataHardwareAdapter('hardware-adapter:test');
-assert.equal(demoHardwareAdapter.categories.includes('audio_interface'), true, 'hardware adapter advertises audio interface category');
-const hardwareDemo = await createHardwareIntegrationDemo({ productionSwitcher: switcher, sceneCompositor: programCompositor });
-assert.equal(hardwareDemo.manager.events.some((event) => event.type === 'hardware_heartbeat'), true, 'hardware integration demo records heartbeat workflow');
+assert.equal(
+  demoHardwareAdapter.categories.includes('audio_interface'),
+  true,
+  'hardware adapter advertises audio interface category',
+);
+const hardwareDemo = await createHardwareIntegrationDemo({
+  productionSwitcher: switcher,
+  sceneCompositor: programCompositor,
+});
+assert.equal(
+  hardwareDemo.manager.events.some((event) => event.type === 'hardware_heartbeat'),
+  true,
+  'hardware integration demo records heartbeat workflow',
+);
 
-
-assert.equal(captureSource.getSnapshot().containsMediaPayloads, false, 'video capture snapshots exclude media payloads');
-
+assert.equal(
+  captureSource.getSnapshot().containsMediaPayloads,
+  false,
+  'video capture snapshots exclude media payloads',
+);
 
 // UBOS 2.0 Phase 2.18 broadcast transport layer validation
 const transportManager = createTransportManager({ id: 'transport-manager:phase-2-18' });
@@ -5493,27 +5626,187 @@ const transportSession = transportManager.createSession({
   metadata: { phase: '2.18' },
 });
 assert.equal(transportSession.lifecycle, 'idle', 'transport sessions start idle');
-assert.equal(transportSession.sanitizedEndpoint.includes('super-secret'), false, 'transport endpoint metadata is sanitized');
+assert.equal(
+  transportSession.sanitizedEndpoint.includes('super-secret'),
+  false,
+  'transport endpoint metadata is sanitized',
+);
 transportManager.negotiate(transportSession.id);
 transportManager.connect(transportSession.id);
 transportManager.markConnected(transportSession.id);
-const transportMetrics = transportManager.updateMetrics(transportSession.id, { bitrateKbps: 5900, latencyMs: 95, jitterMs: 8, packetLossPercent: 0.1, tick: streamingScheduler214.createTick(), audioFrames: 1 });
+const transportMetrics = transportManager.updateMetrics(transportSession.id, {
+  bitrateKbps: 5900,
+  latencyMs: 95,
+  jitterMs: 8,
+  packetLossPercent: 0.1,
+  tick: streamingScheduler214.createTick(),
+  audioFrames: 1,
+});
 assert.equal(transportMetrics.metadata.health, 'healthy', 'transport metrics derive healthy state');
-const reconnectingTransport = transportManager.reconnect(transportSession.id, 'validation reconnect');
-assert.equal(reconnectingTransport.lifecycle, 'reconnecting', 'transport supports reconnecting lifecycle');
+const reconnectingTransport = transportManager.reconnect(
+  transportSession.id,
+  'validation reconnect',
+);
+assert.equal(
+  reconnectingTransport.lifecycle,
+  'reconnecting',
+  'transport supports reconnecting lifecycle',
+);
 assert.equal(reconnectingTransport.metadata.reconnectCount, 1, 'transport tracks reconnect count');
 transportManager.stop(transportSession.id);
 const transportSnapshot = transportManager.getSnapshot();
 assert.equal(transportProtocols.length, 7, 'transport layer models seven professional protocols');
-assert.equal(transportSnapshot.backend.transmitsNetworkPackets, false, 'transport backend is metadata-only');
-assert.equal(transportSnapshot.backend.implementsIce, false, 'transport backend does not implement ICE');
-assert.equal(transportSnapshot.sessions[0]?.bindings.audioMixerId, programMixer.id, 'transport binds AudioMixer identity');
-assert.equal(transportSnapshot.sessions[0]?.bindings.sceneCompositorId, programCompositor.id, 'transport binds SceneCompositor identity');
-assert.equal(transportSnapshot.sessions[0]?.containsEncodedPackets, false, 'transport sessions exclude encoded packets');
-assert.equal(transportEvents.includes('transport_connected'), true, 'transport manager emits runtime events');
-const failedTransport = transportManager.createSession({ id: 'transport-session:phase-2-18:rist', protocol: 'rist', endpoint: 'rist://backup.example/live', mediaClock: programClock });
+assert.equal(
+  transportSnapshot.backend.transmitsNetworkPackets,
+  false,
+  'transport backend is metadata-only',
+);
+assert.equal(
+  transportSnapshot.backend.implementsIce,
+  false,
+  'transport backend does not implement ICE',
+);
+assert.equal(
+  transportSnapshot.sessions[0]?.bindings.audioMixerId,
+  programMixer.id,
+  'transport binds AudioMixer identity',
+);
+assert.equal(
+  transportSnapshot.sessions[0]?.bindings.sceneCompositorId,
+  programCompositor.id,
+  'transport binds SceneCompositor identity',
+);
+assert.equal(
+  transportSnapshot.sessions[0]?.containsEncodedPackets,
+  false,
+  'transport sessions exclude encoded packets',
+);
+assert.equal(
+  transportEvents.includes('transport_connected'),
+  true,
+  'transport manager emits runtime events',
+);
+const failedTransport = transportManager.createSession({
+  id: 'transport-session:phase-2-18:rist',
+  protocol: 'rist',
+  endpoint: 'rist://backup.example/live',
+  mediaClock: programClock,
+});
 transportManager.fail(failedTransport.id, 'validation failure');
-assert.equal(transportManager.getSession(failedTransport.id)?.metadata.health, 'critical', 'failed transport marks critical health');
-const transportDemo = await createDemoTransportWorkflow({ programOutput, audioMixer: programMixer, sceneCompositor: programCompositor, mediaClock: programClock, frameScheduler: streamingScheduler214 });
-assert.equal(transportDemo.session.lifecycle, 'stopped', 'transport demo completes stopped lifecycle');
-assert.equal(transportDemo.manager.events.some((event) => event.type === 'transport_reconnecting'), true, 'transport demo emits reconnect event');
+assert.equal(
+  transportManager.getSession(failedTransport.id)?.metadata.health,
+  'critical',
+  'failed transport marks critical health',
+);
+const transportDemo = await createDemoTransportWorkflow({
+  programOutput,
+  audioMixer: programMixer,
+  sceneCompositor: programCompositor,
+  mediaClock: programClock,
+  frameScheduler: streamingScheduler214,
+});
+assert.equal(
+  transportDemo.session.lifecycle,
+  'stopped',
+  'transport demo completes stopped lifecycle',
+);
+assert.equal(
+  transportDemo.manager.events.some((event) => event.type === 'transport_reconnecting'),
+  true,
+  'transport demo emits reconnect event',
+);
+
+// UBOS 2.0 Phase 2.23 diagnostics, telemetry and performance profiler validation
+const diagnostics = createDiagnosticsManager('diagnostics-manager:phase-2-23');
+diagnostics.updateCpu({ estimatedPercent: 36, sampleWindowMs: 500 });
+diagnostics.updateGpu({ estimatedPercent: 44, memoryEstimatedMb: 256, queueDepth: 3 });
+diagnostics.updateMemory({ usedMb: 640, reservedMb: 1024 });
+diagnostics.profiler.recordFrame(16.7);
+diagnostics.profiler.recordFrame(20.1, true);
+diagnostics.profiler.recordAudioLatency(5, 7, 9);
+diagnostics.profiler.recordRenderLatency(4, 8, 3);
+diagnostics.healthMonitor.updatePipeline('pipeline:program', 'Program Pipeline', [
+  { name: 'program output', state: 'healthy', message: 'Program output metadata is current' },
+  { name: 'encoder queue', state: 'degraded', message: 'Encoder queue depth is elevated' },
+]);
+diagnostics.trace('program_render', 'begin', { frameId: 42 });
+diagnostics.trace('program_render', 'end', { frameId: 42 });
+diagnostics.recordEvent('warning', 'render_latency', 'Render latency exceeded metadata target', {
+  latencyMs: 15,
+});
+const diagnosticsAlert = diagnostics.raiseAlert(
+  'warning',
+  'UBOS_DIAG_RENDER_LATENCY',
+  'Render latency is above threshold',
+);
+diagnostics.acknowledgeAlert(diagnosticsAlert.id);
+const diagnosticsSnapshot = diagnostics.getSnapshot();
+assert.equal(
+  diagnosticsSnapshot.backend.metadataOnly,
+  true,
+  'diagnostics snapshots are metadata-only',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesOsPerformanceApis,
+  false,
+  'diagnostics avoids OS-specific performance APIs',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesBrowserApis,
+  false,
+  'diagnostics avoids browser-specific APIs',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesNativeProfiler,
+  false,
+  'diagnostics avoids native profiler dependencies',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesExternalTelemetry,
+  false,
+  'diagnostics avoids external telemetry services',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.persistsData,
+  false,
+  'diagnostics has no persistence requirement',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.frameTiming.frames,
+  2,
+  'diagnostics records frame timing statistics',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.frameTiming.droppedFrames,
+  1,
+  'diagnostics records dropped frame metadata',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.audioLatency.totalLatencyMs,
+  21,
+  'diagnostics records audio latency metrics',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.renderLatency.totalLatencyMs,
+  15,
+  'diagnostics records render latency metrics',
+);
+assert.equal(
+  diagnosticsSnapshot.pipelines[0]?.state,
+  'degraded',
+  'health monitor derives worst pipeline health',
+);
+assert.equal(diagnosticsSnapshot.traces.length, 2, 'diagnostics records execution tracing');
+assert.equal(diagnosticsSnapshot.events.length, 1, 'diagnostics records performance event history');
+assert.equal(
+  diagnosticsSnapshot.alerts[0]?.acknowledged,
+  true,
+  'diagnostics alert model supports acknowledgement',
+);
+assert.equal(
+  diagnostics.exportJson().includes('diagnostics-manager:phase-2-23'),
+  true,
+  'diagnostics exposes snapshot export API',
+);
+const diagnosticsDemo = createDiagnosticsDemo();
+assert.equal(diagnosticsDemo.snapshot.alerts.length, 1, 'diagnostics demo produces alert metadata');
