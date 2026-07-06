@@ -17,3 +17,8 @@ This smoke test validates Browser sources in the Control Room while preserving U
 ## Expected limitations
 
 Some third-party sites send `X-Frame-Options` or `Content-Security-Policy` headers that prevent iframe embedding. Browsers block those pages before application code can inspect the response, so UBOS shows an operator warning and recommends another URL or screen capture.
+
+
+## Related smoke tests
+
+- [UBOS 3.5 Recording Engine Smoke Test](./ubos-3.5-recording-engine-smoke-test.md) validates Program recording, WebM download, recording metadata history, and Browser-source capture limitations.

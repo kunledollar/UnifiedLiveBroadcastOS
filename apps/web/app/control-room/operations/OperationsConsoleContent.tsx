@@ -42,7 +42,7 @@ import { createMediaRuntimeState } from '@ubos/shared';
 import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
-import { RecordingRuntimePanel } from './RecordingRuntimePanel';
+import { RecordingRuntimePanel, type BrowserRecordingPanelState } from './RecordingRuntimePanel';
 import { SecurityPanel } from './SecurityPanel';
 import { MonitoringPanel } from './MonitoringPanel';
 import { ClusterPanel } from './ClusterPanel';
@@ -97,6 +97,9 @@ export function OperationsConsoleContent({
   mediaRuntimeState,
   mediaRuntimeHealth,
   recordingRuntimeState,
+  browserRecordingState,
+  onStartBrowserRecording,
+  onStopBrowserRecording,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -139,6 +142,9 @@ export function OperationsConsoleContent({
   mediaRuntimeState?: MediaRuntimeState;
   mediaRuntimeHealth?: MediaRuntimeHealth;
   recordingRuntimeState?: RecordingRuntimeState;
+  browserRecordingState?: BrowserRecordingPanelState;
+  onStartBrowserRecording?: () => void;
+  onStopBrowserRecording?: () => void;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -217,9 +223,18 @@ export function OperationsConsoleContent({
     analytics: <AnalyticsPanel />,
     'enterprise-admin': <EnterpriseAdminPanel />, 
     recording: recordingRuntimeState ? (
-      <RecordingRuntimePanel state={recordingRuntimeState} />
+      <RecordingRuntimePanel
+        state={recordingRuntimeState}
+        {...(browserRecordingState ? { browserState: browserRecordingState } : {})}
+        {...(onStartBrowserRecording ? { onStart: onStartBrowserRecording } : {})}
+        {...(onStopBrowserRecording ? { onStop: onStopBrowserRecording } : {})}
+      />
     ) : (
-      <RecordingRuntimePanel />
+      <RecordingRuntimePanel
+        {...(browserRecordingState ? { browserState: browserRecordingState } : {})}
+        {...(onStartBrowserRecording ? { onStart: onStartBrowserRecording } : {})}
+        {...(onStopBrowserRecording ? { onStop: onStopBrowserRecording } : {})}
+      />
     ),
     health: (
       <HealthPanel
