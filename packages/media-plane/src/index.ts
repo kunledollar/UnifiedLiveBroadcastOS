@@ -1185,3 +1185,4 @@ export * from './media-runtime/ffmpeg/index.js';
 
 export * from './production-switcher.js';
 export * from './transition-renderer.js';
+export * from './graphics-engine.js';
