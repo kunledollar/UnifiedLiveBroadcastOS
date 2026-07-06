@@ -2,13 +2,7 @@ import { GuestStatus, type Guest, type SceneSource, type SceneSourceType } from 
 
 export type SourceHealthFilter = 'all' | 'ready' | 'offline' | 'unavailable' | 'mock';
 export type SourceHealthStatus =
-  | 'ready'
-  | 'offline'
-  | 'permission_required'
-  | 'unavailable'
-  | 'mock'
-  | 'live'
-  | 'hidden';
+  'ready' | 'offline' | 'permission_required' | 'unavailable' | 'mock' | 'live' | 'hidden';
 
 const sourceTypeLabels: Record<SceneSourceType, string> = {
   camera: 'Camera',
@@ -31,6 +25,7 @@ export function deriveSourceHealth(source: SceneSource, guests: Guest[]): Source
   if (runtimeStatus === 'live') return 'live';
   if (runtimeStatus === 'mock') return 'mock';
   if (runtimeStatus === 'permission_required') return 'permission_required';
+  if (runtimeStatus === 'offline') return 'offline';
   if (runtimeStatus === 'unavailable') return 'unavailable';
 
   if (source.type === 'guest') {
