@@ -27,6 +27,12 @@ export function InspectorPanel({
   programRouteName?: string | null;
   verticalRouteName?: string | null;
 }) {
+  const mediaSources = [...previewScene.sources, ...programScene.sources].filter(
+    (source, index, all) =>
+      source.type === 'media' &&
+      source.settings?.mediaUrl &&
+      all.findIndex((item) => item.id === source.id) === index,
+  );
   return (
     <OperationsPanel title="Inspector">
       <ConsoleSection title="Session Context">
@@ -59,6 +65,22 @@ export function InspectorPanel({
           }
         />
       </ConsoleSection>
+
+      {mediaSources.map((source) => {
+        const fileSize = typeof source.settings.fileSize === 'number'
+          ? `${(source.settings.fileSize / 1024 / 1024).toFixed(2)} MB`
+          : 'unavailable';
+        return (
+          <ConsoleSection key={source.id} title={`Media Source · ${source.name}`}>
+            <InspectorRow label="Filename" value={String(source.settings.filename ?? source.name)} />
+            <InspectorRow label="Duration" value={source.settings.duration ? `${source.settings.duration}s` : 'image / unavailable'} />
+            <InspectorRow label="Resolution" value={String(source.settings.resolution ?? 'detected at playback')} />
+            <InspectorRow label="FPS" value={String(source.settings.fps ?? (source.settings.mediaKind === 'video' ? 'unavailable' : 'image'))} />
+            <InspectorRow label="File size" value={fileSize} />
+            <InspectorRow label="Media type" value={String(source.settings.fileType ?? source.settings.mediaKind ?? 'media')} />
+          </ConsoleSection>
+        );
+      })}
 
       <ConsoleSection title="Context Sections" collapsed>
         <p className="text-ubos-metadata text-ubos-fg-muted">

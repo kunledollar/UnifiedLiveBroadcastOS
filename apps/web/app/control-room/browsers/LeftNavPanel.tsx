@@ -81,6 +81,7 @@ export function LeftNavPanel({
     name: string;
     type: SceneSourceType;
     url?: string;
+    settings?: Record<string, unknown>;
   }) => void;
   onSourceRename: (sourceId: string, name: string) => void;
   onSourceDuplicate: (sourceId: string) => void;

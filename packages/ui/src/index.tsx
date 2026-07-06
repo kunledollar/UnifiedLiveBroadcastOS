@@ -15,7 +15,7 @@ import type {
   StreamHealth,
   StreamHealthMetric,
 } from '@ubos/shared';
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -694,6 +694,14 @@ function sourceMonitorState(source: SceneSource) {
         tone: 'danger' as const,
       };
     case 'media':
+      if (source.settings?.mediaUrl) {
+        return {
+          title: source.settings?.mediaKind === 'image' ? 'Image Ready' : 'Video Ready',
+          subtitle: typeof source.settings?.filename === 'string' ? source.settings.filename : 'Local media source imported.',
+          badge: source.settings?.mediaKind === 'image' ? 'IMAGE' : 'VIDEO',
+          tone: 'success' as const,
+        };
+      }
       return {
         title: 'Waiting for Media',
         subtitle: 'Choose a clip, image or media asset.',
@@ -733,6 +741,43 @@ function sourceMonitorState(source: SceneSource) {
   }
 }
 
+
+function SourceMediaRuntime({ source, muted = false, className = '' }: { source: SceneSource; muted?: boolean; className?: string }) {
+  const url = typeof source.settings?.mediaUrl === 'string' ? source.settings.mediaUrl : undefined;
+  const kind = source.settings?.mediaKind === 'image' ? 'image' : source.settings?.mediaKind === 'video' ? 'video' : undefined;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [meta, setMeta] = useState<{ duration?: number; resolution?: string }>({});
+  if (!url || !kind) return null;
+  if (kind === 'image') {
+    return <img src={url} alt={source.name} className={`${className} object-contain bg-black`} />;
+  }
+  return (
+    <div className={`${className} bg-black`}>
+      <video
+        ref={videoRef}
+        src={url}
+        autoPlay={source.settings?.autoplay !== false}
+        loop={source.settings?.loop === true}
+        muted={muted || source.muted === true}
+        playsInline
+        controls={false}
+        className="h-full w-full object-contain"
+        onLoadedMetadata={(event) => {
+          const v = event.currentTarget;
+          setMeta({ duration: v.duration, resolution: `${v.videoWidth}×${v.videoHeight}` });
+        }}
+      />
+      <div className="absolute bottom-2 left-2 z-30 flex gap-1 rounded bg-black/60 p-1 text-[10px] font-bold text-white">
+        <button type="button" onClick={() => void videoRef.current?.play()}>Play</button>
+        <button type="button" onClick={() => videoRef.current?.pause()}>Pause</button>
+        <button type="button" onClick={() => { if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; } }}>Stop</button>
+        <button type="button" onClick={() => { if (videoRef.current) { videoRef.current.currentTime = 0; void videoRef.current.play(); } }}>Restart</button>
+      </div>
+      <span className="absolute right-2 bottom-2 z-30 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">{meta.resolution ?? 'media'}{meta.duration ? ` · ${Math.round(meta.duration)}s` : ''}</span>
+    </div>
+  );
+}
+
 function SourceMonitorPreview({ source }: { source: SceneSource }) {
   const theme = sourceThemes[source.type];
   const state = sourceMonitorState(source);
@@ -740,6 +785,8 @@ function SourceMonitorPreview({ source }: { source: SceneSource }) {
     <div
       className={`relative mt-3 aspect-video overflow-hidden rounded-lg border ${theme.ring} bg-black`}
     >
+      <SourceMediaRuntime source={source} muted className="absolute inset-0 z-0 h-full w-full" />
+      {!source.settings?.mediaUrl ? (
       <MonitorStateScreen
         title={state.title}
         subtitle={state.subtitle}
@@ -748,6 +795,7 @@ function SourceMonitorPreview({ source }: { source: SceneSource }) {
         tone={state.tone}
         compact
       />
+      ) : null}
       <MonitorHUD
         title={sourceTypeLabels[source.type]}
         position="bottom-left"
@@ -1647,6 +1695,21 @@ function SourceLayers({ sources, output }: { sources: SceneSource[]; output: Out
   );
 }
 
+
+function SourceMediaLayers({ sources }: { sources: SceneSource[] }) {
+  return (
+    <>
+      {sortedVisibleSources(sources)
+        .filter((source) => source.type === 'media' && source.settings?.mediaUrl)
+        .map((source, index) => (
+          <div key={source.id} className="absolute inset-0 z-[18] bg-black" style={{ zIndex: 18 + index }}>
+            <SourceMediaRuntime source={source} />
+          </div>
+        ))}
+    </>
+  );
+}
+
 function SceneFooter({
   scene,
   layoutPreset,
@@ -1721,6 +1784,7 @@ function BaseCompositor({
           Program scene contains offline source
         </div>
       ) : null}
+      <SourceMediaLayers sources={scene.sources} />
       <SourceLayers sources={scene.sources} output={output} />
       <SafeAreaOverlay output={output} guides={safeAreaGuides} />
       <SceneFooter
