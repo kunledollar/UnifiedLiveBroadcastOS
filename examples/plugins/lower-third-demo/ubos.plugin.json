@@ -1,0 +1,111 @@
+{
+  "manifestVersion": "2.21",
+  "id": "ubos.demo.lower-third",
+  "version": "1.0.0",
+  "metadata": {
+    "name": "Demo Lower Third Plugin",
+    "description": "Declarative demo plugin that contributes a Control Room panel, generated source, monitor output, graphics provider, event subscription, command, and settings namespace.",
+    "tags": ["demo", "graphics", "control-room"]
+  },
+  "author": { "name": "UBOS" },
+  "compatibility": {
+    "ubosVersionRange": ">=2.21.0",
+    "sdkVersionRange": "^2.21.0",
+    "minHostApi": "2.21.0"
+  },
+  "signature": {
+    "algorithm": "ed25519",
+    "publicKeyId": "ubos-demo-key",
+    "digest": "sha256-demo-lower-third-fixture",
+    "signature": "demo-signature-fixture-for-validation-tests"
+  },
+  "categories": ["graphics", "lower-third", "input", "output"],
+  "dependencies": [],
+  "capabilities": [
+    {
+      "id": "ubos.demo.lower-third.graphics",
+      "name": "Lower Third Graphics",
+      "category": "graphics",
+      "extensionPoint": "control-room",
+      "description": "Adds lower-third controls and declarative graphics metadata."
+    }
+  ],
+  "permissions": [
+    {
+      "id": "ubos.demo.lower-third.settings",
+      "scope": "plugin-settings:read-write",
+      "reason": "Stores default lower-third text and style choices in the plugin namespace only.",
+      "required": true
+    }
+  ],
+  "runtime": {
+    "kind": "sandboxed-declarative",
+    "entrypoint": "manifest",
+    "sandbox": {
+      "network": "none",
+      "filesystem": "plugin-settings-only",
+      "process": "none",
+      "privateRuntimeInternals": false
+    },
+    "handles": ["manifest", "declarative-panel"]
+  },
+  "commands": [
+    {
+      "id": "ubos.demo.lower-third.take",
+      "title": "Take Demo Lower Third",
+      "capabilityId": "ubos.demo.lower-third.graphics",
+      "category": "graphics",
+      "defaultShortcut": "Ctrl+Alt+L"
+    }
+  ],
+  "panels": [
+    {
+      "id": "ubos.demo.lower-third.panel",
+      "title": "Demo Lower Third",
+      "workspaceId": "control-room",
+      "capabilityId": "ubos.demo.lower-third.graphics",
+      "component": "declarative-panel",
+      "layout": { "minWidth": 360, "minHeight": 260, "preferredDock": "right" }
+    }
+  ],
+  "sourceProviders": [
+    {
+      "id": "ubos.demo.lower-third.generated-source",
+      "name": "Generated Lower Third Source",
+      "capabilityId": "ubos.demo.lower-third.graphics",
+      "sourceKinds": ["generated"],
+      "configSchema": { "type": "object", "properties": { "title": { "type": "string" } } }
+    }
+  ],
+  "outputProviders": [
+    {
+      "id": "ubos.demo.lower-third.preview-output",
+      "name": "Lower Third Preview Output",
+      "capabilityId": "ubos.demo.lower-third.graphics",
+      "outputKinds": ["monitor"],
+      "configSchema": { "type": "object" }
+    }
+  ],
+  "graphicsProviders": [
+    {
+      "id": "ubos.demo.lower-third.provider",
+      "name": "Lower Third Template Provider",
+      "capabilityId": "ubos.demo.lower-third.graphics",
+      "graphicsKinds": ["lower-third", "template"],
+      "configSchema": { "type": "object" }
+    }
+  ],
+  "eventSubscriptions": [
+    {
+      "id": "ubos.demo.lower-third.program-events",
+      "eventType": "program.changed",
+      "capabilityId": "ubos.demo.lower-third.graphics",
+      "delivery": "panel-notification"
+    }
+  ],
+  "settings": {
+    "namespace": "ubos.demo.lower-third",
+    "schema": { "type": "object", "properties": { "defaultTitle": { "type": "string" } } },
+    "defaults": { "defaultTitle": "UBOS Live" }
+  }
+}

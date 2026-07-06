@@ -1,56 +1,115 @@
-# UBOS Plugin SDK and Extension Framework
+# Phase 2.21 – Plugin & Extension SDK
 
-Phase 29 introduces a metadata-first plugin SDK for UBOS. Plugins describe what they add to the broadcast operating system, but they do not load or execute third-party code.
+UBOS 2.21 adds a secure, backend-independent plugin architecture for extending the application without changing core runtime code. The SDK is declarative: plugins register capabilities, UI panels, providers, commands, events, and settings through a signed manifest. UBOS does **not** download code, does **not** expose private runtime internals, and does **not** execute unsigned plugins.
 
-## Plugin architecture
+## Deliverables
 
-The SDK lives in `packages/shared/src/plugin-sdk/` and centers on `PluginManifest`, `PluginDescriptor`, `PluginRegistry`, `PluginValidator`, and `PluginManager`. A manifest can register metadata for commands, menus, panels, workspaces, themes, assets, templates, device drivers, graphics packages, automations, AI providers, events, hooks, and extension points.
+- **Plugin SDK:** `packages/shared/src/plugin-sdk/index.ts` defines the public manifest, lifecycle, registry, discovery, validation, extension, and settings types.
+- **Plugin manager:** `PluginManager` coordinates install, load, enable, disable, and unload operations.
+- **Manifest schema:** `PluginManifest` version `2.21` is the canonical TypeScript schema.
+- **Extension registry:** `ExtensionRegistry` indexes panels, commands, source providers, output providers, graphics providers, event subscriptions, and settings namespaces.
+- **Demo plugin:** `examples/plugins/lower-third-demo/ubos.plugin.json` demonstrates a signed declarative lower-third plugin.
+- **Tests:** `packages/shared/src/plugin-sdk/validation.ts` validates lifecycle, security policy, compatibility, dependency resolution, discovery, and extension registration.
 
-All runtimes are deterministic. `PluginRuntime.kind` must be `metadata-only`, and runtime handles are validated to reject dynamic imports, eval, Function constructors, Node VM references, WASM, DLLs, native code, npm installation, browser APIs, and remote downloads.
+## Manifest format
 
-## Registration lifecycle
+A plugin manifest contains:
 
-Plugins move through these lifecycle states:
+- `manifestVersion: "2.21"`
+- stable plugin `id` and semantic `version`
+- human-readable metadata and author information
+- compatibility ranges for UBOS, SDK, and host API versions
+- signing metadata (`algorithm`, `publicKeyId`, `digest`, and `signature`)
+- explicit capabilities and permissions
+- a sandboxed declarative runtime declaration
+- optional extension contributions: panels, commands, providers, events, settings, menus, workspaces, assets, and hooks
 
-- Installed
-- Registered
-- Enabled
-- Disabled
-- Loading
-- Running
-- Stopped
-- Failed
-- Updating
-- Uninstalled
+The validator rejects malformed IDs, invalid semantic versions, missing signatures, untrusted signing keys, unknown categories, unknown extension points, missing capabilities, and settings namespaces that do not match the plugin ID.
 
-`PluginRegistry.register` validates a manifest, rejects duplicate IDs, indexes extension points, and checks dependency cycles. `PluginManager` provides deterministic install, enable, disable, start, and stop transitions.
+## Lifecycle
 
-## Capabilities
+The plugin manager supports the required Phase 2.21 lifecycle:
 
-Capabilities describe what a plugin contributes and where it integrates. Categories include graphics, audio, media, replay, recording, streaming, automation, AI, analytics, monitoring, device driver, protocol, layout, theme, workspace, output, input, overlay, scoreboard, lower third, social, chat, cloud, and utility.
+1. **Install** – validate and persist manifest metadata.
+2. **Load** – register extensions in the host-owned `ExtensionRegistry`.
+3. **Enable** – verify required dependencies and mark the plugin active.
+4. **Disable** – leave metadata installed but inactive.
+5. **Unload** – unregister extensions while keeping install metadata available.
 
-## Permissions
+The lifecycle is intentionally metadata-only. Loading a plugin registers declarations; it never imports plugin code.
 
-Permissions are explicit metadata records with an ID, scope, reason, and required flag. They are not runtime grants and do not permit code execution. The validator requires every permission to include both a scope and reason so operators can inspect why a plugin needs metadata access.
+## Version compatibility
 
-## Extension points
+`PluginCompatibility` declares:
 
-Supported extension points are Control Room, Operations Console, Production Engine, Media Runtime, Audio Runtime, Graphics Runtime, Rendering Runtime, Cluster Runtime, Monitoring Runtime, Recording Runtime, Automation Runtime, AI Runtime, Distribution Runtime, Security Runtime, and Device Runtime.
+- `ubosVersionRange`
+- `sdkVersionRange`
+- `minHostApi`
 
-The registry exports extension-point indexes so the Control Room plugin workspace and Operations Console Plugin tab can show where installed plugins integrate.
+`PluginValidator.validate(manifest, host)` checks those values against the host and rejects incompatible plugins before install. Dependency version ranges are also enforced when resolving required dependencies.
 
-## Dependency resolution
+## Sandboxed execution model
 
-Dependencies are declared by plugin ID and optional version range. Required dependencies must be present during resolution. The registry walks dependency metadata and rejects circular dependency graphs.
+Phase 2.21 uses a **sandboxed declarative** runtime model:
 
-## Future marketplace
+- `network` must be `none`.
+- `process` must be `none`.
+- `filesystem` is either `none` or `plugin-settings-only`.
+- `privateRuntimeInternals` must be `false`.
+- `entrypoint` must be `manifest`.
 
-The Plugin Marketplace panel is metadata only. Phase 29 does not implement a marketplace backend, remote plugin downloads, package installation, or dynamic loading.
+The validator rejects dynamic imports, `eval`, Function constructors, Node VM references, WASM/native references, package installation handles, browser API access, HTTP(S) handles, remote code references, and native references. This provides a backend-independent security boundary and ensures plugins can extend UBOS only through public extension metadata.
 
-## Future signed plugins
+## Extension registration API
 
-Future phases can add signature metadata and trust policy validation to manifests. Signature checks should remain deterministic and separate from code execution.
+`ExtensionRegistry` exposes deterministic registration for:
 
-## Future sandbox execution
+- Control Room panels
+- Commands
+- Custom source providers
+- Custom output providers
+- Custom graphics providers
+- Event subscriptions
+- Settings namespaces
 
-Future sandbox execution is explicitly out of scope for Phase 29. Any future runtime must be designed as a separate security architecture and must not weaken the metadata-only guarantees introduced here.
+`PluginRegistry.load(id)` registers all declared extensions. `PluginRegistry.unload(id)` removes them. `snapshot()` returns sorted IDs for UI and test assertions.
+
+## Custom Control Room panels
+
+Panels use `PluginPanel` with `component: "declarative-panel"`, layout constraints, a capability reference, and an optional workspace ID. The host owns rendering; plugins provide metadata only.
+
+## Providers
+
+Provider declarations describe integration points without granting runtime access:
+
+- `PluginSourceProvider` supports camera, screen, media-file, network, and generated source kinds.
+- `PluginOutputProvider` supports recording, stream, monitor, file, and transport output kinds.
+- `PluginGraphicsProvider` supports lower-third, scoreboard, bug, ticker, and template graphics kinds.
+
+Each provider includes a JSON-compatible `configSchema` so the host can render safe configuration UI.
+
+## Event and command APIs
+
+Commands are registered with IDs, titles, capability references, categories, and optional default shortcuts. Event subscriptions declare an event type and a safe delivery mechanism such as host-dispatched commands, settings updates, or panel notifications.
+
+## Settings namespaces
+
+A plugin can declare one `PluginSettingsNamespace`. Its namespace must exactly match the plugin ID. This prevents cross-plugin settings access and keeps persistence scoped to the plugin-owned keyspace.
+
+## Discovery service
+
+`PluginDiscoveryService` accepts locally available manifests and returns a deterministic ID-sorted scan. It performs no marketplace calls, code downloads, or package installation. Discovery validation delegates to the registry/validator so host trust policy is applied consistently.
+
+## Demo plugin
+
+The demo plugin at `examples/plugins/lower-third-demo/ubos.plugin.json` contributes:
+
+- a Control Room panel
+- a Take Lower Third command
+- a generated source provider
+- a monitor output provider
+- a lower-third graphics provider
+- a `program.changed` event subscription
+- a plugin-scoped settings namespace
+
+It is signed with fixture signing metadata for validation and local development only.
