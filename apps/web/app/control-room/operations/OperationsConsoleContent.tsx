@@ -24,6 +24,7 @@ import { createInitialAIState } from '../ai/ai-state';
 import { GuestsPanel } from './GuestsPanel';
 import { HealthPanel } from './HealthPanel';
 import { InspectorPanel, deriveInspectorRoutes } from './InspectorPanel';
+import type { OperationsInspectorSelection } from './operations-inspector-selection';
 import { LogsPanelContainer } from './LogsPanelContainer';
 import { OutputsPanel } from './OutputsPanel';
 import { PreviewPanel } from './PreviewPanel';
@@ -109,6 +110,7 @@ export function OperationsConsoleContent({
   onStartBrowserRecording,
   onStopBrowserRecording,
   pipeline,
+  inspectorSelection,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -157,6 +159,7 @@ export function OperationsConsoleContent({
   onStartBrowserRecording?: () => void;
   onStopBrowserRecording?: () => void;
   pipeline?: ProductionPipelineModel;
+  inspectorSelection?: OperationsInspectorSelection;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -180,6 +183,7 @@ export function OperationsConsoleContent({
             ? { verticalRouteName: routeInfo.verticalRouteName }
             : {})}
           {...(pipeline ? { pipeline } : {})}
+          selection={inspectorSelection ?? null}
         />
         <HostDevicesSection />
       </>

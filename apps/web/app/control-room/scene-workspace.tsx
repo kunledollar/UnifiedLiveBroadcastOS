@@ -126,6 +126,9 @@ import {
   BroadcastCommandCenterLayout,
   type MonitorStatusInfo,
 } from './broadcast-command-center';
+import { DiagnosticsSummary } from './broadcast-command-center/FloatingDiagnosticsPanel';
+import type { OperationsDockSection } from './broadcast-command-center/RightOperationsDock';
+import type { OperationsInspectorSelection } from './operations/operations-inspector-selection';
 import {
   ProductionGraphTreeSummary,
   RoutingPatchMatrix,
@@ -3077,6 +3080,7 @@ export function SceneWorkspace({
     initialMediaCompositionState,
   );
   const [selectedGraphicsLayerId, setSelectedGraphicsLayerId] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [selectedMediaAssetId, setSelectedMediaAssetId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedReplayClipId, setSelectedReplayClipId] = useState<string | null>(null);
@@ -3407,6 +3411,74 @@ export function SceneWorkspace({
     [productionGraphSession.graph, productionGraphSession.eventLog],
   );
 
+  const operationsInspectorSelection = useMemo((): OperationsInspectorSelection => {
+    if (selectedSourceId) {
+      const previewMatch = previewScene.sources.find((source) => source.id === selectedSourceId);
+      if (previewMatch) {
+        return { kind: 'source', source: previewMatch, sceneName: previewScene.name };
+      }
+      const programMatch = programScene.sources.find((source) => source.id === selectedSourceId);
+      if (programMatch) {
+        return { kind: 'source', source: programMatch, sceneName: programScene.name };
+      }
+    }
+
+    if (selectedRouteId) {
+      const route = mediaRoutes.find((item) => item.id === selectedRouteId);
+      if (route) {
+        const pipelineRoute = productionPipeline.state.outputRouting.find(
+          (item) => item.label === route.displayName || item.id === route.id,
+        );
+        if (pipelineRoute) {
+          return { kind: 'pipeline-route', route: pipelineRoute };
+        }
+        return { kind: 'route', route };
+      }
+    }
+
+    if (selectedGraphicsLayerId) {
+      const layer = previewSceneComposition.layers.find((item) => item.id === selectedGraphicsLayerId);
+      if (layer) {
+        return {
+          kind: 'graphics-layer',
+          layerId: layer.id,
+          layerName: layer.name,
+        };
+      }
+    }
+
+    if (selectedMediaAssetId) {
+      const asset = previewSceneMediaComposition.assets.find(
+        (item) => item.id === selectedMediaAssetId,
+      );
+      if (asset) {
+        return {
+          kind: 'media-asset',
+          assetId: asset.id,
+          assetName: asset.name,
+        };
+      }
+    }
+
+    return null;
+  }, [
+    selectedSourceId,
+    selectedRouteId,
+    selectedGraphicsLayerId,
+    selectedMediaAssetId,
+    previewScene,
+    programScene,
+    mediaRoutes,
+    productionPipeline,
+    previewSceneComposition.layers,
+    previewSceneMediaComposition.assets,
+  ]);
+
+  const handleSelectSource = useCallback((sourceId: string) => {
+    setSelectedSourceId(sourceId);
+    setActiveOperationsTab('inspector');
+  }, []);
+
   const operationsPanels = useMemo(
     () =>
       OperationsConsoleContent({
@@ -3471,6 +3543,7 @@ export function SceneWorkspace({
         onStartBrowserRecording: startSmokeRecording,
         onStopBrowserRecording: stopSmokeRecording,
         pipeline: productionPipeline,
+        inspectorSelection: operationsInspectorSelection,
       }),
     [
       broadcastId,
@@ -3508,6 +3581,7 @@ export function SceneWorkspace({
       startSmokeRecording,
       stopSmokeRecording,
       productionPipeline,
+      operationsInspectorSelection,
     ],
   );
 
@@ -3796,8 +3870,10 @@ export function SceneWorkspace({
       mediaComposition={previewSceneMediaComposition}
       selectedMediaAssetId={selectedMediaAssetId}
       selectedReplayClipId={selectedReplayClipId}
+      selectedSourceId={selectedSourceId}
       onSelectMediaAsset={setSelectedMediaAssetId}
       onSelectReplayClip={setSelectedReplayClipId}
+      onSelectSource={handleSelectSource}
     />
   );
 
@@ -3948,6 +4024,70 @@ export function SceneWorkspace({
       productionPipeline.health,
     ],
   );
+
+  const operationsSections = useMemo((): OperationsDockSection[] => {
+    const recordingBadge =
+      recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
+        ? 'REC'
+        : undefined;
+    const streamingBadge =
+      streamingState.lifecycle === 'streaming' || streamingState.lifecycle === 'connecting'
+        ? 'LIVE'
+        : undefined;
+
+    return [
+      {
+        id: 'unified-chat',
+        content: operationsPanels.logs,
+        ...(messages.length ? { badge: String(messages.length) } : {}),
+        defaultCollapsed: true,
+      },
+      {
+        id: 'guests',
+        content: operationsPanels.guests,
+        ...(guests.length ? { badge: String(guests.length) } : {}),
+      },
+      {
+        id: 'inspector',
+        content: operationsPanels.inspector,
+        ...(operationsInspectorSelection ? { badge: '●' } : {}),
+      },
+      {
+        id: 'recording',
+        content: operationsPanels.recording,
+        ...(recordingBadge ? { badge: recordingBadge } : {}),
+      },
+      {
+        id: 'streaming',
+        content: operationsPanels.streaming,
+        ...(streamingBadge ? { badge: streamingBadge } : {}),
+      },
+      {
+        id: 'outputs',
+        content: operationsPanels.outputs,
+        defaultCollapsed: true,
+      },
+      {
+        id: 'telemetry',
+        content: <DiagnosticsSummary metrics={diagnosticsMetrics} />,
+        defaultCollapsed: true,
+      },
+      {
+        id: 'system-health',
+        content: operationsPanels.health,
+        defaultCollapsed: true,
+      },
+    ];
+  }, [
+    operationsPanels,
+    messages.length,
+    guests.length,
+    operationsInspectorSelection,
+    recordingState,
+    browserRecordingPanelState.state,
+    streamingState.lifecycle,
+    diagnosticsMetrics,
+  ]);
 
   const bottomDockContent = (
     <>
@@ -4784,7 +4924,7 @@ export function SceneWorkspace({
       routingEdges={routingEdges}
       audioMixerContent={<ProfessionalAudioMixer sources={mixerSources} />}
       diagnosticsMetrics={diagnosticsMetrics}
-      operationsTabs={operationsTabsResolved}
+      operationsSections={operationsSections}
       activeOperationsTab={activeOperationsTab}
       activeDockTab={activeBottomDock}
       onOperationsTabChange={setActiveOperationsTab}
@@ -4801,7 +4941,6 @@ export function SceneWorkspace({
       bottomWorkspaceContent={bottomDockContent}
       productionGraphContent={productionGraphPanelContent}
       graphRevision={productionGraphSession.graph.metadata.revision}
-      previewSlot={previewMonitor}
     />
   );
 }

@@ -58,6 +58,8 @@ export function LeftNavPanel({
   selectedReplayClipId,
   onSelectMediaAsset,
   onSelectReplayClip,
+  selectedSourceId,
+  onSelectSource,
 }: {
   activeNav: NavItemId;
   scenes: Scene[];
@@ -101,6 +103,8 @@ export function LeftNavPanel({
   selectedReplayClipId?: string | null;
   onSelectMediaAsset?: (assetId: string) => void;
   onSelectReplayClip?: (clipId: string) => void;
+  selectedSourceId?: string | null;
+  onSelectSource?: (sourceId: string) => void;
 }) {
   switch (activeNav) {
     case 'scenes':
@@ -137,6 +141,8 @@ export function LeftNavPanel({
           onToggleLock={onSourceToggleLock}
           {...(onReloadBrowserSource ? { onReloadBrowserSource } : {})}
           {...(onSourceToggleMute ? { onToggleMute: onSourceToggleMute } : {})}
+          {...(selectedSourceId !== undefined ? { selectedSourceId } : {})}
+          {...(onSelectSource ? { onSelectSource } : {})}
         />
       );
     case 'media':
