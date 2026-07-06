@@ -1166,8 +1166,8 @@ export function summarizeExecutionHealth(health: MediaExecutionHealth) {
 export * from './gpu-runtime/index.js';
 export * from './ffmpeg-runtime/index.js';
 
-export { StreamingPipeline, StreamingSessionManager, StreamingScheduler, StreamingRecovery, StreamingValidator, createStreamingRuntimeManifest, isRealStreamingEnabled, validateStreamingDestination } from './streaming-runtime/index.js';
-export type { StreamingJob as RuntimeStreamingJob, StreamingDestination as RuntimeStreamingDestination, StreamingStatistics as RuntimeStreamingStatistics, StreamingHealth as RuntimeStreamingHealth, StreamingManifest as RuntimeStreamingManifest } from './streaming-runtime/index.js';
+export { StreamingPipeline, StreamingSessionManager, StreamingScheduler, StreamingRecovery, StreamingValidator, createStreamingRuntimeManifest, isRealStreamingEnabled, validateStreamingDestination, createStreamingPipeline, createDemoStreamingSession, streamingProviders, MetadataStreamingPipeline } from './streaming-runtime/index.js';
+export type { StreamingJob as RuntimeStreamingJob, StreamingDestination as RuntimeStreamingDestination, StreamingStatistics as RuntimeStreamingStatistics, StreamingHealth as RuntimeStreamingHealth, StreamingManifest as RuntimeStreamingManifest, StreamingPipelineV2, StreamingSession, StreamingDestinationModel, StreamingProviderModel, StreamingSessionMetadata, StreamingRuntimeEvent, StreamingBackendDescriptor } from './streaming-runtime/index.js';
 
 export { AudioRuntime, AudioMixer, AudioMatrix, MixMinusManager, AudioStatisticsRuntime, AudioHealthRuntime, AudioRecovery, AudioValidator, createAudioBus, createAudioChannel, createDefaultBuses, isRealAudioEnabled } from './audio-runtime/index.js';
 export type { AudioBus as RuntimeAudioBus, AudioChannel as RuntimeAudioChannel, AudioGroup as RuntimeAudioGroup, AudioEffect, AudioMeter, AudioSession, AudioStatistics as RuntimeAudioStatistics, AudioHealth as RuntimeAudioHealth, AudioReplayEvent, MixMinusTarget, AudioBusKind, AudioEffectKind } from './audio-runtime/index.js';
