@@ -101,6 +101,7 @@ import {
   useState,
   useTransition,
 } from 'react';
+import { useMediaCapture } from '../../lib/media/use-media-capture';
 import {
   addScene,
   addSource,
@@ -274,6 +275,56 @@ function MediaStreamPreview({
         <span>{label}</span>
         <span className="text-slate-400">{status}</span>
       </div>
+    </div>
+  );
+}
+
+function LiveMediaMonitor({
+  title,
+  sceneName,
+  stream,
+  active,
+  role,
+}: {
+  title: string;
+  sceneName: string;
+  stream: MediaStream | null;
+  active: boolean;
+  role: 'program' | 'preview';
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.srcObject = active ? stream : null;
+    if (active && stream) void video.play().catch(() => undefined);
+    return () => {
+      video.srcObject = null;
+    };
+  }, [active, stream]);
+  return (
+    <div
+      className={`relative flex h-full min-h-0 flex-col overflow-hidden rounded-xl border ${role === 'program' ? 'border-red-500/50' : 'border-emerald-400/50'} bg-black`}
+    >
+      <video ref={videoRef} autoPlay playsInline muted className="min-h-0 flex-1 object-cover" />
+      {!active ? (
+        <div className="absolute inset-0 flex items-center justify-center p-6 text-center text-xs uppercase tracking-[0.18em] text-slate-500">
+          Add/start a camera source to see live video here.
+        </div>
+      ) : null}
+      <div className="flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
+        <span className={role === 'program' ? 'text-red-200' : 'text-emerald-100'}>{title}</span>
+        <span className="text-slate-300">{sceneName}</span>
+      </div>
+    </div>
+  );
+}
+
+function SmokeCheck({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-ubos-sm bg-ubos-midnight px-2 py-1 text-ubos-caption">
+      <span className="text-ubos-fg-secondary">{label}</span>
+      <span className={ok ? 'text-emerald-300' : 'text-amber-300'}>{ok ? 'PASS' : 'TODO'}</span>
     </div>
   );
 }
@@ -1916,6 +1967,80 @@ export function SceneWorkspace({
     (next: Scene[]) => startTransition(() => setScenes(next)),
     [startTransition, setScenes],
   );
+  const smokeMedia = useMediaCapture();
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [recordingState, setRecordingState] = useState<
+    'idle' | 'recording' | 'ready' | 'unsupported'
+  >('idle');
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
+
+  useEffect(() => {
+    const stream = smokeMedia.stream;
+    if (!stream?.getAudioTracks().length) {
+      setAudioLevel(0);
+      return;
+    }
+    const AudioContextConstructor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    const audioContext = new AudioContextConstructor();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let frame = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      const peak = data.reduce((max, value) => Math.max(max, Math.abs(value - 128)), 0);
+      setAudioLevel(Math.min(100, Math.round((peak / 64) * 100)));
+      frame = window.requestAnimationFrame(tick);
+    };
+    tick();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      source.disconnect();
+      void audioContext.close();
+    };
+  }, [smokeMedia.stream]);
+
+  const startSmokeCapture = useCallback(async () => {
+    await smokeMedia.startPreview({ withAudio: true });
+  }, [smokeMedia]);
+
+  const startSmokeRecording = useCallback(() => {
+    if (!smokeMedia.stream || !mediaRecorderSupported) {
+      setRecordingState('unsupported');
+      return;
+    }
+    recordedChunksRef.current = [];
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    setRecordedUrl(null);
+    const recorderOptions = MediaRecorder.isTypeSupported('video/webm')
+      ? { mimeType: 'video/webm' }
+      : undefined;
+    const recorder = new MediaRecorder(smokeMedia.stream, recorderOptions);
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) recordedChunksRef.current.push(event.data);
+    };
+    recorder.onstop = () => {
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      setRecordedUrl(URL.createObjectURL(blob));
+      setRecordingState('ready');
+    };
+    recorder.start();
+    recorderRef.current = recorder;
+    setRecordingState('recording');
+  }, [mediaRecorderSupported, recordedUrl, smokeMedia.stream]);
+
+  const stopSmokeRecording = useCallback(() => {
+    if (recorderRef.current?.state === 'recording') recorderRef.current.stop();
+  }, []);
+
   const sorted = useMemo(() => [...scenes].sort((a, b) => a.order - b.order), [scenes]);
   const programScene =
     sorted.find((scene) => scene.id === productionState.programSceneId) ??
@@ -1924,6 +2049,14 @@ export function SceneWorkspace({
   const previewScene =
     sorted.find((scene) => scene.id === productionState.previewSceneId) ?? programScene;
   const activeScene = previewScene;
+  const previewHasCameraSource = previewScene.sources.some(
+    (source) => source.type === 'camera' && source.isVisible,
+  );
+  const programHasCameraSource = programScene.sources.some(
+    (source) => source.type === 'camera' && source.isVisible,
+  );
+  const livePreviewVisible = previewHasCameraSource && smokeMedia.cameraReady;
+  const liveProgramVisible = programHasCameraSource && smokeMedia.cameraReady;
   const synchronizedOutputs = ProgramPreviewSynchronizer.fromSwitchingState(productionState);
   const activeSceneTallyState = getTallyState({
     id: activeScene.id,
@@ -2172,7 +2305,7 @@ export function SceneWorkspace({
   const [activeBottomDock, setActiveBottomDock] = useState<DockTabId>('audio');
   const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
   const [professionalRightTab, setProfessionalRightTab] = useState<
-    'guests' | 'outputs' | 'chat' | 'inspector' | 'health'
+    'guests' | 'outputs' | 'chat' | 'inspector' | 'health' | 'smoke'
   >('guests');
   const [showSafeAreas, setShowSafeAreas] = useState(false);
   const safeAreaToggles = workspace.safeAreaToggles;
@@ -2782,6 +2915,7 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
+        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture();
         startTransition(async () => {
           await addSource(formData);
         });
@@ -3327,6 +3461,7 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
+        if (input.type === 'camera' || input.type === 'audio') void startSmokeCapture();
         startTransition(async () => {
           await addSource(formData);
         });
@@ -3423,6 +3558,84 @@ export function SceneWorkspace({
     ),
     inspector: operationsPanels.inspector,
     health: operationsPanels.health,
+    smoke: (
+      <div className="space-y-ubos-2">
+        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-3">
+          <p className="text-ubos-caption font-black uppercase tracking-[0.16em] text-ubos-fg-primary">
+            UBOS 3.1 Client-Ready Media Smoke Test
+          </p>
+          <p className="mt-1 text-ubos-caption text-ubos-fg-muted">
+            Browser camera, microphone, preview/program, audio meter, and WebM recording run
+            locally. RTMP streaming is unavailable until a real backend is configured.
+          </p>
+        </div>
+        <div className="grid gap-1">
+          <SmokeCheck label="Camera active" ok={smokeMedia.cameraReady} />
+          <SmokeCheck label="Microphone active" ok={smokeMedia.microphoneReady} />
+          <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
+          <SmokeCheck label="Program visible" ok={liveProgramVisible} />
+          <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
+          <SmokeCheck label="Recording works" ok={recordingState === 'ready'} />
+          <SmokeCheck label="No console errors" ok={!smokeMedia.errorMessage} />
+        </div>
+        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
+          <div className="mb-2 flex items-center justify-between text-ubos-caption text-ubos-fg-secondary">
+            <span>Mic level</span>
+            <span>{audioLevel}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-ubos-midnight">
+            <div
+              className="h-full bg-emerald-400 transition-all"
+              style={{ width: `${audioLevel}%` }}
+            />
+          </div>
+        </div>
+        {smokeMedia.errorMessage ? (
+          <p className="text-ubos-caption text-ubos-error-text">{smokeMedia.errorMessage}</p>
+        ) : null}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
+            onClick={() => void startSmokeCapture()}
+          >
+            Start camera + mic
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
+            onClick={smokeMedia.stopAll}
+          >
+            Stop devices
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
+            disabled={!smokeMedia.stream || recordingState === 'recording'}
+            onClick={startSmokeRecording}
+          >
+            Start WebM REC
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary disabled:opacity-50"
+            disabled={recordingState !== 'recording'}
+            onClick={stopSmokeRecording}
+          >
+            Stop REC
+          </button>
+        </div>
+        {recordedUrl ? (
+          <a
+            className="block rounded-ubos-sm bg-emerald-400 px-2 py-2 text-center text-xs font-black text-slate-950"
+            href={recordedUrl}
+            download="ubos-smoke-test.webm"
+          >
+            Download recorded WebM
+          </a>
+        ) : null}
+      </div>
+    ),
   } satisfies Record<typeof professionalRightTab, ReactNode>;
 
   return (
@@ -3430,7 +3643,7 @@ export function SceneWorkspace({
       <BroadcastStatusBar
         sessionName="Launch Day"
         isLive={activeRouteCount > 0}
-        isRecording={false}
+        isRecording={recordingState === 'recording'}
         runTime={formatElapsed(elapsedSeconds)}
         clock={clock}
         transitionActive={transitionActive}
@@ -3476,39 +3689,59 @@ export function SceneWorkspace({
                 <span>Program</span>
                 <span>{programScene.name}</span>
               </div>
-              <ProgramMonitor
-                scene={programScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-                graph={productionGraphSession.graph}
-                healthFps={safeHealthMetrics.fps}
-                showSafeAreas={showSafeAreas}
-                graphicsLayers={previewSceneComposition.layers.filter(
-                  (layer) => layer.programState === 'live',
-                )}
-                mediaOverlayItems={programMediaOverlayItems}
-              />
+              {liveProgramVisible ? (
+                <LiveMediaMonitor
+                  title="Program"
+                  sceneName={programScene.name}
+                  stream={smokeMedia.stream}
+                  active={liveProgramVisible}
+                  role="program"
+                />
+              ) : (
+                <ProgramMonitor
+                  scene={programScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                  graph={productionGraphSession.graph}
+                  healthFps={safeHealthMetrics.fps}
+                  showSafeAreas={showSafeAreas}
+                  graphicsLayers={previewSceneComposition.layers.filter(
+                    (layer) => layer.programState === 'live',
+                  )}
+                  mediaOverlayItems={programMediaOverlayItems}
+                />
+              )}
             </div>
             <div className="min-h-0 rounded-2xl border border-emerald-400/40 bg-black p-2 shadow-[0_0_28px_rgba(16,185,129,0.12)]">
               <div className="mb-2 flex items-center justify-between px-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
                 <span>Preview</span>
                 <span>{previewScene.name}</span>
               </div>
-              <ProgramMonitor
-                scene={previewScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-                graph={productionGraphSession.graph}
-                healthFps={safeHealthMetrics.fps}
-                showSafeAreas={showSafeAreas}
-                graphicsLayers={previewSceneComposition.layers.filter(
-                  (layer) => layer.previewState === 'preview' || layer.programState === 'live',
-                )}
-                mediaOverlayItems={previewMediaOverlayItems}
-                role="preview"
-              />
+              {livePreviewVisible ? (
+                <LiveMediaMonitor
+                  title="Preview"
+                  sceneName={previewScene.name}
+                  stream={smokeMedia.stream}
+                  active={livePreviewVisible}
+                  role="preview"
+                />
+              ) : (
+                <ProgramMonitor
+                  scene={previewScene}
+                  routes={mediaRoutes}
+                  layoutPreset={layoutPreset}
+                  guests={guests}
+                  graph={productionGraphSession.graph}
+                  healthFps={safeHealthMetrics.fps}
+                  showSafeAreas={showSafeAreas}
+                  graphicsLayers={previewSceneComposition.layers.filter(
+                    (layer) => layer.previewState === 'preview' || layer.programState === 'live',
+                  )}
+                  mediaOverlayItems={previewMediaOverlayItems}
+                  role="preview"
+                />
+              )}
             </div>
           </div>
 
@@ -3594,11 +3827,11 @@ export function SceneWorkspace({
 
         <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ubos-border-subtle bg-ubos-carbon shadow-2xl">
           <div
-            className="grid grid-cols-5 gap-1 border-b border-ubos-border-subtle p-2"
+            className="grid grid-cols-6 gap-1 border-b border-ubos-border-subtle p-2"
             role="tablist"
             aria-label="Right workspace tabs"
           >
-            {(['guests', 'outputs', 'chat', 'inspector', 'health'] as const).map((id) => (
+            {(['guests', 'outputs', 'chat', 'inspector', 'health', 'smoke'] as const).map((id) => (
               <button
                 key={id}
                 type="button"
