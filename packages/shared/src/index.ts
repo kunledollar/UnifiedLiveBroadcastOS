@@ -616,3 +616,4 @@ export { AnalyticsRuntime, AnalyticsCollector, AnalyticsAggregator, AnalyticsVal
 export * from './release-metadata.js';
 
 export * from './desktop-platform/index.js';
+export * as CollaborationFoundation from './collaboration-foundation/index.js';
