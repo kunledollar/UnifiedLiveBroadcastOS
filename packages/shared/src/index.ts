@@ -181,6 +181,67 @@ export interface BroadcastSession {
   status: BroadcastSessionStatus;
   createdAt: string;
 }
+export type GuestLinkMode = 'one_time' | 'reusable';
+export type GuestMediaMode = 'camera' | 'screen' | 'split_view';
+export interface GuestConnectionMetadata {
+  quality: 'excellent' | 'good' | 'fair' | 'poor';
+  browser: string;
+  latencyMs: number;
+  rttMs: number;
+  jitterMs: number;
+  packetLossPercent: number;
+  bitrateKbps: number;
+  frameDrops: number;
+  reconnectAttempts: number;
+  browserCompatible: boolean;
+  deviceInfo: string;
+  waitingSeconds: number;
+}
+export interface GuestMediaMetadata {
+  camera: boolean;
+  microphone: boolean;
+  screenShare: boolean;
+  browserTabShare: boolean;
+  virtualBackground: boolean;
+  resolution: string;
+  fps: number;
+  bitrateKbps: number;
+  latencyMs: number;
+  packetLossPercent: number;
+  activeMode: GuestMediaMode;
+}
+export interface GuestAudioSettings {
+  gainDb: number;
+  muted: boolean;
+  solo: boolean;
+  balance: number;
+  noiseSuppression: boolean;
+  echoCancellation: boolean;
+  autoGain: boolean;
+}
+export interface GuestPermissions {
+  canShareScreen: boolean;
+  canUseChat: boolean;
+  canUseCamera: boolean;
+  canUseMicrophone: boolean;
+  requireOperatorAdmission: boolean;
+}
+export interface GuestOperatorSettings {
+  notes?: string | null;
+  pinned: boolean;
+  spotlighted: boolean;
+  hiddenVideo: boolean;
+  inPreview: boolean;
+  inProgram: boolean;
+  layoutSlot?: string | null;
+}
+export interface GuestRecordingMetadata {
+  recordProgram: boolean;
+  recordIso: boolean;
+  recordAudioOnly: boolean;
+  metadata: Record<string, unknown>;
+  timelineMarkers: string[];
+}
 export interface Guest {
   id: string;
   workspaceId?: string;
@@ -193,6 +254,12 @@ export interface Guest {
   isSpotlighted?: boolean;
   lastSeenAt?: string | null;
   privateChatNote?: string | null;
+  connectionMetadata?: GuestConnectionMetadata;
+  mediaMetadata?: GuestMediaMetadata;
+  audioSettings?: GuestAudioSettings;
+  permissions?: GuestPermissions;
+  operatorSettings?: GuestOperatorSettings;
+  recordingMetadata?: GuestRecordingMetadata;
 }
 export interface MediaRoute {
   id: string;
@@ -231,6 +298,13 @@ export interface GuestInvite {
   sessionId: string;
   token: string;
   displayName?: string | null;
+  role?: GuestRole | null;
+  linkMode?: GuestLinkMode | null;
+  oneTime?: boolean | null;
+  reusable?: boolean | null;
+  passwordProtected?: boolean | null;
+  qrCodeDataUrl?: string | null;
+  emailTo?: string | null;
   revokedAt?: string | null;
   acceptedAt?: string | null;
   expiresAt?: string | null;
@@ -348,7 +422,14 @@ export const updateSceneSourceTransformSchema = z.object({
   transform: sourceTransformSchema,
 });
 
-export const guestInviteSchema = z.object({ displayName: z.string().trim().max(80).optional() });
+export const guestInviteSchema = z.object({
+  displayName: z.string().trim().max(80).optional(),
+  role: z.nativeEnum(GuestRole).default(GuestRole.Guest),
+  expiresAt: z.string().trim().optional(),
+  linkMode: z.enum(['one_time', 'reusable']).default('one_time'),
+  password: z.string().trim().max(80).optional(),
+  emailTo: z.string().trim().email().optional().or(z.literal('')),
+});
 export const renameGuestSchema = z.object({
   guestId: z.string().min(1),
   displayName: z.string().trim().min(1).max(80),

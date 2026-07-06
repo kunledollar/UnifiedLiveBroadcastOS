@@ -6,17 +6,22 @@ import {
   BroadcastButton,
   StatusBadge,
 } from '@ubos/ui';
-import { GuestStatus, createGuestRuntimeState, createGuestRuntimeSession, type Guest, type GuestInvite, type MediaRoute } from '@ubos/shared';
+import { GuestRole, GuestStatus, createGuestRuntimeState, createGuestRuntimeSession, type Guest, type GuestInvite, type MediaRoute } from '@ubos/shared';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useBroadcastRealtime } from '../../../lib/realtime';
 import type { BroadcastRealtimeEvent } from '@ubos/shared';
 import { emitWebRtcSignal, webRtcIceServers } from '../../../lib/webrtc-signaling';
 import {
   admitGuest,
+  assignGuestRole,
+  hideGuestVideo,
   inviteGuest,
   muteGuest,
+  rejectGuest,
   removeGuest,
   revokeInvite,
+  showGuestVideo,
+  spotlightGuest,
 } from '../guest-actions';
 import {
   setOnProgramRoute,
@@ -331,15 +336,29 @@ export function GuestsPanel({
         className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight p-ubos-2"
       >
         <input type="hidden" name="broadcastId" value={broadcastId} />
-        <div className="flex items-center gap-ubos-2">
+        <div className="grid gap-ubos-2 md:grid-cols-[1fr_auto_auto_auto]">
           <input
             name="displayName"
             className="min-w-0 flex-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-ubos-2 py-1.5 text-ubos-caption text-ubos-fg-primary placeholder:text-ubos-fg-muted"
             placeholder="Invite link name"
           />
+          <select name="role" className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-ubos-2 py-1.5 text-ubos-caption text-ubos-fg-primary">
+            <option value="guest">Guest</option>
+            <option value="producer">Producer</option>
+            <option value="host">Host</option>
+          </select>
+          <select name="linkMode" className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-ubos-2 py-1.5 text-ubos-caption text-ubos-fg-primary">
+            <option value="one_time">One-time</option>
+            <option value="reusable">Reusable</option>
+          </select>
           <BroadcastButton type="submit" size="sm" variant="primary">
             Invite
           </BroadcastButton>
+        </div>
+        <div className="mt-ubos-2 grid gap-ubos-2 md:grid-cols-3">
+          <input name="expiresAt" type="datetime-local" className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-ubos-2 py-1.5 text-ubos-caption text-ubos-fg-primary" aria-label="Invitation expiration" />
+          <input name="password" type="password" className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-ubos-2 py-1.5 text-ubos-caption text-ubos-fg-primary" placeholder="Optional password" />
+          <input name="emailTo" type="email" className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-ubos-2 py-1.5 text-ubos-caption text-ubos-fg-primary" placeholder="Email invitation" />
         </div>
         {invites.length ? (
           <div className="mt-ubos-2 space-y-1">
@@ -351,6 +370,7 @@ export function GuestsPanel({
                 <span className="ubos-truncate font-mono text-ubos-fg-secondary">
                   /guest?token={invite.token}
                 </span>
+                <span className="text-ubos-fg-muted">QR {invite.qrCodeDataUrl ? 'ready' : 'pending'} · copy link · email</span>
                 <BroadcastButton
                   size="sm"
                   variant="danger"
@@ -395,18 +415,18 @@ export function GuestsPanel({
                 </div>
               }
               action={
+                <div>
+              <div className="mt-ubos-2 grid gap-ubos-2 text-[0.65rem] text-ubos-fg-secondary md:grid-cols-3">
+                <div className="rounded-ubos-sm bg-ubos-carbon p-ubos-2">Lobby: {guest.connectionMetadata?.browser} · {guest.connectionMetadata?.deviceInfo} · wait {guest.connectionMetadata?.waitingSeconds}s · note {guest.privateChatNote ?? '—'}</div>
+                <div className="rounded-ubos-sm bg-ubos-carbon p-ubos-2">Network: RTT {guest.connectionMetadata?.rttMs}ms · jitter {guest.connectionMetadata?.jitterMs}ms · loss {guest.connectionMetadata?.packetLossPercent}% · reconnects {guest.connectionMetadata?.reconnectAttempts}</div>
+                <div className="rounded-ubos-sm bg-ubos-carbon p-ubos-2">Media: {guest.mediaMetadata?.resolution}@{guest.mediaMetadata?.fps} · {guest.mediaMetadata?.bitrateKbps}kbps · drops {guest.connectionMetadata?.frameDrops} · VB {guest.mediaMetadata?.virtualBackground ? 'on' : 'off'}</div>
+                <div className="rounded-ubos-sm bg-ubos-carbon p-ubos-2">Audio: gain {guest.audioSettings?.gainDb}dB · solo {guest.audioSettings?.solo ? 'on' : 'off'} · balance {guest.audioSettings?.balance} · NS/EC/AGC enabled</div>
+                <div className="rounded-ubos-sm bg-ubos-carbon p-ubos-2">Chat: guest/operator/private · announcements · emoji reactions · raise hand</div>
+                <div className="rounded-ubos-sm bg-ubos-carbon p-ubos-2">Recording/streaming: program · guest ISO · audio-only · replay · graphics · metadata markers</div>
+              </div>
                 <CompactOpsActions>
-                  <BroadcastButton
-                    size="sm"
-                    variant="ghost"
-                    onClick={() =>
-                      startTransition(async () => {
-                        await admitGuest(guest.id);
-                      })
-                    }
-                  >
-                    Admit
-                  </BroadcastButton>
+                  <BroadcastButton size="sm" variant="ghost" onClick={() => startTransition(async () => { await admitGuest(guest.id); })}>Admit</BroadcastButton>
+                  <BroadcastButton size="sm" variant="danger" onClick={() => startTransition(async () => { await rejectGuest(guest.id); })}>Reject</BroadcastButton>
                   {route ? (
                     <BroadcastButton
                       size="sm"
@@ -457,18 +477,13 @@ export function GuestsPanel({
                   >
                     {guest.isMuted ? 'Unmute' : 'Mute'}
                   </BroadcastButton>
-                  <BroadcastButton
-                    size="sm"
-                    variant="danger"
-                    onClick={() =>
-                      startTransition(async () => {
-                        await removeGuest(guest.id);
-                      })
-                    }
-                  >
-                    Remove
-                  </BroadcastButton>
+                  <BroadcastButton size="sm" variant="ghost" onClick={() => startTransition(async () => { await hideGuestVideo(guest.id); })}>Hide video</BroadcastButton>
+                  <BroadcastButton size="sm" variant="ghost" onClick={() => startTransition(async () => { await showGuestVideo(guest.id); })}>Show video</BroadcastButton>
+                  <BroadcastButton size="sm" variant="preview" onClick={() => startTransition(async () => { await spotlightGuest(guest.id); })}>Spotlight</BroadcastButton>
+                  <BroadcastButton size="sm" variant="ghost" onClick={() => startTransition(async () => { await assignGuestRole(guest.id, GuestRole.Producer); })}>Assign role</BroadcastButton>
+                  <BroadcastButton size="sm" variant="danger" onClick={() => startTransition(async () => { await removeGuest(guest.id); })}>Kick</BroadcastButton>
                 </CompactOpsActions>
+                </div>
               }
             />
           );
