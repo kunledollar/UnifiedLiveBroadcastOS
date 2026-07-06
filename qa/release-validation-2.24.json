@@ -1,0 +1,17 @@
+{
+  "phase": "2.24",
+  "name": "Release Engineering & Commercial Readiness",
+  "checklists": ["build", "packaging", "smoke", "regression", "plugin-compatibility", "hardware-compatibility", "documentation", "release-approval"],
+  "smokeTests": [
+    { "id": "launch-desktop-shell", "expected": "desktop metadata loads without native installer dependency" },
+    { "id": "load-demo-plugin", "expected": "plugin compatibility metadata validates" },
+    { "id": "open-about-dialog", "expected": "version, channel, edition, and build metadata are present" }
+  ],
+  "regressionSuites": ["shared-runtime-validations", "release-engineering-validation"],
+  "hardwareCompatibility": [
+    { "vendor": "Blackmagic Design", "model": "DeckLink metadata profile", "category": "capture-card", "status": "pending" },
+    { "vendor": "Elgato", "model": "Stream Deck metadata profile", "category": "control-surface", "status": "pending" }
+  ],
+  "noExternalInfrastructure": true,
+  "metadataOnly": true
+}
