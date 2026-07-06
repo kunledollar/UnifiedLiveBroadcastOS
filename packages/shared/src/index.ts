@@ -614,3 +614,5 @@ export * from './runtime-ai-director/index.js';
 export { AnalyticsRuntime, AnalyticsCollector, AnalyticsAggregator, AnalyticsValidator, AnalyticsScheduler, createAnalyticsSession, createAnalyticsWorkspace, createAnalyticsPipeline, type AnalyticsRuntimeSource, type AnalyticsKpi, type AnalyticsDashboard, type AnalyticsReport, type AnalyticsMetric, type AnalyticsEvent, type AnalyticsQuery, type AnalyticsSnapshot, type AnalyticsTimeline, type AnalyticsTrend, type AnalyticsFilter, type AnalyticsDimension, type AnalyticsMeasure, type AnalyticsForecast, type AnalyticsAlert, type AnalyticsExport, type AnalyticsDataset, type AnalyticsVisualization, type AnalyticsWorkspace, type AnalyticsHistory, type AnalyticsCache, type AnalyticsRegistry, type AnalyticsPipeline, type AnalyticsSession, type AnalyticsInsight as AnalyticsRuntimeInsight } from './runtime-analytics/index.js';
 
 export * from './release-metadata.js';
+
+export * from './desktop-platform/index.js';
