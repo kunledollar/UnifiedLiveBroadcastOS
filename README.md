@@ -18,8 +18,28 @@ pnpm install
 cp .env.example .env
 docker compose up -d postgres
 pnpm db:push
-pnpm dev
+pnpm ubos:start
 ```
+
+### Safe web startup
+
+`@ubos/web` uses Prisma-backed Control Room data during normal development, so
+`DATABASE_URL` must exist before opening `/control-room`. Keep secrets in the
+repo-root `.env` (copied from `.env.example`) and never commit real credentials.
+
+Use one of the dotenv-backed startup scripts so the root `.env` is loaded before
+Next.js starts:
+
+```bash
+pnpm ubos:start
+pnpm ubos:browser
+```
+
+If you start the web app directly with `pnpm --filter @ubos/web dev`, the shared
+`@ubos/db` Prisma client also checks for a repo-root `.env` from the current
+working directory before constructing `PrismaClient`. It still fails fast when
+`DATABASE_URL` is absent; database access is only bypassed by explicit demo/mock
+mode features, not by the default Control Room path.
 
 ## Checks
 
