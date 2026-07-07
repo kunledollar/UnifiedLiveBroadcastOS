@@ -144,23 +144,10 @@ import {
 } from './workspace-canvas';
 import { ProfessionalSwitcher } from './switcher';
 import { BroadcastStatusBar } from './shell/BroadcastStatusBar';
-import { LeftNavigationRail } from './shell/LeftNavigationRail';
-import { CenterProgramWorkspace } from './shell/CenterProgramWorkspace';
-import { RightOperationsConsole } from './shell/RightOperationsConsole';
-import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
-import { BottomDock } from './shell/BottomDock';
 import {
-  DOCK_TOTAL_DEFAULT_PX,
-  DOCK_TAB_HEIGHT_PX,
-  clampDockContentHeight,
-  dockContentFromTotal,
-  preferredDockContentHeight,
-  shouldShowBottomDock,
-  shouldShowRightConsole,
   statusBarHeightForLayout,
   switcherHeightForLayout,
 } from './shell/control-room-layout';
-import { LeftNavPanel } from './browsers';
 import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import { LogsPanel } from './operations/LogsPanel';
@@ -176,16 +163,12 @@ import {
   defaultSafeAreaToggles,
   defaultWorkspaceId,
   normalizeWorkspaceId,
-  SafeAreaControls,
-  WorkspaceCenterLayout,
-  WorkspaceLayout,
   workspaceProfiles,
   type LayoutFocusMode,
   type ProfessionalWorkspaceId,
   type SafeAreaToggles,
 } from './workspaces';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from './menu';
-import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
 import { PreviewMonitorCompact, ProgramMonitor } from './workspace/OutputViewRenderer';
 import {
   deriveMonitorTelemetry,
@@ -1785,7 +1768,7 @@ const factoryWorkspace: ControlRoomWorkspaceState = {
   selectedWorkspace: defaultWorkspaceId,
   viewMode: workspaceProfiles.director.defaultViewMode,
   splitRatio: 0.72,
-  sizes: { left: 288, center: 640, right: 352, dock: DOCK_TOTAL_DEFAULT_PX, operations: 288 },
+  sizes: { left: 288, center: 640, right: 352, dock: 204, operations: 288 },
   safeAreaToggles: defaultSafeAreaToggles,
   compactChrome: false,
   layoutFocus: 'full',
@@ -2207,30 +2190,6 @@ export function SceneWorkspace({
     window.localStorage.setItem(controlRoomViewStorageKey, profile.viewMode);
   };
 
-  const selectLayoutFocus = (layoutFocus: LayoutFocusMode) => {
-    setWorkspace((current) => {
-      const contentHeight = preferredDockContentHeight(
-        layoutFocus,
-        dockContentFromTotal(current.sizes.dock),
-      );
-      return {
-        ...current,
-        layoutFocus,
-        sizes: {
-          ...current.sizes,
-          dock: DOCK_TAB_HEIGHT_PX + contentHeight,
-        },
-      };
-    });
-    if (layoutFocus === 'audio') {
-      setActiveBottomDock('audio');
-    }
-  };
-
-  const toggleCompactChrome = () => {
-    setWorkspace((current) => ({ ...current, compactChrome: !current.compactChrome }));
-  };
-
   const setCompactChrome = (compactChrome: boolean) => {
     setWorkspace((current) => ({ ...current, compactChrome }));
   };
@@ -2241,16 +2200,6 @@ export function SceneWorkspace({
     if (compactChrome !== undefined) {
       setCompactChrome(compactChrome);
     }
-  };
-
-  const handleDockContentHeightChange = (contentHeightPx: number) => {
-    setWorkspace((current) => ({
-      ...current,
-      sizes: {
-        ...current.sizes,
-        dock: DOCK_TAB_HEIGHT_PX + clampDockContentHeight(contentHeightPx),
-      },
-    }));
   };
 
   const saveWorkspace = () =>
@@ -4452,215 +4401,13 @@ export function SceneWorkspace({
     </>
   );
 
-  const dockContentHeightPx = preferredDockContentHeight(
-    workspace.layoutFocus,
-    dockContentFromTotal(workspace.sizes.dock),
-  );
-  const showBottomDock = shouldShowBottomDock(workspace.layoutFocus);
-  const showRightConsole = shouldShowRightConsole(workspace.layoutFocus);
   const layoutStyle = {
     '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
     '--ubos-switcher-height': switcherHeightForLayout(
       workspace.layoutFocus,
       workspace.compactChrome,
     ),
-    '--ubos-dock-content-height': `${dockContentHeightPx}px`,
-    '--ubos-dock-total-height': `${DOCK_TAB_HEIGHT_PX + dockContentHeightPx}px`,
   } as CSSProperties;
-
-  const constrainedLeftNav: NavItemId = activeNav === 'sources' ? 'sources' : 'scenes';
-  const professionalLeftContent = (
-    <LeftNavPanel
-      activeNav={constrainedLeftNav}
-      scenes={sorted}
-      sceneTypes={sceneTypes}
-      guests={guests}
-      programSceneId={productionState.programSceneId}
-      previewSceneId={productionState.previewSceneId}
-      previewScene={previewScene}
-      previewSceneName={previewScene.name}
-      sourceTypes={sourceTypes}
-      tallyState={activeSceneTallyState}
-      layouts={layouts}
-      assets={assets}
-      mediaRouteCount={mediaRoutes.length}
-      isPending={isPending}
-      directCameraLive={directCameraLive}
-      onSceneAdd={(data) => {
-        const tempScene: Scene = {
-          ...activeScene,
-          id: `temp-${Date.now()}`,
-          name: data.name,
-          type: data.type,
-          order: sorted.length,
-          isActive: false,
-          sources: [],
-          overlays: [],
-          audioConfig: {},
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        refresh([...sorted, tempScene]);
-        const formData = new FormData();
-        formData.set('broadcastId', activeScene.broadcastId);
-        formData.set('name', data.name);
-        formData.set('type', data.type);
-        startTransition(async () => {
-          await addScene(formData);
-        });
-      }}
-      onSceneRename={(sceneId, name) => {
-        const formData = new FormData();
-        formData.set('sceneId', sceneId);
-        formData.set('name', name);
-        refresh(sorted.map((scene) => (scene.id === sceneId ? { ...scene, name } : scene)));
-        startTransition(async () => {
-          await renameScene(formData);
-        });
-      }}
-      onSceneSwitch={stageScene}
-      onSceneDuplicate={(sceneId) => {
-        const original = sorted.find((scene) => scene.id === sceneId);
-        if (original)
-          refresh([
-            ...sorted,
-            {
-              ...original,
-              id: `temp-${Date.now()}`,
-              name: `${original.name} Copy`,
-              isActive: false,
-              order: sorted.length,
-            },
-          ]);
-        startTransition(async () => {
-          await duplicateScene(sceneId);
-        });
-      }}
-      onSceneDelete={(sceneId) => {
-        const next = sorted
-          .filter((scene) => scene.id !== sceneId)
-          .map((scene, index) => ({ ...scene, order: index }));
-        refresh(
-          next.some((scene) => scene.isActive)
-            ? next
-            : next.map((scene, index) => ({ ...scene, isActive: index === 0 })),
-        );
-        startTransition(async () => {
-          await deleteScene(sceneId);
-        });
-      }}
-      onSourceAdd={(input) => {
-        const tempSource: SceneSource = {
-          id: `temp-${Date.now()}`,
-          sceneId: input.sceneId,
-          broadcastId: activeScene.broadcastId,
-          name: input.name,
-          label: input.name,
-          type: input.type,
-          order: activeScene.sources.length,
-          visible: true,
-          isVisible: true,
-          isLocked: false,
-          settings:
-            input.settings ??
-            (input.type === 'camera' || input.type === 'screen'
-              ? { runtimeStatus: 'connecting' }
-              : input.type === 'browser'
-                ? {
-                    runtimeStatus: input.url ? 'loading' : 'failed',
-                    url: input.url ?? null,
-                    muted: true,
-                    lastLoadedAt: null,
-                    message: input.url
-                      ? 'Browser source is loading.'
-                      : 'Enter a valid http:// or https:// URL for this Browser source.',
-                    iframeBlockedWarning:
-                      'Some sites block iframe embedding. If the preview stays blank, try another page or use screen capture.',
-                  }
-                : {}),
-          transform: {},
-        };
-        updateActiveSources((sources) => [...sources, tempSource]);
-        const formData = new FormData();
-        formData.set('sceneId', input.sceneId);
-        formData.set('name', input.name);
-        formData.set('type', input.type);
-        if (input.url) formData.set('url', input.url);
-        if (input.type === 'camera') void startCameraCapture(tempSource.id);
-        else if (input.type === 'screen') void startScreenCapture(tempSource.id);
-        else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
-        startTransition(async () => {
-          await addSource(formData);
-        });
-      }}
-      onSourceRename={(sourceId, name) => {
-        updateActiveSources((sources) =>
-          sources.map((source) =>
-            source.id === sourceId ? { ...source, name, label: name } : source,
-          ),
-        );
-        const formData = new FormData();
-        formData.set('sourceId', sourceId);
-        formData.set('name', name);
-        startTransition(async () => {
-          await renameSource(formData);
-        });
-      }}
-      onSourceDuplicate={(sourceId) => {
-        updateActiveSources((sources) => {
-          const source = sources.find((item) => item.id === sourceId);
-          return source
-            ? [
-                ...sources,
-                {
-                  ...source,
-                  id: `temp-${Date.now()}`,
-                  name: `${source.name} Copy`,
-                  label: `${source.name} Copy`,
-                  order: sources.length,
-                },
-              ]
-            : sources;
-        });
-        startTransition(async () => {
-          await duplicateSource(sourceId);
-        });
-      }}
-      onSourceDelete={(sourceId) => {
-        stopLiveSourceStream(sourceId);
-        updateActiveSources((sources) =>
-          sources
-            .filter((source) => source.id !== sourceId)
-            .map((source, order) => ({ ...source, order })),
-        );
-        startTransition(async () => {
-          await deleteSource(sourceId);
-        });
-      }}
-      onSourceToggleVisibility={(sourceId) => {
-        updateActiveSources((sources) =>
-          sources.map((source) =>
-            source.id === sourceId
-              ? { ...source, isVisible: !source.isVisible, visible: !source.isVisible }
-              : source,
-          ),
-        );
-        startTransition(async () => {
-          await toggleSourceVisibility(sourceId);
-        });
-      }}
-      onSourceToggleLock={(sourceId) => {
-        updateActiveSources((sources) =>
-          sources.map((source) =>
-            source.id === sourceId ? { ...source, isLocked: !source.isLocked } : source,
-          ),
-        );
-        startTransition(async () => {
-          await toggleSourceLock(sourceId);
-        });
-      }}
-    />
-  );
 
   const rightTabContent = {
     guests: operationsPanels.guests,

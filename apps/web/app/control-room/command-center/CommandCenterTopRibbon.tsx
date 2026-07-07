@@ -1,18 +1,15 @@
 'use client';
 
 /**
- * UBOS 3.15C — Command Center top ribbon.
+ * UBOS 3.15D — Command Center top ribbon.
  *
- * Visible workspace preset selector plus dock collapse / layout lock quick
- * controls. Operates on Workspace Manager layout metadata only.
+ * Shows a compact active-workspace chip (single source of truth for the
+ * current preset) plus zone collapse / layout lock quick controls. The full
+ * workspace preset list is in the Workspace menu (CommandCenterTopMenu) —
+ * the duplicate preset-pill bar has been removed per 3.15D requirements.
  *
- * 3.15C changes (polish only):
- * - Preset pills use a more readable type scale + active ring
- * - Zone toggle buttons display icons with tooltip titles
- * - Lock/Save/Reset buttons receive consistent typographic treatment
- * - Separator between preset group and controls is more pronounced
- * - Focus-visible rings on all interactive elements
- * - Toolbar role + aria-label for screen readers
+ * Workspace Manager owns the active preset; this ribbon only reflects and
+ * triggers zone-level geometry changes.
  */
 import { cn } from '@ubos/ui';
 import type { WorkspacePresetId } from '@ubos/shared';
@@ -51,55 +48,49 @@ export function CommandCenterTopRibbon({
   onResetLayout: () => void;
   className?: string;
 }) {
+  const activePreset = workspacePresetList.find((p) => p.id === activePresetId);
+
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-ubos-border-subtle',
+        'flex shrink-0 items-center gap-1.5 overflow-x-hidden border-b border-ubos-border-subtle',
         'bg-ubos-carbon px-2 py-1',
         className,
       )}
       role="toolbar"
-      aria-label="Workspace presets and dock controls"
+      aria-label="Active workspace and dock controls"
     >
-      {/* ── Workspace label ───────────────────────────────────────── */}
-      <span
-        className="hidden shrink-0 text-[9px] font-black uppercase tracking-[0.2em] text-ubos-fg-muted/60 md:inline"
-        aria-hidden="true"
-      >
-        Workspace
-      </span>
-
-      {/* ── Preset pills ─────────────────────────────────────────── */}
+      {/* ── Active workspace chip ────────────────────────────────── */}
       <div
-        className="flex min-w-0 items-center gap-0.5 overflow-x-auto"
-        role="group"
-        aria-label="Workspace presets"
+        className="flex shrink-0 items-center gap-1"
+        role="status"
+        aria-label="Current workspace"
       >
-        {workspacePresetList.map((preset) => {
-          const active = activePresetId === preset.id;
-          return (
-            <button
-              key={preset.id}
-              type="button"
-              title={layoutLocked ? 'Unlock layout to switch workspace' : preset.description}
-              disabled={layoutLocked}
-              onClick={() => onSelectPreset(preset.id)}
-              aria-pressed={active}
-              className={cn(
-                'shrink-0 rounded-ubos-sm px-2 py-0.5',
-                'text-[10px] font-bold uppercase tracking-[0.08em]',
-                'transition-colors duration-[var(--ubos-duration-fast)]',
-                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
-                layoutLocked && 'cursor-not-allowed opacity-40',
-                active
-                  ? 'bg-ubos-selection-muted text-ubos-selection-text ring-1 ring-ubos-selection/40'
-                  : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
-              )}
-            >
-              {preset.name}
-            </button>
-          );
-        })}
+        <span
+          className="hidden shrink-0 text-[9px] font-black uppercase tracking-[0.2em] text-ubos-fg-muted/60 md:inline"
+          aria-hidden="true"
+        >
+          Workspace
+        </span>
+        <span
+          title={
+            layoutLocked
+              ? 'Layout locked — use Workspace menu to switch'
+              : (activePreset?.description ?? activePresetId)
+          }
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1 rounded-ubos-sm px-2 py-0.5',
+            'text-[10px] font-bold uppercase tracking-[0.08em]',
+            'bg-ubos-selection-muted text-ubos-selection-text ring-1 ring-ubos-selection/40',
+          )}
+        >
+          {activePreset?.name ?? activePresetId}
+          {layoutLocked ? (
+            <span className="text-[8px] opacity-70" aria-hidden="true">
+              🔒
+            </span>
+          ) : null}
+        </span>
       </div>
 
       {/* ── Right controls ───────────────────────────────────────── */}
@@ -159,7 +150,7 @@ export function CommandCenterTopRibbon({
               : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
           )}
         >
-          {layoutLocked ? '🔒 Locked' : 'Lock'}
+          {layoutLocked ? 'Locked' : 'Lock'}
         </button>
 
         {/* Save layout */}
