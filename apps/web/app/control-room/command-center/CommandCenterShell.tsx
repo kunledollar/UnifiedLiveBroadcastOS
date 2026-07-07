@@ -265,11 +265,18 @@ export function CommandCenterShell({
   const handleActivateSourceTab = useCallback(
     (tab: SourceDockTabId) => {
       const gatingPanel = panelGatingSourceTab(tab);
-      if (gatingPanel) setPanelVisible(gatingPanel, true);
-      if (leftCollapsed) toggleZone('left-dock');
+      if (gatingPanel) {
+        // One Owner Rule: route through activatePanel so the panel is
+        // un-collapsed and its zone is expanded — matching the right-dock
+        // path that uses activatePanel for all operations panels.
+        activatePanel(gatingPanel);
+      } else if (leftCollapsed) {
+        // No gating panel for this tab: still expand the zone if collapsed.
+        toggleZone('left-dock');
+      }
       onSourceDockTabChange(tab);
     },
-    [setPanelVisible, leftCollapsed, toggleZone, onSourceDockTabChange],
+    [activatePanel, leftCollapsed, toggleZone, onSourceDockTabChange],
   );
 
   const handleHideSourcePanel = useCallback(
@@ -412,6 +419,10 @@ export function CommandCenterShell({
     onResetLayout: resetLayout,
     onOpenCommandPalette: openCommandPalette,
     onCloseOverlays: handleCloseOverlays,
+    onSaveLayout: saveLayout,
+    onCut,
+    onTake,
+    onAuto,
   });
 
   return (

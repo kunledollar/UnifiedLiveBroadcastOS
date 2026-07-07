@@ -4692,6 +4692,12 @@ export function SceneWorkspace({
     />
   );
 
+  // Derive latency label from the first active output destination that
+  // has a measured latency value. Used by the Program monitor overlay.
+  const primaryOutputLatencyMs = distributionState.outputHealth.find(
+    (h) => h.latencyMs != null,
+  )?.latencyMs;
+
   return (
     <CommandCenterShell
       layoutStyle={layoutStyle}
@@ -4772,6 +4778,8 @@ export function SceneWorkspace({
               : undefined,
         droppedLabel:
           safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
+        latencyLabel:
+          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : undefined,
       }}
       previewOverlay={{
         sceneName: previewScene.name,

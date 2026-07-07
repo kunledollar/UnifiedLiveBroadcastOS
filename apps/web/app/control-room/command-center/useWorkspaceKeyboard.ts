@@ -5,6 +5,7 @@
  *
  * Shortcuts:
  *   Ctrl+K           Open Command Palette
+ *   Ctrl+S           Save Layout
  *   Ctrl+1           Director workspace
  *   Ctrl+2           Audio Engineer workspace
  *   Ctrl+3           Graphics Operator workspace
@@ -12,12 +13,17 @@
  *   Ctrl+5           Streaming Operator workspace
  *   Ctrl+Shift+L     Reset Layout
  *   Esc              Close overlays / palette
+ *   F1               Cut (production transition)
+ *   F2               Take (production transition)
+ *   F3               Auto (production transition)
  *
  * Rules:
  * - Browser-critical shortcuts are not overridden (Ctrl+W, Ctrl+T, Ctrl+R,
  *   Ctrl+F, Ctrl+P are explicitly skipped).
  * - Input, textarea, select elements keep normal keyboard behaviour when
- *   focused unless the shortcut is a non-text key (Esc, F1-F5, Ctrl+…).
+ *   focused unless the shortcut is a non-text key (Esc, F1–F3, Ctrl+…).
+ * - F1/F2/F3 fire even inside form fields (same policy as Esc) so operators
+ *   can trigger transitions without moving focus away from a scene name field.
  * - All actions delegate to Workspace Manager only.
  */
 import { useEffect } from 'react';
@@ -29,6 +35,12 @@ type WorkspaceKeyboardOptions = {
   onResetLayout: () => void;
   onOpenCommandPalette: () => void;
   onCloseOverlays: () => void;
+  /** Save the current layout to browser storage (Ctrl+S). */
+  onSaveLayout?: (() => void) | undefined;
+  /** Production transition shortcuts (F1 / F2 / F3). */
+  onCut?: (() => void) | undefined;
+  onTake?: (() => void) | undefined;
+  onAuto?: (() => void) | undefined;
 };
 
 /** Preset keyboard map: Ctrl+digit → preset id */
@@ -53,6 +65,10 @@ export function useWorkspaceKeyboard({
   onResetLayout,
   onOpenCommandPalette,
   onCloseOverlays,
+  onSaveLayout,
+  onCut,
+  onTake,
+  onAuto,
 }: WorkspaceKeyboardOptions): void {
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -67,6 +83,15 @@ export function useWorkspaceKeyboard({
         return;
       }
 
+      // F1/F2/F3 — Cut / Take / Auto production transitions.
+      // Fire even in editable targets so operators can trigger transitions
+      // without leaving a form field (same policy as Esc).
+      if (!mod && !shiftKey && !altKey) {
+        if (key === 'F1') { event.preventDefault(); onCut?.(); return; }
+        if (key === 'F2') { event.preventDefault(); onTake?.(); return; }
+        if (key === 'F3') { event.preventDefault(); onAuto?.(); return; }
+      }
+
       // For all Ctrl/Cmd shortcuts, skip if an editable element is focused
       // so operators can still type in form fields.
       if (mod && isEditableTarget(document.activeElement)) return;
@@ -75,6 +100,13 @@ export function useWorkspaceKeyboard({
       if (mod && !shiftKey && !altKey && key === 'k') {
         event.preventDefault();
         onOpenCommandPalette();
+        return;
+      }
+
+      // Ctrl+S — Save Layout
+      if (mod && !shiftKey && !altKey && key === 's') {
+        event.preventDefault();
+        onSaveLayout?.();
         return;
       }
 
@@ -98,5 +130,5 @@ export function useWorkspaceKeyboard({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [layoutLocked, onSelectPreset, onResetLayout, onOpenCommandPalette, onCloseOverlays]);
+  }, [layoutLocked, onSelectPreset, onResetLayout, onOpenCommandPalette, onCloseOverlays, onSaveLayout, onCut, onTake, onAuto]);
 }
