@@ -123,11 +123,11 @@ import {
   setRouteMuted,
 } from './media-route-actions';
 import {
-  BroadcastCommandCenterLayout,
   type MonitorStatusInfo,
   SourceDockPanel,
   preferredSourceDockTab,
 } from './broadcast-command-center';
+import { CommandCenterShell } from './command-center';
 import { DiagnosticsSummary } from './broadcast-command-center/FloatingDiagnosticsPanel';
 import type { OperationsDockSection } from './broadcast-command-center/RightOperationsDock';
 import type { OperationsInspectorSelection } from './operations/operations-inspector-selection';
@@ -4945,21 +4945,9 @@ export function SceneWorkspace({
     />
   );
 
-  const productionGraphPanelContent = (
-    <div className="space-y-2 p-2">
-      <ProductionGraphInspector session={productionGraphSession} />
-      <MediaExecutionInspector
-        engine={mediaExecutionEngine}
-        graph={productionGraphSession.graph}
-      />
-    </div>
-  );
-
   return (
-    <BroadcastCommandCenterLayout
+    <CommandCenterShell
       layoutStyle={layoutStyle}
-      layoutFocus={workspace.layoutFocus}
-      compactChrome={workspace.compactChrome}
       statusBar={
         <BroadcastStatusBar
           sessionName="Launch Day"
@@ -5007,17 +4995,12 @@ export function SceneWorkspace({
       programStatus={programMonitorStatus}
       previewStatus={previewMonitorStatus}
       switcherContent={switcherNode}
-      routingEdges={routingEdges}
-      audioMixerContent={<ProfessionalAudioMixer sources={mixerSources} />}
-      diagnosticsMetrics={diagnosticsMetrics}
       operationsSections={operationsSections}
       activeOperationsTab={activeOperationsTab}
       activeDockTab={activeBottomDock}
       onOperationsTabChange={setActiveOperationsTab}
       onDockTabChange={(tab) => setActiveBottomDock(normalizeDockTabId(tab))}
       onWorkspaceModeApplied={applyMenuWorkspaceMode}
-      onLayoutFocusChange={selectLayoutFocus}
-      onToggleCompactChrome={toggleCompactChrome}
       onSaveWorkspace={saveWorkspace}
       onRestoreWorkspace={restoreWorkspace}
       onResetWorkspace={resetWorkspace}
@@ -5025,8 +5008,31 @@ export function SceneWorkspace({
       onSimulateDemo={() => startTransition(async () => simulateDemoProduction())}
       onResetDemo={() => startTransition(async () => resetDemoProductionState())}
       bottomWorkspaceContent={bottomDockContent}
-      productionGraphContent={productionGraphPanelContent}
-      graphRevision={productionGraphSession.graph.metadata.revision}
+      onCut={() => switchProgram('cut')}
+      onTake={() => switchProgram(productionState.transitionType)}
+      onAuto={() => switchProgram('fade')}
+      programOverlay={{
+        sceneName: programScene.name,
+        recordingLabel:
+          recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
+            ? 'ON'
+            : undefined,
+        streamingLabel:
+          streamingState.lifecycle === 'streaming'
+            ? 'LIVE'
+            : streamingState.lifecycle === 'connecting'
+              ? 'CONNECTING'
+              : undefined,
+        droppedLabel:
+          safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
+      }}
+      previewOverlay={{
+        sceneName: previewScene.name,
+        transitionLabel: productionState.transitionType,
+        armedGraphicsCount: previewSceneComposition.layers.filter(
+          (layer) => layer.previewState === 'preview',
+        ).length,
+      }}
     />
   );
 }

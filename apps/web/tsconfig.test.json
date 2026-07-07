@@ -12,6 +12,8 @@
   "include": [
     "app/control-room/browsers/browser-workflows.test.ts",
     "app/control-room/browsers/source-browser-utils.ts",
-    "app/control-room/broadcast-command-center/command-rail-constants.ts"
+    "app/control-room/broadcast-command-center/command-rail-constants.ts",
+    "app/control-room/command-center/command-center-logic.ts",
+    "app/control-room/command-center/command-center-logic.test.ts"
   ]
 }
