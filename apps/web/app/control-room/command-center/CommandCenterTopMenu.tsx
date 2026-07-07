@@ -1,12 +1,24 @@
 'use client';
 
 /**
- * UBOS 3.15B — Command Center menu bar.
+ * UBOS 3.15C — Command Center menu bar.
  *
  * Professional application menu. Items connect to EXISTING actions where the
  * Control Room already exposes them (workspace presets, dock toggles, layout
  * persistence, transitions, demo tooling, sub-routes); everything else is a
  * clearly disabled placeholder. No production state is fabricated here.
+ *
+ * One Owner Rule (3.15C): menu items that navigate to a panel call
+ * onActivateBottomTab / onActivateSourceTab / onActivateOperationsPanel
+ * rather than rendering any panel inline. This ensures every capability
+ * has exactly one primary editable home.
+ *
+ * 3.15C visual changes:
+ * - Menu trigger buttons have better typography and focus rings
+ * - Dropdown uses improved typography hierarchy (section headers vs items)
+ * - Shortcut keys use tabular-nums mono styling
+ * - Checked items use a more readable ✓ glyph with accent color
+ * - Dividers are more subtle
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@ubos/ui';
@@ -65,7 +77,10 @@ function MenuDropdown({
         type="button"
         onClick={() => (open ? onClose() : onOpen())}
         className={cn(
-          'rounded-ubos-sm px-2 py-1 text-xs font-medium transition-colors',
+          'rounded-ubos-sm px-2 py-1',
+          'text-xs font-medium',
+          'transition-colors duration-[var(--ubos-duration-fast)]',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
           open
             ? 'bg-ubos-selection-muted text-ubos-selection-text'
             : 'text-ubos-fg-secondary hover:bg-ubos-midnight hover:text-ubos-fg-primary',
@@ -78,20 +93,38 @@ function MenuDropdown({
       {open ? (
         <div
           role="menu"
-          className="absolute left-0 top-full z-50 mt-0.5 max-h-[min(60vh,26rem)] min-w-52 overflow-y-auto rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon py-1 shadow-ubos-raised ubos-scroll"
+          className={cn(
+            'absolute left-0 top-full z-50 mt-0.5',
+            'max-h-[min(60vh,26rem)] min-w-52 overflow-y-auto',
+            'rounded-ubos-md border border-ubos-border-default',
+            'bg-ubos-carbon py-1',
+            'shadow-[var(--ubos-shadow-raised)]',
+            'ubos-scroll',
+            'animate-[ubos-slide-up_120ms_var(--ubos-easing-out)_forwards]',
+          )}
         >
           {menu.items.map((item, index) => {
             if (item.divider) {
               return (
-                <div key={`divider-${index}`} className="my-1 border-t border-ubos-border-subtle" />
+                <div
+                  key={`divider-${index}`}
+                  className="my-0.5 border-t border-ubos-border-subtle"
+                  role="separator"
+                />
               );
             }
             const content = (
               <>
                 <span className="flex items-center gap-2">
                   {item.checked !== undefined ? (
-                    <span className="w-3 text-center text-ubos-selection-text" aria-hidden="true">
-                      {item.checked ? '✓' : ''}
+                    <span
+                      className={cn(
+                        'w-3 text-center text-[10px]',
+                        item.checked ? 'text-ubos-selection-text' : 'text-transparent',
+                      )}
+                      aria-hidden="true"
+                    >
+                      ✓
                     </span>
                   ) : (
                     <span className="w-3" aria-hidden="true" />
@@ -99,7 +132,7 @@ function MenuDropdown({
                   {item.label}
                 </span>
                 {item.shortcut ? (
-                  <span className="ml-4 font-mono text-[10px] text-ubos-fg-muted">
+                  <span className="ml-4 font-mono tabular-nums text-[10px] text-ubos-fg-muted/70">
                     {item.shortcut}
                   </span>
                 ) : null}
@@ -111,7 +144,13 @@ function MenuDropdown({
                   key={`${item.label}-${index}`}
                   href={item.href}
                   role="menuitem"
-                  className="flex w-full items-center justify-between px-3 py-1.5 text-left text-ubos-caption text-ubos-fg-secondary hover:bg-ubos-midnight"
+                  className={cn(
+                    'flex w-full items-center justify-between px-3 py-1.5',
+                    'text-left text-ubos-caption text-ubos-fg-secondary',
+                    'transition-colors duration-[var(--ubos-duration-fast)]',
+                    'hover:bg-ubos-midnight hover:text-ubos-fg-primary',
+                    'focus-visible:outline-none focus-visible:bg-ubos-midnight',
+                  )}
                   onClick={onClose}
                 >
                   {content}
@@ -129,10 +168,13 @@ function MenuDropdown({
                   onClose();
                 }}
                 className={cn(
-                  'flex w-full items-center justify-between px-3 py-1.5 text-left text-ubos-caption transition-colors',
+                  'flex w-full items-center justify-between px-3 py-1.5',
+                  'text-left text-ubos-caption',
+                  'transition-colors duration-[var(--ubos-duration-fast)]',
+                  'focus-visible:outline-none focus-visible:bg-ubos-midnight',
                   item.disabled
-                    ? 'cursor-not-allowed text-ubos-fg-muted'
-                    : 'text-ubos-fg-secondary hover:bg-ubos-midnight',
+                    ? 'cursor-not-allowed text-ubos-fg-muted/60'
+                    : 'text-ubos-fg-secondary hover:bg-ubos-midnight hover:text-ubos-fg-primary',
                 )}
               >
                 {content}
@@ -402,10 +444,11 @@ export function CommandCenterTopMenu({
   return (
     <nav
       className={cn(
-        'flex shrink-0 flex-wrap items-center gap-0.5 border-b border-ubos-border-subtle bg-ubos-graphite/60 px-2 py-0.5',
+        'flex shrink-0 flex-wrap items-center gap-0.5 border-b border-ubos-border-subtle',
+        'bg-ubos-graphite/50 px-2 py-0.5',
         className,
       )}
-      aria-label="Command center menu"
+      aria-label="Command center application menu"
     >
       {menus.map((menu) => (
         <MenuDropdown

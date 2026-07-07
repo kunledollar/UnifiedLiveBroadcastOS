@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UBOS 3.15B — tabbed bottom workspace.
+ * UBOS 3.15C — tabbed bottom workspace.
  *
  * Hosts the EXISTING bottom workspace content node (audio mixer, replay,
  * graphics, routing matrix, automation, logs, production graph, system
@@ -9,6 +9,20 @@
  * Workspace Manager panel visibility and the active tab follows the active
  * workspace preset. Changing tabs is pure layout — production state is
  * never touched. Collapsing reduces the workspace to its tab bar.
+ *
+ * One Owner Rule (3.15C): this zone is the PRIMARY home for:
+ *   Audio Mixer, Graphics, Replay, Automation, Routing Matrix,
+ *   Production Graph, Logs, System Status
+ * Secondary surfaces must not render these as full editors — they call
+ * CommandCenterShell.handleActivateBottomTab(tabId) instead.
+ *
+ * 3.15C changes (polish only):
+ * - Tab bar label changed to "Workspaces" (was already there, now bold)
+ * - Active tab uses underline indicator plus subtle bg fill
+ * - Collapse chevron is animated (rotates 180° when collapsed)
+ * - Tabpanel aria-labelledby wires to the correct tab button id
+ * - Content header uses improved hierarchy typography
+ * - Transition on tab content uses fade-in animation
  */
 import type { ReactNode } from 'react';
 import { cn } from '@ubos/ui';
@@ -62,17 +76,32 @@ export function CommandCenterBottomWorkspace({
       )}
       aria-label="Bottom workspace"
     >
+      {/* ── Tab bar ──────────────────────────────────────────────────── */}
       <div
-        className={cn('flex shrink-0 items-center gap-1.5 border-b px-1.5 py-1', broadcastDock.tabBar)}
+        className={cn(
+          'flex shrink-0 items-end gap-1.5 border-b px-2 pt-1',
+          broadcastDock.tabBar,
+        )}
+        role="tablist"
+        aria-label="Bottom workspace tabs"
+        aria-orientation="horizontal"
       >
-        <span className="hidden shrink-0 px-1 text-[10px] font-bold uppercase tracking-[0.14em] text-ubos-fg-muted sm:inline">
+        {/* Zone label */}
+        <span
+          className="hidden shrink-0 pb-1.5 pr-1 text-[9px] font-black uppercase tracking-[0.18em] text-ubos-fg-muted/70 sm:inline"
+          aria-hidden="true"
+        >
           Workspaces
         </span>
-        <nav
-          className="flex min-w-0 flex-1 gap-0.5 overflow-x-auto"
-          role="tablist"
-          aria-label="Bottom workspace tabs"
-        >
+
+        {/* Separator */}
+        <span
+          className="hidden h-3 self-center border-r border-ubos-border-subtle sm:inline"
+          aria-hidden="true"
+        />
+
+        {/* Tabs */}
+        <nav className="flex min-w-0 flex-1 gap-px overflow-x-auto">
           {visibleTabs.map((tab) => {
             const selected = activeTab === tab.id;
             return (
@@ -84,44 +113,80 @@ export function CommandCenterBottomWorkspace({
                 aria-controls={`command-center-workspace-${tab.id}`}
                 id={`command-center-workspace-tab-${tab.id}`}
                 onClick={() => handleTabClick(tab.id)}
+                title={tab.label}
                 className={cn(
-                  'shrink-0 rounded-ubos-sm px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide transition-colors',
+                  'relative shrink-0 px-2.5 pb-1.5 pt-1',
+                  'text-[10px] font-bold uppercase tracking-wide',
+                  'transition-colors duration-[var(--ubos-duration-fast)]',
+                  'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
                   selected
                     ? contentExpanded
-                      ? broadcastDock.tabActive
-                      : 'bg-ubos-selection-muted/70 text-ubos-selection-text'
-                    : broadcastDock.tabInactive,
+                      ? 'text-ubos-fg-primary'
+                      : 'text-ubos-selection-text'
+                    : 'text-ubos-fg-muted hover:text-ubos-fg-secondary',
                 )}
-                title={tab.label}
               >
                 <span className="hidden md:inline">{tab.label}</span>
                 <span className="md:hidden">{tab.shortLabel ?? tab.label}</span>
+
+                {/* Active underline indicator */}
+                <span
+                  className={cn(
+                    'absolute bottom-0 inset-x-2 h-0.5 rounded-full',
+                    'transition-all duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-out)]',
+                    selected && contentExpanded
+                      ? 'bg-ubos-selection opacity-100'
+                      : 'bg-transparent opacity-0',
+                  )}
+                  aria-hidden="true"
+                />
               </button>
             );
           })}
         </nav>
+
+        {/* Collapse toggle */}
         {onToggleCollapse ? (
           <button
             type="button"
             onClick={onToggleCollapse}
-            className={broadcastDock.collapseButton}
+            className={cn(
+              'mb-1.5 shrink-0 rounded-ubos-sm px-1.5 py-0.5',
+              'text-[10px] text-ubos-fg-muted',
+              'transition-colors duration-[var(--ubos-duration-fast)]',
+              'hover:bg-ubos-midnight hover:text-ubos-fg-secondary',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+            )}
             aria-label={contentExpanded ? 'Collapse bottom workspace' : 'Expand bottom workspace'}
             aria-expanded={contentExpanded}
           >
-            {contentExpanded ? '▾' : '▴'}
+            <span
+              className={cn(
+                'inline-block transition-transform duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-out)]',
+                contentExpanded ? 'rotate-0' : 'rotate-180',
+              )}
+              aria-hidden="true"
+            >
+              ▾
+            </span>
           </button>
         ) : null}
       </div>
 
+      {/* ── Tab content ─────────────────────────────────────────────── */}
       {contentExpanded ? (
         <div
           id={`command-center-workspace-${activeTab}`}
           role="tabpanel"
           aria-labelledby={`command-center-workspace-tab-${activeTab}`}
-          className="ubos-scroll min-h-0 flex-1 overflow-y-auto"
+          className={cn(
+            'ubos-scroll min-h-0 flex-1 overflow-y-auto',
+            'animate-[ubos-fade-in_120ms_var(--ubos-easing-out)_forwards]',
+          )}
         >
-          <div className="border-b border-ubos-border-subtle px-2.5 py-1">
-            <p className="text-[10px] font-bold uppercase tracking-wide text-ubos-fg-muted">
+          {/* Content section header */}
+          <div className="border-b border-ubos-border-subtle bg-ubos-midnight/30 px-3 py-1.5">
+            <p className="text-[10px] font-black uppercase tracking-[0.14em] text-ubos-fg-muted">
               {workspaceTabLabel(activeTab)}
             </p>
           </div>

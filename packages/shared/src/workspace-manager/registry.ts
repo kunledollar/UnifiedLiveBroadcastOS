@@ -6,6 +6,12 @@
  * no runtime media objects, functions, DOM nodes, or React elements may be
  * stored here. Existing Control Room components stay untouched — this layer
  * merely records where their (future) DockablePanel wrappers should live.
+ *
+ * One Owner Rule (UBOS 3.15C): each panel id may be registered exactly once.
+ * Secondary surfaces that want to navigate to a panel must call the
+ * React-layer `useCommandCenterWorkspace().activatePanel(panelId)` rather
+ * than rendering a duplicate editor inline. The registry itself enforces
+ * uniqueness at the definition level.
  */
 import type {
   WorkspacePanelDefinition,

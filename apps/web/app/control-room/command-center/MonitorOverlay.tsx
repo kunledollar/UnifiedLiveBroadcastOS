@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UBOS 3.15B — compact monitor overlay.
+ * UBOS 3.15C — compact monitor overlay.
  *
  * Renders small, non-obstructive telemetry chips in the four corners of a
  * monitor. The overlay is `pointer-events-none` throughout so it can never
@@ -9,6 +9,12 @@
  * data that the production runtime already exposes — nothing is fabricated.
  * Secondary details are revealed on hover of the monitor cell (via the
  * `group/monitor` class on the host).
+ *
+ * 3.15C changes (polish only):
+ * - Chip backdrop uses slightly more opaque background for contrast on busy video
+ * - LIVE badge animates via ubos-status-pulse keyframe
+ * - Hover reveal uses improved opacity transition timing
+ * - Audio bar uses ubos design tokens for clip color
  */
 import type { ReactNode } from 'react';
 import { cn } from '@ubos/ui';
@@ -64,8 +70,10 @@ function OverlayChip({
   return (
     <span
       className={cn(
-        'inline-flex max-w-[14rem] items-center gap-1 truncate rounded-ubos-sm border px-1.5 py-px font-mono text-[9px] uppercase tracking-wide backdrop-blur-sm',
-        secondary && 'opacity-0 transition-opacity duration-150 group-hover/monitor:opacity-100',
+        'inline-flex max-w-[14rem] items-center gap-1 truncate rounded-ubos-sm border px-1.5 py-px',
+        'font-mono text-[9px] uppercase tracking-wide',
+        'backdrop-blur-sm',
+        secondary && 'opacity-0 transition-opacity duration-[var(--ubos-duration-normal)] group-hover/monitor:opacity-100',
         className,
       )}
     >

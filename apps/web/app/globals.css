@@ -4,9 +4,26 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── UBOS 3.15C — Global reset + accessibility ──────────────────────── */
 body {
   background: var(--ubos-bg-carbon);
   color: var(--ubos-fg-primary);
+  /* Improve text rendering for broadcast UI */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Global focus ring — replaces browser default outline */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--ubos-focus-ring);
+  border-radius: var(--ubos-radius-sm);
+}
+
+/* Remove focus ring for mouse interactions only */
+:focus:not(:focus-visible) {
+  outline: none;
 }
 
 * {

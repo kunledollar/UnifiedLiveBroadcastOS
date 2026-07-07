@@ -144,6 +144,10 @@ const ubosPreset = {
         'ubos-recording-pulse': 'ubos-recording-pulse 1.2s ease-in-out infinite',
         'ubos-fade-in': 'ubos-fade-in 180ms ease-out forwards',
         'ubos-slide-up': 'ubos-slide-up 180ms ease-out forwards',
+        // UBOS 3.15C additions
+        'ubos-panel-appear': 'ubos-panel-appear 180ms cubic-bezier(0,0,0.2,1) forwards',
+        'ubos-status-pulse': 'ubos-status-pulse 1.5s ease-in-out infinite',
+        'ubos-chip-pop': 'ubos-chip-pop 220ms cubic-bezier(0.34,1.56,0.64,1) forwards',
       },
       keyframes: {
         'ubos-broadcast-scan': {
@@ -171,6 +175,20 @@ const ubosPreset = {
         'ubos-slide-up': {
           from: { opacity: '0', transform: 'translateY(4px)' },
           to: { opacity: '1', transform: 'translateY(0)' },
+        },
+        // UBOS 3.15C
+        'ubos-panel-appear': {
+          from: { opacity: '0', transform: 'translateY(2px) scale(0.995)' },
+          to: { opacity: '1', transform: 'translateY(0) scale(1)' },
+        },
+        'ubos-status-pulse': {
+          '0%, 100%': { opacity: '1' },
+          '50%': { opacity: '0.45' },
+        },
+        'ubos-chip-pop': {
+          '0%': { transform: 'scale(0.88)', opacity: '0' },
+          '60%': { transform: 'scale(1.04)', opacity: '1' },
+          '100%': { transform: 'scale(1)', opacity: '1' },
         },
       },
     },
