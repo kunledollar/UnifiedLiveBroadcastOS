@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UBOS 3.15C — Command Center shell.
+ * UBOS 3.15D-2 — Command Center shell.
  *
  * Non-intrusive layout orchestration for the Control Room. The shell places
  * EXISTING panel and monitor nodes (passed in as ReactNode props, exactly
@@ -15,10 +15,17 @@
  * with flexbox from that metadata, so panels can never overlap the Program
  * or Preview monitors.
  *
- * One Owner Rule (3.15C): every capability has exactly one primary editable
+ * One Owner Rule (3.15C/D): every capability has exactly one primary editable
  * home. Secondary surfaces call `activatePanel(panelId)` or
  * `activateWorkspace(tabId)` to navigate to the primary home instead of
  * rendering a duplicate editor inline.
+ *
+ * Responsive rules (3.15D-2):
+ *   ≥1920px:     left dock visible, right dock visible, bottom workspace visible
+ *   1440–1919px: left dock visible, right dock may collapse per preset
+ *   1200–1439px: right dock collapsed by default, left dock compact, bottom tabbed
+ *   <1200px:     secondary docks collapsed, Program/Preview side-by-side if ≥900px
+ *   <900px:      compact mode — Program/Preview stacked, bottom workspace tab bar only
  */
 import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
@@ -338,7 +345,23 @@ export function CommandCenterShell({
     ...previewOverlay,
   };
 
+  // Stacking policy (3.15D-2):
+  //   <900px center width  → Program above Preview (stacked)
+  //   ≥900px center width  → Program left, Preview right (side-by-side)
+  // layout.monitorsStacked is set by calculateWorkspaceLayout when the
+  // MONITOR_STACK_WIDTH threshold is crossed; we also check the raw rect.
   const monitorsStacked = layout.monitorsStacked || layout.zones['center-stage'].rect.width < 900;
+
+  // Responsive bottom collapse: at <900px the bottom workspace shows tab bar
+  // only (the zone collapses to its collapsedSize = tab bar height).
+  const viewportWidth = layout.zones['center-stage'].rect.width +
+    (leftCollapsed ? 0 : (leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize)) +
+    (rightCollapsed ? 0 : (rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize)) +
+    (layout.zones['left-rail'].rect.width || workspaceZoneDefinitions['left-rail'].defaultSize);
+
+  // At <900px viewport we force the bottom workspace to collapsed (tab bar only)
+  // so it never covers Program/Preview on very small screens.
+  const forceBottomCollapsed = viewportWidth < 900;
 
   // Zone geometry from Workspace Manager. Rail uses a fixed width from the
   // zone definition. Docks use their stored/preset width (falling back to
@@ -371,8 +394,8 @@ export function CommandCenterShell({
         broadcastSurfaces.app,
       )}
       style={layoutStyle}
-      data-ubos-command-center="3.15c"
-      data-ubos-version="3.15c"
+      data-ubos-command-center="3.15d"
+      data-ubos-version="3.15d"
     >
       <header
         className={cn(
@@ -494,13 +517,15 @@ export function CommandCenterShell({
 
         <div
           className="min-h-0 shrink-0 overflow-hidden"
-          style={bottomCollapsed ? undefined : { height: bottomHeight }}
+          style={bottomCollapsed || forceBottomCollapsed ? undefined : { height: bottomHeight }}
         >
           <CommandCenterBottomWorkspace
             activeTab={activeDockTab}
             onTabChange={handleBottomTabChange}
-            collapsed={bottomCollapsed}
-            onToggleCollapse={layoutLocked ? undefined : () => toggleZone('bottom-workspace')}
+            collapsed={bottomCollapsed || forceBottomCollapsed}
+            onToggleCollapse={
+              layoutLocked || forceBottomCollapsed ? undefined : () => toggleZone('bottom-workspace')
+            }
             isPanelVisible={isPanelVisible}
             className="h-full"
           >

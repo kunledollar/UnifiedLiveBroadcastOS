@@ -4,6 +4,11 @@
  * Sizes are defined against the 1920x1080 reference viewport. All values are
  * static layout metadata; actual per-viewport geometry is computed by the
  * pure helpers in `layout.ts`.
+ *
+ * 3.15D-2 dock geometry contract:
+ *   Left Dock:         min 300 / preferred 340 / max 440
+ *   Right Dock:        min 280 / preferred 340 / max 460
+ *   Bottom Workspace:  min 180 / preferred 280 / max 420
  */
 import type { WorkspaceZoneDefinition, WorkspaceZoneId } from './types.js';
 
@@ -46,9 +51,9 @@ export const workspaceZoneDefinitions: Record<WorkspaceZoneId, WorkspaceZoneDefi
     id: 'left-dock',
     label: 'Left Dock',
     placement: 'left',
-    defaultSize: 260,
-    minSize: 220,
-    maxSize: 360,
+    defaultSize: 340,
+    minSize: 300,
+    maxSize: 440,
     collapsible: true,
     resizable: true,
     collapsedSize: 0,
@@ -69,9 +74,9 @@ export const workspaceZoneDefinitions: Record<WorkspaceZoneId, WorkspaceZoneDefi
     id: 'right-dock',
     label: 'Right Dock',
     placement: 'right',
-    defaultSize: 320,
-    minSize: 260,
-    maxSize: 420,
+    defaultSize: 340,
+    minSize: 280,
+    maxSize: 460,
     collapsible: true,
     resizable: true,
     collapsedSize: 0,
@@ -80,7 +85,7 @@ export const workspaceZoneDefinitions: Record<WorkspaceZoneId, WorkspaceZoneDefi
     id: 'bottom-workspace',
     label: 'Bottom Workspace',
     placement: 'bottom',
-    defaultSize: 260,
+    defaultSize: 280,
     minSize: 180,
     maxSize: 420,
     collapsible: true,

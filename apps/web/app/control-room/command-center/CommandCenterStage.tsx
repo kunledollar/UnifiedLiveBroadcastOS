@@ -1,30 +1,32 @@
 'use client';
 
 /**
- * UBOS 3.15C — Center Stage.
+ * UBOS 3.15D-2 — Center Stage.
  *
  * Hosts the EXISTING Program and Preview monitor nodes plus the existing
  * transition controls (CUT / TAKE / AUTO). The monitor renderers are passed
  * in unchanged and stay mounted at all times — fullscreen is implemented by
  * fixing the same cell to the viewport so live media never remounts.
  *
- * Geometry contract (5A): Program is always dominant, monitors keep priority
- * over every dock, transition controls sit below the monitors and never
- * overlap them, and safe-area overlays scale with the monitor because they
- * are percentage-based.
+ * Center Stage Layout Contract (3.15D-2):
+ *   Program:  visually dominant, never hidden, never collapsed, 16:9 where
+ *             possible, minimum 800×450, preferred 1200×675.
+ *   Preview:  secondary but large, never hidden, never collapsed, 16:9 where
+ *             possible, minimum 480×270, preferred 800×450.
  *
- * One Owner Rule (3.15C): Program and Preview have NO secondary homes.
+ *   Desktop (≥1200px center width):  Program and Preview side-by-side.
+ *   Laptop  (900–1199px):            Program dominant, Preview beside/below.
+ *   Small   (<900px):                Program above Preview, stacked.
+ *
+ * Safety rules:
+ *   - No dock, panel, tooltip, menu, or overlay may cover Program.
+ *   - Preview may only be covered by explicit fullscreen/dialog behavior.
+ *   - Transition controls remain directly accessible below monitors.
+ *
+ * One Owner Rule (3.15C/D): Program and Preview have NO secondary homes.
  * Center Stage is their sole primary home; no other zone may host them.
- *
- * 3.15C changes (polish only):
- * - Monitor header uses improved typography hierarchy
- * - Fullscreen backdrop uses smoother fade transition
- * - Safe-area overlay uses better z-index layering
- * - Fullscreen button focus ring applied
- * - Stage section receives aria-label for screen reader navigation
- * - Collapsed zone overlay tells operator which key to press (Escape)
  */
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
 import type { WorkspaceCenterEmphasis } from '@ubos/shared';
 import { broadcastMonitor, broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
@@ -87,7 +89,7 @@ function StageMonitorCell({
   safeAreasVisible: boolean;
   fullscreen: boolean;
   onToggleFullscreen: () => void;
-  style?: React.CSSProperties;
+  style?: CSSProperties;
   className?: string;
 }) {
   const chrome = broadcastMonitor[role];
@@ -96,6 +98,7 @@ function StageMonitorCell({
   return (
     <div
       {...(role === 'program' ? { 'data-ubos-program-monitor': 'true' } : {})}
+      {...(role === 'preview' ? { 'data-ubos-preview-monitor': 'true' } : {})}
       className={cn(
         'group/monitor flex min-h-0 min-w-0 flex-col overflow-hidden',
         'rounded-ubos-md border',
@@ -108,7 +111,7 @@ function StageMonitorCell({
       style={fullscreen ? undefined : style}
       aria-label={`${roleLabel} monitor`}
     >
-      {/* Monitor header */}
+      {/* Monitor header — compact single row with role badge and fullscreen toggle */}
       <header
         className={cn(
           'flex shrink-0 items-center gap-2 border-b px-2 py-1',
@@ -118,7 +121,7 @@ function StageMonitorCell({
       >
         <span
           className={cn(
-            'text-[10px] font-black uppercase tracking-[0.22em]',
+            'shrink-0 text-[10px] font-black uppercase tracking-[0.22em]',
             chrome.label,
           )}
         >
@@ -149,7 +152,8 @@ function StageMonitorCell({
         </button>
       </header>
 
-      {/* Monitor canvas */}
+      {/* Monitor canvas — fills remaining height; overlay and safe areas are
+          absolutely positioned so they never push the video surface. */}
       <div className="relative min-h-0 min-w-0 flex-1">
         {/* Existing monitor renderer — mounted unchanged, never wrapped in
             anything that intercepts its pointer events. */}
@@ -201,10 +205,26 @@ export function CommandCenterStage({
     onFullscreenChange(fullscreenMonitor === role ? null : role);
   };
 
+  // Center Stage Layout Contract (3.15D-2):
+  //   Program: min 800×450; flex share = programShare(emphasis)
+  //   Preview: min 480×270; flex share = 1 - programShare(emphasis)
+  //   Stacked (center width <900): min-h for program 450, preview 270
+  //   Side-by-side: min-w for program 800, preview 480
+  //
+  // Using CSS min-* alongside flex so the browser enforces the floor while
+  // still allowing the monitors to expand to fill all freed space.
+  const programMinStyle: CSSProperties = stacked
+    ? { flex: `${share} 1 0%`, minHeight: 450 }
+    : { flex: `${share} 1 0%`, minWidth: 800 };
+  const previewMinStyle: CSSProperties = stacked
+    ? { flex: `${1 - share} 1 0%`, minHeight: 270 }
+    : { flex: `${1 - share} 1 0%`, minWidth: 480 };
+
   return (
     <section
       className={cn('flex min-h-0 min-w-0 flex-1 flex-col gap-1.5', className)}
       aria-label="Center stage — Program and Preview monitors"
+      data-ubos-center-stage="3.15d"
     >
       {/* Fullscreen backdrop */}
       {fullscreenMonitor ? (
@@ -215,11 +235,16 @@ export function CommandCenterStage({
         />
       ) : null}
 
-      {/* Monitor bay */}
+      {/* Monitor bay — Program is always rendered first (DOM order = visual
+          priority). When stacked, Program occupies the upper slot; when
+          side-by-side, Program occupies the left slot. The bay uses overflow-
+          auto (not overflow-hidden) so that if the viewport is smaller than
+          the minimum monitor sizes the operator can still scroll to see both
+          monitors — Program is never clipped out of view. */}
       <div
         className={cn(
-          'flex min-h-[14rem] min-w-0 flex-1 gap-1.5 overflow-hidden',
-          stacked ? 'flex-col' : 'flex-row',
+          'flex min-h-0 min-w-0 flex-1 gap-1.5',
+          stacked ? 'flex-col overflow-y-auto' : 'flex-row overflow-x-auto',
         )}
       >
         <StageMonitorCell
@@ -229,8 +254,8 @@ export function CommandCenterStage({
           safeAreasVisible={safeAreasVisible}
           fullscreen={fullscreenMonitor === 'program'}
           onToggleFullscreen={() => toggleFullscreen('program')}
-          style={{ flex: `${share} 1 0%` }}
-          className={stacked ? 'min-h-0' : 'min-w-0'}
+          style={programMinStyle}
+          className={stacked ? '' : 'min-w-0'}
         />
         <StageMonitorCell
           role="preview"
@@ -239,13 +264,15 @@ export function CommandCenterStage({
           safeAreasVisible={safeAreasVisible}
           fullscreen={fullscreenMonitor === 'preview'}
           onToggleFullscreen={() => toggleFullscreen('preview')}
-          style={{ flex: `${1 - share} 1 0%` }}
-          className={stacked ? 'min-h-0' : 'min-w-0'}
+          style={previewMinStyle}
+          className={stacked ? '' : 'min-w-0'}
         />
       </div>
 
       {/* Transition controls (existing CUT / TAKE / AUTO switcher) — always
-          visible below the monitors, never overlapping them. */}
+          directly accessible below the monitors, never overlapping them.
+          The switcher is rendered in the normal flow so it cannot cover
+          Program or Preview. */}
       {switcherContent ? (
         <div
           className={cn(

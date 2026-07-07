@@ -1,28 +1,28 @@
 'use client';
 
 /**
- * UBOS 3.15C — tabbed bottom workspace.
+ * UBOS 3.15D-2 — tabbed bottom workspace.
  *
  * Hosts the EXISTING bottom workspace content node (audio mixer, replay,
  * graphics, routing matrix, automation, logs, production graph, system
- * status). Only one tab expands at a time; the tab set is gated by
- * Workspace Manager panel visibility and the active tab follows the active
- * workspace preset. Changing tabs is pure layout — production state is
- * never touched. Collapsing reduces the workspace to its tab bar.
+ * status). Only one tab's full editor is mounted at a time — inactive
+ * workspaces are represented by their tab button only. This prevents
+ * duplicate editor instances (One Owner Rule) and keeps the bottom zone
+ * from growing larger than its height budget.
  *
- * One Owner Rule (3.15C): this zone is the PRIMARY home for:
+ * One Owner Rule (3.15C/D): this zone is the PRIMARY home for:
  *   Audio Mixer, Graphics, Replay, Automation, Routing Matrix,
  *   Production Graph, Logs, System Status
  * Secondary surfaces must not render these as full editors — they call
  * CommandCenterShell.handleActivateBottomTab(tabId) instead.
  *
- * 3.15C changes (polish only):
- * - Tab bar label changed to "Workspaces" (was already there, now bold)
- * - Active tab uses underline indicator plus subtle bg fill
- * - Collapse chevron is animated (rotates 180° when collapsed)
- * - Tabpanel aria-labelledby wires to the correct tab button id
- * - Content header uses improved hierarchy typography
- * - Transition on tab content uses fade-in animation
+ * 3.15D-2 refinements:
+ * - Tabs scroll horizontally when the zone is narrow
+ * - Only the active workspace renders its full editor; others are tabs only
+ * - Content scrolls internally (overflow-y-auto on the tabpanel)
+ * - Bottom workspace never covers Program/Preview (rendered below stage in
+ *   the normal document flow with a capped height from Workspace Manager)
+ * - No duplicate editors: children (the active editor node) renders once
  */
 import type { ReactNode } from 'react';
 import { cn } from '@ubos/ui';
@@ -100,8 +100,13 @@ export function CommandCenterBottomWorkspace({
           aria-hidden="true"
         />
 
-        {/* Tabs */}
-        <nav className="flex min-w-0 flex-1 gap-px overflow-x-auto">
+        {/* Tabs — scroll horizontally when zone is narrow */}
+        <nav
+          className={cn(
+            'flex min-w-0 flex-1 gap-px overflow-x-auto',
+            '[scrollbar-width:none] [&::-webkit-scrollbar]:hidden',
+          )}
+        >
           {visibleTabs.map((tab) => {
             const selected = activeTab === tab.id;
             return (
@@ -115,7 +120,7 @@ export function CommandCenterBottomWorkspace({
                 onClick={() => handleTabClick(tab.id)}
                 title={tab.label}
                 className={cn(
-                  'relative shrink-0 px-2.5 pb-1.5 pt-1',
+                  'relative shrink-0 whitespace-nowrap px-2.5 pb-1.5 pt-1',
                   'text-[10px] font-bold uppercase tracking-wide',
                   'transition-colors duration-[var(--ubos-duration-fast)]',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
@@ -174,13 +179,15 @@ export function CommandCenterBottomWorkspace({
       </div>
 
       {/* ── Tab content ─────────────────────────────────────────────── */}
+      {/* Only the active workspace renders its full editor (One Owner Rule).
+          Inactive workspaces are tab buttons only — no duplicate editors. */}
       {contentExpanded ? (
         <div
           id={`command-center-workspace-${activeTab}`}
           role="tabpanel"
           aria-labelledby={`command-center-workspace-tab-${activeTab}`}
           className={cn(
-            'ubos-scroll min-h-0 flex-1 overflow-y-auto',
+            'ubos-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden',
             'animate-[ubos-fade-in_120ms_var(--ubos-easing-out)_forwards]',
           )}
         >

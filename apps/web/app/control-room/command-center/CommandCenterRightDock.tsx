@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UBOS 3.15C — right dock.
+ * UBOS 3.15D-2 — right dock.
  *
  * Wraps the EXISTING operations sections (inspector, guests, recording,
  * streaming, outputs, alerts, telemetry, chat) in DockablePanel chrome.
@@ -14,12 +14,13 @@
  * Secondary surfaces must not render these panels again — they call
  * CommandCenterShell.handleActivateOperationsPanel(panelId) instead.
  *
- * 3.15C changes (polish only):
- * - Empty-dock hint tells operator how to reveal panels
- * - Section panels use animate-[ubos-panel-appear] on first render
- * - Gap between sections increased slightly for scanability
- * - Scroll target uses smooth inertia scrollIntoView
- * - Focus management: keyboard-reachable after panel expand
+ * 3.15D-2 readability fixes:
+ * - Aside uses min-w-0 + overflow-hidden to prevent horizontal overflow
+ * - Each section wrapper uses min-w-0 so DockablePanel never bleeds out
+ * - DockablePanel bodyClassName caps height per section and adds scroll
+ * - Panel content overflow clipped at the zone boundary
+ * - Labels remain readable (no horizontal overflow of the dock zone)
+ * - Action buttons remain visible (shrink-0 in DockablePanel header)
  */
 import { useEffect, useRef } from 'react';
 import { cn } from '@ubos/ui';
@@ -83,12 +84,15 @@ export function CommandCenterRightDock({
 
   return (
     <aside
-      className={cn('flex h-full min-h-0 min-w-0 flex-col', className)}
+      className={cn(
+        'flex h-full min-h-0 min-w-0 flex-col overflow-hidden',
+        className,
+      )}
       aria-label="Operations dock"
     >
       <div
         ref={scrollRef}
-        className="ubos-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-1.5"
+        className="ubos-scroll flex min-h-0 min-w-0 flex-1 flex-col gap-1.5 overflow-y-auto overflow-x-hidden p-1.5"
       >
         {visibleSectionCount === 0 ? (
           // Empty-dock hint — One Owner Rule: tells operator where to find panels.
@@ -115,7 +119,7 @@ export function CommandCenterRightDock({
             <div
               key={section.id}
               id={`command-center-ops-${section.id}`}
-              className="shrink-0 animate-[ubos-panel-appear_180ms_var(--ubos-easing-out)_forwards]"
+              className="min-w-0 shrink-0 animate-[ubos-panel-appear_180ms_var(--ubos-easing-out)_forwards]"
             >
               <DockablePanel
                 title={getPanelTitle?.(panelId) ?? OPERATIONS_DOCK_SECTION_LABELS[section.id]}
@@ -125,7 +129,7 @@ export function CommandCenterRightDock({
                 closable
                 onToggleCollapse={() => onToggleCollapsed(panelId)}
                 onHide={() => onHidePanel(panelId)}
-                bodyClassName="max-h-[24rem]"
+                bodyClassName="max-h-[22rem] overflow-x-hidden"
               >
                 {section.content}
               </DockablePanel>
