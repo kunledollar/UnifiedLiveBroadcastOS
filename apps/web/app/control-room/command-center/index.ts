@@ -13,5 +13,6 @@ export {
   type CommandCenterWorkspace,
   type CommandCenterFullscreenTarget,
   type CommandCenterZoneToggleId,
+  type ActivatePanelResult,
 } from './useCommandCenterWorkspace';
 export * from './command-center-logic';

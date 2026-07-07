@@ -1,20 +1,33 @@
 'use client';
 
 /**
- * UBOS 3.15B — Command Center top ribbon.
+ * UBOS 3.15C — Command Center top ribbon.
  *
  * Visible workspace preset selector plus dock collapse / layout lock quick
  * controls. Operates on Workspace Manager layout metadata only.
+ *
+ * 3.15C changes (polish only):
+ * - Preset pills use a more readable type scale + active ring
+ * - Zone toggle buttons display icons with tooltip titles
+ * - Lock/Save/Reset buttons receive consistent typographic treatment
+ * - Separator between preset group and controls is more pronounced
+ * - Focus-visible rings on all interactive elements
+ * - Toolbar role + aria-label for screen readers
  */
 import { cn } from '@ubos/ui';
 import type { WorkspacePresetId } from '@ubos/shared';
 import { workspacePresetList } from '@ubos/shared';
 import type { CommandCenterZoneToggleId } from './useCommandCenterWorkspace';
 
-const zoneToggles: Array<{ id: CommandCenterZoneToggleId; label: string; icon: string }> = [
-  { id: 'left-dock', label: 'Left dock', icon: '◧' },
-  { id: 'bottom-workspace', label: 'Bottom workspace', icon: '◒' },
-  { id: 'right-dock', label: 'Right dock', icon: '◨' },
+const zoneToggles: Array<{
+  id: CommandCenterZoneToggleId;
+  label: string;
+  collapsedIcon: string;
+  expandedIcon: string;
+}> = [
+  { id: 'left-dock', label: 'Left dock', collapsedIcon: '◧', expandedIcon: '◧' },
+  { id: 'bottom-workspace', label: 'Bottom workspace', collapsedIcon: '◒', expandedIcon: '◒' },
+  { id: 'right-dock', label: 'Right dock', collapsedIcon: '◨', expandedIcon: '◨' },
 ];
 
 export function CommandCenterTopRibbon({
@@ -41,16 +54,27 @@ export function CommandCenterTopRibbon({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center gap-1 overflow-x-auto border-b border-ubos-border-subtle bg-ubos-carbon px-2 py-1',
+        'flex shrink-0 items-center gap-1.5 overflow-x-auto border-b border-ubos-border-subtle',
+        'bg-ubos-carbon px-2 py-1',
         className,
       )}
       role="toolbar"
       aria-label="Workspace presets and dock controls"
     >
-      <span className="hidden shrink-0 text-[9px] font-bold uppercase tracking-[0.16em] text-ubos-fg-muted md:inline">
+      {/* ── Workspace label ───────────────────────────────────────── */}
+      <span
+        className="hidden shrink-0 text-[9px] font-black uppercase tracking-[0.2em] text-ubos-fg-muted/60 md:inline"
+        aria-hidden="true"
+      >
         Workspace
       </span>
-      <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+
+      {/* ── Preset pills ─────────────────────────────────────────── */}
+      <div
+        className="flex min-w-0 items-center gap-0.5 overflow-x-auto"
+        role="group"
+        aria-label="Workspace presets"
+      >
         {workspacePresetList.map((preset) => {
           const active = activePresetId === preset.id;
           return (
@@ -62,8 +86,11 @@ export function CommandCenterTopRibbon({
               onClick={() => onSelectPreset(preset.id)}
               aria-pressed={active}
               className={cn(
-                'shrink-0 rounded-ubos-sm px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide transition-colors',
-                layoutLocked && 'cursor-not-allowed opacity-50',
+                'shrink-0 rounded-ubos-sm px-2 py-0.5',
+                'text-[10px] font-bold uppercase tracking-[0.08em]',
+                'transition-colors duration-[var(--ubos-duration-fast)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+                layoutLocked && 'cursor-not-allowed opacity-40',
                 active
                   ? 'bg-ubos-selection-muted text-ubos-selection-text ring-1 ring-ubos-selection/40'
                   : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
@@ -75,7 +102,13 @@ export function CommandCenterTopRibbon({
         })}
       </div>
 
-      <div className="ml-auto flex shrink-0 items-center gap-0.5 border-l border-ubos-border-subtle pl-2">
+      {/* ── Right controls ───────────────────────────────────────── */}
+      <div
+        className="ml-auto flex shrink-0 items-center gap-0.5 border-l border-ubos-border-subtle pl-2"
+        role="group"
+        aria-label="Zone and layout controls"
+      >
+        {/* Zone collapse toggles */}
         {zoneToggles.map((zone) => {
           const collapsed = isZoneCollapsed(zone.id);
           return (
@@ -86,46 +119,78 @@ export function CommandCenterTopRibbon({
               disabled={layoutLocked}
               title={`${collapsed ? 'Expand' : 'Collapse'} ${zone.label.toLowerCase()}`}
               aria-pressed={!collapsed}
+              aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${zone.label}`}
               className={cn(
-                'rounded-ubos-sm px-1.5 py-0.5 text-xs transition-colors',
-                layoutLocked && 'cursor-not-allowed opacity-50',
+                'rounded-ubos-sm px-1.5 py-0.5 text-xs',
+                'transition-colors duration-[var(--ubos-duration-fast)]',
+                'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+                layoutLocked && 'cursor-not-allowed opacity-40',
                 collapsed
-                  ? 'text-ubos-fg-muted hover:bg-ubos-graphite'
-                  : 'bg-ubos-selection-muted/60 text-ubos-selection-text',
+                  ? 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary'
+                  : 'bg-ubos-selection-muted/50 text-ubos-selection-text',
               )}
             >
-              <span aria-hidden="true">{zone.icon}</span>
+              <span aria-hidden="true">
+                {collapsed ? zone.collapsedIcon : zone.expandedIcon}
+              </span>
             </button>
           );
         })}
+
+        {/* Divider */}
+        <span
+          className="h-3 border-r border-ubos-border-subtle"
+          aria-hidden="true"
+        />
+
+        {/* Layout lock */}
         <button
           type="button"
           onClick={onToggleLayoutLock}
           aria-pressed={layoutLocked}
+          title={layoutLocked ? 'Unlock layout to make changes' : 'Lock layout to prevent changes'}
           className={cn(
-            'rounded-ubos-sm px-2 py-0.5 text-[10px] font-medium transition-colors',
+            'rounded-ubos-sm px-2 py-0.5',
+            'text-[10px] font-bold uppercase tracking-[0.08em]',
+            'transition-colors duration-[var(--ubos-duration-fast)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
             layoutLocked
               ? 'bg-amber-500/15 text-amber-300 ring-1 ring-amber-500/30'
               : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
           )}
         >
-          {layoutLocked ? 'Locked' : 'Lock'}
+          {layoutLocked ? '🔒 Locked' : 'Lock'}
         </button>
+
+        {/* Save layout */}
         <button
           type="button"
           onClick={onSaveLayout}
-          className="rounded-ubos-sm px-2 py-0.5 text-[10px] font-medium text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary"
+          title="Save current layout to browser storage"
+          className={cn(
+            'rounded-ubos-sm px-2 py-0.5',
+            'text-[10px] font-medium',
+            'transition-colors duration-[var(--ubos-duration-fast)]',
+            'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+          )}
         >
           Save
         </button>
+
+        {/* Reset layout */}
         <button
           type="button"
           onClick={onResetLayout}
           disabled={layoutLocked}
+          title={layoutLocked ? 'Unlock layout to reset' : 'Reset layout to defaults'}
           className={cn(
-            'rounded-ubos-sm px-2 py-0.5 text-[10px] font-medium transition-colors',
+            'rounded-ubos-sm px-2 py-0.5',
+            'text-[10px] font-medium',
+            'transition-colors duration-[var(--ubos-duration-fast)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
             layoutLocked
-              ? 'cursor-not-allowed text-ubos-fg-muted opacity-50'
+              ? 'cursor-not-allowed text-ubos-fg-muted opacity-40'
               : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
           )}
         >

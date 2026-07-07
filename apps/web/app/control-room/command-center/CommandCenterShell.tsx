@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UBOS 3.15B — Command Center shell.
+ * UBOS 3.15C — Command Center shell.
  *
  * Non-intrusive layout orchestration for the Control Room. The shell places
  * EXISTING panel and monitor nodes (passed in as ReactNode props, exactly
@@ -14,6 +14,11 @@
  * collapsed zones); nothing is hardcoded per monitor. Zones are laid out
  * with flexbox from that metadata, so panels can never overlap the Program
  * or Preview monitors.
+ *
+ * One Owner Rule (3.15C): every capability has exactly one primary editable
+ * home. Secondary surfaces call `activatePanel(panelId)` or
+ * `activateWorkspace(tabId)` to navigate to the primary home instead of
+ * rendering a duplicate editor inline.
  */
 import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
@@ -82,6 +87,11 @@ export type CommandCenterShellProps = {
   onResetDemo?: (() => void) | undefined;
 };
 
+/**
+ * Collapsed zone indicator strip — 3.15C visual polish.
+ * Renders a thin clickable strip with a vertical label and an expand chevron.
+ * Shows a subtle hover accent so it's clearly interactive.
+ */
 function CollapsedZoneStrip({
   side,
   label,
@@ -94,20 +104,30 @@ function CollapsedZoneStrip({
   return (
     <div
       className={cn(
-        'flex h-full w-6 shrink-0 flex-col items-center overflow-hidden rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite py-2',
+        'flex h-full w-5 shrink-0 flex-col items-center overflow-hidden',
+        'rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite/50',
+        'transition-colors duration-[var(--ubos-duration-fast)]',
+        'hover:border-ubos-border-default hover:bg-ubos-graphite',
       )}
     >
       <button
         type="button"
         onClick={onExpand}
-        className="flex flex-col items-center gap-1 rounded px-0.5 py-1 text-[9px] font-bold uppercase tracking-wide text-ubos-fg-muted hover:bg-ubos-midnight hover:text-ubos-fg-secondary"
-        aria-label={`Expand ${label}`}
-        title={`Expand ${label}`}
+        className={cn(
+          'flex h-full w-full flex-col items-center justify-center gap-1',
+          'rounded px-0.5 py-2',
+          'text-[8px] font-black uppercase tracking-widest text-ubos-fg-muted',
+          'transition-colors duration-[var(--ubos-duration-fast)]',
+          'hover:text-ubos-fg-secondary',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+        )}
+        aria-label={`Expand ${label} dock`}
+        title={`Expand ${label} (click or drag)`}
       >
-        <span className="text-[10px]" aria-hidden="true">
-          {side === 'left' ? '⟩' : '⟨'}
+        <span className="text-[10px] font-medium" aria-hidden="true">
+          {side === 'left' ? '›' : '‹'}
         </span>
-        <span className="[writing-mode:vertical-rl] rotate-180">{label}</span>
+        <span className="[writing-mode:vertical-rl] rotate-180 leading-none">{label}</span>
       </button>
     </div>
   );
@@ -168,6 +188,8 @@ export function CommandCenterShell({
     setFullscreenMonitor,
     saveLayout,
     resetLayout,
+    activatePanel,
+    activateWorkspace,
   } = workspace;
 
   const leftDockGeometry = layout.zones['left-dock'];
@@ -209,12 +231,14 @@ export function CommandCenterShell({
 
   const handleActivateBottomTab = useCallback(
     (tab: DockTabId) => {
+      // One Owner Rule: activateWorkspace expands the zone and sets the tab
+      // without rendering any duplicate editor inline.
+      activateWorkspace(tab);
       const gatingPanel = panelGatingBottomTab(tab);
       if (gatingPanel) setPanelVisible(gatingPanel, true);
-      if (bottomCollapsed) toggleZone('bottom-workspace');
       handleBottomTabChange(tab);
     },
-    [setPanelVisible, bottomCollapsed, toggleZone, handleBottomTabChange],
+    [activateWorkspace, setPanelVisible, handleBottomTabChange],
   );
 
   // ----- left dock ----------------------------------------------------------
@@ -246,13 +270,19 @@ export function CommandCenterShell({
   // ----- right dock ---------------------------------------------------------
   const handleActivateOperationsPanel = useCallback(
     (panelId: string) => {
-      setPanelVisible(panelId, true);
-      if (isPanelCollapsed(panelId)) togglePanelCollapsed(panelId);
-      if (rightCollapsed) toggleZone('right-dock');
-      const opsTab = operationsTabForPanel(panelId);
-      if (opsTab) onOperationsTabChange(opsTab);
+      // One Owner Rule: activatePanel reveals the single registered instance
+      // of this panel without rendering any duplicate editor inline.
+      const result = activatePanel(panelId);
+      if (result.operationsTab) onOperationsTabChange(result.operationsTab);
+      else {
+        // Fallback for panels without an operations tab mapping.
+        setPanelVisible(panelId, true);
+        if (isPanelCollapsed(panelId)) togglePanelCollapsed(panelId);
+        if (rightCollapsed) toggleZone('right-dock');
+      }
     },
     [
+      activatePanel,
       setPanelVisible,
       isPanelCollapsed,
       togglePanelCollapsed,
@@ -337,11 +367,22 @@ export function CommandCenterShell({
 
   return (
     <div
-      className={cn('flex h-full min-h-0 flex-col overflow-hidden text-sm', broadcastSurfaces.app)}
+      className={cn(
+        'flex h-full min-h-0 flex-col overflow-hidden',
+        'text-sm antialiased',
+        broadcastSurfaces.app,
+      )}
       style={layoutStyle}
-      data-ubos-command-center="true"
+      data-ubos-command-center="3.15c"
+      data-ubos-version="3.15c"
     >
-      <header className={cn('flex shrink-0 flex-col border-b', broadcastSurfaces.header)}>
+      <header
+        className={cn(
+          'flex shrink-0 flex-col border-b',
+          broadcastSurfaces.header,
+          'shadow-[var(--ubos-elevation-rail)]',
+        )}
+      >
         {statusBar}
         <CommandCenterTopMenu
           activePresetId={activePresetId}

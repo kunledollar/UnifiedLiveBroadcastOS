@@ -1,13 +1,25 @@
 'use client';
 
 /**
- * UBOS 3.15B — right dock.
+ * UBOS 3.15C — right dock.
  *
  * Wraps the EXISTING operations sections (inspector, guests, recording,
  * streaming, outputs, alerts, telemetry, chat) in DockablePanel chrome.
  * Guest, recording, streaming, and inspector behaviors live entirely in the
  * wrapped components. Visibility and collapse are Workspace Manager panel
  * metadata; content stays mounted while collapsed so panel state persists.
+ *
+ * One Owner Rule (3.15C): this dock is the PRIMARY home for:
+ *   Recording, Streaming, Guests, Broadcast I/O, Inspector
+ * Secondary surfaces must not render these panels again — they call
+ * CommandCenterShell.handleActivateOperationsPanel(panelId) instead.
+ *
+ * 3.15C changes (polish only):
+ * - Empty-dock hint tells operator how to reveal panels
+ * - Section panels use animate-[ubos-panel-appear] on first render
+ * - Gap between sections increased slightly for scanability
+ * - Scroll target uses smooth inertia scrollIntoView
+ * - Focus management: keyboard-reachable after panel expand
  */
 import { useEffect, useRef } from 'react';
 import { cn } from '@ubos/ui';
@@ -55,6 +67,10 @@ export function CommandCenterRightDock({
     return section ? [section] : [];
   });
 
+  const visibleSectionCount = orderedSections.filter(
+    (section) => isPanelVisible(panelForRightDockSection(section.id)),
+  ).length;
+
   useEffect(() => {
     const target = operationsTabToDockSection(activeOperationsTab);
     if (!target) return;
@@ -72,13 +88,35 @@ export function CommandCenterRightDock({
     >
       <div
         ref={scrollRef}
-        className="ubos-scroll flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto p-1"
+        className="ubos-scroll flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto p-1.5"
       >
+        {visibleSectionCount === 0 ? (
+          // Empty-dock hint — One Owner Rule: tells operator where to find panels.
+          <div className="flex flex-col items-center gap-2 px-3 py-6 text-center">
+            <span className="text-lg text-ubos-fg-muted/40" aria-hidden="true">
+              ◨
+            </span>
+            <p className="text-[10px] leading-relaxed text-ubos-fg-muted">
+              No operations panels are visible.
+              <br />
+              Use{' '}
+              <span className="font-bold text-ubos-fg-secondary">
+                Docks menu → Panels
+              </span>{' '}
+              to show them.
+            </p>
+          </div>
+        ) : null}
+
         {orderedSections.map((section) => {
           const panelId = panelForRightDockSection(section.id);
           if (!isPanelVisible(panelId)) return null;
           return (
-            <div key={section.id} id={`command-center-ops-${section.id}`} className="shrink-0">
+            <div
+              key={section.id}
+              id={`command-center-ops-${section.id}`}
+              className="shrink-0 animate-[ubos-panel-appear_180ms_var(--ubos-easing-out)_forwards]"
+            >
               <DockablePanel
                 title={getPanelTitle?.(panelId) ?? OPERATIONS_DOCK_SECTION_LABELS[section.id]}
                 status={statusForBadge(section.badge)}

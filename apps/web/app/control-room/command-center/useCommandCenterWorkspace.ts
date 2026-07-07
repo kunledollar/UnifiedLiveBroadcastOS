@@ -32,13 +32,16 @@ import type { DockTabId } from '../shell/types';
 import {
   COMMAND_CENTER_PREFS_STORAGE_KEY,
   applyPresetToRegistry,
+  bottomTabForPanel,
   createCommandCenterExtraPanelDefinitions,
   createDefaultCommandCenterPrefs,
   effectivePresetForLayout,
+  operationsTabForPanel,
   parseCommandCenterPrefs,
   presetBottomTab,
   serializeCommandCenterPrefs,
 } from './command-center-logic';
+import type { OperationsTabId } from '../shell/types';
 
 export type CommandCenterFullscreenTarget = 'program' | 'preview' | null;
 
@@ -59,6 +62,15 @@ function createPopulatedRegistry(): WorkspacePanelRegistry {
   }
   return registry;
 }
+
+/**
+ * Result of activatePanel — tells callers which tab (if any) to focus so
+ * they can update their own React state without querying the registry again.
+ */
+export type ActivatePanelResult = {
+  bottomTab: DockTabId | null;
+  operationsTab: OperationsTabId | null;
+};
 
 export type CommandCenterWorkspace = {
   /** Attach to the element whose box drives layout geometry. */
@@ -87,6 +99,20 @@ export type CommandCenterWorkspace = {
   setFullscreenMonitor: (target: CommandCenterFullscreenTarget) => void;
   saveLayout: () => void;
   resetLayout: () => void;
+  /**
+   * One Owner Rule enforcement: navigate to the primary home of a panel.
+   *
+   * Makes the panel visible, expands its zone, uncollpases it, and returns
+   * the tab identifiers (if any) that the caller should activate to surface
+   * the panel's primary editable home. No duplicate editors are created —
+   * this only reveals the single registered instance.
+   */
+  activatePanel: (panelId: string) => ActivatePanelResult;
+  /**
+   * Activate a bottom workspace tab by id, expanding the zone if needed.
+   * Replaces any shortcut that would render a duplicate editor inline.
+   */
+  activateWorkspace: (tabId: DockTabId) => void;
 };
 
 export function useCommandCenterWorkspace(): CommandCenterWorkspace {
@@ -322,6 +348,63 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     persist();
   }, [persist]);
 
+  /**
+   * One Owner Rule: navigate to the single registered primary home of a panel.
+   * Secondary surfaces call this instead of rendering a duplicate full editor.
+   */
+  const activatePanel = useCallback(
+    (panelId: string): ActivatePanelResult => {
+      const state = panelStates.get(panelId);
+      if (!state) return { bottomTab: null, operationsTab: null };
+
+      // Reveal the panel if hidden.
+      if (!state.visible) {
+        try {
+          registry.togglePanelVisibility(panelId);
+          bump();
+        } catch {
+          // Non-closable panels are always visible; nothing to toggle.
+        }
+      }
+
+      // Un-collapse if collapsed.
+      if (state.collapsed) {
+        try {
+          registry.togglePanelCollapsed(panelId);
+          bump();
+        } catch {
+          // Non-collapsible panels cannot be collapsed; safe to ignore.
+        }
+      }
+
+      // Expand the zone if needed (applies to left-dock, right-dock, bottom-workspace).
+      const zone = state.zone;
+      if (zone === 'left-dock' || zone === 'right-dock' || zone === 'bottom-workspace') {
+        ensureZoneExpanded(zone);
+      }
+
+      // Return tab identifiers so the calling shell can sync its own tab state.
+      const bottomTab = bottomTabForPanel(panelId);
+      if (bottomTab) setActiveBottomTabState(bottomTab);
+      const operationsTab = operationsTabForPanel(panelId);
+
+      return { bottomTab, operationsTab };
+    },
+    [panelStates, registry, bump, ensureZoneExpanded],
+  );
+
+  /**
+   * One Owner Rule: activate a bottom-workspace tab and expand the zone.
+   * Replaces any inline shortcut that would render a duplicate editor.
+   */
+  const activateWorkspace = useCallback(
+    (tabId: DockTabId) => {
+      setActiveBottomTabState(tabId);
+      ensureZoneExpanded('bottom-workspace');
+    },
+    [ensureZoneExpanded],
+  );
+
   const resetLayout = useCallback(() => {
     if (layoutLocked) return;
     try {
@@ -367,5 +450,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     setFullscreenMonitor,
     saveLayout,
     resetLayout,
+    activatePanel,
+    activateWorkspace,
   };
 }
