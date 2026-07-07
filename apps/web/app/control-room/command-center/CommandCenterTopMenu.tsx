@@ -1,30 +1,27 @@
 'use client';
 
 /**
- * UBOS 3.15C — Command Center menu bar.
+ * UBOS 3.15D-3 — Professional broadcast operator menu bar.
  *
- * Professional application menu. Items connect to EXISTING actions where the
- * Control Room already exposes them (workspace presets, dock toggles, layout
- * persistence, transitions, demo tooling, sub-routes); everything else is a
- * clearly disabled placeholder. No production state is fabricated here.
+ * Menus: File · Workspace · Production · Sources · Graphics · Replay ·
+ *        Guests · Broadcast · Automation · Monitoring · Tools · Window · Help
  *
- * One Owner Rule (3.15C): menu items that navigate to a panel call
- * onActivateBottomTab / onActivateSourceTab / onActivateOperationsPanel
- * rather than rendering any panel inline. This ensures every capability
- * has exactly one primary editable home.
+ * One Owner Rule: every menu action calls Workspace Manager or navigates
+ * to the single primary home of a capability. No duplicate editors are
+ * rendered inline — menus are shortcuts to existing panels/workspaces only.
  *
- * 3.15C visual changes:
- * - Menu trigger buttons have better typography and focus rings
- * - Dropdown uses improved typography hierarchy (section headers vs items)
- * - Shortcut keys use tabular-nums mono styling
- * - Checked items use a more readable ✓ glyph with accent color
- * - Dividers are more subtle
+ * Safety rules:
+ * - Menu items communicate only with Workspace Manager.
+ * - No new layout engine is introduced.
+ * - No production runtime, media, camera, audio, recording, streaming,
+ *   guest, replay, or automation code is touched here.
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { cn } from '@ubos/ui';
 import type { WorkspacePanelDefinition, WorkspacePresetId } from '@ubos/shared';
 import { workspacePresetList } from '@ubos/shared';
 import type { DockTabId, NavItemId, SourceDockTabId } from '../shell/types';
+import type { CommandCenterZoneToggleId } from './useCommandCenterWorkspace';
 
 type MenuItem = {
   label: string;
@@ -34,6 +31,8 @@ type MenuItem = {
   onClick?: () => void;
   href?: string;
   divider?: boolean;
+  /** Section header — non-interactive label for grouping */
+  header?: boolean;
 };
 
 type MenuDefinition = {
@@ -111,6 +110,18 @@ function MenuDropdown({
                   className="my-0.5 border-t border-ubos-border-subtle"
                   role="separator"
                 />
+              );
+            }
+            if (item.header) {
+              return (
+                <div
+                  key={`header-${index}`}
+                  className="px-3 pb-0.5 pt-2 text-[9px] font-black uppercase tracking-[0.15em] text-ubos-fg-muted/60"
+                  role="presentation"
+                  aria-hidden="true"
+                >
+                  {item.label}
+                </div>
               );
             }
             const content = (
@@ -193,8 +204,10 @@ export type CommandCenterTopMenuProps = {
   safeAreasVisible: boolean;
   dockPanels: WorkspacePanelDefinition[];
   isPanelVisible: (panelId: string) => boolean;
+  isZoneCollapsed: (zoneId: CommandCenterZoneToggleId) => boolean;
   onSelectPreset: (presetId: WorkspacePresetId) => void;
   onTogglePanel: (panelId: string) => void;
+  onToggleZone: (zoneId: CommandCenterZoneToggleId) => void;
   onResetLayout: () => void;
   onToggleLayoutLock: () => void;
   onSaveLayout: () => void;
@@ -205,6 +218,7 @@ export type CommandCenterTopMenuProps = {
   onActivateSourceTab: (tab: SourceDockTabId) => void;
   onActivateOperationsPanel: (panelId: string) => void;
   onNavChange: (nav: NavItemId) => void;
+  onOpenCommandPalette: () => void;
   onCut?: (() => void) | undefined;
   onTake?: (() => void) | undefined;
   onAuto?: (() => void) | undefined;
@@ -223,8 +237,10 @@ export function CommandCenterTopMenu({
   safeAreasVisible,
   dockPanels,
   isPanelVisible,
+  isZoneCollapsed,
   onSelectPreset,
   onTogglePanel,
+  onToggleZone,
   onResetLayout,
   onToggleLayoutLock,
   onSaveLayout,
@@ -235,6 +251,7 @@ export function CommandCenterTopMenu({
   onActivateSourceTab,
   onActivateOperationsPanel,
   onNavChange,
+  onOpenCommandPalette,
   onCut,
   onTake,
   onAuto,
@@ -250,6 +267,7 @@ export function CommandCenterTopMenu({
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
   const openMenu = useCallback((id: string) => setOpenMenuId(id), []);
 
+  // ── Workspace menu: all 9 presets, current one highlighted ────────────────
   const workspaceItems: MenuItem[] = workspacePresetList.map((preset) => ({
     label: preset.name,
     checked: activePresetId === preset.id,
@@ -257,14 +275,18 @@ export function CommandCenterTopMenu({
     onClick: () => onSelectPreset(preset.id),
   }));
 
-  const dockItems: MenuItem[] = dockPanels.map((panel) => ({
-    label: panel.title,
-    checked: isPanelVisible(panel.id),
-    disabled: layoutLocked || !panel.closable,
-    onClick: () => onTogglePanel(panel.id),
-  }));
+  // ── Window > Panels section: registered dock panels ───────────────────────
+  const panelItems: MenuItem[] = dockPanels
+    .filter((panel) => panel.closable)
+    .map((panel) => ({
+      label: panel.title,
+      checked: isPanelVisible(panel.id),
+      disabled: layoutLocked || !panel.closable,
+      onClick: () => onTogglePanel(panel.id),
+    }));
 
   const menus: MenuDefinition[] = [
+    // ── File ──────────────────────────────────────────────────────────────
     {
       id: 'file',
       label: 'File',
@@ -274,50 +296,31 @@ export function CommandCenterTopMenu({
         { label: 'Import Media…', disabled: true },
         { label: 'Export Production State…', disabled: true },
         { divider: true, label: '' },
-        { label: 'Save Layout', onClick: onSaveLayout },
+        { label: 'Save Layout', shortcut: 'Ctrl+S', onClick: onSaveLayout },
         ...(onSaveWorkspace ? [{ label: 'Save Workspace', onClick: onSaveWorkspace }] : []),
         ...(onRestoreWorkspace ? [{ label: 'Restore Workspace', onClick: onRestoreWorkspace }] : []),
         ...(onResetWorkspace ? [{ label: 'Reset Workspace', onClick: onResetWorkspace }] : []),
-      ],
-    },
-    {
-      id: 'edit',
-      label: 'Edit',
-      items: [
-        { label: 'Undo', shortcut: 'Ctrl+Z', disabled: true },
-        { label: 'Redo', shortcut: 'Ctrl+Y', disabled: true },
         { divider: true, label: '' },
-        { label: 'Cut', shortcut: 'Ctrl+X', disabled: true },
-        { label: 'Copy', shortcut: 'Ctrl+C', disabled: true },
-        { label: 'Paste', shortcut: 'Ctrl+V', disabled: true },
+        { label: 'Command Palette…', shortcut: 'Ctrl+K', onClick: onOpenCommandPalette },
         { divider: true, label: '' },
         { label: 'Preferences…', href: '/control-room/settings' },
       ],
     },
-    {
-      id: 'view',
-      label: 'View',
-      items: [
-        { label: 'Reset Layout', onClick: onResetLayout, disabled: layoutLocked },
-        { label: 'Lock Layout', checked: layoutLocked, onClick: onToggleLayoutLock },
-        { label: 'Save Layout', onClick: onSaveLayout },
-        { divider: true, label: '' },
-        { label: 'Fullscreen Program', onClick: onFullscreenProgram },
-        { label: 'Fullscreen Preview', onClick: onFullscreenPreview },
-        { divider: true, label: '' },
-        { label: 'Toggle Safe Areas', checked: safeAreasVisible, onClick: onToggleSafeAreas },
-      ],
-    },
+
+    // ── Workspace ─────────────────────────────────────────────────────────
     {
       id: 'workspace',
       label: 'Workspace',
-      items: workspaceItems,
+      items: [
+        ...workspaceItems,
+        { divider: true, label: '' },
+        { label: 'Reset Layout', shortcut: 'Ctrl+Shift+L', onClick: onResetLayout, disabled: layoutLocked },
+        { label: 'Save Layout', onClick: onSaveLayout },
+        { label: layoutLocked ? 'Unlock Layout' : 'Lock Layout', checked: layoutLocked, onClick: onToggleLayoutLock },
+      ],
     },
-    {
-      id: 'docks',
-      label: 'Docks',
-      items: dockItems,
-    },
+
+    // ── Production ────────────────────────────────────────────────────────
     {
       id: 'production',
       label: 'Production',
@@ -333,6 +336,8 @@ export function CommandCenterTopMenu({
         { label: 'Compositor', href: '/control-room/compositor' },
       ],
     },
+
+    // ── Sources ───────────────────────────────────────────────────────────
     {
       id: 'sources',
       label: 'Sources',
@@ -341,7 +346,6 @@ export function CommandCenterTopMenu({
         { label: 'Source Browser', onClick: () => onActivateSourceTab('sources') },
         { label: 'Media Browser', onClick: () => onActivateSourceTab('media') },
         { label: 'Graphics Browser', onClick: () => onActivateSourceTab('graphics') },
-        { label: 'Guests Browser', onClick: () => onActivateSourceTab('guests') },
         { divider: true, label: '' },
         {
           label: 'Add Source…',
@@ -352,10 +356,53 @@ export function CommandCenterTopMenu({
         },
       ],
     },
+
+    // ── Graphics ──────────────────────────────────────────────────────────
+    {
+      id: 'graphics',
+      label: 'Graphics',
+      items: [
+        { label: 'Open Graphics Workspace', shortcut: 'Ctrl+3', onClick: () => onSelectPreset('graphics-operator') },
+        { label: 'Graphics Workspace Tab', onClick: () => onActivateBottomTab('graphics') },
+        { label: 'Graphics Browser', onClick: () => onActivateSourceTab('graphics') },
+        { divider: true, label: '' },
+        { label: 'Import Graphics Package…', disabled: true },
+      ],
+    },
+
+    // ── Replay ────────────────────────────────────────────────────────────
+    {
+      id: 'replay',
+      label: 'Replay',
+      items: [
+        { label: 'Open Replay Workspace', shortcut: 'Ctrl+4', onClick: () => onSelectPreset('replay-operator') },
+        { label: 'Replay Workspace Tab', onClick: () => onActivateBottomTab('replay') },
+        { divider: true, label: '' },
+        { label: 'Capture Clip', disabled: true },
+        { label: 'Clip Library', onClick: () => onActivateSourceTab('media') },
+      ],
+    },
+
+    // ── Guests ────────────────────────────────────────────────────────────
+    {
+      id: 'guests',
+      label: 'Guests',
+      items: [
+        { label: 'Guest Panel', onClick: () => onActivateOperationsPanel('guests') },
+        { label: 'Invite Guest', onClick: () => onActivateSourceTab('guests') },
+        { label: 'Guest Browser', onClick: () => onActivateSourceTab('guests') },
+        { divider: true, label: '' },
+        { label: 'WebRTC Settings…', href: '/control-room/webrtc-runtime' },
+      ],
+    },
+
+    // ── Broadcast ─────────────────────────────────────────────────────────
     {
       id: 'broadcast',
       label: 'Broadcast',
       items: [
+        { label: 'Open Streaming Workspace', shortcut: 'Ctrl+5', onClick: () => onSelectPreset('streaming-operator') },
+        { divider: true, label: '' },
         { label: 'Streaming Panel', onClick: () => onActivateOperationsPanel('streaming') },
         { label: 'Recording Panel', onClick: () => onActivateOperationsPanel('recording') },
         { label: 'Outputs Panel', onClick: () => onActivateOperationsPanel('outputs') },
@@ -367,26 +414,8 @@ export function CommandCenterTopMenu({
         { label: 'Recording Runtime…', href: '/control-room/recording-runtime' },
       ],
     },
-    {
-      id: 'graphics',
-      label: 'Graphics',
-      items: [
-        { label: 'Graphics Workspace', onClick: () => onActivateBottomTab('graphics') },
-        { label: 'Graphics Browser', onClick: () => onActivateSourceTab('graphics') },
-        { divider: true, label: '' },
-        { label: 'Import Graphics Package…', disabled: true },
-      ],
-    },
-    {
-      id: 'replay',
-      label: 'Replay',
-      items: [
-        { label: 'Replay Workspace', onClick: () => onActivateBottomTab('replay') },
-        { divider: true, label: '' },
-        { label: 'Capture Clip', disabled: true },
-        { label: 'Clip Library', onClick: () => onActivateSourceTab('media') },
-      ],
-    },
+
+    // ── Automation ────────────────────────────────────────────────────────
     {
       id: 'automation',
       label: 'Automation',
@@ -397,6 +426,8 @@ export function CommandCenterTopMenu({
         { label: 'AI Director', href: '/control-room/ai-director' },
       ],
     },
+
+    // ── Monitoring ────────────────────────────────────────────────────────
     {
       id: 'monitoring',
       label: 'Monitoring',
@@ -408,12 +439,18 @@ export function CommandCenterTopMenu({
         { label: 'Alerts Panel', onClick: () => onActivateOperationsPanel('alerts') },
         { label: 'System Status', onClick: () => onActivateBottomTab('system-status') },
         { label: 'Logs', onClick: () => onActivateBottomTab('logs') },
+        { divider: true, label: '' },
+        { label: 'Analytics', href: '/control-room/analytics' },
       ],
     },
+
+    // ── Tools ─────────────────────────────────────────────────────────────
     {
       id: 'tools',
       label: 'Tools',
       items: [
+        { label: 'Command Palette…', shortcut: 'Ctrl+K', onClick: onOpenCommandPalette },
+        { divider: true, label: '' },
         { label: 'Auto-Configuration Wizard', disabled: true },
         { label: 'Output Timer', disabled: true },
         { divider: true, label: '' },
@@ -428,12 +465,66 @@ export function CommandCenterTopMenu({
         ...(onResetDemo ? [{ label: 'Reset Demo State', onClick: onResetDemo }] : []),
       ],
     },
+
+    // ── Window ────────────────────────────────────────────────────────────
+    // Section 3 layout actions + Section 4 dock panel toggles.
+    // All actions call Workspace Manager — no editor is rendered inline.
+    {
+      id: 'window',
+      label: 'Window',
+      items: [
+        // Layout actions (former "View" menu)
+        { label: 'Layout', header: true },
+        { label: 'Reset Layout', shortcut: 'Ctrl+Shift+L', onClick: onResetLayout, disabled: layoutLocked },
+        { label: 'Save Layout', onClick: onSaveLayout },
+        ...(onRestoreWorkspace
+          ? [{ label: 'Load Layout', onClick: onRestoreWorkspace }]
+          : [{ label: 'Load Layout', disabled: true }]),
+        { label: layoutLocked ? 'Unlock Layout' : 'Lock Layout', checked: layoutLocked, onClick: onToggleLayoutLock },
+        { divider: true, label: '' },
+        { label: 'Fullscreen Program', onClick: onFullscreenProgram },
+        { label: 'Fullscreen Preview', onClick: onFullscreenPreview },
+        { label: 'Toggle Safe Areas', checked: safeAreasVisible, onClick: onToggleSafeAreas },
+        { label: 'Show Telemetry', onClick: () => onActivateOperationsPanel('telemetry') },
+        { divider: true, label: '' },
+        // Dock zone toggles (Section 3 Window items)
+        { label: 'Zones', header: true },
+        {
+          label: 'Toggle Left Dock',
+          checked: !isZoneCollapsed('left-dock'),
+          disabled: layoutLocked,
+          onClick: () => onToggleZone('left-dock'),
+        },
+        {
+          label: 'Toggle Right Dock',
+          checked: !isZoneCollapsed('right-dock'),
+          disabled: layoutLocked,
+          onClick: () => onToggleZone('right-dock'),
+        },
+        {
+          label: 'Toggle Bottom Workspace',
+          checked: !isZoneCollapsed('bottom-workspace'),
+          disabled: layoutLocked,
+          onClick: () => onToggleZone('bottom-workspace'),
+        },
+        { divider: true, label: '' },
+        { label: 'Toggle Inspector', onClick: () => onActivateOperationsPanel('inspector') },
+        { label: 'Toggle Monitor Wall', onClick: () => onSelectPreset('monitor-wall') },
+        { label: 'Toggle Pipeline Inspector', onClick: () => onActivateBottomTab('production-graph') },
+        { divider: true, label: '' },
+        // Registered dock panels (Section 4)
+        { label: 'Panels', header: true },
+        ...panelItems,
+      ],
+    },
+
+    // ── Help ──────────────────────────────────────────────────────────────
     {
       id: 'help',
       label: 'Help',
       items: [
         { label: 'UBOS Documentation', disabled: true },
-        { label: 'Keyboard Shortcuts', disabled: true },
+        { label: 'Keyboard Shortcuts', onClick: onOpenCommandPalette },
         { divider: true, label: '' },
         { label: 'System Diagnostics', onClick: () => onActivateBottomTab('logs') },
         { label: 'About UBOS', disabled: true },

@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UBOS 3.15D-2 — Command Center shell.
+ * UBOS 3.15D-3 — Command Center shell.
  *
  * Non-intrusive layout orchestration for the Control Room. The shell places
  * EXISTING panel and monitor nodes (passed in as ReactNode props, exactly
@@ -20,6 +20,13 @@
  * `activateWorkspace(tabId)` to navigate to the primary home instead of
  * rendering a duplicate editor inline.
  *
+ * 3.15D-3 additions:
+ * - Professional menu system: File · Workspace · Production · Sources ·
+ *   Graphics · Replay · Guests · Broadcast · Automation · Monitoring ·
+ *   Tools · Window · Help
+ * - Command Palette (Ctrl+K) wired to Workspace Manager
+ * - Global keyboard shortcuts: Ctrl+1-5 presets, Ctrl+Shift+L reset, Esc close
+ *
  * Responsive rules (3.15D-2):
  *   ≥1920px:     left dock visible, right dock visible, bottom workspace visible
  *   1440–1919px: left dock visible, right dock may collapse per preset
@@ -27,7 +34,7 @@
  *   <1200px:     secondary docks collapsed, Program/Preview side-by-side if ≥900px
  *   <900px:      compact mode — Program/Preview stacked, bottom workspace tab bar only
  */
-import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
 import { workspaceZoneDefinitions, type WorkspacePresetId } from '@ubos/shared';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from '../menu';
@@ -42,7 +49,9 @@ import { CommandCenterRightDock } from './CommandCenterRightDock';
 import { CommandCenterStage } from './CommandCenterStage';
 import { CommandCenterTopMenu } from './CommandCenterTopMenu';
 import { CommandCenterTopRibbon } from './CommandCenterTopRibbon';
+import { CommandPalette } from './CommandPalette';
 import type { MonitorOverlayData } from './MonitorOverlay';
+import { useWorkspaceKeyboard } from './useWorkspaceKeyboard';
 import {
   operationsTabForPanel,
   panelForOperationsTab,
@@ -198,6 +207,10 @@ export function CommandCenterShell({
     activatePanel,
     activateWorkspace,
   } = workspace;
+
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const openCommandPalette = useCallback(() => setCommandPaletteOpen(true), []);
+  const closeCommandPalette = useCallback(() => setCommandPaletteOpen(false), []);
 
   const leftDockGeometry = layout.zones['left-dock'];
   const rightDockGeometry = layout.zones['right-dock'];
@@ -386,6 +399,21 @@ export function CommandCenterShell({
     [layout],
   );
 
+  // ----- global keyboard shortcuts (3.15D-3) --------------------------------
+  // Close overlays (palette, fullscreen) on Esc
+  const handleCloseOverlays = useCallback(() => {
+    setCommandPaletteOpen(false);
+    setFullscreenMonitor(null);
+  }, [setFullscreenMonitor]);
+
+  useWorkspaceKeyboard({
+    layoutLocked,
+    onSelectPreset: handleSelectPreset,
+    onResetLayout: resetLayout,
+    onOpenCommandPalette: openCommandPalette,
+    onCloseOverlays: handleCloseOverlays,
+  });
+
   return (
     <div
       className={cn(
@@ -394,9 +422,28 @@ export function CommandCenterShell({
         broadcastSurfaces.app,
       )}
       style={layoutStyle}
-      data-ubos-command-center="3.15d"
-      data-ubos-version="3.15d"
+      data-ubos-command-center="3.15d-3"
+      data-ubos-version="3.15d-3"
     >
+      {/* Command Palette — rendered at root so it overlays everything */}
+      <CommandPalette
+        open={commandPaletteOpen}
+        onClose={closeCommandPalette}
+        activePresetId={activePresetId}
+        layoutLocked={layoutLocked}
+        onSelectPreset={handleSelectPreset}
+        onActivateBottomTab={handleActivateBottomTab}
+        onActivateSourceTab={handleActivateSourceTab}
+        onActivateOperationsPanel={handleActivateOperationsPanel}
+        onToggleZone={toggleZone}
+        onResetLayout={resetLayout}
+        onSaveLayout={saveLayout}
+        onToggleLayoutLock={() => setLayoutLocked(!layoutLocked)}
+        onNavChange={onNavChange}
+        onFullscreenProgram={() => setFullscreenMonitor('program')}
+        onFullscreenPreview={() => setFullscreenMonitor('preview')}
+      />
+
       <header
         className={cn(
           'flex shrink-0 flex-col border-b',
@@ -411,8 +458,10 @@ export function CommandCenterShell({
           safeAreasVisible={safeAreasVisible}
           dockPanels={panels}
           isPanelVisible={isPanelVisible}
+          isZoneCollapsed={isZoneToggleCollapsed}
           onSelectPreset={handleSelectPreset}
           onTogglePanel={togglePanelVisibility}
+          onToggleZone={toggleZone}
           onResetLayout={resetLayout}
           onToggleLayoutLock={() => setLayoutLocked(!layoutLocked)}
           onSaveLayout={saveLayout}
@@ -423,6 +472,7 @@ export function CommandCenterShell({
           onActivateSourceTab={handleActivateSourceTab}
           onActivateOperationsPanel={handleActivateOperationsPanel}
           onNavChange={onNavChange}
+          onOpenCommandPalette={openCommandPalette}
           onCut={onCut}
           onTake={onTake}
           onAuto={onAuto}
