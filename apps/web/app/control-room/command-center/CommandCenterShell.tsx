@@ -340,22 +340,20 @@ export function CommandCenterShell({
 
   const monitorsStacked = layout.monitorsStacked || layout.zones['center-stage'].rect.width < 900;
 
-  // Center-stage priority: docks render at the slim end of their allowed
-  // range (zone minSize from the shared geometry rules) so freed space flows
-  // to Program first, then Preview. Nothing here is a hardcoded monitor size.
-  const railWidth = Math.min(
-    layout.zones['left-rail'].rect.width || workspaceZoneDefinitions['left-rail'].defaultSize,
-    workspaceZoneDefinitions['left-rail'].defaultSize,
-  );
-  const leftDockWidth = Math.min(
+  // Zone geometry from Workspace Manager. Rail uses a fixed width from the
+  // zone definition. Docks use their stored/preset width (falling back to
+  // defaultSize) and are floored at minSize so they never underflow.
+  const railWidth =
+    layout.zones['left-rail'].rect.width || workspaceZoneDefinitions['left-rail'].defaultSize;
+  const leftDockWidth = Math.max(
     leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize,
     workspaceZoneDefinitions['left-dock'].minSize,
   );
-  const rightDockWidth = Math.min(
+  const rightDockWidth = Math.max(
     rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize,
     workspaceZoneDefinitions['right-dock'].minSize,
   );
-  const bottomHeight = Math.min(
+  const bottomHeight = Math.max(
     bottomGeometry.rect.height || workspaceZoneDefinitions['bottom-workspace'].defaultSize,
     workspaceZoneDefinitions['bottom-workspace'].minSize,
   );
