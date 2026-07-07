@@ -700,3 +700,5 @@ export * from './desktop-platform/index.js';
 export * as CollaborationFoundation from './collaboration-foundation/index.js';
 
 export * from './broadcast-io/index.js';
+
+export * from './workspace-manager/index.js';
