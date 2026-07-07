@@ -33,6 +33,7 @@ export function CommandCenterRightDock({
   activeOperationsTab,
   isPanelVisible,
   isPanelCollapsed,
+  getPanelTitle,
   onToggleCollapsed,
   onHidePanel,
   className,
@@ -41,6 +42,7 @@ export function CommandCenterRightDock({
   activeOperationsTab: OperationsTabId;
   isPanelVisible: (panelId: string) => boolean;
   isPanelCollapsed: (panelId: string) => boolean;
+  getPanelTitle?: ((panelId: string) => string | undefined) | undefined;
   onToggleCollapsed: (panelId: string) => void;
   onHidePanel: (panelId: string) => void;
   className?: string;
@@ -78,7 +80,7 @@ export function CommandCenterRightDock({
           return (
             <div key={section.id} id={`command-center-ops-${section.id}`} className="shrink-0">
               <DockablePanel
-                title={OPERATIONS_DOCK_SECTION_LABELS[section.id]}
+                title={getPanelTitle?.(panelId) ?? OPERATIONS_DOCK_SECTION_LABELS[section.id]}
                 status={statusForBadge(section.badge)}
                 collapsed={isPanelCollapsed(panelId)}
                 collapsible

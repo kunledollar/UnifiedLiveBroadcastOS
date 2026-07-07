@@ -24,17 +24,18 @@ type MonitorRole = 'program' | 'preview';
 
 /**
  * Program share of the monitor axis per emphasis. Program always receives
- * more space than Preview, per the Center Stage layout contract.
+ * more space than Preview, per the Center Stage layout contract (Program
+ * ~60–65% of the video area in the default Director workspace).
  */
 function programShare(emphasis: WorkspaceCenterEmphasis): number {
   switch (emphasis) {
     case 'program':
-      return 0.65;
+      return 0.68;
     case 'preview':
-      return 0.55;
+      return 0.56;
     case 'balanced':
     default:
-      return 0.62;
+      return 0.65;
   }
 }
 

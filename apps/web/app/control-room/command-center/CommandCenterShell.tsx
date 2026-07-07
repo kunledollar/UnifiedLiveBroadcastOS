@@ -17,7 +17,7 @@
  */
 import { useCallback, useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
-import type { WorkspacePresetId, WorkspaceZoneId } from '@ubos/shared';
+import { workspaceZoneDefinitions, type WorkspacePresetId } from '@ubos/shared';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from '../menu';
 import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../shell/types';
 import type { MonitorStatusInfo } from '../broadcast-command-center/CenterProgramPreviewDeck';
@@ -310,7 +310,25 @@ export function CommandCenterShell({
 
   const monitorsStacked = layout.monitorsStacked || layout.zones['center-stage'].rect.width < 900;
 
-  const zoneWidth = (zoneId: WorkspaceZoneId): number => layout.zones[zoneId]?.rect.width ?? 0;
+  // Center-stage priority: docks render at the slim end of their allowed
+  // range (zone minSize from the shared geometry rules) so freed space flows
+  // to Program first, then Preview. Nothing here is a hardcoded monitor size.
+  const railWidth = Math.min(
+    layout.zones['left-rail'].rect.width || workspaceZoneDefinitions['left-rail'].defaultSize,
+    workspaceZoneDefinitions['left-rail'].defaultSize,
+  );
+  const leftDockWidth = Math.min(
+    leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize,
+    workspaceZoneDefinitions['left-dock'].minSize,
+  );
+  const rightDockWidth = Math.min(
+    rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize,
+    workspaceZoneDefinitions['right-dock'].minSize,
+  );
+  const bottomHeight = Math.min(
+    bottomGeometry.rect.height || workspaceZoneDefinitions['bottom-workspace'].defaultSize,
+    workspaceZoneDefinitions['bottom-workspace'].minSize,
+  );
 
   const isZoneToggleCollapsed = useCallback(
     (zoneId: CommandCenterZoneToggleId) => layout.zones[zoneId]?.collapsed ?? false,
@@ -370,7 +388,7 @@ export function CommandCenterShell({
         className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1"
       >
         <div className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-hidden">
-          <div className="shrink-0" style={{ width: zoneWidth('left-rail') || 56 }}>
+          <div className="shrink-0" style={{ width: railWidth }}>
             <CommandCenterLeftRail activeNav={activeNav} onSelectItem={handleRailItem} />
           </div>
 
@@ -383,7 +401,7 @@ export function CommandCenterShell({
           ) : (
             <div
               className="min-h-0 shrink-0 overflow-hidden"
-              style={{ width: Math.max(zoneWidth('left-dock'), 220) }}
+              style={{ width: leftDockWidth }}
             >
               <CommandCenterLeftDock
                 activeTab={activeSourceDockTab}
@@ -420,13 +438,14 @@ export function CommandCenterShell({
           ) : (
             <div
               className="min-h-0 shrink-0 overflow-hidden"
-              style={{ width: Math.max(zoneWidth('right-dock'), 260) }}
+              style={{ width: rightDockWidth }}
             >
               <CommandCenterRightDock
                 sections={operationsSections}
                 activeOperationsTab={activeOperationsTab}
                 isPanelVisible={isPanelVisible}
                 isPanelCollapsed={isPanelCollapsed}
+                getPanelTitle={(panelId) => panels.find((panel) => panel.id === panelId)?.title}
                 onToggleCollapsed={togglePanelCollapsed}
                 onHidePanel={togglePanelVisibility}
               />
@@ -436,7 +455,7 @@ export function CommandCenterShell({
 
         <div
           className="min-h-0 shrink-0 overflow-hidden"
-          style={bottomCollapsed ? undefined : { height: Math.max(bottomGeometry.rect.height, 180) }}
+          style={bottomCollapsed ? undefined : { height: bottomHeight }}
         >
           <CommandCenterBottomWorkspace
             activeTab={activeDockTab}
