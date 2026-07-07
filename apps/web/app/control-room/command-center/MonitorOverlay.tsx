@@ -109,8 +109,9 @@ export function MonitorOverlay({
       className={cn('pointer-events-none absolute inset-0 z-10 select-none', className)}
       aria-hidden="true"
     >
-      {/* Top-left: role badge + scene name. */}
-      <div className="absolute left-1.5 top-1.5 flex max-w-[70%] items-center gap-1">
+      {/* Top-left: role badge + scene name. Offset below the top edge so the
+          existing monitor warning strip is never obscured. */}
+      <div className="absolute left-1.5 top-7 flex max-w-[70%] items-center gap-1">
         <span
           className={cn(
             'inline-flex shrink-0 items-center rounded-ubos-sm border px-1.5 py-px text-[9px] font-black uppercase tracking-[0.14em]',
@@ -124,7 +125,7 @@ export function MonitorOverlay({
       </div>
 
       {/* Top-right: resolution + fps. */}
-      <div className="absolute right-1.5 top-1.5 flex items-center gap-1">
+      <div className="absolute right-1.5 top-7 flex items-center gap-1">
         {data.resolution ? <OverlayChip className={chrome.chip}>{data.resolution}</OverlayChip> : null}
         {data.fps ? <OverlayChip className={chrome.chip}>{data.fps} fps</OverlayChip> : null}
       </div>
