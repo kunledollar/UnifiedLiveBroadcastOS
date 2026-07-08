@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "postinstall": "prisma generate --schema prisma/schema.prisma",
     "build": "prisma generate --schema prisma/schema.prisma",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit"
