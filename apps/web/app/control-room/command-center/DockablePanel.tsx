@@ -208,14 +208,14 @@ export function DockablePanel({
         ) : null}
       </header>
 
-      {/* Undock notice tooltip */}
+      {/* Undock notice tooltip — top-9 (36 px) clears the py-2 header (8+20+8 px). */}
       {undockNotice ? (
         <div
           id={undockId}
           role="status"
           aria-live="polite"
           className={cn(
-            'pointer-events-none absolute right-1.5 top-7 z-20',
+            'pointer-events-none absolute right-1.5 top-9 z-20',
             'rounded-ubos-sm border border-ubos-border-default bg-ubos-carbon',
             'px-2 py-1 text-[10px] font-medium text-ubos-fg-secondary',
             'shadow-[var(--ubos-shadow-raised)]',
