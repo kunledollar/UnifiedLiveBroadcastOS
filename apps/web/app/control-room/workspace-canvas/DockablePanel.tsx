@@ -10,7 +10,7 @@ function PanelIcon({ children, label, onClick }: { children: ReactNode; label: s
       aria-label={label}
       title={label}
       onClick={onClick}
-      className="flex h-5 w-5 items-center justify-center rounded text-slate-500 opacity-0 transition-opacity hover:bg-white/10 hover:text-slate-300 group-hover/panel-header:opacity-100"
+      className="flex h-4 w-4 items-center justify-center rounded text-slate-500 opacity-0 transition-opacity hover:bg-white/10 hover:text-slate-300 group-hover/panel-header:opacity-100"
     >
       {children}
     </button>
@@ -73,8 +73,8 @@ export function DockablePanel({
     >
       <header
         className={cn(
-          'group/panel-header flex shrink-0 items-center justify-between border-b border-white/6 bg-[#070b12]/95 px-2',
-          compactHeader ? 'py-1' : 'py-1.5',
+          'group/panel-header flex items-center min-h-[40px] px-3 py-1 gap-2 whitespace-nowrap text-sm font-medium rounded-md',
+          'shrink-0 border-b border-white/6 bg-[#070b12]/95',
         )}
       >
         <div className="min-w-0 flex-1">
@@ -83,7 +83,7 @@ export function DockablePanel({
             <p className="truncate text-[10px] text-slate-500">{subtitle}</p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-2">
           {headerActions}
           <PanelIcon label={collapsed ? 'Expand panel' : 'Collapse panel'} onClick={onToggleCollapse}>
             <span className="text-[10px] leading-none">{collapsed ? '▾' : '▴'}</span>
