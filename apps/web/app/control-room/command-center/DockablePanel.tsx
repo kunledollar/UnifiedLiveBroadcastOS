@@ -20,11 +20,24 @@
  * 3.15E patch (PR-E): header vertical padding increased from py-1 (4px) to
  * py-2 (8px) for improved touch target size and visual breathing room.
  * No layout logic, geometry, or preset changes.
+ *
+ * PR-G: Added Move-to dropdown in panel header for operator workflow.
+ * No layout changes, no new dependencies, no panel content changes.
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
 
 export type DockablePanelStatusTone = 'live' | 'ready' | 'warning' | 'neutral';
+
+/** A single destination in the Move-to dropdown. */
+export type MoveToOption = {
+  /** Stable identifier forwarded to `onMoveTo`. */
+  key: string;
+  /** Human-readable destination label shown in the menu. */
+  label: string;
+  /** When true the item is rendered but not clickable (already in that zone). */
+  disabled?: boolean;
+};
 
 export type DockablePanelStatus = {
   tone: DockablePanelStatusTone;
@@ -78,6 +91,109 @@ function HeaderIconButton({
   );
 }
 
+/**
+ * Move-to dropdown — appears in the panel header and lets operators relocate
+ * a panel to a different dock zone by selecting a named destination.
+ * Click-outside and Escape close the menu; no new library dependencies.
+ */
+function MovePanelDropdown({
+  options,
+  onMoveTo,
+}: {
+  options: MoveToOption[];
+  onMoveTo: (key: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handleOutside = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', handleOutside);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-label="Move panel to…"
+        title="Move to…"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((prev) => !prev)}
+        className={cn(
+          'flex h-5 w-5 shrink-0 items-center justify-center rounded-ubos-sm text-ubos-fg-muted',
+          'transition-colors duration-[var(--ubos-duration-fast)]',
+          'hover:bg-ubos-midnight hover:text-ubos-fg-primary',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+          open && 'bg-ubos-selection-muted text-ubos-selection-text',
+        )}
+      >
+        <span className="text-[10px] leading-none" aria-hidden="true">
+          ⊞
+        </span>
+      </button>
+
+      {open ? (
+        <div
+          role="menu"
+          aria-label="Move panel to…"
+          className={cn(
+            'absolute right-0 top-full z-50 mt-1 min-w-[140px]',
+            'rounded-ubos-md border border-ubos-border-default bg-ubos-carbon',
+            'shadow-[var(--ubos-shadow-raised)] py-1',
+            'animate-[ubos-slide-up_120ms_var(--ubos-easing-out)_forwards]',
+          )}
+        >
+          <p
+            className={cn(
+              'px-3 pb-1 pt-1.5',
+              'text-[9px] font-black uppercase tracking-[0.12em] text-ubos-fg-muted',
+            )}
+          >
+            Move to…
+          </p>
+          {options.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              role="menuitem"
+              disabled={option.disabled}
+              onClick={() => {
+                if (!option.disabled) {
+                  onMoveTo(option.key);
+                  setOpen(false);
+                }
+              }}
+              className={cn(
+                'flex w-full items-center px-3 py-1.5',
+                'text-left text-[11px] font-medium',
+                'transition-colors duration-[var(--ubos-duration-fast)]',
+                option.disabled
+                  ? 'cursor-default text-ubos-fg-muted/40'
+                  : 'cursor-pointer text-ubos-fg-secondary hover:bg-ubos-midnight/60 hover:text-ubos-fg-primary',
+                'focus-visible:outline-none focus-visible:ring-inset focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function DockablePanel({
   title,
   status,
@@ -87,6 +203,8 @@ export function DockablePanel({
   onToggleCollapse,
   onHide,
   headerActions,
+  moveToOptions,
+  onMoveTo,
   children,
   bodyClassName,
   className,
@@ -99,6 +217,10 @@ export function DockablePanel({
   onToggleCollapse?: () => void;
   onHide?: () => void;
   headerActions?: ReactNode;
+  /** When provided, a Move-to dropdown appears in the header. */
+  moveToOptions?: MoveToOption[];
+  /** Called with the selected destination key when the operator moves the panel. */
+  onMoveTo?: (key: string) => void;
   children: ReactNode;
   bodyClassName?: string;
   className?: string;
@@ -170,6 +292,10 @@ export function DockablePanel({
         ) : null}
 
         {headerActions}
+
+        {moveToOptions && moveToOptions.length > 0 && onMoveTo ? (
+          <MovePanelDropdown options={moveToOptions} onMoveTo={onMoveTo} />
+        ) : null}
 
         {collapsible && onToggleCollapse ? (
           <HeaderIconButton

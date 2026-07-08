@@ -120,6 +120,12 @@ export type CommandCenterWorkspace = {
    * Replaces any shortcut that would render a duplicate editor inline.
    */
   activateWorkspace: (tabId: DockTabId) => void;
+  /**
+   * Move a registered panel to a different dock zone.
+   * Expands the destination zone if it is currently collapsed.
+   * No-op when the layout is locked or the move is not permitted by the registry.
+   */
+  movePanelToZone: (panelId: string, zoneId: WorkspaceZoneId) => void;
 };
 
 export function useCommandCenterWorkspace(): CommandCenterWorkspace {
@@ -459,6 +465,22 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     [ensureZoneExpanded],
   );
 
+  const movePanelToZone = useCallback(
+    (panelId: string, zoneId: WorkspaceZoneId) => {
+      if (layoutLocked) return;
+      try {
+        registry.movePanelToZone(panelId, zoneId);
+      } catch {
+        return;
+      }
+      if (zoneId === 'left-dock' || zoneId === 'right-dock' || zoneId === 'bottom-workspace') {
+        ensureZoneExpanded(zoneId);
+      }
+      bump();
+    },
+    [registry, layoutLocked, ensureZoneExpanded, bump],
+  );
+
   const resetLayout = useCallback(() => {
     if (layoutLocked) return;
     try {
@@ -508,5 +530,6 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     resetLayout,
     activatePanel,
     activateWorkspace,
+    movePanelToZone,
   };
 }
