@@ -165,6 +165,16 @@ function StageMonitorCell({
   );
 }
 
+// Height budget reserved for non-monitor chrome when stacked: switcher panel
+// (~184 px max-height via --ubos-switcher-height), monitor headers (2×32 px),
+// section gaps, and a small margin.  Used only to cap stacked min-heights.
+const STACKED_CHROME_RESERVE_PX = 200;
+
+// Absolute floor below which a monitor's min-height will never be pushed,
+// even on very small viewports, to keep the video surface legible.
+const PROGRAM_MIN_HEIGHT_FLOOR_PX = 180;
+const PREVIEW_MIN_HEIGHT_FLOOR_PX = 108;
+
 export function CommandCenterStage({
   programMonitor,
   previewMonitor,
@@ -176,6 +186,7 @@ export function CommandCenterStage({
   safeAreasVisible,
   fullscreenMonitor,
   onFullscreenChange,
+  viewportHeight,
   className,
 }: {
   programMonitor: ReactNode;
@@ -188,6 +199,13 @@ export function CommandCenterStage({
   safeAreasVisible: boolean;
   fullscreenMonitor: CommandCenterFullscreenTarget;
   onFullscreenChange: (target: CommandCenterFullscreenTarget) => void;
+  /**
+   * Height of the center-stage zone (px), supplied by the shell from the
+   * Workspace Manager layout.  Used only when stacked to cap each monitor's
+   * min-height so the pair never exceeds the available vertical space and
+   * causes an unwanted scrollbar on very small viewports.
+   */
+  viewportHeight?: number;
   className?: string;
 }) {
   const share = programShare(emphasis);
@@ -213,11 +231,25 @@ export function CommandCenterStage({
   //
   // Using CSS min-* alongside flex so the browser enforces the floor while
   // still allowing the monitors to expand to fill all freed space.
+  //
+  // Min-height cap (stacked only): when viewportHeight is provided the nominal
+  // min-heights (450 / 270) are capped to each monitor's proportional share of
+  // the available height after reserving STACKED_CHROME_RESERVE_PX for switcher
+  // and monitor chrome.  This prevents the stacked pair from overflowing the
+  // zone on very small viewports without altering the flex share or geometry.
+  let programMinH = 450;
+  let previewMinH = 270;
+  if (stacked && viewportHeight) {
+    const available = Math.max(STACKED_CHROME_RESERVE_PX, viewportHeight - STACKED_CHROME_RESERVE_PX);
+    programMinH = Math.max(PROGRAM_MIN_HEIGHT_FLOOR_PX, Math.min(450, Math.floor(available * share)));
+    previewMinH = Math.max(PREVIEW_MIN_HEIGHT_FLOOR_PX, Math.min(270, Math.floor(available * (1 - share))));
+  }
+
   const programMinStyle: CSSProperties = stacked
-    ? { flex: `${share} 1 0%`, minHeight: 450 }
+    ? { flex: `${share} 1 0%`, minHeight: programMinH }
     : { flex: `${share} 1 0%`, minWidth: 800 };
   const previewMinStyle: CSSProperties = stacked
-    ? { flex: `${1 - share} 1 0%`, minHeight: 270 }
+    ? { flex: `${1 - share} 1 0%`, minHeight: previewMinH }
     : { flex: `${1 - share} 1 0%`, minWidth: 480 };
 
   return (

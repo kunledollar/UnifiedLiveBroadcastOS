@@ -372,15 +372,28 @@ export function CommandCenterShell({
   // MONITOR_STACK_WIDTH threshold is crossed; we also check the raw rect.
   const monitorsStacked = layout.monitorsStacked || layout.zones['center-stage'].rect.width < 900;
 
-  // Responsive bottom collapse: at <900px the bottom workspace shows tab bar
-  // only (the zone collapses to its collapsedSize = tab bar height).
+  // Viewport width = center-stage + visible dock widths + rail.
+  // Used exclusively for the forceBottomCollapsed policy below.
   const viewportWidth = layout.zones['center-stage'].rect.width +
     (leftCollapsed ? 0 : (leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize)) +
     (rightCollapsed ? 0 : (rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize)) +
     (layout.zones['left-rail'].rect.width || workspaceZoneDefinitions['left-rail'].defaultSize);
 
-  // At <900px viewport we force the bottom workspace to collapsed (tab bar only)
-  // so it never covers Program/Preview on very small screens.
+  // forceBottomCollapsed — operator-override policy (3.15D responsive):
+  //
+  //   When the total viewport width drops below 900 px the bottom workspace is
+  //   forced into its collapsed (tab-bar-only) state regardless of any saved
+  //   or user-toggled expanded state.  The policy is intentionally an override:
+  //
+  //   • The expand toggle is suppressed (onToggleCollapse receives undefined) so
+  //     the operator cannot manually re-open the bottom workspace while the
+  //     viewport remains under the threshold.
+  //   • Once the viewport grows back past 900 px the lock releases and the
+  //     operator regains full control of the bottom workspace.
+  //
+  //   Rationale: on very small screens the bottom workspace would occlude the
+  //   Program/Preview monitors.  Keeping it collapsed ensures Center Stage
+  //   always has enough vertical space for both monitors.
   const forceBottomCollapsed = viewportWidth < 900;
 
   // Zone geometry from Workspace Manager. Rail uses a fixed width from the
@@ -549,6 +562,9 @@ export function CommandCenterShell({
               safeAreasVisible={safeAreasVisible}
               fullscreenMonitor={fullscreenMonitor}
               onFullscreenChange={setFullscreenMonitor}
+              {...(layout.zones['center-stage'].rect.height > 0
+                ? { viewportHeight: layout.zones['center-stage'].rect.height }
+                : {})}
             />
           </div>
 

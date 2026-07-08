@@ -1,3 +1,21 @@
+// ONE OWNER RULE AUDIT (3.15C/D) — /control-room/analytics
+//
+// Surface type: standalone full-page route (Next.js App Router page).
+//   This route is NOT a panel inside the CommandCenter zone layout.
+//
+// activatePanel() usage: NOT APPLICABLE.
+//   Standalone route pages sit outside the CommandCenter zone system and do
+//   not use activatePanel().  Panel activation via Workspace Manager is only
+//   required for surfaces docked inside the CommandCenter shell.
+//
+// Workspace Manager bypass: NONE — no CommandCenter zones are rendered here.
+//   The analytics surface is a self-contained metadata-only display page;
+//   it does not render Program/Preview monitors and poses no One Owner Rule
+//   conflict.  All data displayed is deterministic and local (no telemetry).
+//
+// TODO(one-owner): If an analytics panel is later embedded inside the
+//   CommandCenter bottom/right dock, ensure activation goes through
+//   activatePanel() and does not duplicate monitor rendering.
 const pages = ['Analytics Dashboard','Reports','KPIs','Insights','Forecasts','History','Activity Timeline','Production Metrics','Executive Summary','Performance Center'];
 const dashboards = ['Executive Dashboard','Operations Dashboard','Production Dashboard','Engineering Dashboard','AI Dashboard','Monitoring Dashboard','Media Dashboard','Graphics Dashboard','Audio Dashboard','Distribution Dashboard','Security Dashboard','Cloud Dashboard','Plugin Dashboard'];
 const visualizations = ['Line Charts','Bar Charts','Pie Charts','Heat Maps','Trend Graphs','Timelines','KPI Cards','Gauge Panels','Scorecards','Activity Streams'];
