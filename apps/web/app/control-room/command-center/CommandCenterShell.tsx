@@ -538,7 +538,7 @@ export function CommandCenterShell({
             />
           ) : (
             <div
-              className="min-h-0 shrink-0 overflow-hidden"
+              className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-default)]"
               style={{ width: leftDockWidth }}
             >
               <CommandCenterLeftDock
@@ -598,7 +598,7 @@ export function CommandCenterShell({
             />
           ) : (
             <div
-              className="min-h-0 shrink-0 overflow-hidden"
+              className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-default)]"
               style={{ width: rightDockWidth }}
             >
               <CommandCenterRightDock

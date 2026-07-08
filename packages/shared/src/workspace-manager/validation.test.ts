@@ -30,10 +30,10 @@ import {
 } from './index.js';
 import type { WorkspacePanelDefinition, WorkspaceZoneId } from './index.js';
 
-// ── Zone geometry rules (2A / 3.15D-2) ────────────────────────────────────
-// 3.15D-2 dock geometry contract:
-//   Left Dock:        min 300 / preferred 340 / max 440
-//   Right Dock:       min 280 / preferred 340 / max 460
+// ── Zone geometry rules (2A / PR-F responsive dock) ───────────────────────
+// PR-F dock geometry contract:
+//   Left Dock:        min 200 / preferred 270 / max 440
+//   Right Dock:       min 260 / preferred 270 / max 460
 //   Bottom Workspace: min 180 / preferred 280 / max 420
 assertEqual(WORKSPACE_ZONE_IDS.length, 8);
 assertEqual(workspaceZoneDefinitions['top-ribbon'].defaultSize, 56);
@@ -41,14 +41,14 @@ assertEqual(workspaceZoneDefinitions['top-ribbon'].collapsible, false);
 assertEqual(workspaceZoneDefinitions['top-ribbon'].resizable, false);
 assertEqual(workspaceZoneDefinitions['left-rail'].defaultSize, 72);
 assertEqual(workspaceZoneDefinitions['left-rail'].collapsible, false);
-assertEqual(workspaceZoneDefinitions['left-dock'].defaultSize, 340);
-assertEqual(workspaceZoneDefinitions['left-dock'].minSize, 300);
+assertEqual(workspaceZoneDefinitions['left-dock'].defaultSize, 270);
+assertEqual(workspaceZoneDefinitions['left-dock'].minSize, 200);
 assertEqual(workspaceZoneDefinitions['left-dock'].maxSize, 440);
 assertEqual(workspaceZoneDefinitions['left-dock'].collapsedSize, 0);
 assertEqual(workspaceZoneDefinitions['center-stage'].minSize, 900);
 assertEqual(workspaceZoneDefinitions['center-stage'].collapsible, false);
-assertEqual(workspaceZoneDefinitions['right-dock'].defaultSize, 340);
-assertEqual(workspaceZoneDefinitions['right-dock'].minSize, 280);
+assertEqual(workspaceZoneDefinitions['right-dock'].defaultSize, 270);
+assertEqual(workspaceZoneDefinitions['right-dock'].minSize, 260);
 assertEqual(workspaceZoneDefinitions['right-dock'].maxSize, 460);
 assertEqual(workspaceZoneDefinitions['right-dock'].collapsedSize, 0);
 assertEqual(workspaceZoneDefinitions['bottom-workspace'].defaultSize, 280);
@@ -57,7 +57,7 @@ assertEqual(workspaceZoneDefinitions['bottom-workspace'].maxSize, 420);
 assertEqual(workspaceZoneDefinitions['bottom-workspace'].collapsedSize, 42);
 assertEqual(workspaceZoneDefinitions.floating.defaultSize, 0, 'floating is a placeholder only');
 
-assertEqual(clampZoneSize('left-dock', 100), 300);
+assertEqual(clampZoneSize('left-dock', 100), 200);
 assertEqual(clampZoneSize('left-dock', 500), 440);
 assertEqual(clampZoneSize('bottom-workspace', 300), 300);
 
@@ -149,16 +149,16 @@ assertOk(validateWorkspacePreset(conflictPreset).some((issue) => issue.code === 
 const badCollapse = { ...workspacePresets.director, collapsedZones: ['center-stage' as WorkspaceZoneId] };
 assertOk(validateWorkspacePreset(badCollapse).some((issue) => issue.code === 'PRESET_ZONE_NOT_COLLAPSIBLE'));
 
-// ── Layout calculation (2A / 3.15D-2) ───────────────────────────────────────
-// Reference: 1920×1080 viewport, Director preset, both docks at their 3.15D-2
-// preferred widths (left 340, right 340), bottom workspace at preferred height 280.
+// ── Layout calculation (2A / PR-F responsive dock) ───────────────────────────
+// Reference: 1920×1080 viewport, Director preset, both docks at PR-F full
+// width (270px each), bottom workspace at preferred height 280.
 const reference = calculateWorkspaceLayout({ viewportWidth: 1920, viewportHeight: 1080, preset: workspacePresets.director });
 assertEqual(reference.zones['top-ribbon'].rect.height, 56);
 assertEqual(reference.zones['left-rail'].rect.width, 72);
-assertEqual(reference.zones['left-dock'].rect.width, 340);
-assertEqual(reference.zones['right-dock'].rect.width, 340);
+assertEqual(reference.zones['left-dock'].rect.width, 270);
+assertEqual(reference.zones['right-dock'].rect.width, 270);
 assertEqual(reference.zones['bottom-workspace'].rect.height, 280);
-assertEqual(reference.zones['center-stage'].rect.width, 1920 - 72 - 340 - 340);
+assertEqual(reference.zones['center-stage'].rect.width, 1920 - 72 - 270 - 270);
 assertOk(reference.zones['center-stage'].rect.width >= 900, 'center-stage honours its 900px minimum');
 assertEqual(reference.monitorsStacked, false);
 assertEqual(validateLayoutResult(reference).length, 0, 'reference layout must satisfy all safety invariants');
@@ -182,6 +182,19 @@ const at1199 = calculateWorkspaceLayout({ viewportWidth: 1199, viewportHeight: 8
 assertEqual(at1199.zones['left-dock'].collapsed, true, 'left-dock starts collapsed below 1200px');
 assertEqual(at1199.zones['right-dock'].collapsed, true);
 assertEqual(validateLayoutResult(at1199).length, 0);
+
+// PR-F: Compact dock width at 1200–1439px (left dock visible, right dock collapsed).
+const compact1300 = calculateWorkspaceLayout({ viewportWidth: 1300, viewportHeight: 900, preset: workspacePresets.director });
+assertEqual(compact1300.zones['left-dock'].collapsed, false, 'left-dock visible at 1300px');
+assertEqual(compact1300.zones['right-dock'].collapsed, true, 'right-dock collapsed at 1300px');
+assertEqual(compact1300.zones['left-dock'].rect.width, 200, 'left-dock uses DOCK_COMPACT_WIDTH at 1300px');
+assertOk(compact1300.zones['center-stage'].rect.width >= 900, 'center-stage honours minimum at compact width');
+assertEqual(validateLayoutResult(compact1300).length, 0, 'compact-width layout satisfies all safety invariants');
+
+// PR-F: Full dock width at ≥1440px (both docks visible at 270px).
+const full1920 = calculateWorkspaceLayout({ viewportWidth: 1920, viewportHeight: 1080, preset: workspacePresets.director });
+assertEqual(full1920.zones['left-dock'].rect.width, 270, 'left-dock uses DOCK_FULL_WIDTH at 1920px');
+assertEqual(full1920.zones['right-dock'].rect.width, 270, 'right-dock uses DOCK_FULL_WIDTH at 1920px');
 
 // Force-collapse protects the center-stage minimum between thresholds.
 const at1500 = calculateWorkspaceLayout({ viewportWidth: 1500, viewportHeight: 900, preset: workspacePresets.director });

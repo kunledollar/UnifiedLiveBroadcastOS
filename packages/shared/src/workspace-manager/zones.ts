@@ -5,10 +5,15 @@
  * static layout metadata; actual per-viewport geometry is computed by the
  * pure helpers in `layout.ts`.
  *
- * 3.15D-2 dock geometry contract:
- *   Left Dock:         min 300 / preferred 340 / max 440
- *   Right Dock:        min 280 / preferred 340 / max 460
+ * PR-F responsive dock geometry contract:
+ *   Left Dock:         min 200 / preferred 270 / max 440
+ *   Right Dock:        min 260 / preferred 270 / max 460
  *   Bottom Workspace:  min 180 / preferred 280 / max 420
+ *
+ * Responsive dock width rules (PR-F):
+ *   ≥ 1440px viewport → full dock width  (DOCK_FULL_WIDTH = 270px)
+ *   1200–1439px       → compact width    (DOCK_COMPACT_WIDTH = 200px, left only)
+ *   < 1200px          → auto-collapse    (handled by LEFT_DOCK_AUTO_COLLAPSE_WIDTH)
  */
 import type { WorkspaceZoneDefinition, WorkspaceZoneId } from './types.js';
 
@@ -23,6 +28,15 @@ export const RIGHT_DOCK_AUTO_COLLAPSE_WIDTH = 1440;
 export const LEFT_DOCK_AUTO_COLLAPSE_WIDTH = 1200;
 /** Below this viewport width Program and Preview stack vertically. */
 export const MONITOR_STACK_WIDTH = 900;
+
+/**
+ * PR-F: Responsive dock width constants.
+ * Full width (≥ 1440px) — sits in the 260–280px range specified for PR-F.
+ * Compact width (1200–1439px) — applied to the left dock when the right dock
+ * is already auto-collapsed, keeping the center stage unclipped.
+ */
+export const DOCK_FULL_WIDTH = 270;
+export const DOCK_COMPACT_WIDTH = 200;
 
 export const workspaceZoneDefinitions: Record<WorkspaceZoneId, WorkspaceZoneDefinition> = {
   'top-ribbon': {
@@ -51,8 +65,8 @@ export const workspaceZoneDefinitions: Record<WorkspaceZoneId, WorkspaceZoneDefi
     id: 'left-dock',
     label: 'Left Dock',
     placement: 'left',
-    defaultSize: 340,
-    minSize: 300,
+    defaultSize: DOCK_FULL_WIDTH,
+    minSize: DOCK_COMPACT_WIDTH,
     maxSize: 440,
     collapsible: true,
     resizable: true,
@@ -74,8 +88,8 @@ export const workspaceZoneDefinitions: Record<WorkspaceZoneId, WorkspaceZoneDefi
     id: 'right-dock',
     label: 'Right Dock',
     placement: 'right',
-    defaultSize: 340,
-    minSize: 280,
+    defaultSize: DOCK_FULL_WIDTH,
+    minSize: 260,
     maxSize: 460,
     collapsible: true,
     resizable: true,
@@ -144,4 +158,32 @@ export function getResponsiveCollapsedZones(viewportWidth: number): WorkspaceZon
   if (viewportWidth < RIGHT_DOCK_AUTO_COLLAPSE_WIDTH) collapsed.push('right-dock');
   if (viewportWidth < LEFT_DOCK_AUTO_COLLAPSE_WIDTH) collapsed.push('left-dock');
   return collapsed;
+}
+
+/**
+ * PR-F: Returns the viewport-responsive default width for a dock zone when
+ * no user-dragged override is present.
+ *
+ * Breakpoint table:
+ *   ≥ 1440px  → DOCK_FULL_WIDTH (270px) for both left and right dock
+ *   1200–1439px → DOCK_COMPACT_WIDTH (200px) for the left dock only
+ *               (right dock is already auto-collapsed in this range)
+ *   < 1200px  → docks are auto-collapsed; this function is not reached
+ *
+ * Non-dock zones fall through to their zone definition's defaultSize.
+ */
+export function getResponsiveDockWidth(
+  zoneId: WorkspaceZoneId,
+  viewportWidth: number,
+): number {
+  if (zoneId === 'left-dock') {
+    if (
+      viewportWidth >= LEFT_DOCK_AUTO_COLLAPSE_WIDTH &&
+      viewportWidth < RIGHT_DOCK_AUTO_COLLAPSE_WIDTH
+    ) {
+      return DOCK_COMPACT_WIDTH;
+    }
+    return workspaceZoneDefinitions['left-dock'].defaultSize;
+  }
+  return workspaceZoneDefinitions[zoneId]?.defaultSize ?? 0;
 }
