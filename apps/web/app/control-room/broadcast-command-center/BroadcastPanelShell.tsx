@@ -53,7 +53,7 @@ export function BroadcastPanelShell({
     >
       <header
         className={cn(
-          'flex shrink-0 items-center justify-between border-b px-ubos-2 py-1.5',
+          'flex shrink-0 items-center justify-between border-b px-ubos-2 py-2',
           broadcastSurfaces.panelHeader,
         )}
       >
