@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback } from 'react';
 import {
   MonitorFooter,
   MonitorFrame,
@@ -32,6 +33,7 @@ import {
   getVerticalRoutes,
   type OutputViewMode,
 } from './monitor-state';
+import { openPopOutWindow } from '../pop-out/usePopOutWindow';
 
 type OutputViewRendererProps = {
   mode: OutputViewMode;
@@ -259,6 +261,10 @@ export function OutputViewRenderer({
 }: OutputViewRendererProps) {
   const graphProps = graph ? { graph } : {};
 
+  const handleMultiviewPopOut = useCallback(() => {
+    openPopOutWindow('multiview');
+  }, []);
+
   switch (mode) {
     case 'program':
       return (
@@ -321,17 +327,35 @@ export function OutputViewRenderer({
         );
       }
       return (
-        <div className="h-full min-h-0 overflow-hidden">
-          <ProductionMultiview
-            programScene={programScene}
-            previewScene={previewScene}
-            routes={routes}
-            layoutPreset={layoutPreset}
-            channels={channels}
-            healthMetrics={healthMetrics}
-            guests={guests}
-            preset="broadcast"
-          />
+        <div className="flex h-full min-h-0 flex-col overflow-hidden">
+          {/* Multiview panel header with Pop Out button */}
+          <div className="flex shrink-0 items-center gap-2 border-b border-ubos-border-subtle bg-ubos-graphite/60 px-2 py-1">
+            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-ubos-fg-muted">
+              Multiview
+            </span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              onClick={handleMultiviewPopOut}
+              className="shrink-0 rounded-ubos-sm border border-ubos-border-subtle bg-transparent px-1.5 py-px text-[9px] font-bold uppercase tracking-wide text-ubos-fg-muted transition-colors duration-[var(--ubos-duration-fast)] hover:bg-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40"
+              aria-label="Pop out Multiview to external window"
+              title="Open Multiview in external window"
+            >
+              ⧉ Pop Out
+            </button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <ProductionMultiview
+              programScene={programScene}
+              previewScene={previewScene}
+              routes={routes}
+              layoutPreset={layoutPreset}
+              channels={channels}
+              healthMetrics={healthMetrics}
+              guests={guests}
+              preset="broadcast"
+            />
+          </div>
         </div>
       );
     }
