@@ -15,6 +15,7 @@ import {
   WorkspacePanelRegistry,
   applyLayoutSnapshot,
   calculateWorkspaceLayout,
+  clampZoneSize,
   createDefaultPanelDefinitions,
   createLayoutSnapshot,
   getWorkspacePreset,
@@ -93,6 +94,12 @@ export type CommandCenterWorkspace = {
   setPanelVisible: (panelId: string, visible: boolean) => void;
   togglePanelCollapsed: (panelId: string) => void;
   toggleZone: (zoneId: CommandCenterZoneToggleId) => void;
+  /**
+   * Set a resizable zone to a specific size in pixels.
+   * The size is clamped to the zone's min/max before being applied.
+   * No-op when the layout is locked or the zone is not resizable.
+   */
+  setZoneSize: (zoneId: CommandCenterZoneToggleId, sizePx: number) => void;
   setActiveBottomTab: (tab: DockTabId) => void;
   setLayoutLocked: (locked: boolean) => void;
   toggleSafeAreas: () => void;
@@ -134,6 +141,13 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   const [fullscreenMonitor, setFullscreenMonitor] = useState<CommandCenterFullscreenTarget>(null);
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
   const [hydrated, setHydrated] = useState(false);
+  /** User-chosen dock sizes (keyed by zone id, in px). Persisted as part of prefs. */
+  const [zoneSizes, setZoneSizesState] = useState<Record<string, number>>({});
+  // Ref so persist() always writes the latest zone sizes without taking them as deps.
+  const zoneSizesRef = useRef(zoneSizes);
+  zoneSizesRef.current = zoneSizes;
+  // Timer ref for debounced zone-size writes.
+  const zoneSizePersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const observerRef = useRef<ResizeObserver | null>(null);
   const containerRef = useCallback((node: HTMLElement | null) => {
@@ -173,6 +187,9 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
         setExpandedZoneOverrides(prefs.expandedZones);
         setLayoutLockedState(prefs.layoutLocked);
         setSafeAreasVisible(prefs.safeAreasVisible);
+        if (Object.keys(prefs.zoneSizes).length > 0) {
+          setZoneSizesState(prefs.zoneSizes);
+        }
       }
     } catch {
       // Ignore storage failures; defaults already applied.
@@ -192,11 +209,14 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
       window.localStorage.setItem(
         COMMAND_CENTER_PREFS_STORAGE_KEY,
         serializeCommandCenterPrefs({
-          version: 1,
+          version: 2,
           activeBottomTab,
           expandedZones: expandedZoneOverrides,
           layoutLocked,
           safeAreasVisible,
+          // Read from ref so zone sizes are always current without being in deps
+          // (avoids running the normal persist path on every resize pointer-move).
+          zoneSizes: zoneSizesRef.current,
         }),
       );
     } catch {
@@ -210,6 +230,8 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     expandedZoneOverrides,
     layoutLocked,
     safeAreasVisible,
+    // zoneSizes intentionally excluded — read from zoneSizesRef to avoid
+    // running a full persist on every resize pointer-move event.
   ]);
 
   useEffect(() => {
@@ -217,6 +239,25 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     persist();
     // `revision` intentionally triggers persistence after registry mutations.
   }, [hydrated, persist, revision]);
+
+  // Debounced persistence for zone-size changes. Zone sizes update on every
+  // pointer-move event during a drag, so we throttle writes to ~400 ms.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (zoneSizePersistTimerRef.current !== null) {
+      clearTimeout(zoneSizePersistTimerRef.current);
+    }
+    zoneSizePersistTimerRef.current = setTimeout(() => {
+      zoneSizePersistTimerRef.current = null;
+      persist();
+    }, 400);
+    return () => {
+      if (zoneSizePersistTimerRef.current !== null) {
+        clearTimeout(zoneSizePersistTimerRef.current);
+        zoneSizePersistTimerRef.current = null;
+      }
+    };
+  }, [hydrated, persist, zoneSizes]);
 
   const preset = useMemo(() => getWorkspacePreset(activePresetId), [activePresetId]);
 
@@ -227,8 +268,9 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
         viewportHeight: viewport.height,
         preset: effectivePresetForLayout(preset, expandedZoneOverrides),
         collapsedZones: collapsedZoneOverrides,
+        zoneSizeOverrides: zoneSizes,
       }),
-    [viewport, preset, expandedZoneOverrides, collapsedZoneOverrides],
+    [viewport, preset, expandedZoneOverrides, collapsedZoneOverrides, zoneSizes],
   );
 
   const panels = useMemo(() => registry.getAllPanels(), [registry]);
@@ -332,6 +374,18 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     [layoutLocked, layout, ensureZoneExpanded],
   );
 
+  const setZoneSize = useCallback(
+    (zoneId: CommandCenterZoneToggleId, sizePx: number) => {
+      if (layoutLocked) return;
+      const clamped = clampZoneSize(zoneId, sizePx);
+      setZoneSizesState((current) => {
+        if (current[zoneId] === clamped) return current;
+        return { ...current, [zoneId]: clamped };
+      });
+    },
+    [layoutLocked],
+  );
+
   const setActiveBottomTab = useCallback((tab: DockTabId) => {
     setActiveBottomTabState(tab);
   }, []);
@@ -418,6 +472,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     setActivePresetId(defaultWorkspacePresetId);
     setCollapsedZoneOverrides([]);
     setExpandedZoneOverrides([]);
+    setZoneSizesState({});
     setActiveBottomTabState(defaults.activeBottomTab);
     setSafeAreasVisible(defaults.safeAreasVisible);
     setFullscreenMonitor(null);
@@ -444,6 +499,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     setPanelVisible,
     togglePanelCollapsed,
     toggleZone,
+    setZoneSize,
     setActiveBottomTab,
     setLayoutLocked,
     toggleSafeAreas,

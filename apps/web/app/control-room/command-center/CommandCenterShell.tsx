@@ -42,6 +42,7 @@ import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../
 import type { MonitorStatusInfo } from '../broadcast-command-center/CenterProgramPreviewDeck';
 import type { OperationsDockSection } from '../broadcast-command-center/RightOperationsDock';
 import { broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
+import { DockResizeHandle } from '../broadcast-command-center/DockResizeHandle';
 import { CommandCenterBottomWorkspace } from './CommandCenterBottomWorkspace';
 import { CommandCenterLeftDock } from './CommandCenterLeftDock';
 import { CommandCenterLeftRail } from './CommandCenterLeftRail';
@@ -198,6 +199,7 @@ export function CommandCenterShell({
     setPanelVisible,
     togglePanelCollapsed,
     toggleZone,
+    setZoneSize,
     setActiveBottomTab,
     setLayoutLocked,
     toggleSafeAreas,
@@ -521,7 +523,7 @@ export function CommandCenterShell({
 
       <div
         ref={containerRef}
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-hidden p-1"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden p-1"
       >
         <div className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-hidden">
           <div className="shrink-0" style={{ width: railWidth }}>
@@ -550,6 +552,16 @@ export function CommandCenterShell({
             </div>
           )}
 
+          {/* Left dock ↔ center stage resize handle */}
+          {!leftCollapsed && (
+            <DockResizeHandle
+              zoneId="left-dock"
+              currentSize={leftDockWidth}
+              onResize={setZoneSize}
+              disabled={layoutLocked}
+            />
+          )}
+
           <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
             <CommandCenterStage
               programMonitor={programMonitor}
@@ -567,6 +579,16 @@ export function CommandCenterShell({
                 : {})}
             />
           </div>
+
+          {/* Center stage ↔ right dock resize handle */}
+          {!rightCollapsed && (
+            <DockResizeHandle
+              zoneId="right-dock"
+              currentSize={rightDockWidth}
+              onResize={setZoneSize}
+              disabled={layoutLocked}
+            />
+          )}
 
           {rightCollapsed ? (
             <CollapsedZoneStrip
@@ -591,6 +613,16 @@ export function CommandCenterShell({
             </div>
           )}
         </div>
+
+        {/* Center stage area ↔ bottom workspace resize handle */}
+        {!bottomCollapsed && !forceBottomCollapsed && (
+          <DockResizeHandle
+            zoneId="bottom-workspace"
+            currentSize={bottomHeight}
+            onResize={setZoneSize}
+            disabled={layoutLocked}
+          />
+        )}
 
         <div
           className="min-h-0 shrink-0 overflow-hidden"
