@@ -345,22 +345,25 @@ export function effectivePresetForLayout(
 
 /** Shell-level user preferences persisted beside the layout snapshot. */
 export type CommandCenterPrefs = {
-  version: 1;
+  version: 2;
   activeBottomTab: DockTabId;
   expandedZones: WorkspaceZoneId[];
   layoutLocked: boolean;
   safeAreasVisible: boolean;
+  /** User-chosen dock sizes in pixels, keyed by zone id. */
+  zoneSizes: Record<string, number>;
 };
 
 export const COMMAND_CENTER_PREFS_STORAGE_KEY = 'ubos.command-center.prefs.v1';
 
 export function createDefaultCommandCenterPrefs(): CommandCenterPrefs {
   return {
-    version: 1,
+    version: 2,
     activeBottomTab: 'layers',
     expandedZones: [],
     layoutLocked: false,
     safeAreasVisible: false,
+    zoneSizes: {},
   };
 }
 
@@ -396,10 +399,11 @@ export function parseCommandCenterPrefs(serialized: string): CommandCenterPrefs 
   }
   if (typeof raw !== 'object' || raw === null) return null;
   const candidate = raw as Record<string, unknown>;
-  if (candidate.version !== 1) return null;
+  // Accept both version 1 (legacy) and version 2 (current). Unknown versions rejected.
+  if (candidate.version !== 1 && candidate.version !== 2) return null;
   const defaults = createDefaultCommandCenterPrefs();
   return {
-    version: 1,
+    version: 2,
     activeBottomTab:
       typeof candidate.activeBottomTab === 'string' && dockTabIdSet.has(candidate.activeBottomTab)
         ? (candidate.activeBottomTab as DockTabId)
@@ -411,5 +415,21 @@ export function parseCommandCenterPrefs(serialized: string): CommandCenterPrefs 
       : defaults.expandedZones,
     layoutLocked: candidate.layoutLocked === true,
     safeAreasVisible: candidate.safeAreasVisible === true,
+    zoneSizes: parseZoneSizes(candidate.zoneSizes),
   };
+}
+
+/**
+ * Validate and sanitize a raw `zoneSizes` value from stored prefs.
+ * Only numeric values for known resizable zone ids are retained.
+ */
+function parseZoneSizes(raw: unknown): Record<string, number> {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const result: Record<string, number> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (zoneIdSet.has(key) && typeof value === 'number' && isFinite(value) && value > 0) {
+      result[key] = value;
+    }
+  }
+  return result;
 }

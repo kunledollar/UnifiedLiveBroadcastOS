@@ -25,6 +25,7 @@ import {
   LEFT_RAIL_WIDTH,
   MONITOR_STACK_WIDTH,
   TOP_RIBBON_HEIGHT,
+  clampZoneSize,
   getResponsiveCollapsedZones,
   workspaceZoneDefinitions,
 } from './zones.js';
@@ -137,7 +138,12 @@ export function calculateWorkspaceLayout(input: WorkspaceLayoutInput): Workspace
 
   const zoneSize = (zoneId: WorkspaceZoneId): number => {
     const zone = workspaceZoneDefinitions[zoneId];
-    return collapsed.has(zoneId) ? zone.collapsedSize : zone.defaultSize;
+    if (collapsed.has(zoneId)) return zone.collapsedSize;
+    const override = input.zoneSizeOverrides?.[zoneId];
+    if (override !== undefined && zone.resizable) {
+      return clampZoneSize(zoneId, override);
+    }
+    return zone.defaultSize;
   };
 
   // Fixed chrome first.

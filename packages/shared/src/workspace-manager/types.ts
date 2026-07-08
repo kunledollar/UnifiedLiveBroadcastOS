@@ -143,6 +143,12 @@ export interface WorkspaceLayoutInput {
   preset: WorkspacePreset;
   /** Zones explicitly collapsed by the operator (merged with preset + responsive rules). */
   collapsedZones?: WorkspaceZoneId[];
+  /**
+   * User-chosen zone size overrides in pixels (e.g. from drag-resize).
+   * Values are clamped to each zone's min/max before use.
+   * Only resizable zones are affected; non-resizable zones ignore overrides.
+   */
+  zoneSizeOverrides?: Partial<Record<WorkspaceZoneId, number>>;
 }
 
 /** Full layout metadata computed for a viewport + preset combination. */
