@@ -18,19 +18,38 @@
  * - Badges wrap to second row where needed (flex-wrap on card bodies)
  * - Action/dropdown buttons remain visible (flex-shrink-0 on icon buttons)
  * - Filters/search remain usable (full width in column layout)
+ *
+ * PR-G: Move-to dropdown wired to every tab via DockablePanel header.
+ * No layout, geometry, or content changes.
  */
 import type { ReactNode } from 'react';
 import { cn } from '@ubos/ui';
+import type { WorkspaceZoneId } from '@ubos/shared';
 import type { SourceDockTabId } from '../shell/types';
 import { sourceDockTabs, sourceDockTabLabel } from '../broadcast-command-center/command-rail-constants';
-import { DockablePanel } from './DockablePanel';
+import { DockablePanel, type MoveToOption } from './DockablePanel';
 import { panelGatingSourceTab } from './command-center-logic';
+
+/**
+ * Named destinations for the Move-to dropdown (PR-G spec).
+ * Zone mapping: left-dock = Scenes/Sources/Media, right-dock = Guests,
+ * bottom-workspace = Diagnostics.
+ */
+const MOVE_DESTINATIONS: ReadonlyArray<{ key: string; label: string; zone: WorkspaceZoneId }> = [
+  { key: 'scenes',      label: 'Scenes',      zone: 'left-dock'        },
+  { key: 'sources',     label: 'Sources',     zone: 'left-dock'        },
+  { key: 'guests',      label: 'Guests',      zone: 'right-dock'       },
+  { key: 'media',       label: 'Media',       zone: 'left-dock'        },
+  { key: 'diagnostics', label: 'Diagnostics', zone: 'bottom-workspace' },
+];
 
 export function CommandCenterLeftDock({
   activeTab,
   onTabChange,
   isPanelVisible,
   onHidePanel,
+  getPanelZone,
+  onMovePanel,
   children,
   className,
 }: {
@@ -38,6 +57,10 @@ export function CommandCenterLeftDock({
   onTabChange: (tab: SourceDockTabId) => void;
   isPanelVisible: (panelId: string) => boolean;
   onHidePanel: (panelId: string) => void;
+  /** Returns the current zone id for a given panel id (used to disable the current-zone option). */
+  getPanelZone?: (panelId: string) => WorkspaceZoneId | undefined;
+  /** Called when the operator selects a Move-to destination. */
+  onMovePanel?: (panelId: string, targetZone: WorkspaceZoneId) => void;
   children: ReactNode;
   className?: string;
 }) {
@@ -49,6 +72,28 @@ export function CommandCenterLeftDock({
 
   const activePanelId = panelGatingSourceTab(activeTab);
 
+  // Build Move-to options for the active panel.
+  // Options for the panel's current zone are disabled (already there).
+  // When no panel is gated by the active tab (guests/diagnostics) or no
+  // move handler is provided, the dropdown is omitted from the header.
+  const currentZone = activePanelId ? getPanelZone?.(activePanelId) : undefined;
+  const moveToOptions: MoveToOption[] | undefined =
+    activePanelId && onMovePanel
+      ? MOVE_DESTINATIONS.map(({ key, label, zone }) => ({
+          key,
+          label,
+          disabled: zone === currentZone,
+        }))
+      : undefined;
+
+  const handleMoveTo =
+    activePanelId && onMovePanel
+      ? (key: string) => {
+          const dest = MOVE_DESTINATIONS.find((d) => d.key === key);
+          if (dest) onMovePanel(activePanelId, dest.zone);
+        }
+      : undefined;
+
   return (
     <DockablePanel
       title={sourceDockTabLabel(activeTab)}
@@ -57,6 +102,7 @@ export function CommandCenterLeftDock({
       collapsible={false}
       closable={activePanelId !== null}
       {...(activePanelId !== null ? { onHide: () => onHidePanel(activePanelId) } : {})}
+      {...(moveToOptions && handleMoveTo ? { moveToOptions, onMoveTo: handleMoveTo } : {})}
       className={cn('h-full', className)}
       bodyClassName="flex min-w-0 flex-col overflow-hidden"
     >

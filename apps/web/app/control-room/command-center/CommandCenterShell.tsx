@@ -36,7 +36,7 @@
  */
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
-import { workspaceZoneDefinitions, type WorkspacePresetId } from '@ubos/shared';
+import { workspaceZoneDefinitions, type WorkspacePresetId, type WorkspaceZoneId } from '@ubos/shared';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from '../menu';
 import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../shell/types';
 import type { MonitorStatusInfo } from '../broadcast-command-center/CenterProgramPreviewDeck';
@@ -189,6 +189,7 @@ export function CommandCenterShell({
     preset,
     activePresetId,
     panels,
+    panelStates,
     isPanelVisible,
     isPanelCollapsed,
     layoutLocked,
@@ -208,6 +209,7 @@ export function CommandCenterShell({
     resetLayout,
     activatePanel,
     activateWorkspace,
+    movePanelToZone,
   } = workspace;
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -294,6 +296,13 @@ export function CommandCenterShell({
       }
     },
     [togglePanelVisibility, activeSourceDockTab, isPanelVisible, onSourceDockTabChange],
+  );
+
+  const handleMoveSourcePanel = useCallback(
+    (panelId: string, targetZone: WorkspaceZoneId) => {
+      movePanelToZone(panelId, targetZone);
+    },
+    [movePanelToZone],
   );
 
   // ----- right dock ---------------------------------------------------------
@@ -546,6 +555,8 @@ export function CommandCenterShell({
                 onTabChange={handleActivateSourceTab}
                 isPanelVisible={isPanelVisible}
                 onHidePanel={handleHideSourcePanel}
+                getPanelZone={(panelId) => panelStates.get(panelId)?.zone}
+                onMovePanel={handleMoveSourcePanel}
               >
                 {sourceDockContent}
               </CommandCenterLeftDock>
