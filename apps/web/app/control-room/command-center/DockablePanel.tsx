@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * UBOS 3.15C — Command Center dockable panel wrapper.
+ * UBOS 3.15D — Command Center dockable panel wrapper.
  *
  * Pure layout chrome around an EXISTING Control Room panel. The wrapped
  * component is passed in as children and is never modified: this wrapper
@@ -16,6 +16,10 @@
  * - Status badge uses compact ubos-status-chip class
  * - Undock placeholder tooltip replaced with aria-describedby pattern
  * - Consistent border-radius via design tokens
+ *
+ * 3.15E patch (PR-E): header vertical padding increased from py-1 (4px) to
+ * py-2 (8px) for improved touch target size and visual breathing room.
+ * No layout logic, geometry, or preset changes.
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
@@ -129,7 +133,7 @@ export function DockablePanel({
       {/* ── Panel header ─────────────────────────────────────────────── */}
       <header
         className={cn(
-          'flex shrink-0 items-center gap-1.5 px-2 py-1',
+          'flex shrink-0 items-center gap-1.5 px-2 py-2',
           'border-b border-ubos-border-subtle',
           'bg-gradient-to-b from-ubos-midnight/90 to-ubos-midnight/70',
         )}
