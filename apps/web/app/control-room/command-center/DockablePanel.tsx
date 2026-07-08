@@ -133,7 +133,7 @@ export function DockablePanel({
       {/* ── Panel header ─────────────────────────────────────────────── */}
       <header
         className={cn(
-          'flex shrink-0 items-center gap-1.5 px-2 py-2',
+          'flex items-center min-h-[40px] px-3 py-1 gap-2 whitespace-nowrap text-sm font-medium',
           'border-b border-ubos-border-subtle',
           'bg-gradient-to-b from-ubos-midnight/90 to-ubos-midnight/70',
         )}
