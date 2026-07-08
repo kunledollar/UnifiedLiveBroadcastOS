@@ -53,11 +53,12 @@ export function BroadcastPanelShell({
     >
       <header
         className={cn(
-          'flex shrink-0 items-center justify-between border-b px-ubos-2 py-1.5',
+          'flex items-center min-h-[40px] px-3 py-1 gap-2 whitespace-nowrap text-sm font-medium rounded-md',
+          'shrink-0 border-b',
           broadcastSurfaces.panelHeader,
         )}
       >
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <h3 className="truncate text-[11px] font-black uppercase tracking-[0.18em] text-ubos-fg-primary">
             {title}
           </h3>
@@ -65,7 +66,7 @@ export function BroadcastPanelShell({
             <p className="truncate text-[10px] text-ubos-fg-muted">{subtitle}</p>
           ) : null}
         </div>
-        {headerActions ? <div className="flex shrink-0 items-center gap-1">{headerActions}</div> : null}
+        {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
       </header>
       <div className="ubos-scroll min-h-0 flex-1 overflow-auto">{children}</div>
     </section>

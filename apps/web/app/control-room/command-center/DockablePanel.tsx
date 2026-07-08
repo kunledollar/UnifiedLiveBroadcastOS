@@ -79,7 +79,7 @@ function HeaderIconButton({
       title={label}
       onClick={onClick}
       className={cn(
-        'flex h-5 w-5 shrink-0 items-center justify-center rounded-ubos-sm text-ubos-fg-muted',
+        'flex h-4 w-4 shrink-0 items-center justify-center rounded-ubos-sm text-ubos-fg-muted',
         'transition-colors duration-[var(--ubos-duration-fast)]',
         'hover:bg-ubos-midnight hover:text-ubos-fg-primary',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
@@ -132,7 +132,7 @@ function MovePanelDropdown({
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
         className={cn(
-          'flex h-5 w-5 shrink-0 items-center justify-center rounded-ubos-sm text-ubos-fg-muted',
+          'flex h-4 w-4 shrink-0 items-center justify-center rounded-ubos-sm text-ubos-fg-muted',
           'transition-colors duration-[var(--ubos-duration-fast)]',
           'hover:bg-ubos-midnight hover:text-ubos-fg-primary',
           'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
@@ -255,7 +255,7 @@ export function DockablePanel({
       {/* ── Panel header ─────────────────────────────────────────────── */}
       <header
         className={cn(
-          'flex items-center min-h-[40px] px-3 py-1 gap-2 whitespace-nowrap text-sm font-medium',
+          'flex items-center min-h-[40px] px-3 py-1 gap-2 whitespace-nowrap text-sm font-medium rounded-md',
           'border-b border-ubos-border-subtle',
           'bg-gradient-to-b from-ubos-midnight/90 to-ubos-midnight/70',
         )}
