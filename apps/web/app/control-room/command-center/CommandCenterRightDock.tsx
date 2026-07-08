@@ -21,6 +21,13 @@
  * - Panel content overflow clipped at the zone boundary
  * - Labels remain readable (no horizontal overflow of the dock zone)
  * - Action buttons remain visible (shrink-0 in DockablePanel header)
+ *
+ * 3.15E patch (PR-E):
+ * - aside gains min-w-[280px] safety floor so the dock zone is never
+ *   rendered narrower than the right-dock minSize (280 px) even when the
+ *   shell container shrinks unexpectedly. No geometry constants changed.
+ * - Empty-dock hint corrected from "Docks menu" to "Window → Panels"
+ *   (dock visibility restore: users can now locate the correct menu path).
  */
 import { useEffect, useRef } from 'react';
 import { cn } from '@ubos/ui';
@@ -85,7 +92,7 @@ export function CommandCenterRightDock({
   return (
     <aside
       className={cn(
-        'flex h-full min-h-0 min-w-0 flex-col overflow-hidden',
+        'flex h-full min-h-0 min-w-[280px] flex-col overflow-hidden',
         className,
       )}
       aria-label="Operations dock"
@@ -105,7 +112,7 @@ export function CommandCenterRightDock({
               <br />
               Use{' '}
               <span className="font-bold text-ubos-fg-secondary">
-                Docks menu → Panels
+                Window → Panels
               </span>{' '}
               to show them.
             </p>
