@@ -27,6 +27,7 @@ import {
   TOP_RIBBON_HEIGHT,
   clampZoneSize,
   getResponsiveCollapsedZones,
+  getResponsiveDockWidth,
   workspaceZoneDefinitions,
 } from './zones.js';
 
@@ -143,7 +144,9 @@ export function calculateWorkspaceLayout(input: WorkspaceLayoutInput): Workspace
     if (override !== undefined && zone.resizable) {
       return clampZoneSize(zoneId, override);
     }
-    return zone.defaultSize;
+    // PR-F: use viewport-responsive default for dock zones; non-dock zones
+    // fall through to their zone definition's defaultSize inside the helper.
+    return getResponsiveDockWidth(zoneId, viewportWidth);
   };
 
   // Fixed chrome first.
