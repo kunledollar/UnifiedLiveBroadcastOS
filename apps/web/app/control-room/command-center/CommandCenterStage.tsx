@@ -26,7 +26,8 @@
  * One Owner Rule (3.15C/D): Program and Preview have NO secondary homes.
  * Center Stage is their sole primary home; no other zone may host them.
  */
-import { useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { openPopOutWindow } from '../pop-out/usePopOutWindow';
 import { cn } from '@ubos/ui';
 import type { WorkspaceCenterEmphasis } from '@ubos/shared';
 import { broadcastMonitor, broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
@@ -95,6 +96,10 @@ function StageMonitorCell({
   const chrome = broadcastMonitor[role];
   const roleLabel = role === 'program' ? 'Program' : 'Preview';
 
+  const handlePopOut = useCallback(() => {
+    openPopOutWindow(role);
+  }, [role]);
+
   return (
     <div
       {...(role === 'program' ? { 'data-ubos-program-monitor': 'true' } : {})}
@@ -111,7 +116,7 @@ function StageMonitorCell({
       style={fullscreen ? undefined : style}
       aria-label={`${roleLabel} monitor`}
     >
-      {/* Monitor header — compact single row with role badge and fullscreen toggle */}
+      {/* Monitor header — compact single row with role badge, pop-out, and fullscreen toggle */}
       <header
         className={cn(
           'flex shrink-0 items-center gap-2 border-b px-2 py-1',
@@ -128,6 +133,24 @@ function StageMonitorCell({
           {roleLabel}
         </span>
         <span className="min-w-0 flex-1" />
+
+        {/* Pop Out button — opens panel in a dedicated external window */}
+        <button
+          type="button"
+          onClick={handlePopOut}
+          className={cn(
+            'shrink-0 rounded-ubos-sm border px-1.5 py-px',
+            'text-[9px] font-bold uppercase tracking-wide',
+            'transition-colors duration-[var(--ubos-duration-fast)]',
+            'hover:bg-white/10',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
+            chrome.chip,
+          )}
+          aria-label={`Pop out ${roleLabel} to external window`}
+          title={`Open ${roleLabel} in external window`}
+        >
+          ⧉ Pop Out
+        </button>
 
         {/* Fullscreen toggle */}
         <button
