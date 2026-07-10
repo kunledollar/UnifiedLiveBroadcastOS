@@ -182,7 +182,60 @@ export interface RuntimeCommand<TPayload = unknown> {
   targetFrame?: bigint;
   correlationId?: string;
   source?: string;
+  scheduledTimeNs?: bigint;
+  delayFrames?: bigint;
+  delayNs?: bigint;
+  dependencies?: readonly string[];
+  groupId?: string;
+  expiresAtFrame?: bigint;
+  expiresAtNs?: bigint;
+  policy?: CommandExecutionPolicy;
 }
+/** Public UBOS runtime execution-engine API. */
+export type CommandExecutionPolicy =
+  | 'EXECUTE_ONCE'
+  | 'EXECUTE_IF_PRESENT'
+  | 'EXECUTE_UNTIL_SUCCESS'
+  | 'DROP_IF_LATE'
+  | 'RUN_IMMEDIATELY_IF_MISSED';
+/** Public UBOS runtime execution-engine API. */
+export type RuntimeCommandState =
+  | 'CREATED'
+  | 'QUEUED'
+  | 'WAITING'
+  | 'READY'
+  | 'EXECUTING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'EXPIRED';
+/** Public UBOS runtime execution-engine API. */
+export interface ScheduledCommandRecord {
+  readonly command: RuntimeCommand;
+  readonly state: RuntimeCommandState;
+  readonly queuedAtNs: bigint;
+  readonly sequence: bigint;
+  readonly dependencies: readonly string[];
+  readonly groupId?: string;
+  readonly attempts: number;
+  readonly latenessFrames: bigint;
+  readonly latenessNs: bigint;
+}
+/** Public UBOS runtime execution-engine API. */
+export interface SchedulerSnapshot {
+  readonly pendingCommands: number;
+  readonly readyCommands: number;
+  readonly waitingCommands: number;
+  readonly completedCommands: number;
+  readonly failedCommands: number;
+  readonly cancelledCommands: number;
+  readonly expiredCommands: number;
+  readonly dependencyWaitCount: number;
+  readonly maximumQueueDepth: number;
+  readonly averageQueueLatencyNs: string;
+  readonly maximumQueueLatencyNs: string;
+}
+
 /** Public UBOS runtime execution-engine API. */
 export interface RuntimeLogger {
   info(message: string, meta?: Record<string, unknown>): void;
@@ -223,10 +276,18 @@ export type RuntimeEventType =
   | 'RuntimeTickCompleted'
   | 'RuntimeTickOverrun'
   | 'CommandScheduled'
+  | 'CommandQueued'
+  | 'CommandReady'
+  | 'CommandExecuting'
   | 'CommandStarted'
   | 'CommandCompleted'
   | 'CommandFailed'
   | 'CommandCancelled'
+  | 'CommandExpired'
+  | 'DependencySatisfied'
+  | 'DependencyFailed'
+  | 'SchedulerIdle'
+  | 'SchedulerBusy'
   | 'ProcessorRegistered'
   | 'ProcessorStarted'
   | 'ProcessorCompleted'
@@ -270,6 +331,17 @@ export interface RuntimeTelemetrySnapshot {
   lateTicks: number;
   droppedTicks: number;
   pendingCommands: number;
+  readyCommands: number;
+  waitingCommands: number;
+  completedCommands: number;
+  failedCommands: number;
+  cancelledCommands: number;
+  expiredCommands: number;
+  averageQueueLatencyNs: string;
+  maximumQueueLatencyNs: string;
+  dependencyWaitCount: number;
+  commandsExecutedPerSecond: number;
+  maximumQueueDepth: number;
   commandsExecuted: number;
   commandsFailed: number;
   processorExecutions: number;
@@ -309,6 +381,17 @@ export class RuntimeTelemetryCollector {
       lateTicks: 0,
       droppedTicks: 0,
       pendingCommands: 0,
+      readyCommands: 0,
+      waitingCommands: 0,
+      completedCommands: 0,
+      failedCommands: 0,
+      cancelledCommands: 0,
+      expiredCommands: 0,
+      averageQueueLatencyNs: '0',
+      maximumQueueLatencyNs: '0',
+      dependencyWaitCount: 0,
+      commandsExecutedPerSecond: 0,
+      maximumQueueDepth: 0,
       commandsExecuted: 0,
       commandsFailed: 0,
       processorExecutions: 0,
@@ -744,15 +827,104 @@ const structuredCloneSafe = <T>(v: T): T =>
   typeof structuredClone === 'function' ? structuredClone(v) : JSON.parse(JSON.stringify(v));
 const targetOf = (c: RuntimeCommand) => c.targetFrame ?? 0n;
 /** Public UBOS runtime execution-engine API. */
+export class MissingDependencyError extends RuntimeEngineError {
+  constructor(id: string, dependencyId: string) {
+    super('MissingDependency', `Command ${id} depends on missing command ${dependencyId}`, {
+      id,
+      dependencyId,
+    });
+  }
+}
+export class DependencyCycleError extends RuntimeEngineError {
+  constructor(ids: readonly string[]) {
+    super('DependencyCycle', `Dependency cycle detected: ${ids.join(' -> ')}`, { ids });
+  }
+}
+export class SchedulerOverflowError extends CommandQueueFullError {
+  constructor(capacity: number) {
+    super(capacity);
+    this.name = 'SchedulerOverflow';
+  }
+}
+export class InvalidPolicyError extends RuntimeEngineError {
+  constructor(policy: string) {
+    super('InvalidPolicy', `Invalid execution policy ${policy}`, { policy });
+  }
+}
+export class InvalidPriorityError extends RuntimeEngineError {
+  constructor(priority: number) {
+    super('InvalidPriority', `Invalid command priority ${priority}`, { priority });
+  }
+}
+export class CommandExpiredError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('CommandExpired', `Command ${id} expired`, { id });
+  }
+}
+export class InvalidCommandStateError extends RuntimeEngineError {
+  constructor(id: string, from: RuntimeCommandState, to: RuntimeCommandState) {
+    super('InvalidCommandState', `Invalid command state transition for ${id}: ${from} -> ${to}`, {
+      id,
+      from,
+      to,
+    });
+  }
+}
+const policies = new Set<CommandExecutionPolicy>([
+  'EXECUTE_ONCE',
+  'EXECUTE_IF_PRESENT',
+  'EXECUTE_UNTIL_SUCCESS',
+  'DROP_IF_LATE',
+  'RUN_IMMEDIATELY_IF_MISSED',
+]);
+const terminalStates = new Set<RuntimeCommandState>([
+  'COMPLETED',
+  'FAILED',
+  'CANCELLED',
+  'EXPIRED',
+]);
+const schedulerTransitions: Record<RuntimeCommandState, readonly RuntimeCommandState[]> = {
+  CREATED: ['QUEUED'],
+  QUEUED: ['WAITING', 'READY', 'CANCELLED', 'EXPIRED'],
+  WAITING: ['READY', 'CANCELLED', 'EXPIRED', 'FAILED'],
+  READY: ['EXECUTING', 'CANCELLED', 'EXPIRED'],
+  EXECUTING: ['COMPLETED', 'FAILED'],
+  COMPLETED: [],
+  FAILED: ['READY'],
+  CANCELLED: [],
+  EXPIRED: [],
+};
+const effectiveTarget = (c: RuntimeCommand, nowFrame: bigint) =>
+  c.targetFrame ?? (c.delayFrames !== undefined ? nowFrame + c.delayFrames : 0n);
+const effectiveTime = (c: RuntimeCommand, nowNs: bigint) =>
+  c.scheduledTimeNs ?? (c.delayNs !== undefined ? nowNs + c.delayNs : 0n);
+/** Public UBOS runtime execution-engine API. */
 export class DeterministicCommandScheduler {
-  private pending = new Map<string, RuntimeCommand>();
+  private records = new Map<string, ScheduledCommandRecord>();
   private sequences = new Set<string>();
+  private completed = new Set<string>();
+  private failed = new Set<string>();
+  private cancelled = new Set<string>();
+  private expired = new Set<string>();
   private draining = false;
+  private depthMax = 0;
+  private totalLatencyNs = 0n;
+  private maxLatencyNs = 0n;
+  private latencySamples = 0n;
   /** Public UBOS runtime execution-engine API. */
   constructor(
     private capacity: number,
     private currentFrame: () => bigint = () => 0n,
+    private currentTimeNs: () => bigint = () => 0n,
   ) {}
+  private transition(r: ScheduledCommandRecord, state: RuntimeCommandState) {
+    if (r.state === state) return r;
+    if (!schedulerTransitions[r.state].includes(state))
+      throw new InvalidCommandStateError(r.command.id, r.state, state);
+    const next = Object.freeze({ ...r, state });
+    this.records.set(r.command.id, next);
+    return next;
+  }
   /** Public UBOS runtime execution-engine API. */
   schedule(command: RuntimeCommand) {
     if ((command.targetFrame ?? 0n) < 0n)
@@ -760,72 +932,315 @@ export class DeterministicCommandScheduler {
         'InvalidCommandTargetFrame',
         'Command targetFrame cannot be negative',
       );
-    if (this.pending.has(command.id)) throw new DuplicateCommandError(command.id);
+    if (!Number.isFinite(command.priority)) throw new InvalidPriorityError(command.priority);
+    const policy = command.policy ?? 'EXECUTE_ONCE';
+    if (!policies.has(policy)) throw new InvalidPolicyError(String(command.policy));
+    if (
+      this.records.has(command.id) ||
+      this.completed.has(command.id) ||
+      this.failed.has(command.id) ||
+      this.cancelled.has(command.id) ||
+      this.expired.has(command.id)
+    )
+      throw new DuplicateCommandError(command.id);
     const seqKey = command.sequence.toString();
     if (this.sequences.has(seqKey)) throw new DuplicateCommandError(`sequence:${seqKey}`);
-    if (this.pending.size >= this.capacity) throw new CommandQueueFullError(this.capacity);
-    const copy = cloneCommand(command);
-    this.pending.set(copy.id, copy);
+    if (this.records.size >= this.capacity) throw new SchedulerOverflowError(this.capacity);
+    const base = cloneCommand({
+      ...command,
+      policy,
+      targetFrame: effectiveTarget(command, this.currentFrame()),
+      scheduledTimeNs: effectiveTime(command, this.currentTimeNs()),
+    });
+    const deps = [...new Set(base.dependencies ?? [])].sort();
+    if (deps.includes(base.id)) throw new DependencyCycleError([base.id, base.id]);
+    const rec = Object.freeze({
+      command: base,
+      state: 'QUEUED' as RuntimeCommandState,
+      queuedAtNs: this.currentTimeNs(),
+      sequence: base.sequence,
+      dependencies: Object.freeze(deps),
+      ...(base.groupId ? { groupId: base.groupId } : {}),
+      attempts: 0,
+      latenessFrames: 0n,
+      latenessNs: 0n,
+    });
+    this.records.set(base.id, rec);
     this.sequences.add(seqKey);
-    return copy;
+    this.depthMax = Math.max(this.depthMax, this.records.size);
+    this.detectCycles();
+    return cloneCommand(base);
   }
-  /** Public UBOS runtime execution-engine API. */
   scheduleForNextFrame(command: RuntimeCommand) {
     return this.schedule({ ...command, targetFrame: this.currentFrame() + 1n });
   }
+  private detectCycles() {
+    const visiting = new Set<string>(),
+      visited = new Set<string>();
+    const path: string[] = [];
+    const visit = (id: string) => {
+      if (visiting.has(id)) throw new DependencyCycleError([...path.slice(path.indexOf(id)), id]);
+      if (visited.has(id)) return;
+      const r = this.records.get(id);
+      if (!r) return;
+      visiting.add(id);
+      path.push(id);
+      for (const d of r.dependencies) if (this.records.has(d)) visit(d);
+      path.pop();
+      visiting.delete(id);
+      visited.add(id);
+    };
+    for (const id of this.records.keys()) visit(id);
+  }
+  private isExpired(r: ScheduledCommandRecord, frame: bigint, nowNs: bigint) {
+    return (
+      (r.command.expiresAtFrame !== undefined && r.command.expiresAtFrame < frame) ||
+      (r.command.expiresAtNs !== undefined && r.command.expiresAtNs < nowNs)
+    );
+  }
+  private due(r: ScheduledCommandRecord, frame: bigint, nowNs: bigint) {
+    return targetOf(r.command) <= frame && (r.command.scheduledTimeNs ?? 0n) <= nowNs;
+  }
+  private ready(r: ScheduledCommandRecord) {
+    return r.dependencies.every((d) => this.completed.has(d));
+  }
   /** Public UBOS runtime execution-engine API. */
-  getDueCommands(frameNumber: bigint) {
-    if (this.draining) return [];
+  getDueCommands(frameNumber: bigint, nowNs: bigint = this.currentTimeNs()) {
+    return this.collectDue(frameNumber, nowNs).commands;
+  }
+  collectDue(frameNumber: bigint, nowNs: bigint = this.currentTimeNs()) {
+    if (this.draining)
+      return {
+        commands: [],
+        readyIds: [],
+        expiredIds: [],
+        failedDependencyIds: [],
+        dependencySatisfied: [],
+      };
     this.draining = true;
+    const readyIds: string[] = [],
+      expiredIds: string[] = [],
+      failedDependencyIds: string[] = [],
+      dependencySatisfied: string[] = [];
     try {
-      const due = [...this.pending.values()]
-        .filter((c) => targetOf(c) <= frameNumber)
-        .sort(compareCommands)
-        .slice(0);
-      for (const c of due) {
-        this.pending.delete(c.id);
-        this.sequences.delete(c.sequence.toString());
+      for (const r of [...this.records.values()].sort(compareRecords)) {
+        if (
+          this.isExpired(r, frameNumber, nowNs) ||
+          (r.command.policy === 'DROP_IF_LATE' && targetOf(r.command) < frameNumber)
+        ) {
+          this.records.delete(r.command.id);
+          this.sequences.delete(r.sequence.toString());
+          this.expired.add(r.command.id);
+          expiredIds.push(r.command.id);
+          continue;
+        }
+        if (
+          r.dependencies.some(
+            (d) => this.failed.has(d) || this.cancelled.has(d) || this.expired.has(d),
+          )
+        ) {
+          this.records.delete(r.command.id);
+          this.sequences.delete(r.sequence.toString());
+          this.failed.add(r.command.id);
+          failedDependencyIds.push(r.command.id);
+          continue;
+        }
+        if (this.due(r, frameNumber, nowNs)) this.transition(r, 'WAITING');
       }
-      return due.map(cloneCommand);
+      const candidates = new Map(
+        [...this.records.values()]
+          .filter((r) => r.state === 'WAITING')
+          .map((r) => [r.command.id, r]),
+      );
+      for (const r of [...candidates.values()].sort(compareRecords)) {
+        const missing = r.dependencies.find((d) => !this.completed.has(d) && !candidates.has(d));
+        if (missing) {
+          this.records.delete(r.command.id);
+          this.sequences.delete(r.sequence.toString());
+          this.failed.add(r.command.id);
+          candidates.delete(r.command.id);
+          failedDependencyIds.push(r.command.id);
+        }
+      }
+      const due: ScheduledCommandRecord[] = [];
+      const satisfied = new Set(this.completed);
+      while (candidates.size) {
+        const readyNow = [...candidates.values()]
+          .filter((r) => r.dependencies.every((d) => satisfied.has(d)))
+          .sort(compareRecords);
+        if (!readyNow.length) {
+          for (const r of [...candidates.values()].sort(compareRecords)) {
+            this.records.delete(r.command.id);
+            this.sequences.delete(r.sequence.toString());
+            this.failed.add(r.command.id);
+            failedDependencyIds.push(r.command.id);
+          }
+          break;
+        }
+        const r = readyNow[0]!;
+        candidates.delete(r.command.id);
+        satisfied.add(r.command.id);
+        due.push(r);
+      }
+      for (const r of due) {
+        this.transition(r, 'READY');
+        this.records.delete(r.command.id);
+        this.sequences.delete(r.sequence.toString());
+        readyIds.push(r.command.id);
+        if (r.dependencies.length) dependencySatisfied.push(r.command.id);
+        const latency = nowNs - r.queuedAtNs;
+        this.totalLatencyNs += latency;
+        this.maxLatencyNs = latency > this.maxLatencyNs ? latency : this.maxLatencyNs;
+        this.latencySamples++;
+      }
+      return {
+        commands: due.map((r) => cloneCommand(r.command)),
+        readyIds,
+        expiredIds,
+        failedDependencyIds,
+        dependencySatisfied,
+      };
     } finally {
       this.draining = false;
     }
   }
-  /** Public UBOS runtime execution-engine API. */
+  markCompleted(id: string) {
+    this.completed.add(id);
+  }
+  markFailed(id: string) {
+    this.failed.add(id);
+  }
   cancel(commandId: string) {
-    const c = this.pending.get(commandId);
+    const c = this.cancelIds([commandId])[0];
     if (!c) throw new CommandNotFoundError(commandId);
-    this.pending.delete(commandId);
-    this.sequences.delete(c.sequence.toString());
-    return cloneCommand(c);
+    return c;
   }
-  /** Public UBOS runtime execution-engine API. */
+  cancelIds(ids: readonly string[]) {
+    const out: RuntimeCommand[] = [];
+    for (const id of [...ids].sort()) {
+      const r = this.records.get(id);
+      if (!r) continue;
+      this.records.delete(id);
+      this.sequences.delete(r.sequence.toString());
+      this.cancelled.add(id);
+      out.push(cloneCommand(r.command));
+    }
+    return out;
+  }
+  cancelGroup(groupId: string) {
+    return this.cancelIds(
+      [...this.records.values()].filter((r) => r.groupId === groupId).map((r) => r.command.id),
+    );
+  }
+  cancelSubtree(commandId: string) {
+    const ids = new Set([commandId]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const r of this.records.values())
+        if (r.dependencies.some((d) => ids.has(d)) && !ids.has(r.command.id)) {
+          ids.add(r.command.id);
+          changed = true;
+        }
+    }
+    return this.cancelIds([...ids]);
+  }
+  cancelDependencyChain(commandId: string) {
+    const ids = new Set<string>();
+    const visit = (id: string) => {
+      const r = this.records.get(id);
+      if (!r) return;
+      ids.add(id);
+      for (const d of r.dependencies) visit(d);
+    };
+    visit(commandId);
+    return this.cancelIds([...ids]);
+  }
   has(id: string) {
-    return this.pending.has(id);
+    return this.records.has(id);
   }
-  /** Public UBOS runtime execution-engine API. */
   pendingCount() {
-    return this.pending.size;
+    return this.records.size;
   }
-  /** Public UBOS runtime execution-engine API. */
   clear() {
-    this.pending.clear();
+    this.records.clear();
     this.sequences.clear();
   }
-  /** Public UBOS runtime execution-engine API. */
   inspectPendingCommands() {
-    return [...this.pending.values()].sort(compareCommands).map(cloneCommand);
+    return [...this.records.values()].sort(compareRecords).map((r) => cloneCommand(r.command));
+  }
+  listPending() {
+    return this.inspectPendingCommands();
+  }
+  listWaiting() {
+    return [...this.records.values()]
+      .filter((r) => r.state === 'WAITING')
+      .sort(compareRecords)
+      .map((r) => cloneCommand(r.command));
+  }
+  listReady() {
+    return [...this.records.values()]
+      .filter((r) => r.state === 'READY')
+      .sort(compareRecords)
+      .map((r) => cloneCommand(r.command));
+  }
+  lookupById(id: string) {
+    const r = this.records.get(id);
+    return r ? Object.freeze({ ...r, command: cloneCommand(r.command) }) : undefined;
+  }
+  lookupByGroup(groupId: string) {
+    return [...this.records.values()]
+      .filter((r) => r.groupId === groupId)
+      .sort(compareRecords)
+      .map((r) => cloneCommand(r.command));
+  }
+  lookupByDependency(dependencyId: string) {
+    return [...this.records.values()]
+      .filter((r) => r.dependencies.includes(dependencyId))
+      .sort(compareRecords)
+      .map((r) => cloneCommand(r.command));
+  }
+  snapshot(): SchedulerSnapshot {
+    const vals = [...this.records.values()];
+    const waiting = vals.filter((r) => r.state === 'WAITING').length;
+    const ready = vals.filter((r) => r.state === 'READY').length;
+    return Object.freeze({
+      pendingCommands: vals.length,
+      readyCommands: ready,
+      waitingCommands: waiting,
+      completedCommands: this.completed.size,
+      failedCommands: this.failed.size,
+      cancelledCommands: this.cancelled.size,
+      expiredCommands: this.expired.size,
+      dependencyWaitCount: vals.filter((r) => r.dependencies.length && r.state === 'WAITING')
+        .length,
+      maximumQueueDepth: this.depthMax,
+      averageQueueLatencyNs: this.latencySamples
+        ? (this.totalLatencyNs / this.latencySamples).toString()
+        : '0',
+      maximumQueueLatencyNs: this.maxLatencyNs.toString(),
+    });
   }
 }
-/** Public UBOS runtime execution-engine API. */
 export function compareCommands(a: RuntimeCommand, b: RuntimeCommand) {
   const tf = targetOf(a) < targetOf(b) ? -1 : targetOf(a) > targetOf(b) ? 1 : 0;
   if (tf) return tf;
+  const ts =
+    (a.scheduledTimeNs ?? 0n) < (b.scheduledTimeNs ?? 0n)
+      ? -1
+      : (a.scheduledTimeNs ?? 0n) > (b.scheduledTimeNs ?? 0n)
+        ? 1
+        : 0;
+  if (ts) return ts;
   const pr = b.priority - a.priority;
   if (pr) return pr;
   const sq = a.sequence < b.sequence ? -1 : a.sequence > b.sequence ? 1 : 0;
   if (sq) return sq;
   return a.id.localeCompare(b.id);
+}
+/** Public UBOS runtime execution-engine API. */
+export function compareRecords(a: ScheduledCommandRecord, b: ScheduledCommandRecord) {
+  return compareCommands(a.command, b.command);
 }
 /** Public UBOS runtime execution-engine API. */
 export interface TickProcessor {
@@ -972,6 +1387,7 @@ export class RuntimeExecutionEngine {
     this.scheduler = new DeterministicCommandScheduler(
       this.config.commandQueueCapacity,
       () => this.masterFrameClock.currentFrame || this.#frameNumber,
+      () => this.clock.nowNs(),
     );
     this.telemetry = new RuntimeTelemetryCollector(this.config.runtimeId);
     this.registerBuiltIns();
@@ -1093,6 +1509,7 @@ export class RuntimeExecutionEngine {
   schedule(command: RuntimeCommand) {
     const c = this.scheduler.schedule(command);
     void this.emit('CommandScheduled', { commandType: c.type, commandId: c.id }, c.correlationId);
+    void this.emit('CommandQueued', { commandType: c.type, commandId: c.id }, c.correlationId);
     return c;
   }
   /** Public UBOS runtime execution-engine API. */
@@ -1142,9 +1559,22 @@ export class RuntimeExecutionEngine {
     let commandErrors = 0,
       processorErrors = 0;
     try {
-      const due = this.scheduler
-        .getDueCommands(this.#frameNumber)
-        .slice(0, this.config.maximumCommandsPerTick);
+      const collected = this.scheduler.collectDue(this.#frameNumber, this.clock.nowNs());
+      for (const id of collected.expiredIds)
+        await this.emit('CommandExpired', { commandId: id }, undefined, this.#frameNumber);
+      for (const id of collected.failedDependencyIds)
+        await this.emit('DependencyFailed', { commandId: id }, undefined, this.#frameNumber);
+      for (const id of collected.dependencySatisfied)
+        await this.emit('DependencySatisfied', { commandId: id }, undefined, this.#frameNumber);
+      for (const id of collected.readyIds)
+        await this.emit('CommandReady', { commandId: id }, undefined, this.#frameNumber);
+      await this.emit(
+        collected.commands.length ? 'SchedulerBusy' : 'SchedulerIdle',
+        { dueCommands: collected.commands.length },
+        undefined,
+        this.#frameNumber,
+      );
+      const due = collected.commands.slice(0, this.config.maximumCommandsPerTick);
       for (const c of due) await this.executeCommand(c);
       for (const p of this.processors.ordered()) {
         const ps = this.clock.nowMs();
@@ -1187,6 +1617,21 @@ export class RuntimeExecutionEngine {
         totalTicks: this.telemetry.current().totalTicks + 1,
         lateTicks: this.telemetry.current().lateTicks + (late ? 1 : 0),
         pendingCommands: this.scheduler.pendingCount(),
+        readyCommands: this.scheduler.snapshot().readyCommands,
+        waitingCommands: this.scheduler.snapshot().waitingCommands,
+        completedCommands: this.scheduler.snapshot().completedCommands,
+        failedCommands: this.scheduler.snapshot().failedCommands,
+        cancelledCommands: this.scheduler.snapshot().cancelledCommands,
+        expiredCommands: this.scheduler.snapshot().expiredCommands,
+        averageQueueLatencyNs: this.scheduler.snapshot().averageQueueLatencyNs,
+        maximumQueueLatencyNs: this.scheduler.snapshot().maximumQueueLatencyNs,
+        dependencyWaitCount: this.scheduler.snapshot().dependencyWaitCount,
+        commandsExecutedPerSecond:
+          this.#startedAtMs === undefined || this.clock.nowMs() === this.#startedAtMs
+            ? 0
+            : this.telemetry.current().commandsExecuted /
+              ((this.clock.nowMs() - this.#startedAtMs) / 1000),
+        maximumQueueDepth: this.scheduler.snapshot().maximumQueueDepth,
         processorExecutions:
           this.telemetry.current().processorExecutions + this.processors.ordered().length,
         processorFailures: this.telemetry.current().processorFailures + processorErrors,
@@ -1237,6 +1682,12 @@ export class RuntimeExecutionEngine {
   }
   private async executeCommand(c: RuntimeCommand) {
     await this.emit(
+      'CommandExecuting',
+      { commandType: c.type, commandId: c.id },
+      c.correlationId,
+      this.#frameNumber,
+    );
+    await this.emit(
       'CommandStarted',
       { commandType: c.type, commandId: c.id },
       c.correlationId,
@@ -1244,6 +1695,7 @@ export class RuntimeExecutionEngine {
     );
     try {
       await this.handlers.resolve(c.type)(c, this.context());
+      this.scheduler.markCompleted(c.id);
       this.telemetry.commit({ commandsExecuted: this.telemetry.current().commandsExecuted + 1 });
       await this.emit(
         'CommandCompleted',
@@ -1252,6 +1704,7 @@ export class RuntimeExecutionEngine {
         this.#frameNumber,
       );
     } catch (e) {
+      this.scheduler.markFailed(c.id);
       this.telemetry.commit({
         commandsFailed: this.telemetry.current().commandsFailed + 1,
         lastError: e instanceof Error ? e.message : String(e),
