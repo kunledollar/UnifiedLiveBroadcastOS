@@ -203,6 +203,7 @@ test('command center prefs round-trip as plain serializable metadata', () => {
   prefs.expandedZones = ['right-dock'];
   prefs.layoutLocked = true;
   prefs.safeAreasVisible = true;
+  prefs.zoneSizes = { 'left-dock': 400, 'right-dock': 320, 'bottom-workspace': 220 };
   const parsed = parseCommandCenterPrefs(serializeCommandCenterPrefs(prefs));
   assert.deepEqual(parsed, prefs);
 });
@@ -213,4 +214,27 @@ test('malformed prefs are rejected instead of breaking the shell', () => {
   const partial = parseCommandCenterPrefs('{"version":1,"activeBottomTab":"bogus"}');
   assert.ok(partial);
   assert.equal(partial.activeBottomTab, 'layers');
+});
+
+test('command center prefs migrate v1 and clamp valid zone sizes', () => {
+  const parsed = parseCommandCenterPrefs(JSON.stringify({
+    version: 1,
+    activeBottomTab: 'graphics',
+    expandedZones: ['left-dock', 'invalid-zone'],
+    zoneSizes: {
+      'left-dock': 999,
+      'right-dock': 100,
+      'bottom-workspace': 240,
+      floating: 1000,
+      bad: 300,
+    },
+  }));
+  assert.ok(parsed);
+  assert.equal(parsed.version, 2);
+  assert.deepEqual(parsed.expandedZones, ['left-dock']);
+  assert.equal(parsed.zoneSizes['left-dock'], 440);
+  assert.equal(parsed.zoneSizes['right-dock'], 260);
+  assert.equal(parsed.zoneSizes['bottom-workspace'], 240);
+  assert.equal('floating' in parsed.zoneSizes, false);
+  assert.equal('bad' in parsed.zoneSizes, false);
 });
