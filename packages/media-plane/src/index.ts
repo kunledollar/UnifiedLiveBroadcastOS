@@ -1757,3 +1757,24 @@ export {
   createIFBState,
   createDemoGuestWorkflow,
 } from './remote-production.js';
+
+export {
+  RuntimeEventBus,
+  RuntimeStateMachine,
+  RuntimeController,
+  RuntimeScheduler,
+  SessionManager,
+  DeviceManager as BroadcastRuntimeDeviceManager,
+  HealthManager,
+  createBroadcastRuntimeCore,
+} from './broadcast-runtime-core.js';
+export type {
+  RuntimeLifecycleState as BroadcastRuntimeLifecycleState,
+  RuntimeDomain,
+  RuntimeCommand,
+  RuntimeEvent as BroadcastRuntimeEvent,
+  RuntimeStateTransition,
+  RuntimeSubsystem as BroadcastRuntimeSubsystem,
+  RuntimeSubsystemSnapshot as BroadcastRuntimeSubsystemSnapshot,
+  RuntimeControllerSnapshot,
+} from './broadcast-runtime-core.js';
