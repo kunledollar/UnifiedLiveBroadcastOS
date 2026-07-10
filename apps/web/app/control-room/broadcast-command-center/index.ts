@@ -1,4 +1,3 @@
-export type { MonitorStatusInfo } from './CenterProgramPreviewDeck';
 export { RightOperationsDock } from './RightOperationsDock';
 export type { OperationsDockSection } from './RightOperationsDock';
 export { DiagnosticsSummary } from './FloatingDiagnosticsPanel';

@@ -94,13 +94,19 @@ test('preset switching is reversible layout metadata (round-trips to director)',
   assert.equal(JSON.stringify(registry.getPanelStates()), directorStates);
 });
 
-test('layout stays valid (no monitor overlap) for every preset at common viewports', () => {
+test('layout stays valid (no monitor overlap) for every preset at Phase 2 responsive widths', () => {
   for (const preset of workspacePresetList) {
     for (const [width, height] of [
+      [3840, 2160],
+      [2560, 1440],
       [1920, 1080],
-      [1536, 864],
+      [1600, 900],
+      [1440, 900],
+      [1366, 768],
       [1280, 800],
+      [1200, 800],
       [1024, 768],
+      [900, 700],
     ] as const) {
       const layout = calculateWorkspaceLayout({
         viewportWidth: width,

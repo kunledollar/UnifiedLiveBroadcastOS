@@ -122,11 +122,8 @@ import {
   resetDemoProductionState,
   setRouteMuted,
 } from './media-route-actions';
-import {
-  type MonitorStatusInfo,
-  SourceDockPanel,
-  preferredSourceDockTab,
-} from './broadcast-command-center';
+import { SourceDockPanel, preferredSourceDockTab } from './broadcast-command-center';
+import type { MonitorStatusInfo } from './command-center/monitor-status';
 import { CommandCenterShell } from './command-center';
 import { DiagnosticsSummary } from './broadcast-command-center/FloatingDiagnosticsPanel';
 import type { OperationsDockSection } from './broadcast-command-center/RightOperationsDock';
