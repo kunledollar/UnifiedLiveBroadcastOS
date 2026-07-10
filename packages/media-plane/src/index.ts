@@ -1834,3 +1834,32 @@ export type {
 
 export * from './monitoring-runtime.js';
 export * from './execution-engine.js';
+
+export {
+  RuntimeWatchdog,
+  createRuntimeWatchdog,
+  createDefaultWatchdogRules,
+  defaultRuntimeWatchdogConfig,
+  redactWatchdogValue,
+} from './runtime-watchdog.js';
+export type {
+  WatchdogRuntimeSubsystem,
+  RuntimeHealthState,
+  HealthSeverity,
+  WatchdogState,
+  WatchdogRuleObserved,
+  WatchdogRecoveryAction,
+  RecoveryScope,
+  IncidentLifecycleState,
+  WatchdogRecoveryPolicy,
+  RuntimeWatchdogConfig,
+  WatchdogRuleResult,
+  WatchdogHealthRule,
+  WatchdogEvaluationContext,
+  WatchdogIncident,
+  SubsystemHealthSnapshot,
+  RuntimeHealthSnapshot,
+  RecoveryAttemptSnapshot,
+  WatchdogDiagnosticsSnapshot,
+  WatchdogEvaluationResult,
+} from './runtime-watchdog.js';

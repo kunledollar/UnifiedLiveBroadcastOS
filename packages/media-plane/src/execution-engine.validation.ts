@@ -70,6 +70,12 @@ import {
   type RuntimeCommand,
   type TickProcessor,
 } from './execution-engine.js';
+import {
+  RuntimeWatchdog,
+  createRuntimeWatchdog,
+  createDefaultWatchdogRules,
+  redactWatchdogValue,
+} from './runtime-watchdog.js';
 
 class FakeClock implements RuntimeClock {
   ms = 1_700_000_000_000;
@@ -1389,4 +1395,111 @@ console.log('runtime loop validation passed');
       }),
     /ProcessorDependencyMissing/,
   );
+}
+
+// UBOS v5.1.7 Telemetry & Watchdog validation: deterministic, no real sleeping.
+{
+  const clock = new FakeClock();
+  const publisher = new InMemoryRuntimeEventPublisher();
+  const engine = createRuntimeExecutionEngine(
+    { runtimeId: 'v517-watchdog-basic' },
+    publisher,
+    clock,
+  );
+  const watchdog = createRuntimeWatchdog(
+    engine,
+    { watchdogIntervalMs: 10_000 },
+    clock,
+    createDefaultWatchdogRules(),
+    publisher,
+  );
+  assertEqual(watchdog.getHealth().overallHealth, 'UNKNOWN');
+  await watchdog.start();
+  await watchdog.start();
+  const healthy = await watchdog.evaluateNow();
+  assertOk(healthy.ruleResults.length >= 10);
+  assertOk(watchdog.getSubsystemHealth('SCHEDULER'));
+  assertDoesNotThrow(() => watchdog.assertInvariants());
+  await watchdog.stop();
+  await watchdog.stop();
+}
+{
+  const clock = new FakeClock();
+  const engine = createRuntimeExecutionEngine(
+    { runtimeId: 'v517-watchdog-incidents' },
+    new InMemoryRuntimeEventPublisher(),
+    clock,
+  );
+  const watchdog = new RuntimeWatchdog(
+    engine,
+    { heartbeatFailureThresholdMs: 1, watchdogIntervalMs: 10_000 },
+    clock,
+  );
+  await engine.initialize();
+  await engine.start();
+  engine.telemetry.commit({ lastLoopHeartbeatNs: '1' });
+  clock.ms += 10_000;
+  const first = await watchdog.evaluateNow();
+  assertOk(first.openedIncidents.some((incident) => incident.code === 'LOOP_HEARTBEAT_STALE'));
+  await watchdog.evaluateNow();
+  const incident = watchdog.getDiagnostics().activeIncidents[0];
+  assertOk(incident);
+  assertEqual(watchdog.acknowledgeIncident(incident!.incidentId), true);
+  await engine.stop();
+}
+{
+  const clock = new FakeClock();
+  const engine = createRuntimeExecutionEngine(
+    { runtimeId: 'v517-watchdog-pressure', commandQueueCapacity: 2 },
+    new InMemoryRuntimeEventPublisher(),
+    clock,
+  );
+  const watchdog = createRuntimeWatchdog(
+    engine,
+    {
+      queuePressureWarningPercent: 50,
+      queuePressureCriticalPercent: 100,
+      watchdogIntervalMs: 10_000,
+    },
+    clock,
+  );
+  engine.schedule(cmd('pressure-1'));
+  const degraded = await watchdog.evaluateNow();
+  assertOk(['DEGRADED', 'UNHEALTHY', 'CRITICAL'].includes(degraded.health.overallHealth));
+  engine.schedule(cmd('pressure-2', { sequence: 2n }));
+  const critical = await watchdog.evaluateNow();
+  assertEqual(critical.health.overallHealth, 'CRITICAL');
+  await watchdog.stop();
+}
+{
+  const clock = new FakeClock();
+  const engine = createRuntimeExecutionEngine(
+    { runtimeId: 'v517-watchdog-bounds' },
+    new InMemoryRuntimeEventPublisher(),
+    clock,
+  );
+  const watchdog = createRuntimeWatchdog(
+    engine,
+    { diagnosticHistoryCapacity: 4, incidentRetentionCapacity: 8, watchdogIntervalMs: 10_000 },
+    clock,
+    [],
+    { publish: () => {} },
+  );
+  for (let i = 0; i < 1_000; i++) {
+    clock.ms += 1;
+    await watchdog.evaluateNow();
+  }
+  assertOk(watchdog.getDiagnostics().generatedAtNs);
+  assertDoesNotThrow(() => watchdog.assertInvariants());
+  await watchdog.stop();
+}
+{
+  const redacted = redactWatchdogValue({
+    streamKey: 'abc',
+    nested: { authToken: 'def' },
+    safe: 'ok',
+  }) as Record<string, unknown>;
+  assertEqual(redacted.streamKey, '[REDACTED]');
+  assertDeepEqual(redacted.nested, { authToken: '[REDACTED]' });
+  assertEqual(redacted.safe, 'ok');
 }
