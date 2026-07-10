@@ -184,6 +184,16 @@ import {
   summarizeProductionRuntimeHealth,
   createProductionRuntimeManifest,
   mapRuntimeFailure,
+  MonitoringRuntimeController,
+  HealthAggregationManager,
+  TelemetryRegistry,
+  TelemetryHistoryStore,
+  AlertRegistry,
+  AlertLifecycleManager,
+  AlertRuleEngine,
+  IncidentManager,
+  DiagnosticSnapshotManager,
+  ProductionGraphTelemetryAdapter,
   redactRuntimeDiagnostics,
   RuntimeSupervisor,
   createFFmpegRuntime,
@@ -6157,3 +6167,67 @@ rundownRuntime.archiveRundown('rundown-v47-main');
 rundownRuntime.dispose();
 assert.equal(rundownRuntime.listRundowns()[0]?.state, 'disposed', 'rundown disposal cleanup marks rundowns disposed');
 assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'rundown-runtime-controller'), true, 'RuntimeController owns RundownRuntimeController lifecycle');
+
+// UBOS v4.9 Monitoring, Telemetry & Alert Runtime validation
+const monitoringRuntime = new MonitoringRuntimeController(v43Runtime.bus);
+v43Runtime.register(monitoringRuntime);
+monitoringRuntime.initialize();
+monitoringRuntime.start();
+assert.equal(monitoringRuntime.listTelemetrySources().some((source) => source.sourceType === 'devices'), true, 'monitoring telemetry source registration includes devices');
+const telemetryRegistry = new TelemetryRegistry();
+telemetryRegistry.register({ sourceId: 'camera-a', sourceType: 'devices', metadata: { label: 'Camera A', runtimeHandle: 'blocked' } });
+let duplicateSourceRejected = false;
+try { telemetryRegistry.register({ sourceId: 'camera-a', sourceType: 'devices' }); } catch { duplicateSourceRejected = true; }
+assert.equal(duplicateSourceRejected, true, 'monitoring duplicate source rejection is deterministic');
+let unavailableValueRejected = false;
+try { monitoringRuntime.ingest({ sampleId: 'bad-unavailable', timestamp: new Date().toISOString(), sourceId: 'camera-a', sourceType: 'devices', metricName: 'latency', metricKind: 'gauge', value: 12, status: 'unavailable', severity: 'unknown', tags: [], dimensions: {}, availability: 'unavailable', confidence: 1, collectionMethod: 'adapter', metadataVersion: '4.9' }); } catch { unavailableValueRejected = true; }
+assert.equal(unavailableValueRejected, true, 'monitoring telemetry sample validation rejects fabricated unavailable values');
+const staleSample = { sampleId: 'stale-1', timestamp: new Date(Date.now() - 2000).toISOString(), sourceId: 'camera-a', sourceType: 'devices', metricName: 'connectionState', metricKind: 'state' as const, value: 'connected', status: 'ok' as const, severity: 'informational' as const, tags: [], dimensions: {}, availability: 'available' as const, confidence: 1, collectionMethod: 'event' as const, expiresAt: new Date(Date.now() - 1000).toISOString(), metadataVersion: '4.9' };
+monitoringRuntime.ingest(staleSample);
+assert.equal(monitoringRuntime.getHealthSummary().staleSourceIds.includes('camera-a'), true, 'monitoring stale-data detection keeps stale sources visible');
+const healthAggregation = new HealthAggregationManager();
+const criticalHealth = healthAggregation.aggregate([{ ...staleSample, sampleId: 'critical-1', sourceId: 'encoder-a', metricName: 'encoderState', status: 'critical', severity: 'critical', expiresAt: new Date(Date.now() + 1000).toISOString() }]);
+assert.equal(criticalHealth.state, 'critical', 'monitoring health aggregation propagates one critical child');
+const alertRegistry = new AlertRegistry();
+const alertLifecycle = new AlertLifecycleManager();
+const alertEngine = new AlertRuleEngine(alertRegistry, alertLifecycle);
+alertRegistry.register({ ruleId: 'cpu-high', name: 'CPU high', type: 'threshold', metricSelector: { metricName: 'cpu' }, condition: { operator: '>', value: 90 }, severity: 'critical', debounceMs: 0, cooldownMs: 1000, enabled: true, version: '1' });
+const cpuSample = { ...staleSample, sampleId: 'cpu-1', sourceId: 'system', sourceType: 'system', metricName: 'cpu', metricKind: 'gauge' as const, value: 95, status: 'ok' as const, severity: 'informational' as const, expiresAt: new Date(Date.now() + 1000).toISOString() };
+const fired = alertEngine.evaluate(cpuSample);
+assert.equal(fired.length, 1, 'monitoring alert threshold rule fires');
+assert.equal(alertEngine.evaluate({ ...cpuSample, sampleId: 'cpu-2' }).length, 0, 'monitoring cooldown prevents duplicate alert storms');
+alertRegistry.register({ ruleId: 'camera-absent', name: 'Camera absent', type: 'absence', metricSelector: { metricName: 'heartbeat' }, condition: {}, severity: 'warning', debounceMs: 1, cooldownMs: 0, enabled: true, version: '1' });
+assert.equal(alertEngine.evaluate({ ...staleSample, sampleId: 'absence-1', metricName: 'heartbeat', status: 'stale' }).some((alert) => alert.state === 'pending'), true, 'monitoring absence rule supports debounce pending state');
+alertRegistry.register({ ruleId: 'output-state', name: 'Output failed', type: 'state-change', metricSelector: { metricName: 'outputState' }, condition: { to: 'failed' }, severity: 'error', debounceMs: 0, cooldownMs: 0, enabled: true, version: '1' });
+assert.equal(alertEngine.evaluate({ ...cpuSample, sampleId: 'state-1', metricName: 'outputState', value: 'failed' }).length, 1, 'monitoring state-change rule fires deterministically');
+const acknowledged = alertLifecycle.acknowledge(fired[0]!.alertId);
+assert.equal(acknowledged.state, 'acknowledged', 'monitoring alert acknowledgement transition works');
+const suppressed = alertLifecycle.suppress(acknowledged.alertId);
+assert.equal(suppressed.state, 'suppressed', 'monitoring alert suppression transition works');
+const resolved = alertLifecycle.resolve(suppressed.alertId);
+assert.equal(resolved.state, 'resolved', 'monitoring alert resolution transition works');
+const incidentManager = new IncidentManager();
+const incident = incidentManager.group(fired[0]!);
+incidentManager.group({ ...fired[0]!, alertId: 'alert-duplicate' });
+assert.equal(incidentManager.list()[0]!.alertIds.length, 2, 'monitoring incident grouping correlates related alerts');
+const history = new TelemetryHistoryStore({ maxSamples: 1, retentionMs: 60_000 });
+history.ingest(cpuSample);
+history.ingest({ ...cpuSample, sampleId: 'cpu-retained' });
+assert.equal(history.query().length, 1, 'monitoring history retention is bounded');
+const snapshotManager = new DiagnosticSnapshotManager();
+const diagnosticSnapshot = snapshotManager.create({ healthSummary: criticalHealth, activeAlerts: [resolved], incidents: [incident], telemetrySamples: [cpuSample], summaries: { deviceSummary: 'metadata-only' } });
+assert.equal(diagnosticSnapshot.containsRuntimeHandles, false, 'monitoring diagnostic snapshot creation is metadata-only');
+assert.equal(JSON.parse(JSON.stringify(diagnosticSnapshot)).version, '4.9', 'monitoring diagnostic snapshot serialization is versioned');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'TelemetrySampleReceived'), true, 'monitoring RuntimeEventBus propagation publishes telemetry events');
+const beforeRecursive = monitoringRuntime.queryMetricHistory().length;
+v43Runtime.bus.publish({ type: 'TelemetrySampleReceived', domain: 'health', source: 'external-monitor', payload: { monitoringEvent: true } });
+assert.equal(monitoringRuntime.queryMetricHistory().length, beforeRecursive, 'monitoring recursive-loop prevention skips monitoring events');
+const graphMonitoring = monitoringRuntime.mapProductionGraphMonitoringMetadata();
+assert.equal(graphMonitoring.containsRuntimeHandles, false, 'monitoring ProductionGraph metadata mapping is non-destructive and metadata-only');
+assert.equal(new ProductionGraphTelemetryAdapter().mapSummary(graphMonitoring).activeIncidentCount >= 0, true, 'monitoring ProductionGraph adapter exposes summary metadata');
+const noMediaHandleSnapshot = monitoringRuntime.createDiagnosticSnapshot();
+assert.equal(JSON.stringify(noMediaHandleSnapshot).includes('MediaStream'), false, 'monitoring no-media-handle safety excludes media handles');
+monitoringRuntime.stop();
+monitoringRuntime.dispose();
+assert.equal(monitoringRuntime.getSnapshot().state, 'disposed', 'monitoring disposal cleanup releases runtime-only state');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'monitoring-runtime-controller'), true, 'RuntimeController owns MonitoringRuntimeController lifecycle');
