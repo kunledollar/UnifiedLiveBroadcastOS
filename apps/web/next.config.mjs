@@ -1,9 +1,10 @@
-import type { NextConfig } from 'next';
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   transpilePackages: ['@ubos/ui', '@ubos/shared', '@ubos/db'],
   webpack(config) {
     config.resolve.extensionAlias = { ...config.resolve.extensionAlias, '.js': ['.ts', '.tsx', '.js'] };
     return config;
   },
 };
+
 export default nextConfig;
