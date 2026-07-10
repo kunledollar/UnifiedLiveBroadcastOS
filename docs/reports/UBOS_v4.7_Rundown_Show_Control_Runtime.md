@@ -1,70 +1,91 @@
-# UBOS v4.7 Rundown & Show Control Runtime
+# UBOS v4.7 Rundown & Show Control Runtime Completion Report
 
 ## 1. Executive Summary
-Implemented a deterministic, metadata-only Rundown Runtime for show-control orchestration inside UBOS production sessions.
+
+UBOS v4.7 introduces a deterministic, metadata-only Rundown Runtime for show-control orchestration within an active production session.
 
 ## 2. Architecture
-Added RundownRuntimeController and supporting registry, lifecycle, item, execution, validation, cue, snapshot, recovery, health, metrics, and event adapter components.
+
+The implementation adds `RundownRuntimeController` plus registries, lifecycle, item, validation, cue, execution, snapshot, recovery, health, metrics, and event adapter components.
 
 ## 3. Files Added
-- packages/media-plane/src/rundown-runtime.ts
-- docs/runtime/Rundown_Runtime_Architecture.md
-- docs/runtime/Rundown_State_Machine.md
-- docs/runtime/Rundown_Item_Contract.md
-- docs/runtime/Rundown_Validation.md
-- docs/runtime/Rundown_Execution.md
-- docs/runtime/Rundown_Snapshots_and_Recovery.md
-- docs/runtime/Rundown_Event_Flow.md
-- docs/runtime/Rundown_Audit_History.md
+
+- `packages/shared/src/rundown-runtime/index.ts`
+- `packages/shared/src/rundown-runtime/validation.ts`
+- `docs/runtime/Rundown_Runtime_Architecture.md`
+- `docs/runtime/Rundown_State_Machine.md`
+- `docs/runtime/Rundown_Item_Contract.md`
+- `docs/runtime/Rundown_Validation.md`
+- `docs/runtime/Rundown_Execution.md`
+- `docs/runtime/Rundown_Snapshots_and_Recovery.md`
+- `docs/runtime/Rundown_Event_Flow.md`
+- `docs/runtime/Rundown_Audit_History.md`
 
 ## 4. Files Modified
-- packages/media-plane/src/index.ts
-- packages/media-plane/src/media-plane.validation.ts
+
+- `packages/shared/src/index.ts`
+- `packages/shared/package.json`
 
 ## 5. Rundown Lifecycle
-States are created, loading, validated, ready, running, paused, recovering, completed, stopped, archived, failed, disposed; illegal transitions are rejected.
+
+States: created, loading, validated, ready, running, paused, recovering, completed, stopped, archived, failed, disposed. Illegal transitions are rejected.
 
 ## 6. Item Types
-All requested item metadata types are supported, including custom and unknown.
+
+All requested item metadata types are supported, including scene, camera, guest, media, browser, graphics, lower third, replay, audio cue, transitions, recording/streaming markers, macro, automation, break, countdown, hold, manual instruction, custom, and unknown.
 
 ## 7. Item State Machine
-Item transitions are deterministic and reject illegal movement, including mutation/reorder protections for executing items.
+
+Items support pending, validating, invalid, ready, cued, next, executing, completed, skipped, held, failed, recovered, and cancelled.
 
 ## 8. Validation
-Validation returns explicit errors for missing scenes, sources, devices, inputs, outputs, graphics, replay clips, transition metadata, duration, and inactive sessions.
+
+Validation checks scenes, sources, devices, inputs, outputs, graphics assets, replay clips, transitions, durations, session ownership, and closed-session safety.
 
 ## 9. Session Integration
-Each rundown has a sessionId and snapshot metadata appropriate for session snapshots.
+
+Every rundown has a session id and the controller rejects ownership violations.
 
 ## 10. ProductionGraph Integration
-`attachRundownMetadataToGraph` maps active rundown state to graph metadata without changing ownership or storing media handles.
+
+A metadata adapter exposes active rundown, current/next item, item status, validation status, execution status, last command, failure state, recovery state, and approval state without live media handles.
 
 ## 11. RuntimeEventBus Integration
-Rundown events are published with metadata-only payloads and repeated publication protection.
+
+The event adapter publishes metadata-only rundown and item lifecycle events with duplicate publication suppression.
 
 ## 12. Health and Metrics
-Health reports invalid, blocked, failed, missing dependency, current item, recovery, and failure metadata. Metrics report item counts and available orchestration counters without fabricating durations.
+
+Health includes invalid, blocked, failed, missing dependency, current item health, recovery attempts, and last failure. Metrics include item totals, completed/skipped/failed counts, execution duration where measured, cue timing where measured, recovery count, interventions, and uptime.
 
 ## 13. Snapshots and Recovery
-Snapshots are metadata-only. Recovery rejects stale snapshots and never restores buffers or Program output.
+
+Snapshots include only serializable orchestration metadata. Recovery restores rundown orchestration state only and never restores media buffers or Program output.
 
 ## 14. Audit History
-Audit entries include ids, timestamps, actor, command, result, state changes, errors, and correlation IDs.
+
+History captures immutable metadata entries for command execution, validation, cueing, item lifecycle, jumps, recovery, and completion.
 
 ## 15. Test Results
-Validation coverage added to media-plane validation for registration, duplicates, ordering, states, validation success/failure, cue/skip/hold/jump, history, duplicate take prevention, events, graph mapping, health, metrics, snapshots, stale recovery rejection, disposal, and no-media-handle safety.
+
+Shared validation tests pass locally, including rundown registration, duplicate rejection, item ordering, transitions, validation success/failure, cue/skip/hold/resume/jump behavior, history, duplicate execution prevention, session ownership, events, graph metadata mapping, health propagation, snapshot round-trip, malformed snapshot rejection, recovery, disposal, and no-media-handle safety.
 
 ## 16. Build Results
-See final implementation response for command results.
+
+Typecheck and shared tests passed. Full validation commands were attempted and results are summarized in the final response.
 
 ## 17. Known Limitations
-Durational metrics are reported as unavailable when no measured execution timings exist.
+
+This phase provides orchestration metadata and does not implement UI or media execution pipelines.
 
 ## 18. Deferred UI Work
-No rundown UI, teleprompter, timeline redesign, scheduling UI, or collaborative editing was implemented.
+
+Rundown UI, teleprompter UI, timeline redesign, scheduling calendar UI, collaborative editing, and cloud synchronization are deferred.
 
 ## 19. Risk Assessment
-Low integration risk: changes are isolated to metadata runtime and adapter surfaces.
+
+Risk is low because the implementation avoids media pipelines and Program switching internals, and blocks runtime handles at metadata boundaries.
 
 ## 20. Recommendation
-Proceed to integration testing with real session metadata while retaining existing ProductionGraph authorization boundaries.
+
+Adopt UBOS v4.7 as the foundation for future rundown UI and operator workflows while preserving existing production safety controls.

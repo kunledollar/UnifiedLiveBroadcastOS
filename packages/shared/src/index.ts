@@ -702,3 +702,5 @@ export * as CollaborationFoundation from './collaboration-foundation/index.js';
 export * from './broadcast-io/index.js';
 
 export * from './workspace-manager/index.js';
+
+export * from './rundown-runtime/index.js';
