@@ -1,0 +1,18 @@
+{
+  "id": "ubos-2.0.0-rc.1",
+  "product": "UBOS",
+  "version": "2.0.0-rc.1",
+  "channel": "release-candidate",
+  "buildManifestId": "build-2.0.0-rc.1",
+  "editions": ["studio", "pro", "enterprise", "cloud"],
+  "releaseNotesId": "notes-2.0.0-rc.1",
+  "upgradeGuideId": "upgrade-1.x-to-2.0",
+  "validationChecklistId": "rc-checklist-2.0.0",
+  "updatePolicy": {
+    "channel": "release-candidate",
+    "strategy": "manual-check",
+    "allowDowngrade": false,
+    "externalInfrastructure": false
+  },
+  "metadataOnly": true
+}

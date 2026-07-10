@@ -47,6 +47,9 @@ export function LeftNavPanel({
   onSourceDelete,
   onSourceToggleVisibility,
   onSourceToggleLock,
+  onReloadBrowserSource,
+  onSourceToggleMute,
+  directCameraLive = false,
   onGraphicsAddToScene,
   graphicsTemplates = [],
   mediaAssets = [],
@@ -55,6 +58,8 @@ export function LeftNavPanel({
   selectedReplayClipId,
   onSelectMediaAsset,
   onSelectReplayClip,
+  selectedSourceId,
+  onSelectSource,
 }: {
   activeNav: NavItemId;
   scenes: Scene[];
@@ -80,12 +85,16 @@ export function LeftNavPanel({
     name: string;
     type: SceneSourceType;
     url?: string;
+    settings?: Record<string, unknown>;
   }) => void;
   onSourceRename: (sourceId: string, name: string) => void;
   onSourceDuplicate: (sourceId: string) => void;
   onSourceDelete: (sourceId: string) => void;
   onSourceToggleVisibility: (sourceId: string) => void;
   onSourceToggleLock: (sourceId: string) => void;
+  onReloadBrowserSource?: (sourceId: string) => void;
+  onSourceToggleMute?: (sourceId: string) => void;
+  directCameraLive?: boolean;
   onGraphicsAddToScene?: (asset: GraphicsAsset) => void;
   graphicsTemplates?: LowerThirdTemplate[];
   mediaAssets?: MediaAsset[];
@@ -94,6 +103,8 @@ export function LeftNavPanel({
   selectedReplayClipId?: string | null;
   onSelectMediaAsset?: (assetId: string) => void;
   onSelectReplayClip?: (clipId: string) => void;
+  selectedSourceId?: string | null;
+  onSelectSource?: (sourceId: string) => void;
 }) {
   switch (activeNav) {
     case 'scenes':
@@ -121,12 +132,17 @@ export function LeftNavPanel({
           sourceTypes={sourceTypes}
           isPending={isPending}
           tallyState={tallyState}
+          directCameraLive={directCameraLive}
           onAdd={onSourceAdd}
           onRename={onSourceRename}
           onDuplicate={onSourceDuplicate}
           onDelete={onSourceDelete}
           onToggleVisibility={onSourceToggleVisibility}
           onToggleLock={onSourceToggleLock}
+          {...(onReloadBrowserSource ? { onReloadBrowserSource } : {})}
+          {...(onSourceToggleMute ? { onToggleMute: onSourceToggleMute } : {})}
+          {...(selectedSourceId !== undefined ? { selectedSourceId } : {})}
+          {...(onSelectSource ? { onSelectSource } : {})}
         />
       );
     case 'media':

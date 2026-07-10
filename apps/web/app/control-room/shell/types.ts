@@ -1,4 +1,8 @@
 export type NavItemId =
+  | 'dashboard'
+  | 'production-graph'
+  | 'nodes'
+  | 'inputs'
   | 'scenes'
   | 'sources'
   | 'graphics'
@@ -12,6 +16,7 @@ export type NavItemId =
   | 'compositor'
   | 'runtime'
   | 'recording'
+  | 'streaming'
   | 'security'
   | 'monitoring'
   | 'cluster'
@@ -20,8 +25,27 @@ export type NavItemId =
   | 'analytics'
   | 'enterprise-admin';
 
+/** Tabs in the adjacent source / diagnostic dock beside the left command rail. */
+export type SourceDockTabId =
+  | 'scenes'
+  | 'sources'
+  | 'media'
+  | 'graphics'
+  | 'guests'
+  | 'diagnostics';
+
 export type DockTabId =
-  'audio' | 'layers' | 'graphics' | 'media' | 'replay' | 'collaboration' | 'automation' | 'logs';
+  | 'audio'
+  | 'layers'
+  | 'graphics'
+  | 'replay'
+  | 'automation'
+  | 'routing'
+  | 'production-graph'
+  | 'logs'
+  | 'system-status'
+  | 'media'
+  | 'collaboration';
 
 export type OperationsTabId =
   | 'guests'
@@ -40,6 +64,7 @@ export type OperationsTabId =
   | 'compositor'
   | 'runtime'
   | 'recording'
+  | 'streaming'
   | 'security'
   | 'monitoring'
   | 'cluster'

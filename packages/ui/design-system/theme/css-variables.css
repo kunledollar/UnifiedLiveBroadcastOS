@@ -1,5 +1,6 @@
 /**
  * UBOS Design System v1.0 — CSS Custom Properties
+ * Updated: UBOS 3.15C — visual polish layer
  *
  * Import in globals.css to establish the broadcast palette at runtime.
  */
@@ -97,10 +98,15 @@
   --ubos-dock-content-height: 10rem;
   --ubos-dock-total-height: calc(var(--ubos-dock-height) + var(--ubos-dock-content-height));
 
-  /* Motion */
+  /* Motion — 3.15C refined timings */
+  --ubos-duration-instant: 60ms;
   --ubos-duration-fast: 120ms;
   --ubos-duration-normal: 180ms;
+  --ubos-duration-slow: 260ms;
   --ubos-easing-default: cubic-bezier(0.4, 0, 0.2, 1);
+  --ubos-easing-out: cubic-bezier(0, 0, 0.2, 1);
+  --ubos-easing-in: cubic-bezier(0.4, 0, 1, 1);
+  --ubos-easing-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
 
   /* Shadows */
   --ubos-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.04);
@@ -111,6 +117,44 @@
   --ubos-radius-sm: 0.25rem;
   --ubos-radius-md: 0.375rem;
   --ubos-radius-lg: 0.5rem;
+
+  /* Focus ring — 3.15C accessibility */
+  --ubos-focus-ring: 0 0 0 2px var(--ubos-bg-carbon), 0 0 0 4px var(--ubos-selection);
+
+  /* Panel elevation — 3.15C hierarchy */
+  --ubos-elevation-rail: 0 1px 3px rgba(0,0,0,0.4);
+  --ubos-elevation-dock: 0 2px 6px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04);
+  --ubos-elevation-panel: 0 1px 2px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
+  --ubos-elevation-header: 0 1px 0 rgba(255,255,255,0.04);
+
+  /* Status tones — 3.15C compact badges */
+  --ubos-status-live: var(--ubos-program);
+  --ubos-status-ready: var(--ubos-preview);
+  --ubos-status-warning: var(--ubos-warning);
+  --ubos-status-neutral: var(--ubos-fg-muted);
+}
+
+/* ── UBOS 3.15C Motion keyframes ──────────────────────────────────────── */
+@keyframes ubos-panel-appear {
+  from {
+    opacity: 0;
+    transform: translateY(2px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes ubos-status-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.45; }
+}
+
+@keyframes ubos-chip-pop {
+  0%   { transform: scale(0.88); opacity: 0; }
+  60%  { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1);    opacity: 1; }
 }
 
 /* Motion keyframes */
@@ -172,6 +216,58 @@
   color: var(--ubos-fg-primary);
   height: 100vh;
   overflow: hidden;
+}
+
+/* ── UBOS 3.15C Utility classes ───────────────────────────────────────── */
+
+/* Panel appear animation — applied on mount */
+.ubos-panel-appear {
+  animation: ubos-panel-appear var(--ubos-duration-normal) var(--ubos-easing-out) forwards;
+}
+
+/* Accessible focus ring — all interactive elements */
+.ubos-focus-ring:focus-visible {
+  outline: none;
+  box-shadow: var(--ubos-focus-ring);
+}
+
+/* Compact status chip used by One Owner secondary surfaces */
+.ubos-status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.0625rem 0.375rem;
+  border-radius: var(--ubos-radius-sm);
+  border: 1px solid;
+  font-size: 0.5625rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1.4;
+}
+
+/* Rail item tooltip */
+.ubos-rail-tooltip {
+  position: absolute;
+  left: calc(100% + 0.5rem);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--ubos-duration-fast) var(--ubos-easing-out);
+  background: var(--ubos-bg-carbon);
+  border: 1px solid var(--ubos-border-default);
+  border-radius: var(--ubos-radius-sm);
+  padding: 0.25rem 0.5rem;
+  font-size: 0.6875rem;
+  color: var(--ubos-fg-primary);
+  box-shadow: var(--ubos-shadow-raised);
+  z-index: 100;
+}
+
+.ubos-rail-item:hover .ubos-rail-tooltip {
+  opacity: 1;
 }
 
 /* Scrollbar styling aligned to design system */

@@ -15,6 +15,7 @@ import type {
   MediaRuntimeState,
   MediaRuntimeHealth,
   RecordingRuntimeState,
+  ProductionPipelineModel,
 } from '@ubos/shared';
 import { AIAssistantPanel } from '../ai/AIAssistantPanel';
 import type { AIAction, AIState } from '../ai/ai-state';
@@ -23,6 +24,7 @@ import { createInitialAIState } from '../ai/ai-state';
 import { GuestsPanel } from './GuestsPanel';
 import { HealthPanel } from './HealthPanel';
 import { InspectorPanel, deriveInspectorRoutes } from './InspectorPanel';
+import type { OperationsInspectorSelection } from './operations-inspector-selection';
 import { LogsPanelContainer } from './LogsPanelContainer';
 import { OutputsPanel } from './OutputsPanel';
 import { PreviewPanel } from './PreviewPanel';
@@ -42,7 +44,12 @@ import { createMediaRuntimeState } from '@ubos/shared';
 import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
-import { RecordingRuntimePanel } from './RecordingRuntimePanel';
+import { RecordingRuntimePanel, type BrowserRecordingPanelState } from './RecordingRuntimePanel';
+import {
+  StreamingRuntimePanel,
+  type BrowserStreamingPanelState,
+  type StreamingPanelAction,
+} from './StreamingRuntimePanel';
 import { SecurityPanel } from './SecurityPanel';
 import { MonitoringPanel } from './MonitoringPanel';
 import { ClusterPanel } from './ClusterPanel';
@@ -97,6 +104,13 @@ export function OperationsConsoleContent({
   mediaRuntimeState,
   mediaRuntimeHealth,
   recordingRuntimeState,
+  browserRecordingState,
+  browserStreamingState,
+  onStreamingDispatch,
+  onStartBrowserRecording,
+  onStopBrowserRecording,
+  pipeline,
+  inspectorSelection,
 }: {
   broadcastId: string;
   workspaceId: string;
@@ -139,6 +153,13 @@ export function OperationsConsoleContent({
   mediaRuntimeState?: MediaRuntimeState;
   mediaRuntimeHealth?: MediaRuntimeHealth;
   recordingRuntimeState?: RecordingRuntimeState;
+  browserRecordingState?: BrowserRecordingPanelState;
+  browserStreamingState?: BrowserStreamingPanelState;
+  onStreamingDispatch?: (action: StreamingPanelAction) => void;
+  onStartBrowserRecording?: () => void;
+  onStopBrowserRecording?: () => void;
+  pipeline?: ProductionPipelineModel;
+  inspectorSelection?: OperationsInspectorSelection;
 }) {
   const routeInfo = deriveInspectorRoutes(routes);
 
@@ -161,6 +182,8 @@ export function OperationsConsoleContent({
           {...(routeInfo.verticalRouteName
             ? { verticalRouteName: routeInfo.verticalRouteName }
             : {})}
+          {...(pipeline ? { pipeline } : {})}
+          selection={inspectorSelection ?? null}
         />
         <HostDevicesSection />
       </>
@@ -215,11 +238,24 @@ export function OperationsConsoleContent({
     plugins: <PluginPanel />,
     cloud: <CloudPanel />,
     analytics: <AnalyticsPanel />,
-    'enterprise-admin': <EnterpriseAdminPanel />, 
+    'enterprise-admin': <EnterpriseAdminPanel />,
+    streaming:
+      browserStreamingState && onStreamingDispatch ? (
+        <StreamingRuntimePanel state={browserStreamingState} dispatch={onStreamingDispatch} />
+      ) : null,
     recording: recordingRuntimeState ? (
-      <RecordingRuntimePanel state={recordingRuntimeState} />
+      <RecordingRuntimePanel
+        state={recordingRuntimeState}
+        {...(browserRecordingState ? { browserState: browserRecordingState } : {})}
+        {...(onStartBrowserRecording ? { onStart: onStartBrowserRecording } : {})}
+        {...(onStopBrowserRecording ? { onStop: onStopBrowserRecording } : {})}
+      />
     ) : (
-      <RecordingRuntimePanel />
+      <RecordingRuntimePanel
+        {...(browserRecordingState ? { browserState: browserRecordingState } : {})}
+        {...(onStartBrowserRecording ? { onStart: onStartBrowserRecording } : {})}
+        {...(onStopBrowserRecording ? { onStop: onStopBrowserRecording } : {})}
+      />
     ),
     health: (
       <HealthPanel

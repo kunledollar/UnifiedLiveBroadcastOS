@@ -1,6 +1,6 @@
 'use client';
 
-import { getTallyState } from '@ubos/ui';
+import { cn, getTallyState } from '@ubos/ui';
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
@@ -83,6 +83,7 @@ import {
   type ProductionBroadcastSession,
   type SceneNode,
   type SourceNode,
+  createProductionPipelineModel,
   createMockSyncScenario,
   createSyncSession,
   getStaleClients,
@@ -101,6 +102,7 @@ import {
   useState,
   useTransition,
 } from 'react';
+import { useMediaCapture } from '../../lib/media/use-media-capture';
 import {
   addScene,
   addSource,
@@ -120,46 +122,53 @@ import {
   resetDemoProductionState,
   setRouteMuted,
 } from './media-route-actions';
+import { SourceDockPanel, preferredSourceDockTab } from './broadcast-command-center';
+import type { MonitorStatusInfo } from './command-center/monitor-status';
+import { CommandCenterShell } from './command-center';
+import { DiagnosticsSummary } from './broadcast-command-center/FloatingDiagnosticsPanel';
+import type { OperationsDockSection } from './broadcast-command-center/RightOperationsDock';
+import type { OperationsInspectorSelection } from './operations/operations-inspector-selection';
+import {
+  ProductionGraphTreeSummary,
+  RoutingPatchMatrix,
+  SystemStatusWorkspace,
+  buildSystemStatusMetrics,
+  normalizeDockTabId,
+} from './broadcast-workspaces';
+import {
+  type RoutingMatrixEdge,
+  type DiagnosticMetric,
+} from './workspace-canvas';
 import { ProfessionalSwitcher } from './switcher';
 import { BroadcastStatusBar } from './shell/BroadcastStatusBar';
-import { LeftNavigationRail } from './shell/LeftNavigationRail';
-import { CenterProgramWorkspace } from './shell/CenterProgramWorkspace';
-import { RightOperationsConsole } from './shell/RightOperationsConsole';
-import { ProfessionalSwitcherBar } from './shell/ProfessionalSwitcherBar';
-import { BottomDock } from './shell/BottomDock';
 import {
-  DOCK_TOTAL_DEFAULT_PX,
-  DOCK_TAB_HEIGHT_PX,
-  clampDockContentHeight,
-  dockContentFromTotal,
-  preferredDockContentHeight,
-  shouldShowBottomDock,
-  shouldShowRightConsole,
   statusBarHeightForLayout,
   switcherHeightForLayout,
 } from './shell/control-room-layout';
-import { LeftNavPanel } from './browsers';
-import { DigitalAudioConsole, DockPanelEmpty } from './audio-console';
+import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
-import type { DockTabId, NavItemId, OperationsTabId } from './shell/types';
+import { LogsPanel } from './operations/LogsPanel';
+import { RoutingPanel } from './operations/RoutingPanel';
+import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
+import type {
+  BrowserStreamingPanelState,
+  StreamingPanelAction,
+} from './operations/StreamingRuntimePanel';
+import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from './shell/types';
 import {
   applyWorkspaceProfile,
   defaultSafeAreaToggles,
   defaultWorkspaceId,
   normalizeWorkspaceId,
-  SafeAreaControls,
-  WorkspaceCenterLayout,
-  WorkspaceLayout,
-  WorkspaceSelector,
-  LayoutFocusSelector,
   workspaceProfiles,
   type LayoutFocusMode,
   type ProfessionalWorkspaceId,
   type SafeAreaToggles,
 } from './workspaces';
-import { OutputViewModeSelector } from './workspace/OutputViewModeSelector';
+import { ubosWorkspaceModes, type UbosWorkspaceModeId } from './menu';
 import { PreviewMonitorCompact, ProgramMonitor } from './workspace/OutputViewRenderer';
 import {
+  deriveMonitorTelemetry,
   normalizeOutputViewMode,
   outputViewModes,
   type OutputViewMode,
@@ -168,6 +177,7 @@ import {
   GraphicsLayerStack,
   GraphicsPreviewControls,
   GraphicsWorkspace,
+  createBuiltInLowerThirdTemplates,
   createDefaultLowerThirdTemplate,
   ensureSceneComposition,
   graphicsCompositionReducer,
@@ -243,6 +253,157 @@ import {
   deviceReducer,
 } from './devices';
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
+function warnMediaDiagnostic(
+  message: string,
+  error: unknown,
+  details?: Record<string, unknown>,
+): void {
+  if (isAbortError(error)) {
+    return;
+  }
+  console.warn(`[UBOS media runtime] ${message}`, { ...details, error });
+}
+
+function describeCaptureError(error: unknown): string {
+  if (error instanceof DOMException) return `${error.name}: ${error.message}`;
+  if (error instanceof Error) return `${error.name}: ${error.message}`;
+  return String(error);
+}
+
+function getFirstVisibleLiveVideoSource(scene: Scene): SceneSource | null {
+  return (
+    scene.sources.find(
+      (source) => (source.type === 'camera' || source.type === 'screen') && source.isVisible,
+    ) ?? null
+  );
+}
+
+function getPrimarySourceName(scene: Scene): string {
+  const visible = scene.sources.find((source) => source.isVisible);
+  return visible?.name ?? scene.name;
+}
+
+function isLiveMediaStream(stream: MediaStream | null | undefined): stream is MediaStream {
+  return Boolean(
+    stream?.active && stream.getVideoTracks().some((track) => track.readyState === 'live'),
+  );
+}
+
+const SMOKE_CAMERA_SOURCE_ID = 'ubos-smoke-camera';
+
+function findFirstLiveVideoStream(streams: Record<string, MediaStream>): MediaStream | null {
+  for (const stream of Object.values(streams)) {
+    if (isLiveMediaStream(stream)) return stream;
+  }
+  return null;
+}
+
+function findSourceName(
+  sourceId: string,
+  scenes: Scene[],
+): string | undefined {
+  for (const scene of scenes) {
+    const source = scene.sources.find((item) => item.id === sourceId);
+    if (source) return source.name;
+  }
+  return undefined;
+}
+
+function toMixerSourceType(
+  type: string | undefined,
+): 'camera' | 'screen' | 'media' | 'browser' | 'guest' | 'master' {
+  if (
+    type === 'screen' ||
+    type === 'media' ||
+    type === 'browser' ||
+    type === 'guest' ||
+    type === 'master'
+  ) {
+    return type;
+  }
+  return 'camera';
+}
+
+function pauseVideoSafely(video: HTMLVideoElement, details?: Record<string, unknown>): void {
+  try {
+    video.pause();
+  } catch (error) {
+    warnMediaDiagnostic('video pause failed', error, details);
+  }
+}
+
+function exitPictureInPictureSafely(details?: Record<string, unknown>): void {
+  if (typeof document === 'undefined' || !document.pictureInPictureElement) {
+    return;
+  }
+
+  try {
+    void document.exitPictureInPicture().catch((error) => {
+      warnMediaDiagnostic('picture-in-picture exit failed', error, details);
+    });
+  } catch (error) {
+    warnMediaDiagnostic('picture-in-picture exit failed', error, details);
+  }
+}
+
+function configureInlineVideoPlayback(video: HTMLVideoElement, muted: boolean): void {
+  video.disablePictureInPicture = true;
+  video.playsInline = true;
+  video.muted = muted;
+  video.autoplay = true;
+}
+
+function assignVideoStreamSafely(
+  video: HTMLVideoElement,
+  stream: MediaStream | null,
+  details?: Record<string, unknown>,
+): void {
+  try {
+    if (stream) {
+      exitPictureInPictureSafely(details);
+    }
+    video.srcObject = stream;
+  } catch (error) {
+    warnMediaDiagnostic(
+      stream ? 'video stream attach failed' : 'video stream cleanup failed',
+      error,
+      details,
+    );
+  }
+}
+
+function playVideoSafely(
+  video: HTMLVideoElement,
+  details?: Record<string, unknown>,
+  onStarted?: () => void,
+  onFailed?: (reason: string) => void,
+): void {
+  try {
+    const playPromise = video.play();
+    if (playPromise) {
+      void playPromise
+        .then(() => {
+          onStarted?.();
+        })
+        .catch((error) => {
+          const reason = describeCaptureError(error);
+          warnMediaDiagnostic('video play failed', error, details);
+          onFailed?.(reason);
+        });
+      return;
+    }
+    onStarted?.();
+  } catch (error) {
+    const reason = describeCaptureError(error);
+    warnMediaDiagnostic('video play failed', error, details);
+    onFailed?.(reason);
+  }
+}
+
 function MediaStreamPreview({
   stream,
   muted = true,
@@ -256,16 +417,27 @@ function MediaStreamPreview({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
-    if (videoRef.current) videoRef.current.srcObject = stream ?? null;
+    const video = videoRef.current;
+    if (!video) return;
+    const details = { target: label, streamId: stream?.id, active: stream?.active };
+    configureInlineVideoPlayback(video, muted);
+    pauseVideoSafely(video, details);
+    if (stream) {
+      video.onloadedmetadata = () => playVideoSafely(video, details);
+    }
+    assignVideoStreamSafely(video, stream ?? null, details);
     return () => {
-      if (videoRef.current) videoRef.current.srcObject = null;
+      video.onloadedmetadata = null;
+      pauseVideoSafely(video, { ...details, cleanup: true });
+      assignVideoStreamSafely(video, null, { ...details, cleanup: true });
     };
-  }, [stream]);
+  }, [label, muted, stream]);
   return (
     <div className="overflow-hidden rounded-lg border border-slate-700 bg-black/40">
       <video
         ref={videoRef}
         autoPlay
+        disablePictureInPicture
         playsInline
         muted={muted}
         className="aspect-video w-full object-cover"
@@ -274,6 +446,96 @@ function MediaStreamPreview({
         <span>{label}</span>
         <span className="text-slate-400">{status}</span>
       </div>
+    </div>
+  );
+}
+
+function LiveMediaMonitor({
+  title,
+  sceneName,
+  stream,
+  active,
+  role,
+  sourceId,
+  sourceType,
+  deckMode = false,
+}: {
+  title: string;
+  sceneName: string;
+  stream: MediaStream | null;
+  active: boolean;
+  role: 'program' | 'preview';
+  sourceId?: string | null;
+  sourceType?: SceneSourceType | null | undefined;
+  deckMode?: boolean;
+}) {
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const nextStream = active ? stream : null;
+    const details = {
+      target: role,
+      sourceId,
+      streamId: nextStream?.id,
+      active: nextStream?.active,
+    };
+    configureInlineVideoPlayback(video, role === 'preview');
+    pauseVideoSafely(video, details);
+    if (nextStream) {
+      video.onloadedmetadata = () => playVideoSafely(video, details);
+    }
+    assignVideoStreamSafely(video, nextStream, details);
+    return () => {
+      video.onloadedmetadata = null;
+      const cleanupDetails = { ...details, cleanup: true };
+      pauseVideoSafely(video, cleanupDetails);
+      assignVideoStreamSafely(video, null, cleanupDetails);
+    };
+  }, [active, role, sourceId, stream]);
+  return (
+    <div
+      className={cn(
+        'relative flex h-full min-h-0 flex-col overflow-hidden bg-black',
+        !deckMode &&
+          `rounded-xl border ${role === 'program' ? 'border-red-500/50' : 'border-emerald-400/50'}`,
+      )}
+    >
+      <video
+        ref={videoRef}
+        autoPlay
+        disablePictureInPicture
+        playsInline
+        muted={role === 'preview'}
+        className="absolute inset-0 z-[1] h-full w-full object-contain"
+      />
+      {!active ? (
+        <div className="absolute inset-0 z-20 flex items-center justify-center p-6 text-center text-xs uppercase tracking-[0.18em] text-slate-500">
+          Add/start a camera source to see live video here.
+        </div>
+      ) : null}
+      {!deckMode ? (
+        <div className="relative z-30 mt-auto flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
+          <span className={role === 'program' ? 'text-red-200' : 'text-emerald-100'}>{title}</span>
+          {sourceType === 'screen' ? (
+            <span className="rounded bg-sky-500/20 px-2 py-0.5 text-sky-100">SCREEN LIVE</span>
+          ) : sourceType === 'camera' ? (
+            <span className="rounded bg-emerald-500/20 px-2 py-0.5 text-emerald-100">
+              CAMERA LIVE
+            </span>
+          ) : null}
+          <span className="text-slate-300">{sceneName}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function SmokeCheck({ label, ok }: { label: string; ok: boolean }) {
+  return (
+    <div className="flex items-center justify-between rounded-ubos-sm bg-ubos-midnight px-2 py-1 text-ubos-caption">
+      <span className="text-ubos-fg-secondary">{label}</span>
+      <span className={ok ? 'text-emerald-300' : 'text-amber-300'}>{ok ? 'PASS' : 'TODO'}</span>
     </div>
   );
 }
@@ -1503,7 +1765,7 @@ const factoryWorkspace: ControlRoomWorkspaceState = {
   selectedWorkspace: defaultWorkspaceId,
   viewMode: workspaceProfiles.director.defaultViewMode,
   splitRatio: 0.72,
-  sizes: { left: 288, center: 640, right: 352, dock: DOCK_TOTAL_DEFAULT_PX, operations: 288 },
+  sizes: { left: 288, center: 640, right: 352, dock: 204, operations: 288 },
   safeAreaToggles: defaultSafeAreaToggles,
   compactChrome: false,
   layoutFocus: 'full',
@@ -1712,6 +1974,34 @@ function createProductionGraphSessionFromScenes(input: {
   const previewSceneId = scenesById[input.productionState.previewSceneId]
     ? input.productionState.previewSceneId
     : programSceneId;
+  const overlayEntries = input.scenes.flatMap((scene) =>
+    scene.overlays.map((overlay) => [
+      String(overlay.id),
+      {
+        id: String(overlay.id),
+        name: String(overlay.name ?? 'Graphics Overlay'),
+        enabled: overlay.isVisible !== false,
+        sceneId: scene.id,
+        sourceId: String(overlay.id),
+        metadata: { type: overlay.type, zIndex: overlay.zIndex },
+      },
+    ]),
+  );
+  const audioEntries = Object.values(sourcesById)
+    .filter(
+      (source) => source.type === 'audio' || source.type === 'camera' || source.type === 'guest',
+    )
+    .map((source) => [
+      `mix-${source.id}`,
+      {
+        id: `mix-${source.id}`,
+        label: source.name,
+        gain: 0.8,
+        muted: Boolean(source.muted),
+        sourceId: source.id,
+        metadata: { followsSource: true },
+      },
+    ]);
   const session = createBroadcastSession({
     id: input.broadcastId,
     name: 'Control Room Session',
@@ -1720,10 +2010,52 @@ function createProductionGraphSessionFromScenes(input: {
   });
   return {
     ...session,
+    eventLog: [
+      ...session.eventLog,
+      {
+        id: `${input.broadcastId}:automation-ready`,
+        type: 'WORKSPACE_CHANGED',
+        broadcastSessionId: input.broadcastId,
+        actorId: 'automation-engine',
+        timestamp,
+        commandId: 'system:automation-ready',
+        payload: { macroId: 'macro-opening-roll', action: 'automation_execution' },
+        graphRevision: graph.metadata.revision,
+        previousRevision: graph.metadata.revision,
+        nextRevision: graph.metadata.revision,
+      },
+    ],
     graph: {
       ...graph,
       scenes: scenesById,
       sources: sourcesById,
+      overlays: Object.fromEntries(overlayEntries),
+      audioChannels: Object.fromEntries(audioEntries),
+      destinations: {
+        'stream-primary': {
+          id: 'stream-primary',
+          name: 'Primary Stream',
+          platform: 'rtmp',
+          enabled: true,
+          status: 'ready',
+          metadata: { destination: 'metadata-only' },
+        },
+        'broadcast-sdi-1': {
+          id: 'broadcast-sdi-1',
+          name: 'SDI Program Out',
+          platform: 'broadcast-io',
+          enabled: true,
+          status: 'ready',
+          metadata: { connector: 'SDI-1' },
+        },
+      },
+      recording: { ...graph.recording, metadata: { route: 'program-output' } },
+      automation: {
+        enabled: true,
+        activeMacroIds: ['macro-opening-roll'],
+        metadata: { mode: 'manual-confirm' },
+      },
+      plugins: { ...graph.plugins, replayActive: true, monitorWall: 'program-preview-grid' },
       program: {
         ...graph.program,
         sceneId: programSceneId,
@@ -1846,7 +2178,7 @@ export function SceneWorkspace({
     const profile = applyWorkspaceProfile(id);
     setActiveNav(profile.activeNav);
     setActiveOperationsTab(profile.activeOperationsTab);
-    setActiveBottomDock(profile.activeBottomDock);
+    setActiveBottomDock(normalizeDockTabId(profile.activeBottomDock));
     setWorkspace((current) => ({
       ...current,
       selectedWorkspace: profile.selectedWorkspace,
@@ -1855,38 +2187,16 @@ export function SceneWorkspace({
     window.localStorage.setItem(controlRoomViewStorageKey, profile.viewMode);
   };
 
-  const selectLayoutFocus = (layoutFocus: LayoutFocusMode) => {
-    setWorkspace((current) => {
-      const contentHeight = preferredDockContentHeight(
-        layoutFocus,
-        dockContentFromTotal(current.sizes.dock),
-      );
-      return {
-        ...current,
-        layoutFocus,
-        sizes: {
-          ...current.sizes,
-          dock: DOCK_TAB_HEIGHT_PX + contentHeight,
-        },
-      };
-    });
-    if (layoutFocus === 'audio') {
-      setActiveBottomDock('audio');
+  const setCompactChrome = (compactChrome: boolean) => {
+    setWorkspace((current) => ({ ...current, compactChrome }));
+  };
+
+  const applyMenuWorkspaceMode = (modeId: UbosWorkspaceModeId, compactChrome?: boolean) => {
+    const modeDef = ubosWorkspaceModes[modeId];
+    selectProfessionalWorkspace(modeDef.professionalWorkspaceId);
+    if (compactChrome !== undefined) {
+      setCompactChrome(compactChrome);
     }
-  };
-
-  const toggleCompactChrome = () => {
-    setWorkspace((current) => ({ ...current, compactChrome: !current.compactChrome }));
-  };
-
-  const handleDockContentHeightChange = (contentHeightPx: number) => {
-    setWorkspace((current) => ({
-      ...current,
-      sizes: {
-        ...current.sizes,
-        dock: DOCK_TAB_HEIGHT_PX + clampDockContentHeight(contentHeightPx),
-      },
-    }));
   };
 
   const saveWorkspace = () =>
@@ -1916,6 +2226,366 @@ export function SceneWorkspace({
     (next: Scene[]) => startTransition(() => setScenes(next)),
     [startTransition, setScenes],
   );
+  const smokeMedia = useMediaCapture();
+  const [programStreamOnAir, setProgramStreamOnAir] = useState(false);
+  const [cameraCaptureError, setCameraCaptureError] = useState('');
+  const [liveSourceStreams, setLiveSourceStreams] = useState<Record<string, MediaStream>>({});
+  const [audioLevel, setAudioLevel] = useState(0);
+  const [recordingState, setRecordingState] = useState<
+    'idle' | 'preparing' | 'recording' | 'stopping' | 'completed' | 'failed' | 'unsupported'
+  >('idle');
+  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const [recordingStartedAt, setRecordingStartedAt] = useState<string | null>(null);
+  const [recordingStoppedAt, setRecordingStoppedAt] = useState<string | null>(null);
+  const [recordingDurationMs, setRecordingDurationMs] = useState(0);
+  const [recordingFileSize, setRecordingFileSize] = useState(0);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [recordingSourceType, setRecordingSourceType] =
+    useState<BrowserRecordingPanelState['sourceType']>('none');
+  const [recordingFilename, setRecordingFilename] = useState<string | null>(null);
+  const [recordingHistory, setRecordingHistory] = useState<BrowserRecordingPanelState['history']>(
+    [],
+  );
+  const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
+  const [streamingState, setStreamingState] = useState<BrowserStreamingPanelState>({
+    lifecycle: 'idle',
+    destination: {
+      id: 'stream-destination:default',
+      platform: 'YouTube',
+      rtmpUrl: '',
+      streamKey: '',
+      enabled: true,
+      resolution: '1920x1080',
+      bitrateKbps: 4500,
+      audioBitrateKbps: 160,
+    },
+    durationMs: 0,
+    startedAt: null,
+    stoppedAt: null,
+    bitrateEstimateKbps: 0,
+    droppedFrameEstimate: 0,
+    error: null,
+    history: [],
+    browserOnly: true,
+    adapters: [
+      'BrowserStreamingAdapter',
+      'FFmpegStreamingAdapter',
+      'NativeDesktopStreamingAdapter',
+    ],
+  });
+  const streamingStartRef = useRef<string | null>(null);
+
+  const validateStreamingDestination = useCallback(
+    (destination: BrowserStreamingPanelState['destination']) => {
+      if (!destination.enabled) return 'Enable the streaming destination before starting.';
+      if (!destination.rtmpUrl.trim()) return 'Add an RTMP server URL before starting streaming.';
+      if (!/^rtmps?:\/\/[^\s]+$/i.test(destination.rtmpUrl.trim()))
+        return 'Enter a valid RTMP or RTMPS server URL.';
+      if (!destination.streamKey.trim()) return 'Add a stream key before starting streaming.';
+      return null;
+    },
+    [],
+  );
+
+  const dispatchStreaming = useCallback(
+    (action: StreamingPanelAction) => {
+      if (action.type === 'updateDestination') {
+        setStreamingState((current) => ({
+          ...current,
+          error: null,
+          destination: { ...current.destination, ...action.patch },
+        }));
+        return;
+      }
+      if (action.type === 'start') {
+        setStreamingState((current) => {
+          const error = validateStreamingDestination(current.destination);
+          if (error) return { ...current, lifecycle: 'failed', error };
+          const startedAt = new Date().toISOString();
+          streamingStartRef.current = startedAt;
+          return {
+            ...current,
+            lifecycle: 'preparing',
+            startedAt,
+            stoppedAt: null,
+            durationMs: 0,
+            bitrateEstimateKbps: 0,
+            droppedFrameEstimate: 0,
+            error:
+              'Browser-only mode cannot transmit RTMP. Lifecycle is simulated until backend/native FFmpeg support is connected.',
+          };
+        });
+        window.setTimeout(
+          () =>
+            setStreamingState((current) =>
+              current.lifecycle === 'preparing' ? { ...current, lifecycle: 'connecting' } : current,
+            ),
+          400,
+        );
+        window.setTimeout(
+          () =>
+            setStreamingState((current) =>
+              current.lifecycle === 'connecting'
+                ? {
+                    ...current,
+                    lifecycle: 'streaming',
+                    bitrateEstimateKbps:
+                      current.destination.bitrateKbps + current.destination.audioBitrateKbps,
+                  }
+                : current,
+            ),
+          900,
+        );
+        return;
+      }
+      if (action.type === 'stop') {
+        setStreamingState((current) => {
+          const stoppedAt = new Date().toISOString();
+          const startedAt = current.startedAt ?? stoppedAt;
+          const durationMs = Math.max(0, Date.parse(stoppedAt) - Date.parse(startedAt));
+          return {
+            ...current,
+            lifecycle: 'stopped',
+            stoppedAt,
+            durationMs,
+            bitrateEstimateKbps: 0,
+            history: [
+              {
+                platform: current.destination.platform,
+                startedAt,
+                stoppedAt,
+                durationMs,
+                state: 'stopped' as const,
+                failureReason: null,
+              },
+              ...current.history,
+            ].slice(0, 10),
+          };
+        });
+      }
+    },
+    [validateStreamingDestination],
+  );
+
+  const liveSourceStreamsRef = useRef<Record<string, MediaStream>>({});
+
+  useEffect(() => {
+    liveSourceStreamsRef.current = liveSourceStreams;
+  }, [liveSourceStreams]);
+
+  useEffect(
+    () => () => {
+      Object.values(liveSourceStreamsRef.current).forEach((stream) => {
+        stream.getTracks().forEach((track) => track.stop());
+      });
+    },
+    [],
+  );
+
+  const patchCaptureSourceStatus = useCallback(
+    (runtimeStatus: string, sourceId?: string, message?: string) => {
+      refresh(
+        scenes.map((scene) => ({
+          ...scene,
+          sources: scene.sources.map((source) =>
+            (source.type === 'camera' || source.type === 'screen' || source.type === 'audio') &&
+            (!sourceId || source.id === sourceId)
+              ? {
+                  ...source,
+                  settings: {
+                    ...source.settings,
+                    runtimeStatus,
+                    ...(message ? { message } : {}),
+                  },
+                }
+              : source,
+          ),
+        })),
+      );
+    },
+    [refresh, scenes],
+  );
+
+  const stopLiveSourceStream = useCallback((sourceId: string) => {
+    setLiveSourceStreams((current) => {
+      const stream = current[sourceId];
+      if (!stream) return current;
+      stream.getTracks().forEach((track) => track.stop());
+      const { [sourceId]: _removed, ...remaining } = current;
+      return remaining;
+    });
+  }, []);
+
+  const markLiveSourceOffline = useCallback(
+    (sourceId: string, message = 'Capture track ended') => {
+      setLiveSourceStreams((current) => {
+        const { [sourceId]: _removed, ...remaining } = current;
+        return remaining;
+      });
+      patchCaptureSourceStatus('offline', sourceId, message);
+    },
+    [patchCaptureSourceStatus],
+  );
+
+  const retainLiveSourceStream = useCallback(
+    (sourceId: string, stream: MediaStream) => {
+      setLiveSourceStreams((current) => {
+        current[sourceId]?.getTracks().forEach((track) => track.stop());
+        return { ...current, [sourceId]: stream };
+      });
+      stream.getTracks().forEach((track) => {
+        track.addEventListener('ended', () => markLiveSourceOffline(sourceId), { once: true });
+      });
+    },
+    [markLiveSourceOffline],
+  );
+
+  const startScreenCapture = useCallback(
+    async (sourceId: string) => {
+      patchCaptureSourceStatus('connecting', sourceId);
+      if (!navigator.mediaDevices?.getDisplayMedia) {
+        patchCaptureSourceStatus(
+          'unavailable',
+          sourceId,
+          'Display capture is not supported in this browser.',
+        );
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+          audio: true,
+        });
+        if (isLiveMediaStream(stream)) {
+          retainLiveSourceStream(sourceId, stream);
+          const videoTrack = stream.getVideoTracks()[0];
+          const settings = videoTrack?.getSettings();
+          refresh(
+            scenes.map((scene) => ({
+              ...scene,
+              sources: scene.sources.map((source) =>
+                source.id === sourceId
+                  ? {
+                      ...source,
+                      settings: {
+                        ...source.settings,
+                        runtimeStatus: 'live',
+                        captureState: 'live',
+                        sourceKind: 'screen',
+                        audioEnabled: stream.getAudioTracks().length > 0,
+                        ...(settings?.width && settings?.height
+                          ? { resolution: `${settings.width}x${settings.height}` }
+                          : {}),
+                        ...(settings?.frameRate ? { fps: Math.round(settings.frameRate) } : {}),
+                      },
+                    }
+                  : source,
+              ),
+            })),
+          );
+        } else {
+          patchCaptureSourceStatus(
+            'unavailable',
+            sourceId,
+            'getDisplayMedia did not return a live display stream.',
+          );
+        }
+      } catch (error) {
+        const failureReason = describeCaptureError(error);
+        patchCaptureSourceStatus(
+          isAbortError(error) ? 'permission_required' : 'unavailable',
+          sourceId,
+          failureReason,
+        );
+      }
+    },
+    [patchCaptureSourceStatus, refresh, retainLiveSourceStream, scenes],
+  );
+
+  const startCameraCapture = useCallback(
+    async (sourceId: string) => {
+      patchCaptureSourceStatus('connecting', sourceId);
+      setCameraCaptureError('');
+      if (!navigator.mediaDevices?.getUserMedia) {
+        patchCaptureSourceStatus(
+          'unavailable',
+          sourceId,
+          'Camera capture is not supported in this browser.',
+        );
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (isLiveMediaStream(stream)) {
+          retainLiveSourceStream(sourceId, stream);
+          const videoTrack = stream.getVideoTracks()[0];
+          const settings = videoTrack?.getSettings();
+          refresh(
+            scenes.map((scene) => ({
+              ...scene,
+              sources: scene.sources.map((source) =>
+                source.id === sourceId
+                  ? {
+                      ...source,
+                      settings: {
+                        ...source.settings,
+                        runtimeStatus: 'live',
+                        captureState: 'live',
+                        sourceKind: 'camera',
+                        audioEnabled: stream.getAudioTracks().length > 0,
+                        ...(settings?.width && settings?.height
+                          ? { resolution: `${settings.width}x${settings.height}` }
+                          : {}),
+                        ...(settings?.frameRate ? { fps: Math.round(settings.frameRate) } : {}),
+                      },
+                    }
+                  : source,
+              ),
+            })),
+          );
+        } else {
+          const failureReason = 'getUserMedia did not return an active camera stream.';
+          patchCaptureSourceStatus('unavailable', sourceId, failureReason);
+          setCameraCaptureError(failureReason);
+        }
+      } catch (error) {
+        const failureReason = describeCaptureError(error);
+        patchCaptureSourceStatus(
+          isAbortError(error) ? 'permission_required' : 'unavailable',
+          sourceId,
+          failureReason,
+        );
+        setCameraCaptureError(failureReason);
+      }
+    },
+    [patchCaptureSourceStatus, refresh, retainLiveSourceStream, scenes],
+  );
+
+  const startSmokeCapture = useCallback(
+    async (sourceId: string) => {
+      patchCaptureSourceStatus('connecting', sourceId);
+      try {
+        const stream = await smokeMedia.startPreview({ withAudio: true });
+        if (isLiveMediaStream(stream)) {
+          retainLiveSourceStream(sourceId, stream);
+          patchCaptureSourceStatus('live', sourceId);
+        } else {
+          const failureReason =
+            smokeMedia.getLastErrorMessage() ||
+            'getUserMedia did not return an active camera stream.';
+          patchCaptureSourceStatus('unavailable', sourceId, failureReason);
+        }
+      } catch (error) {
+        const failureReason = describeCaptureError(error);
+        patchCaptureSourceStatus('unavailable', sourceId, failureReason);
+      }
+    },
+    [patchCaptureSourceStatus, retainLiveSourceStream, smokeMedia],
+  );
+
   const sorted = useMemo(() => [...scenes].sort((a, b) => a.order - b.order), [scenes]);
   const programScene =
     sorted.find((scene) => scene.id === productionState.programSceneId) ??
@@ -1924,6 +2594,263 @@ export function SceneWorkspace({
   const previewScene =
     sorted.find((scene) => scene.id === productionState.previewSceneId) ?? programScene;
   const activeScene = previewScene;
+  const previewLiveVideoSource = getFirstVisibleLiveVideoSource(previewScene);
+  const programLiveVideoSource = getFirstVisibleLiveVideoSource(programScene);
+  const previewCameraSourceId = previewLiveVideoSource?.id ?? null;
+  const programCameraSourceId = programLiveVideoSource?.id ?? null;
+  const previewCameraStream = previewCameraSourceId
+    ? liveSourceStreams[previewCameraSourceId]
+    : null;
+  const programCameraStream = programCameraSourceId
+    ? liveSourceStreams[programCameraSourceId]
+    : null;
+  const firstLiveVideoStream = useMemo(
+    () => findFirstLiveVideoStream(liveSourceStreams),
+    [liveSourceStreams],
+  );
+  const directCameraLive = isLiveMediaStream(firstLiveVideoStream);
+  const previewStreamToShow = previewCameraStream ?? firstLiveVideoStream;
+  const programStreamToShow =
+    programCameraStream ?? (directCameraLive && programStreamOnAir ? firstLiveVideoStream : null);
+  const previewHasCameraSource = Boolean(previewCameraSourceId) || directCameraLive;
+  const programHasCameraSource =
+    Boolean(programCameraSourceId) || (directCameraLive && programStreamOnAir);
+  const livePreviewVisible = isLiveMediaStream(previewStreamToShow);
+  const liveProgramVisible = isLiveMediaStream(programStreamToShow);
+
+  const createProgramRecordingStream = useCallback(() => {
+    const directStream = programStreamToShow ?? (programStreamOnAir ? firstLiveVideoStream : null);
+    if (isLiveMediaStream(directStream)) {
+      return {
+        stream: directStream,
+        sourceType: programLiveVideoSource?.type ?? 'camera',
+      } as const;
+    }
+    const programRoot = document.querySelector('[data-ubos-program-monitor=\"true\"]');
+    const programVideo = programRoot?.querySelector('video') as
+      | (HTMLVideoElement & {
+          captureStream?: () => MediaStream;
+          mozCaptureStream?: () => MediaStream;
+        })
+      | null;
+    const captured = programVideo?.captureStream?.() ?? programVideo?.mozCaptureStream?.();
+    if (captured?.getVideoTracks().length) {
+      const mixed = new MediaStream(captured.getVideoTracks());
+      const addedTrackIds = new Set(mixed.getAudioTracks().map((track) => track.id));
+      Object.values(liveSourceStreamsRef.current).forEach((stream) => {
+        stream
+          .getAudioTracks()
+          .filter((track) => track.readyState === 'live' && !addedTrackIds.has(track.id))
+          .forEach((track) => {
+            mixed.addTrack(track);
+            addedTrackIds.add(track.id);
+          });
+      });
+      return {
+        stream: mixed,
+        sourceType: programScene.sources.find((source) => source.isVisible)?.type ?? 'media',
+      } as const;
+    }
+    return null;
+  }, [
+    firstLiveVideoStream,
+    programLiveVideoSource?.type,
+    programScene.sources,
+    programStreamOnAir,
+    programStreamToShow,
+  ]);
+
+  const startSmokeRecording = useCallback(() => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') return;
+    if (!mediaRecorderSupported) {
+      setRecordingState('failed');
+      setRecordingError('MediaRecorder is not supported in this browser.');
+      return;
+    }
+    setRecordingState('preparing');
+    setRecordingError(null);
+    const source = createProgramRecordingStream();
+    if (!source) {
+      setRecordingState('failed');
+      setRecordingError(
+        'No capturable Program video is available. Start a camera, screen, or supported media source first.',
+      );
+      return;
+    }
+    recordedChunksRef.current = [];
+    setRecordingFileSize(0);
+    if (recordedUrl) URL.revokeObjectURL(recordedUrl);
+    setRecordedUrl(null);
+    const startedAt = new Date().toISOString();
+    const filename = `ubos-program-${startedAt.replace(/[:.]/g, '-')}.webm`;
+    setRecordingStartedAt(startedAt);
+    setRecordingStoppedAt(null);
+    setRecordingDurationMs(0);
+    setRecordingFilename(filename);
+    setRecordingSourceType(source.sourceType);
+    const recorderOptions = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? { mimeType: 'video/webm;codecs=vp9,opus' }
+      : MediaRecorder.isTypeSupported('video/webm')
+        ? { mimeType: 'video/webm' }
+        : undefined;
+    const recorder = new MediaRecorder(source.stream, recorderOptions);
+    recordingStreamRef.current = source.stream;
+    const stopForEndedSource = () => {
+      if (recorder.state === 'recording') recorder.stop();
+    };
+    source.stream
+      .getTracks()
+      .forEach((track) => track.addEventListener('ended', stopForEndedSource, { once: true }));
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordedChunksRef.current.push(event.data);
+        setRecordingFileSize((size) => size + event.data.size);
+      }
+    };
+    recorder.onerror = () => {
+      setRecordingState('failed');
+      setRecordingError('The browser recording pipeline reported an error.');
+    };
+    recorder.onstop = () => {
+      const stoppedAt = new Date().toISOString();
+      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const durationMs = startedAt
+        ? Date.parse(stoppedAt) - Date.parse(startedAt)
+        : recordingDurationMs;
+      setRecordedUrl(URL.createObjectURL(blob));
+      setRecordingStoppedAt(stoppedAt);
+      setRecordingDurationMs(Math.max(0, durationMs));
+      setRecordingFileSize(blob.size);
+      setRecordingState('completed');
+      setRecordingHistory((history) =>
+        [
+          {
+            filename,
+            durationMs: Math.max(0, durationMs),
+            startedAt,
+            stoppedAt,
+            sourceType: source.sourceType,
+            fileSizeBytes: blob.size,
+          },
+          ...history,
+        ].slice(0, 10),
+      );
+      recorderRef.current = null;
+      recordingStreamRef.current = null;
+    };
+    recorder.start(1000);
+    recorderRef.current = recorder;
+    setRecordingState('recording');
+  }, [createProgramRecordingStream, mediaRecorderSupported, recordedUrl, recordingDurationMs]);
+
+  const stopSmokeRecording = useCallback(() => {
+    if (recorderRef.current?.state === 'recording') {
+      setRecordingState('stopping');
+      recorderRef.current.stop();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (streamingState.lifecycle !== 'streaming' || !streamingState.startedAt) return;
+    const tick = () =>
+      setStreamingState((current) => ({
+        ...current,
+        durationMs: Date.now() - Date.parse(streamingState.startedAt!),
+        bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps,
+        droppedFrameEstimate: Math.floor(
+          (Date.now() - Date.parse(streamingState.startedAt!)) / 60000,
+        ),
+      }));
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [streamingState.lifecycle, streamingState.startedAt]);
+
+  useEffect(() => {
+    if (recordingState !== 'recording' || !recordingStartedAt) return;
+    const tick = () => setRecordingDurationMs(Date.now() - Date.parse(recordingStartedAt));
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [recordingStartedAt, recordingState]);
+
+  const browserRecordingPanelState = useMemo<BrowserRecordingPanelState>(
+    () => ({
+      state: recordingState === 'unsupported' ? 'failed' : recordingState,
+      filename: recordingFilename,
+      durationMs: recordingDurationMs,
+      startedAt: recordingStartedAt,
+      stoppedAt: recordingStoppedAt,
+      sourceType: recordingSourceType,
+      fileSizeBytes: recordingFileSize,
+      downloadUrl: recordedUrl,
+      error: recordingError,
+      history: recordingHistory,
+      supported: mediaRecorderSupported,
+    }),
+    [
+      mediaRecorderSupported,
+      recordedUrl,
+      recordingDurationMs,
+      recordingError,
+      recordingFileSize,
+      recordingFilename,
+      recordingHistory,
+      recordingSourceType,
+      recordingStartedAt,
+      recordingState,
+      recordingStoppedAt,
+    ],
+  );
+
+  useEffect(() => {
+    const stream = previewStreamToShow ?? firstLiveVideoStream;
+    if (!stream?.getAudioTracks().length) {
+      setAudioLevel(0);
+      return;
+    }
+    const AudioContextConstructor =
+      window.AudioContext ||
+      (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextConstructor) return;
+    const audioContext = new AudioContextConstructor();
+    const analyser = audioContext.createAnalyser();
+    analyser.fftSize = 256;
+    const source = audioContext.createMediaStreamSource(stream);
+    source.connect(analyser);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    let frame = 0;
+    const tick = () => {
+      analyser.getByteTimeDomainData(data);
+      const peak = data.reduce((max, value) => Math.max(max, Math.abs(value - 128)), 0);
+      setAudioLevel(Math.min(100, Math.round((peak / 64) * 100)));
+      frame = window.requestAnimationFrame(tick);
+    };
+    tick();
+    return () => {
+      window.cancelAnimationFrame(frame);
+      source.disconnect();
+      void audioContext.close();
+    };
+  }, [firstLiveVideoStream, previewStreamToShow]);
+  const liveAudioChannels = useMemo<AudioChannel[]>(() => {
+    const entries = Object.entries(liveSourceStreams).filter(([, stream]) =>
+      stream.getAudioTracks().some((track) => track.readyState === 'live'),
+    );
+    return entries.map(([sourceId]) => ({
+      id: `live-${sourceId}`,
+      label: findSourceName(sourceId, sorted) ?? `Live Source (${sourceId.slice(0, 8)})`,
+      level: audioLevel,
+      muted: false,
+      kind: 'mic' as const,
+    }));
+  }, [audioLevel, liveSourceStreams, sorted]);
+
+  const effectiveAudioChannels = useMemo(
+    () => [...channels, ...liveAudioChannels],
+    [channels, liveAudioChannels],
+  );
+
   const synchronizedOutputs = ProgramPreviewSynchronizer.fromSwitchingState(productionState);
   const activeSceneTallyState = getTallyState({
     id: activeScene.id,
@@ -2085,6 +3012,9 @@ export function SceneWorkspace({
       window.setTimeout(() => setTransitionActive(false), Math.max(duration, 250));
     }
     refresh(sorted.map((scene) => ({ ...scene, isActive: scene.id === next.programSceneId })));
+    if (isLiveMediaStream(previewStreamToShow)) {
+      setProgramStreamOnAir(true);
+    }
     persistProductionState(next, type === 'fade' ? 'fade' : type === 'cut' ? 'cut' : 'take');
   };
 
@@ -2168,11 +3098,12 @@ export function SceneWorkspace({
     [activeRouteCount, multiviewActiveRouteCount, safeHealthMetrics],
   );
 
-  const [activeNav, setActiveNav] = useState<NavItemId>('scenes');
+  const [activeNav, setActiveNav] = useState<NavItemId>('dashboard');
+  const [activeSourceDockTab, setActiveSourceDockTab] = useState<SourceDockTabId>('scenes');
   const [activeBottomDock, setActiveBottomDock] = useState<DockTabId>('audio');
   const [activeOperationsTab, setActiveOperationsTab] = useState<OperationsTabId>('guests');
   const [professionalRightTab, setProfessionalRightTab] = useState<
-    'guests' | 'outputs' | 'chat' | 'inspector' | 'health'
+    'guests' | 'outputs' | 'chat' | 'inspector' | 'health' | 'smoke'
   >('guests');
   const [showSafeAreas, setShowSafeAreas] = useState(false);
   const safeAreaToggles = workspace.safeAreaToggles;
@@ -2185,6 +3116,7 @@ export function SceneWorkspace({
     initialMediaCompositionState,
   );
   const [selectedGraphicsLayerId, setSelectedGraphicsLayerId] = useState<string | null>(null);
+  const [selectedSourceId, setSelectedSourceId] = useState<string | null>(null);
   const [selectedMediaAssetId, setSelectedMediaAssetId] = useState<string | null>(null);
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [selectedReplayClipId, setSelectedReplayClipId] = useState<string | null>(null);
@@ -2222,8 +3154,9 @@ export function SceneWorkspace({
     deviceReducer,
     createInitialDeviceState(deviceManifest),
   );
-  const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>([
+  const [lowerThirdTemplates, setLowerThirdTemplates] = useState<LowerThirdTemplate[]>(() => [
     createDefaultLowerThirdTemplate('Broadcast Lower Third'),
+    ...createBuiltInLowerThirdTemplates(),
   ]);
 
   const updateActiveSources = (updater: (sources: SceneSource[]) => SceneSource[]) => {
@@ -2235,6 +3168,11 @@ export function SceneWorkspace({
       ),
     );
   };
+
+  const activateDirectCamera = useCallback(async () => {
+    setProgramStreamOnAir(false);
+    await startCameraCapture(SMOKE_CAMERA_SOURCE_ID);
+  }, [startCameraCapture]);
 
   const graphicsAssets = useMemo(
     () => assets.filter((asset) => ['overlay', 'lower_third', 'background'].includes(asset.type)),
@@ -2249,6 +3187,11 @@ export function SceneWorkspace({
   const previewSceneComposition = useMemo(
     () => ensureSceneComposition(graphicsState.compositions, previewScene.id),
     [graphicsState.compositions, previewScene.id],
+  );
+
+  const programSceneComposition = useMemo(
+    () => ensureSceneComposition(graphicsState.compositions, programScene.id),
+    [graphicsState.compositions, programScene.id],
   );
 
   const previewSceneMediaComposition = useMemo(
@@ -2471,6 +3414,80 @@ export function SceneWorkspace({
     [productionGraphSession.graph],
   );
 
+  const productionPipeline = useMemo(
+    () =>
+      createProductionPipelineModel(productionGraphSession.graph, productionGraphSession.eventLog),
+    [productionGraphSession.graph, productionGraphSession.eventLog],
+  );
+
+  const operationsInspectorSelection = useMemo((): OperationsInspectorSelection => {
+    if (selectedSourceId) {
+      const previewMatch = previewScene.sources.find((source) => source.id === selectedSourceId);
+      if (previewMatch) {
+        return { kind: 'source', source: previewMatch, sceneName: previewScene.name };
+      }
+      const programMatch = programScene.sources.find((source) => source.id === selectedSourceId);
+      if (programMatch) {
+        return { kind: 'source', source: programMatch, sceneName: programScene.name };
+      }
+    }
+
+    if (selectedRouteId) {
+      const route = mediaRoutes.find((item) => item.id === selectedRouteId);
+      if (route) {
+        const pipelineRoute = productionPipeline.state.outputRouting.find(
+          (item) => item.label === route.displayName || item.id === route.id,
+        );
+        if (pipelineRoute) {
+          return { kind: 'pipeline-route', route: pipelineRoute };
+        }
+        return { kind: 'route', route };
+      }
+    }
+
+    if (selectedGraphicsLayerId) {
+      const layer = previewSceneComposition.layers.find((item) => item.id === selectedGraphicsLayerId);
+      if (layer) {
+        return {
+          kind: 'graphics-layer',
+          layerId: layer.id,
+          layerName: layer.name,
+        };
+      }
+    }
+
+    if (selectedMediaAssetId) {
+      const asset = previewSceneMediaComposition.assets.find(
+        (item) => item.id === selectedMediaAssetId,
+      );
+      if (asset) {
+        return {
+          kind: 'media-asset',
+          assetId: asset.id,
+          assetName: asset.name,
+        };
+      }
+    }
+
+    return null;
+  }, [
+    selectedSourceId,
+    selectedRouteId,
+    selectedGraphicsLayerId,
+    selectedMediaAssetId,
+    previewScene,
+    programScene,
+    mediaRoutes,
+    productionPipeline,
+    previewSceneComposition.layers,
+    previewSceneMediaComposition.assets,
+  ]);
+
+  const handleSelectSource = useCallback((sourceId: string) => {
+    setSelectedSourceId(sourceId);
+    setActiveOperationsTab('inspector');
+  }, []);
+
   const operationsPanels = useMemo(
     () =>
       OperationsConsoleContent({
@@ -2529,6 +3546,13 @@ export function SceneWorkspace({
         runtimeState: runtimeView,
         runtimeHealth: runtime.session.health(),
         runtimeSnapshots: runtime.session.history.history,
+        browserRecordingState: browserRecordingPanelState,
+        browserStreamingState: streamingState,
+        onStreamingDispatch: dispatchStreaming,
+        onStartBrowserRecording: startSmokeRecording,
+        onStopBrowserRecording: stopSmokeRecording,
+        pipeline: productionPipeline,
+        inspectorSelection: operationsInspectorSelection,
       }),
     [
       broadcastId,
@@ -2560,6 +3584,13 @@ export function SceneWorkspace({
       deviceState,
       runtimeView,
       runtime,
+      browserRecordingPanelState,
+      streamingState,
+      dispatchStreaming,
+      startSmokeRecording,
+      stopSmokeRecording,
+      productionPipeline,
+      operationsInspectorSelection,
     ],
   );
 
@@ -2574,6 +3605,7 @@ export function SceneWorkspace({
       'compositor',
       'runtime',
       'recording',
+      'streaming',
       'security',
       'monitoring',
       'cluster',
@@ -2612,77 +3644,165 @@ export function SceneWorkspace({
     />
   );
 
-  const toolsMenu = (
-    <div className="flex items-center gap-1">
-      <LayoutFocusSelector selected={workspace.layoutFocus} onSelect={selectLayoutFocus} />
-      <WorkspaceSelector selected={selectedWorkspace} onSelect={selectProfessionalWorkspace} />
-      <label className="flex h-6 cursor-pointer items-center gap-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
-        <input
-          type="checkbox"
-          checked={workspace.compactChrome}
-          onChange={toggleCompactChrome}
-          className="h-3 w-3 accent-ubos-selection"
-          aria-label="Toggle compact chrome"
-        />
-        <span>Compact</span>
-      </label>
-      <details className="group relative">
-        <summary className="flex h-6 cursor-pointer list-none items-center rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 text-ubos-metadata font-medium text-ubos-fg-secondary hover:bg-ubos-slate">
-          Tools
-        </summary>
-        <div className="absolute right-0 z-20 mt-1 grid min-w-40 gap-1 rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-2 text-ubos-caption text-ubos-fg-secondary shadow-ubos-raised">
-          <button
-            type="button"
-            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={saveWorkspace}
-          >
-            Save Workspace
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={restoreWorkspace}
-          >
-            Restore Workspace
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-            onClick={resetWorkspace}
-          >
-            Reset Workspace
-          </button>
-          <div className="border-t border-ubos-border-subtle pt-1">
-            <button
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => startTransition(async () => seedDemoProductionState())}
-            >
-              Seed demo
-            </button>
-            <button
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => startTransition(async () => simulateDemoProduction())}
-            >
-              Simulate
-            </button>
-            <button
-              type="button"
-              className="rounded-ubos-sm px-2 py-1 text-left hover:bg-ubos-midnight"
-              onClick={() => startTransition(async () => resetDemoProductionState())}
-            >
-              Reset
-            </button>
-          </div>
-        </div>
-      </details>
-    </div>
+  const toolsMenu = null;
+
+  const graphAudioChannels = useMemo(
+    () => selectAudioChannels(productionGraphSession.graph),
+    [productionGraphSession.graph],
+  );
+
+  const recordingActive = useMemo(
+    () => selectRecordingState(productionGraphSession.graph).status === 'recording',
+    [productionGraphSession.graph],
+  );
+
+  const workspaceMonitorContext = useMemo(
+    () => ({
+      programScene,
+      previewScene,
+      routes: mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      healthMetrics: multiviewHealthMetrics,
+      graph: productionGraphSession.graph,
+      healthFps: safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+      programGraphicsLayers: programSceneComposition.layers.filter(
+        (layer) => layer.programState === 'live',
+      ),
+      previewGraphicsLayers: previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview',
+      ),
+      programMediaOverlayItems,
+      previewMediaOverlayItems,
+      replayBuffer: previewSceneMediaComposition.replayBuffer,
+      ...(collaborationState.remoteProduction.operators.find(
+        (operator) => operator.role === 'director',
+      )?.name
+        ? {
+            collaborationDirectorName: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.role === 'director',
+            )!.name,
+          }
+        : {}),
+      collaborationLockCount: collaborationState.remoteProduction.locks.filter(
+        (lock) => Date.parse(lock.expiresAt) > Date.now(),
+      ).length,
+      collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
+        (note) => note.status === 'open',
+      ).length,
+      ...(collaborationState.remoteProduction.operators.find((operator) =>
+        operator.currentPanel?.toLowerCase().includes('preview'),
+      )?.name
+        ? {
+            collaborationPreviewChangedBy: collaborationState.remoteProduction.operators.find(
+              (operator) => operator.currentPanel?.toLowerCase().includes('preview'),
+            )!.name,
+          }
+        : {}),
+      ...(getCurrentSegment(automationState.runOfShow)?.name
+        ? { automationCurrentSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
+        : {}),
+      ...(getNextSegment(automationState.runOfShow)?.name
+        ? { automationNextSegmentName: getNextSegment(automationState.runOfShow)!.name }
+        : {}),
+      automationModeLabel: automationModeLabel(automationState.automationMode),
+    }),
+    [
+      programScene,
+      previewScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      channels,
+      multiviewHealthMetrics,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      safeAreaToggles,
+      previewSceneComposition,
+      programSceneComposition,
+      programMediaOverlayItems,
+      previewMediaOverlayItems,
+      previewSceneMediaComposition.replayBuffer,
+      collaborationState.remoteProduction,
+      automationState,
+    ],
+  );
+
+  const mixerSources = useMemo(() => {
+    const liveEntries = Object.entries(liveSourceStreams)
+      .filter(([, stream]) =>
+        stream.getAudioTracks().some((track) => track.readyState === 'live'),
+      )
+      .map(([sourceId, stream]) => {
+        const source = sorted
+          .flatMap((scene) => scene.sources)
+          .find((item) => item.id === sourceId);
+        return {
+          id: sourceId,
+          name: source?.name ?? findSourceName(sourceId, sorted) ?? `Source ${sourceId.slice(0, 8)}`,
+          type: toMixerSourceType(source?.type),
+          stream,
+        };
+      });
+
+    const staticChannels = [
+      { id: 'media', name: 'Media Playback', type: 'media' as const, stream: null },
+      { id: 'browser', name: 'Browser Source', type: 'browser' as const, stream: null },
+      { id: 'guest', name: 'Guest Audio', type: 'guest' as const, stream: null },
+      { id: 'master', name: 'Master Output', type: 'master' as const, stream: null },
+    ];
+
+    return liveEntries.length > 0 ? [...liveEntries, ...staticChannels] : staticChannels;
+  }, [liveSourceStreams, sorted]);
+
+  const routingEdges = useMemo<RoutingMatrixEdge[]>(
+    () =>
+      mediaRoutes.map((route) => {
+        const gain =
+          typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
+        return {
+          id: route.id,
+          sourceId: route.sourceId ?? route.id,
+          sourceLabel: route.displayName,
+          destinationId: route.routeType,
+          destinationLabel: route.routeType.replace(/_/g, ' '),
+          active: route.isActive,
+          ...(gain !== undefined ? { gain } : {}),
+        };
+      }),
+    [mediaRoutes],
+  );
+
+  const diagnosticsMetrics = useMemo<DiagnosticMetric[]>(
+    () =>
+      buildSystemStatusMetrics({
+        fps: String(safeHealthMetrics.fps),
+        cpu: String(safeHealthMetrics.cpu),
+        dropped: String(safeHealthMetrics.dropped),
+        upload: String(safeHealthMetrics.upload),
+        recordingState,
+        streamingLifecycle: streamingState.lifecycle,
+        activeRouteCount,
+        graph: productionGraphSession.graph,
+        pipelineHealth: productionPipeline.health,
+      }),
+    [
+      safeHealthMetrics,
+      recordingState,
+      streamingState.lifecycle,
+      activeRouteCount,
+      productionGraphSession.graph,
+      productionPipeline.health,
+    ],
   );
 
   const leftNavContent = (
-    <LeftNavPanel
-      activeNav={activeNav}
+    <SourceDockPanel
+      activeTab={activeSourceDockTab}
       scenes={sorted}
       sceneTypes={sceneTypes}
       guests={guests}
@@ -2696,6 +3816,8 @@ export function SceneWorkspace({
       assets={assets}
       mediaRouteCount={mediaRoutes.length}
       isPending={isPending}
+      directCameraLive={directCameraLive}
+      diagnosticsMetrics={diagnosticsMetrics}
       onSceneAdd={(data) => {
         const tempScene: Scene = {
           ...activeScene,
@@ -2773,7 +3895,23 @@ export function SceneWorkspace({
           visible: true,
           isVisible: true,
           isLocked: false,
-          settings: {},
+          settings:
+            input.settings ??
+            (input.type === 'camera' || input.type === 'screen'
+              ? { runtimeStatus: 'connecting' }
+              : input.type === 'browser'
+                ? {
+                    runtimeStatus: input.url ? 'loading' : 'failed',
+                    url: input.url ?? null,
+                    muted: true,
+                    lastLoadedAt: null,
+                    message: input.url
+                      ? 'Browser source is loading.'
+                      : 'Enter a valid http:// or https:// URL for this Browser source.',
+                    iframeBlockedWarning:
+                      'Some sites block iframe embedding. If the preview stays blank, try another page or use screen capture.',
+                  }
+                : {}),
           transform: {},
         };
         updateActiveSources((sources) => [...sources, tempSource]);
@@ -2782,6 +3920,9 @@ export function SceneWorkspace({
         formData.set('name', input.name);
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
+        if (input.type === 'camera') void startCameraCapture(tempSource.id);
+        else if (input.type === 'screen') void startScreenCapture(tempSource.id);
+        else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
         });
@@ -2820,6 +3961,7 @@ export function SceneWorkspace({
         });
       }}
       onSourceDelete={(sourceId) => {
+        stopLiveSourceStream(sourceId);
         updateActiveSources((sources) =>
           sources
             .filter((source) => source.id !== sourceId)
@@ -2841,6 +3983,39 @@ export function SceneWorkspace({
           await toggleSourceVisibility(sourceId);
         });
       }}
+      onReloadBrowserSource={(sourceId) => {
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.id === sourceId
+              ? {
+                  ...source,
+                  settings: {
+                    ...source.settings,
+                    runtimeStatus: 'loading',
+                    reloadNonce: Date.now(),
+                    lastLoadedAt: null,
+                  },
+                }
+              : source,
+          ),
+        );
+      }}
+      onSourceToggleMute={(sourceId) => {
+        updateActiveSources((sources) =>
+          sources.map((source) =>
+            source.id === sourceId
+              ? {
+                  ...source,
+                  muted: !(source.muted || source.settings?.muted !== false),
+                  settings: {
+                    ...source.settings,
+                    muted: !(source.muted || source.settings?.muted !== false),
+                  },
+                }
+              : source,
+          ),
+        );
+      }}
       onSourceToggleLock={(sourceId) => {
         updateActiveSources((sources) =>
           sources.map((source) =>
@@ -2859,105 +4034,79 @@ export function SceneWorkspace({
       mediaComposition={previewSceneMediaComposition}
       selectedMediaAssetId={selectedMediaAssetId}
       selectedReplayClipId={selectedReplayClipId}
+      selectedSourceId={selectedSourceId}
       onSelectMediaAsset={setSelectedMediaAssetId}
       onSelectReplayClip={setSelectedReplayClipId}
+      onSelectSource={handleSelectSource}
     />
   );
 
-  const graphAudioChannels = useMemo(
-    () => selectAudioChannels(productionGraphSession.graph),
-    [productionGraphSession.graph],
-  );
+  const operationsSections = useMemo((): OperationsDockSection[] => {
+    const recordingBadge =
+      recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
+        ? 'REC'
+        : undefined;
+    const streamingBadge =
+      streamingState.lifecycle === 'streaming' || streamingState.lifecycle === 'connecting'
+        ? 'LIVE'
+        : undefined;
 
-  const recordingActive = useMemo(
-    () => selectRecordingState(productionGraphSession.graph).status === 'recording',
-    [productionGraphSession.graph],
-  );
-
-  const workspaceMonitorContext = useMemo(
-    () => ({
-      programScene,
-      previewScene,
-      routes: mediaRoutes,
-      layoutPreset,
-      guests,
-      channels,
-      healthMetrics: multiviewHealthMetrics,
-      graph: productionGraphSession.graph,
-      healthFps: safeHealthMetrics.fps,
-      showSafeAreas,
-      safeAreaToggles,
-      programGraphicsLayers: previewSceneComposition.layers.filter(
-        (layer) => layer.programState === 'live',
-      ),
-      previewGraphicsLayers: previewSceneComposition.layers.filter(
-        (layer) => layer.previewState === 'preview',
-      ),
-      programMediaOverlayItems,
-      previewMediaOverlayItems,
-      replayBuffer: previewSceneMediaComposition.replayBuffer,
-      ...(collaborationState.remoteProduction.operators.find(
-        (operator) => operator.role === 'director',
-      )?.name
-        ? {
-            collaborationDirectorName: collaborationState.remoteProduction.operators.find(
-              (operator) => operator.role === 'director',
-            )!.name,
-          }
-        : {}),
-      collaborationLockCount: collaborationState.remoteProduction.locks.filter(
-        (lock) => Date.parse(lock.expiresAt) > Date.now(),
-      ).length,
-      collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
-        (note) => note.status === 'open',
-      ).length,
-      ...(collaborationState.remoteProduction.operators.find((operator) =>
-        operator.currentPanel?.toLowerCase().includes('preview'),
-      )?.name
-        ? {
-            collaborationPreviewChangedBy: collaborationState.remoteProduction.operators.find(
-              (operator) => operator.currentPanel?.toLowerCase().includes('preview'),
-            )!.name,
-          }
-        : {}),
-      ...(getCurrentSegment(automationState.runOfShow)?.name
-        ? { automationCurrentSegmentName: getCurrentSegment(automationState.runOfShow)!.name }
-        : {}),
-      ...(getNextSegment(automationState.runOfShow)?.name
-        ? { automationNextSegmentName: getNextSegment(automationState.runOfShow)!.name }
-        : {}),
-      automationModeLabel: automationModeLabel(automationState.automationMode),
-    }),
-    [
-      programScene,
-      previewScene,
-      mediaRoutes,
-      layoutPreset,
-      guests,
-      channels,
-      multiviewHealthMetrics,
-      productionGraphSession.graph,
-      safeHealthMetrics.fps,
-      showSafeAreas,
-      safeAreaToggles,
-      previewSceneComposition,
-      programMediaOverlayItems,
-      previewMediaOverlayItems,
-      previewSceneMediaComposition.replayBuffer,
-      collaborationState.remoteProduction,
-      automationState,
-    ],
-  );
+    return [
+      {
+        id: 'unified-chat',
+        content: operationsPanels.logs,
+        ...(messages.length ? { badge: String(messages.length) } : {}),
+        defaultCollapsed: true,
+      },
+      {
+        id: 'guests',
+        content: operationsPanels.guests,
+        ...(guests.length ? { badge: String(guests.length) } : {}),
+      },
+      {
+        id: 'inspector',
+        content: operationsPanels.inspector,
+        ...(operationsInspectorSelection ? { badge: '●' } : {}),
+      },
+      {
+        id: 'recording',
+        content: operationsPanels.recording,
+        ...(recordingBadge ? { badge: recordingBadge } : {}),
+      },
+      {
+        id: 'streaming',
+        content: operationsPanels.streaming,
+        ...(streamingBadge ? { badge: streamingBadge } : {}),
+      },
+      {
+        id: 'outputs',
+        content: operationsPanels.outputs,
+        defaultCollapsed: true,
+      },
+      {
+        id: 'telemetry',
+        content: <DiagnosticsSummary metrics={diagnosticsMetrics} />,
+        defaultCollapsed: true,
+      },
+      {
+        id: 'system-health',
+        content: operationsPanels.health,
+        defaultCollapsed: true,
+      },
+    ];
+  }, [
+    operationsPanels,
+    messages.length,
+    guests.length,
+    operationsInspectorSelection,
+    recordingState,
+    browserRecordingPanelState.state,
+    streamingState.lifecycle,
+    diagnosticsMetrics,
+  ]);
 
   const bottomDockContent = (
     <>
-      {activeBottomDock === 'audio' ? (
-        <DigitalAudioConsole
-          channels={channels}
-          graphChannels={graphAudioChannels}
-          recordingActive={recordingActive}
-        />
-      ) : null}
       {activeBottomDock === 'layers' ? (
         activeScene.sources.length ? (
           <div className="grid gap-1 px-ubos-2 py-ubos-2 text-ubos-caption text-ubos-fg-secondary">
@@ -2978,6 +4127,9 @@ export function SceneWorkspace({
             <DockPanelEmpty message="No layers in preview scene." />
           </div>
         )
+      ) : null}
+      {activeBottomDock === 'audio' ? (
+        <ProfessionalAudioMixer sources={mixerSources} compact />
       ) : null}
       {activeBottomDock === 'graphics' ? (
         <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
@@ -3073,6 +4225,97 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
+      {activeBottomDock === 'replay' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <ReplayWorkspace
+            replayBuffer={previewSceneMediaComposition.replayBuffer}
+            replayClips={previewSceneMediaComposition.replayClips}
+            selectedReplayClipId={selectedReplayClipId}
+            onSelectReplayClip={setSelectedReplayClipId}
+            onSendToPreview={(clipId) =>
+              dispatchMedia({ type: 'SEND_REPLAY_TO_PREVIEW', sceneId: previewScene.id, clipId })
+            }
+            onTakeLive={(clipId) =>
+              dispatchMedia({ type: 'TAKE_REPLAY_TO_PROGRAM', sceneId: previewScene.id, clipId })
+            }
+            onAddSampleClip={() =>
+              dispatchMedia({
+                type: 'ADD_REPLAY_CLIP',
+                sceneId: previewScene.id,
+                clip: {
+                  id: `replay-${Date.now()}`,
+                  sourceId: 'program-feed',
+                  name: 'Sample Replay Clip',
+                  startTimeMs: 0,
+                  endTimeMs: 5000,
+                  durationMs: 5000,
+                  speed: 1,
+                  markers: [],
+                  angle: 'A',
+                  programState: 'idle',
+                  previewState: 'idle',
+                  status: 'ready',
+                },
+              })
+            }
+            className="h-full"
+          />
+        </div>
+      ) : null}
+      {activeBottomDock === 'automation' ? (
+        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
+          <AutomationPanel
+            state={automationState}
+            dispatch={dispatchAutomation}
+            className="h-full"
+          />
+        </div>
+      ) : null}
+      {activeBottomDock === 'routing' ? (
+        <div className="flex h-full min-h-0 flex-col gap-2 overflow-hidden">
+          <RoutingPatchMatrix edges={routingEdges} className="max-h-40 shrink-0" />
+          <div className="min-h-0 flex-1 overflow-hidden px-ubos-2 pb-ubos-2">
+            <RoutingPanel
+              broadcastId={broadcastId}
+              guests={guests}
+              scenes={sorted}
+              routes={mediaRoutes}
+            />
+          </div>
+        </div>
+      ) : null}
+      {activeBottomDock === 'production-graph' ? (
+        <div className="space-y-2 px-ubos-2 py-ubos-2">
+          <ProductionGraphTreeSummary session={productionGraphSession} />
+          <ProductionGraphInspector session={productionGraphSession} />
+          <MediaExecutionInspector
+            engine={mediaExecutionEngine}
+            graph={productionGraphSession.graph}
+          />
+        </div>
+      ) : null}
+      {activeBottomDock === 'logs' ? (
+        <div className="space-y-2 px-ubos-2 py-ubos-2">
+          <LogsPanel messages={messages} />
+          {productionGraphSession.eventLog.length ? (
+            <div className="rounded-ubos-sm border border-white/6 bg-ubos-midnight p-2">
+              <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-ubos-fg-muted">
+                Graph Events
+              </p>
+              <ul className="max-h-32 space-y-1 overflow-y-auto text-[10px] text-ubos-fg-secondary">
+                {productionGraphSession.eventLog.slice(-12).map((event, index) => (
+                  <li key={`${event.type}-${index}`} className="font-mono">
+                    rev {event.graphRevision} · {event.type}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {activeBottomDock === 'system-status' ? (
+        <SystemStatusWorkspace metrics={diagnosticsMetrics} />
+      ) : null}
       {activeBottomDock === 'media' ? (
         <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
           <MediaPreviewControls
@@ -3142,43 +4385,6 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
-      {activeBottomDock === 'replay' ? (
-        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
-          <ReplayWorkspace
-            replayBuffer={previewSceneMediaComposition.replayBuffer}
-            replayClips={previewSceneMediaComposition.replayClips}
-            selectedReplayClipId={selectedReplayClipId}
-            onSelectReplayClip={setSelectedReplayClipId}
-            onSendToPreview={(clipId) =>
-              dispatchMedia({ type: 'SEND_REPLAY_TO_PREVIEW', sceneId: previewScene.id, clipId })
-            }
-            onTakeLive={(clipId) =>
-              dispatchMedia({ type: 'TAKE_REPLAY_TO_PROGRAM', sceneId: previewScene.id, clipId })
-            }
-            onAddSampleClip={() =>
-              dispatchMedia({
-                type: 'ADD_REPLAY_CLIP',
-                sceneId: previewScene.id,
-                clip: {
-                  id: `replay-${Date.now()}`,
-                  sourceId: 'program-feed',
-                  name: 'Sample Replay Clip',
-                  startTimeMs: 0,
-                  endTimeMs: 5000,
-                  durationMs: 5000,
-                  speed: 1,
-                  markers: [],
-                  angle: 'A',
-                  programState: 'idle',
-                  previewState: 'idle',
-                  status: 'ready',
-                },
-              })
-            }
-            className="h-full"
-          />
-        </div>
-      ) : null}
       {activeBottomDock === 'collaboration' ? (
         <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
           <TeamPanel
@@ -3189,215 +4395,16 @@ export function SceneWorkspace({
           />
         </div>
       ) : null}
-      {activeBottomDock === 'automation' ? (
-        <div className="h-full min-h-0 overflow-hidden px-ubos-2 py-ubos-2">
-          <AutomationPanel
-            state={automationState}
-            dispatch={dispatchAutomation}
-            className="h-full"
-          />
-        </div>
-      ) : null}
-      {activeBottomDock === 'logs' ? (
-        <div className="space-y-2 px-ubos-2 py-ubos-2">
-          <ProductionGraphInspector session={productionGraphSession} />
-          <MediaExecutionInspector
-            engine={mediaExecutionEngine}
-            graph={productionGraphSession.graph}
-          />
-        </div>
-      ) : null}
     </>
   );
 
-  const dockContentHeightPx = preferredDockContentHeight(
-    workspace.layoutFocus,
-    dockContentFromTotal(workspace.sizes.dock),
-  );
-  const showBottomDock = shouldShowBottomDock(workspace.layoutFocus);
-  const showRightConsole = shouldShowRightConsole(workspace.layoutFocus);
   const layoutStyle = {
     '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
     '--ubos-switcher-height': switcherHeightForLayout(
       workspace.layoutFocus,
       workspace.compactChrome,
     ),
-    '--ubos-dock-content-height': `${dockContentHeightPx}px`,
-    '--ubos-dock-total-height': `${DOCK_TAB_HEIGHT_PX + dockContentHeightPx}px`,
   } as CSSProperties;
-
-  const constrainedLeftNav: NavItemId = activeNav === 'sources' ? 'sources' : 'scenes';
-  const professionalLeftContent = (
-    <LeftNavPanel
-      activeNav={constrainedLeftNav}
-      scenes={sorted}
-      sceneTypes={sceneTypes}
-      guests={guests}
-      programSceneId={productionState.programSceneId}
-      previewSceneId={productionState.previewSceneId}
-      previewScene={previewScene}
-      previewSceneName={previewScene.name}
-      sourceTypes={sourceTypes}
-      tallyState={activeSceneTallyState}
-      layouts={layouts}
-      assets={assets}
-      mediaRouteCount={mediaRoutes.length}
-      isPending={isPending}
-      onSceneAdd={(data) => {
-        const tempScene: Scene = {
-          ...activeScene,
-          id: `temp-${Date.now()}`,
-          name: data.name,
-          type: data.type,
-          order: sorted.length,
-          isActive: false,
-          sources: [],
-          overlays: [],
-          audioConfig: {},
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        refresh([...sorted, tempScene]);
-        const formData = new FormData();
-        formData.set('broadcastId', activeScene.broadcastId);
-        formData.set('name', data.name);
-        formData.set('type', data.type);
-        startTransition(async () => {
-          await addScene(formData);
-        });
-      }}
-      onSceneRename={(sceneId, name) => {
-        const formData = new FormData();
-        formData.set('sceneId', sceneId);
-        formData.set('name', name);
-        refresh(sorted.map((scene) => (scene.id === sceneId ? { ...scene, name } : scene)));
-        startTransition(async () => {
-          await renameScene(formData);
-        });
-      }}
-      onSceneSwitch={stageScene}
-      onSceneDuplicate={(sceneId) => {
-        const original = sorted.find((scene) => scene.id === sceneId);
-        if (original)
-          refresh([
-            ...sorted,
-            {
-              ...original,
-              id: `temp-${Date.now()}`,
-              name: `${original.name} Copy`,
-              isActive: false,
-              order: sorted.length,
-            },
-          ]);
-        startTransition(async () => {
-          await duplicateScene(sceneId);
-        });
-      }}
-      onSceneDelete={(sceneId) => {
-        const next = sorted
-          .filter((scene) => scene.id !== sceneId)
-          .map((scene, index) => ({ ...scene, order: index }));
-        refresh(
-          next.some((scene) => scene.isActive)
-            ? next
-            : next.map((scene, index) => ({ ...scene, isActive: index === 0 })),
-        );
-        startTransition(async () => {
-          await deleteScene(sceneId);
-        });
-      }}
-      onSourceAdd={(input) => {
-        const tempSource: SceneSource = {
-          id: `temp-${Date.now()}`,
-          sceneId: input.sceneId,
-          broadcastId: activeScene.broadcastId,
-          name: input.name,
-          label: input.name,
-          type: input.type,
-          order: activeScene.sources.length,
-          visible: true,
-          isVisible: true,
-          isLocked: false,
-          settings: {},
-          transform: {},
-        };
-        updateActiveSources((sources) => [...sources, tempSource]);
-        const formData = new FormData();
-        formData.set('sceneId', input.sceneId);
-        formData.set('name', input.name);
-        formData.set('type', input.type);
-        if (input.url) formData.set('url', input.url);
-        startTransition(async () => {
-          await addSource(formData);
-        });
-      }}
-      onSourceRename={(sourceId, name) => {
-        updateActiveSources((sources) =>
-          sources.map((source) =>
-            source.id === sourceId ? { ...source, name, label: name } : source,
-          ),
-        );
-        const formData = new FormData();
-        formData.set('sourceId', sourceId);
-        formData.set('name', name);
-        startTransition(async () => {
-          await renameSource(formData);
-        });
-      }}
-      onSourceDuplicate={(sourceId) => {
-        updateActiveSources((sources) => {
-          const source = sources.find((item) => item.id === sourceId);
-          return source
-            ? [
-                ...sources,
-                {
-                  ...source,
-                  id: `temp-${Date.now()}`,
-                  name: `${source.name} Copy`,
-                  label: `${source.name} Copy`,
-                  order: sources.length,
-                },
-              ]
-            : sources;
-        });
-        startTransition(async () => {
-          await duplicateSource(sourceId);
-        });
-      }}
-      onSourceDelete={(sourceId) => {
-        updateActiveSources((sources) =>
-          sources
-            .filter((source) => source.id !== sourceId)
-            .map((source, order) => ({ ...source, order })),
-        );
-        startTransition(async () => {
-          await deleteSource(sourceId);
-        });
-      }}
-      onSourceToggleVisibility={(sourceId) => {
-        updateActiveSources((sources) =>
-          sources.map((source) =>
-            source.id === sourceId
-              ? { ...source, isVisible: !source.isVisible, visible: !source.isVisible }
-              : source,
-          ),
-        );
-        startTransition(async () => {
-          await toggleSourceVisibility(sourceId);
-        });
-      }}
-      onSourceToggleLock={(sourceId) => {
-        updateActiveSources((sources) =>
-          sources.map((source) =>
-            source.id === sourceId ? { ...source, isLocked: !source.isLocked } : source,
-          ),
-        );
-        startTransition(async () => {
-          await toggleSourceLock(sourceId);
-        });
-      }}
-    />
-  );
 
   const rightTabContent = {
     guests: operationsPanels.guests,
@@ -3423,202 +4430,363 @@ export function SceneWorkspace({
     ),
     inspector: operationsPanels.inspector,
     health: operationsPanels.health,
-  } satisfies Record<typeof professionalRightTab, ReactNode>;
-
-  return (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-[#070b12]" style={layoutStyle}>
-      <BroadcastStatusBar
-        sessionName="Launch Day"
-        isLive={activeRouteCount > 0}
-        isRecording={false}
-        runTime={formatElapsed(elapsedSeconds)}
-        clock={clock}
-        transitionActive={transitionActive}
-        fps={safeHealthMetrics.fps}
-        cpu={safeHealthMetrics.cpu}
-        dropped={safeHealthMetrics.dropped}
-        upload={safeHealthMetrics.upload}
-        automationModeLabel={automationModeLabel(automationState.automationMode)}
-        aiStatusLabel={aiStatusLabel(aiState.assistant)}
-        outputHealthLabel={outputHealthSummaryLabel({
-          destinations: distributionState.destinations,
-          health: distributionState.outputHealth,
-        })}
-        deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
-        engineStatusLabel="Unavailable"
-        compactChrome={workspace.compactChrome}
-        toolsMenu={toolsMenu}
-      />
-
-      <main className="grid min-h-0 flex-1 grid-cols-[260px_minmax(0,1fr)_340px] gap-3 overflow-hidden p-3">
-        <aside className="min-h-0 overflow-hidden rounded-2xl border border-ubos-border-subtle bg-ubos-carbon shadow-2xl">
-          <div className="grid grid-cols-2 border-b border-ubos-border-subtle p-2">
-            {(['scenes', 'sources'] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                onClick={() => setActiveNav(id)}
-                className={`rounded-ubos-sm px-3 py-2 text-xs font-black uppercase tracking-[0.16em] ${constrainedLeftNav === id ? 'bg-ubos-selection-muted text-ubos-selection-text' : 'text-ubos-fg-muted hover:bg-ubos-midnight'}`}
-              >
-                {id}
-              </button>
-            ))}
+    smoke: (
+      <div className="space-y-ubos-2">
+        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-3">
+          <p className="text-ubos-caption font-black uppercase tracking-[0.16em] text-ubos-fg-primary">
+            UBOS 3.1 Client-Ready Media Smoke Test
+          </p>
+          <p className="mt-1 text-ubos-caption text-ubos-fg-muted">
+            Browser camera, microphone, preview/program, audio meter, and WebM recording run
+            locally. RTMP streaming is unavailable until a real backend is configured.
+          </p>
+        </div>
+        <div className="grid gap-1">
+          <SmokeCheck label="Camera active" ok={directCameraLive} />
+          <SmokeCheck
+            label="Microphone active"
+            ok={Boolean(
+              firstLiveVideoStream?.getAudioTracks().some((t) => t.readyState === 'live'),
+            )}
+          />
+          <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
+          <SmokeCheck label="Program visible" ok={liveProgramVisible} />
+          <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
+          <SmokeCheck label="Recording works" ok={recordingState === 'completed'} />
+          <SmokeCheck label="No camera errors" ok={!cameraCaptureError} />
+        </div>
+        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
+          <div className="mb-2 flex items-center justify-between text-ubos-caption text-ubos-fg-secondary">
+            <span>Mic level</span>
+            <span>{audioLevel}%</span>
           </div>
-          <div className="ubos-scroll h-[calc(100%-3.25rem)] overflow-y-auto p-2">
-            {professionalLeftContent}
-          </div>
-        </aside>
-
-        <section className="flex min-h-0 flex-col gap-3 overflow-hidden">
-          <div className="grid min-h-0 flex-[1_1_auto] grid-cols-[minmax(0,55fr)_minmax(0,35fr)] gap-3">
-            <div className="min-h-0 rounded-2xl border border-red-500/40 bg-black p-2 shadow-[0_0_34px_rgba(220,38,38,0.18)]">
-              <div className="mb-2 flex items-center justify-between px-1 text-xs font-black uppercase tracking-[0.18em] text-red-200">
-                <span>Program</span>
-                <span>{programScene.name}</span>
-              </div>
-              <ProgramMonitor
-                scene={programScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-                graph={productionGraphSession.graph}
-                healthFps={safeHealthMetrics.fps}
-                showSafeAreas={showSafeAreas}
-                graphicsLayers={previewSceneComposition.layers.filter(
-                  (layer) => layer.programState === 'live',
-                )}
-                mediaOverlayItems={programMediaOverlayItems}
-              />
-            </div>
-            <div className="min-h-0 rounded-2xl border border-emerald-400/40 bg-black p-2 shadow-[0_0_28px_rgba(16,185,129,0.12)]">
-              <div className="mb-2 flex items-center justify-between px-1 text-xs font-black uppercase tracking-[0.18em] text-emerald-100">
-                <span>Preview</span>
-                <span>{previewScene.name}</span>
-              </div>
-              <ProgramMonitor
-                scene={previewScene}
-                routes={mediaRoutes}
-                layoutPreset={layoutPreset}
-                guests={guests}
-                graph={productionGraphSession.graph}
-                healthFps={safeHealthMetrics.fps}
-                showSafeAreas={showSafeAreas}
-                graphicsLayers={previewSceneComposition.layers.filter(
-                  (layer) => layer.previewState === 'preview' || layer.programState === 'live',
-                )}
-                mediaOverlayItems={previewMediaOverlayItems}
-                role="preview"
-              />
-            </div>
-          </div>
-
-          <div className="shrink-0 rounded-2xl border border-ubos-border-subtle bg-ubos-graphite/95 shadow-2xl">
-            <ProfessionalSwitcher
-              productionState={productionState}
-              programSceneName={programScene.name}
-              previewSceneName={previewScene.name}
-              lastTransitionLabel={lastTransitionLabel}
-              feedbackLabel={switcherFeedback}
-              transitionActive={transitionActive}
-              transitionHistory={transitionHistory}
-              switcherReady={!isPending && !transitionActive}
-              transitionReady={!transitionActive}
-              programLocked={authorityDiagnostics.activeLocks.some(
-                (lock) => lock.scope === 'program',
-              )}
-              automationMode={
-                productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'
-              }
-              runtimeStatus={runtimeView.status}
-              queueSize={runtimeView.executionQueue.length}
-              compactChrome
-              detailsDefaultOpen={false}
-              onTake={() => switchProgram(productionState.transitionType)}
-              onCut={() => switchProgram('cut')}
-              onAuto={() => switchProgram('fade')}
-              onPrevious={() => stageAdjacentScene('previous')}
-              onNext={() => stageAdjacentScene('next')}
-              onTransitionChange={(transitionType) => {
-                const transitionDuration = normalizeTransitionDuration(
-                  transitionType,
-                  productionState.transitionDuration,
-                );
-                dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
-                dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-                  durationMs: transitionDuration,
-                });
-                persistProductionState(
-                  { ...productionState, transitionType, transitionDuration },
-                  'stage',
-                );
-              }}
-              onDurationChange={(transitionDuration) => {
-                const normalizedDuration = normalizeTransitionDuration(
-                  productionState.transitionType,
-                  transitionDuration,
-                  productionState.transitionDuration,
-                );
-                dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-                  durationMs: normalizedDuration,
-                });
-                persistProductionState(
-                  { ...productionState, transitionDuration: normalizedDuration },
-                  'stage',
-                );
-              }}
+          <div className="h-2 overflow-hidden rounded-full bg-ubos-midnight">
+            <div
+              className="h-full bg-emerald-400 transition-all"
+              style={{ width: `${audioLevel}%` }}
             />
           </div>
-
-          <div className="grid h-44 shrink-0 grid-cols-3 gap-3 overflow-hidden">
-            {(['audio', 'layers', 'logs'] as const).map((dock) => (
-              <button
-                key={dock}
-                type="button"
-                onClick={() => setActiveBottomDock(dock === 'logs' ? 'logs' : dock)}
-                className={`rounded-2xl border p-3 text-left shadow-xl ${activeBottomDock === dock ? 'border-ubos-selection bg-ubos-selection-muted' : 'border-ubos-border-subtle bg-ubos-carbon hover:bg-ubos-graphite'}`}
-              >
-                <div className="mb-2 text-xs font-black uppercase tracking-[0.18em] text-ubos-fg-primary">
-                  {dock === 'logs' ? 'Inspector' : dock}
-                </div>
-                <div className="ubos-scroll max-h-28 overflow-hidden text-ubos-caption text-ubos-fg-secondary">
-                  {dock === 'audio'
-                    ? `${graphAudioChannels.length || channels.length} channels ready`
-                    : dock === 'layers'
-                      ? `${activeScene.sources.length} preview layers`
-                      : `Graph rev ${productionGraphSession.graph.metadata.revision}`}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <aside className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-ubos-border-subtle bg-ubos-carbon shadow-2xl">
-          <div
-            className="grid grid-cols-5 gap-1 border-b border-ubos-border-subtle p-2"
-            role="tablist"
-            aria-label="Right workspace tabs"
+        </div>
+        {cameraCaptureError ? (
+          <p className="text-ubos-caption text-ubos-error-text">Last Error: {cameraCaptureError}</p>
+        ) : null}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
+            onClick={() => {
+              void activateDirectCamera();
+            }}
           >
-            {(['guests', 'outputs', 'chat', 'inspector', 'health'] as const).map((id) => (
-              <button
-                key={id}
-                type="button"
-                role="tab"
-                aria-selected={professionalRightTab === id}
-                onClick={() => setProfessionalRightTab(id)}
-                className={`rounded-ubos-sm px-1 py-2 text-[10px] font-black uppercase tracking-[0.08em] ${professionalRightTab === id ? 'bg-ubos-selection-muted text-ubos-selection-text' : 'text-ubos-fg-muted hover:bg-ubos-midnight'}`}
-              >
-                {id}
-              </button>
-            ))}
-          </div>
-          <div
-            className="ubos-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2"
-            role="tabpanel"
+            Start camera + mic
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
+            onClick={() => {
+              Object.keys(liveSourceStreams).forEach((sourceId) => stopLiveSourceStream(sourceId));
+              smokeMedia.stopAll();
+              setProgramStreamOnAir(false);
+              setLiveSourceStreams({});
+              setCameraCaptureError('');
+            }}
           >
-            {rightTabContent[professionalRightTab]}
-          </div>
-        </aside>
-      </main>
-    </div>
+            Stop devices
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
+            disabled={
+              recordingState === 'recording' ||
+              recordingState === 'preparing' ||
+              recordingState === 'stopping'
+            }
+            onClick={startSmokeRecording}
+          >
+            Start WebM REC
+          </button>
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary disabled:opacity-50"
+            disabled={recordingState !== 'recording'}
+            onClick={stopSmokeRecording}
+          >
+            Stop REC
+          </button>
+        </div>
+        {recordedUrl ? (
+          <a
+            className="block rounded-ubos-sm bg-emerald-400 px-2 py-2 text-center text-xs font-black text-slate-950"
+            href={recordedUrl}
+            download={recordingFilename ?? 'ubos-smoke-test.webm'}
+          >
+            Download recorded WebM
+          </a>
+        ) : null}
+      </div>
+    ),
+  } satisfies Record<typeof professionalRightTab, ReactNode>;
+
+  const monitorTelemetry = useMemo(
+    () =>
+      deriveMonitorTelemetry({
+        routes: mediaRoutes,
+        graph: productionGraphSession.graph,
+        healthFps: safeHealthMetrics.fps,
+      }),
+    [mediaRoutes, productionGraphSession.graph, safeHealthMetrics.fps],
+  );
+
+  const programMonitorStatus = useMemo<MonitorStatusInfo>(
+    () => ({
+      resolution: monitorTelemetry.resolution,
+      fps: monitorTelemetry.fps,
+      sourceName: liveProgramVisible
+        ? (programLiveVideoSource?.name ?? getPrimarySourceName(programScene))
+        : getPrimarySourceName(programScene),
+      state: liveProgramVisible ? 'live' : 'program',
+      audioLevel: liveProgramVisible ? audioLevel : null,
+      audioMuted: false,
+    }),
+    [
+      monitorTelemetry.fps,
+      monitorTelemetry.resolution,
+      liveProgramVisible,
+      programLiveVideoSource?.name,
+      programScene,
+      audioLevel,
+    ],
+  );
+
+  const previewMonitorStatus = useMemo<MonitorStatusInfo>(
+    () => ({
+      resolution: monitorTelemetry.resolution,
+      fps: monitorTelemetry.fps,
+      sourceName: livePreviewVisible
+        ? (previewLiveVideoSource?.name ?? getPrimarySourceName(previewScene))
+        : getPrimarySourceName(previewScene),
+      state: livePreviewVisible ? 'live' : 'preview',
+      audioLevel: livePreviewVisible ? audioLevel : null,
+      audioMuted: false,
+    }),
+    [
+      monitorTelemetry.fps,
+      monitorTelemetry.resolution,
+      livePreviewVisible,
+      previewLiveVideoSource?.name,
+      previewScene,
+      audioLevel,
+    ],
+  );
+
+  const programMonitorNode = liveProgramVisible ? (
+    <LiveMediaMonitor
+      title="Program"
+      sceneName={programScene.name}
+      stream={programStreamToShow}
+      active={liveProgramVisible}
+      role="program"
+      sourceId={programCameraSourceId}
+      sourceType={programLiveVideoSource?.type}
+      deckMode
+    />
+  ) : (
+    <ProgramMonitor
+      scene={programScene}
+      routes={mediaRoutes}
+      layoutPreset={layoutPreset}
+      guests={guests}
+      graph={productionGraphSession.graph}
+      healthFps={safeHealthMetrics.fps}
+      showSafeAreas={showSafeAreas}
+      graphicsLayers={programSceneComposition.layers.filter(
+        (layer) => layer.programState === 'live',
+      )}
+      mediaOverlayItems={programMediaOverlayItems}
+      deckMode
+    />
+  );
+
+  const previewMonitorNode = livePreviewVisible ? (
+    <LiveMediaMonitor
+      title="Preview"
+      sceneName={previewScene.name}
+      stream={previewStreamToShow}
+      active={livePreviewVisible}
+      role="preview"
+      sourceId={previewCameraSourceId}
+      sourceType={previewLiveVideoSource?.type}
+      deckMode
+    />
+  ) : (
+    <ProgramMonitor
+      scene={previewScene}
+      routes={mediaRoutes}
+      layoutPreset={layoutPreset}
+      guests={guests}
+      graph={productionGraphSession.graph}
+      healthFps={safeHealthMetrics.fps}
+      showSafeAreas={showSafeAreas}
+      graphicsLayers={previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview' || layer.programState === 'live',
+      )}
+      mediaOverlayItems={previewMediaOverlayItems}
+      role="preview"
+      deckMode
+    />
+  );
+
+  const switcherNode = (
+    <ProfessionalSwitcher
+      productionState={productionState}
+      programSceneName={programScene.name}
+      previewSceneName={previewScene.name}
+      lastTransitionLabel={lastTransitionLabel}
+      feedbackLabel={switcherFeedback}
+      transitionActive={transitionActive}
+      transitionHistory={transitionHistory}
+      switcherReady={!isPending && !transitionActive}
+      transitionReady={!transitionActive}
+      programLocked={authorityDiagnostics.activeLocks.some((lock) => lock.scope === 'program')}
+      automationMode={productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'}
+      runtimeStatus={runtimeView.status}
+      queueSize={runtimeView.executionQueue.length}
+      compactChrome
+      detailsDefaultOpen={false}
+      onTake={() => switchProgram(productionState.transitionType)}
+      onCut={() => switchProgram('cut')}
+      onAuto={() => switchProgram('fade')}
+      onPrevious={() => stageAdjacentScene('previous')}
+      onNext={() => stageAdjacentScene('next')}
+      onTransitionChange={(transitionType) => {
+        const transitionDuration = normalizeTransitionDuration(
+          transitionType,
+          productionState.transitionDuration,
+        );
+        dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
+        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+          durationMs: transitionDuration,
+        });
+        persistProductionState(
+          { ...productionState, transitionType, transitionDuration },
+          'stage',
+        );
+      }}
+      onDurationChange={(transitionDuration) => {
+        const normalizedDuration = normalizeTransitionDuration(
+          productionState.transitionType,
+          transitionDuration,
+          productionState.transitionDuration,
+        );
+        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+          durationMs: normalizedDuration,
+        });
+        persistProductionState(
+          { ...productionState, transitionDuration: normalizedDuration },
+          'stage',
+        );
+      }}
+    />
+  );
+
+  // Derive latency label from the first active output destination that
+  // has a measured latency value. Used by the Program monitor overlay.
+  const primaryOutputLatencyMs = distributionState.outputHealth.find(
+    (h) => h.latencyMs != null,
+  )?.latencyMs;
+
+  return (
+    <CommandCenterShell
+      layoutStyle={layoutStyle}
+      statusBar={
+        <BroadcastStatusBar
+          sessionName="Launch Day"
+          isLive={activeRouteCount > 0}
+          isRecording={recordingState === 'recording'}
+          runTime={formatElapsed(elapsedSeconds)}
+          clock={clock}
+          transitionActive={transitionActive}
+          fps={safeHealthMetrics.fps}
+          cpu={safeHealthMetrics.cpu}
+          dropped={safeHealthMetrics.dropped}
+          upload={safeHealthMetrics.upload}
+          automationModeLabel={automationModeLabel(automationState.automationMode)}
+          aiStatusLabel={aiStatusLabel(aiState.assistant)}
+          outputHealthLabel={outputHealthSummaryLabel({
+            destinations: distributionState.destinations,
+            health: distributionState.outputHealth,
+          })}
+          deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
+          engineStatusLabel="Unavailable"
+          compactChrome={workspace.compactChrome}
+          toolsMenu={toolsMenu}
+        />
+      }
+      activeNav={activeNav}
+      onNavChange={(nav) => {
+        setActiveNav(nav);
+        const dockTab = preferredSourceDockTab(nav);
+        if (dockTab) setActiveSourceDockTab(dockTab);
+        if (nav === 'production-graph') {
+          setActiveBottomDock(normalizeDockTabId('production-graph'));
+        }
+        if (nav === 'outputs') {
+          setActiveOperationsTab('outputs');
+        }
+        if (nav === 'settings') {
+          setActiveOperationsTab('inspector');
+        }
+      }}
+      sourceDockContent={leftNavContent}
+      activeSourceDockTab={activeSourceDockTab}
+      onSourceDockTabChange={setActiveSourceDockTab}
+      programMonitor={programMonitorNode}
+      previewMonitor={previewMonitorNode}
+      programStatus={programMonitorStatus}
+      previewStatus={previewMonitorStatus}
+      switcherContent={switcherNode}
+      operationsSections={operationsSections}
+      activeOperationsTab={activeOperationsTab}
+      activeDockTab={activeBottomDock}
+      onOperationsTabChange={setActiveOperationsTab}
+      onDockTabChange={(tab) => setActiveBottomDock(normalizeDockTabId(tab))}
+      onWorkspaceModeApplied={applyMenuWorkspaceMode}
+      onSaveWorkspace={saveWorkspace}
+      onRestoreWorkspace={restoreWorkspace}
+      onResetWorkspace={resetWorkspace}
+      onSeedDemo={() => startTransition(async () => seedDemoProductionState())}
+      onSimulateDemo={() => startTransition(async () => simulateDemoProduction())}
+      onResetDemo={() => startTransition(async () => resetDemoProductionState())}
+      bottomWorkspaceContent={bottomDockContent}
+      onCut={() => switchProgram('cut')}
+      onTake={() => switchProgram(productionState.transitionType)}
+      onAuto={() => switchProgram('fade')}
+      programOverlay={{
+        sceneName: programScene.name,
+        recordingLabel:
+          recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
+            ? 'ON'
+            : undefined,
+        streamingLabel:
+          streamingState.lifecycle === 'streaming'
+            ? 'LIVE'
+            : streamingState.lifecycle === 'connecting'
+              ? 'CONNECTING'
+              : undefined,
+        droppedLabel:
+          safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
+        latencyLabel:
+          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+      }}
+      previewOverlay={{
+        sceneName: previewScene.name,
+        transitionLabel: productionState.transitionType,
+        armedGraphicsCount: previewSceneComposition.layers.filter(
+          (layer) => layer.previewState === 'preview',
+        ).length,
+        latencyLabel:
+          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+      }}
+    />
   );
 }

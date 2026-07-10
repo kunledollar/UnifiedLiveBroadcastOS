@@ -86,7 +86,7 @@ export function GraphicsWorkspace({
             Graphics Workspace
           </h2>
           <p className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-muted')}>
-            Scene: {sceneName} · Metadata staged · Renderer unavailable
+            Scene: {sceneName} · Metadata staged · CSS animation runtime ready
           </p>
         </div>
         <StatusBadge variant="warning">Graphics metadata staged</StatusBadge>
@@ -103,6 +103,12 @@ export function GraphicsWorkspace({
         }}
         onRemoveFromProgram={() => {
           if (selectedLayerId) dispatch({ type: 'REMOVE_FROM_PROGRAM', sceneId, layerId: selectedLayerId });
+        }}
+        onAutoBoth={() => {
+          if (selectedLayerId) {
+            dispatch({ type: 'SEND_TO_PREVIEW', sceneId, layerId: selectedLayerId });
+            dispatch({ type: 'TAKE_TO_PROGRAM', sceneId, layerId: selectedLayerId });
+          }
         }}
         onClearPreview={() => dispatch({ type: 'CLEAR_PREVIEW', sceneId })}
         onClearProgram={() => dispatch({ type: 'CLEAR_PROGRAM', sceneId })}
@@ -153,6 +159,11 @@ export function GraphicsWorkspace({
                 />
                 <BroadcastPanel variant="inset" padding={false} className="shrink-0 border-0 shadow-none">
                   <div className="p-ubos-2">
+                    <div className="mb-ubos-2 grid grid-cols-3 gap-1 text-center text-ubos-metadata text-ubos-fg-muted">
+                      <span className="rounded-ubos-sm border border-ubos-border-subtle py-1">Title Safe</span>
+                      <span className="rounded-ubos-sm border border-ubos-border-subtle py-1">Action Safe</span>
+                      <span className="rounded-ubos-sm border border-ubos-border-subtle py-1">Grid</span>
+                    </div>
                     <OverlayManager layers={composition.layers} assets={graphicsAssets} />
                   </div>
                 </BroadcastPanel>

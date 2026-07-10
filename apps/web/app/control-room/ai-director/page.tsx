@@ -1,3 +1,24 @@
+// ONE OWNER RULE AUDIT (3.15C/D) — /control-room/ai-director
+//
+// Surface type: standalone full-page route (Next.js App Router page).
+//   This route is NOT a panel inside the CommandCenter zone layout.
+//
+// activatePanel() usage: NOT APPLICABLE.
+//   Standalone route pages sit outside the CommandCenter zone system and do
+//   not use activatePanel().  If/when the AI Director is embedded as a
+//   CommandCenter panel, activation must route through activatePanel() via
+//   the Workspace Manager so the One Owner Rule is respected.
+//
+// Workspace Manager bypass: NONE — no CommandCenter zones are rendered here.
+//   The AI Director surface uses AIDirectorSession (from @ubos/shared) for
+//   deterministic metadata-only orchestration.  It does not render Program or
+//   Preview monitors; those remain solely in CommandCenterStage per the One
+//   Owner Rule.  Operator approval is required for all recommendations;
+//   no autonomous or inference-driven execution is performed here.
+//
+// TODO(one-owner): When the AI Director is wired as a docked CommandCenter
+//   panel, verify that panel reveal goes through activatePanel() and that no
+//   code path renders a secondary Program/Preview outside Center Stage.
 import { AIDirectorSession, createAIDirectorContext } from '@ubos/shared';
 
 const session = new AIDirectorSession();

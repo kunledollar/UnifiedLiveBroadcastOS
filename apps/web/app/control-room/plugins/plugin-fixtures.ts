@@ -1,10 +1,33 @@
-import type { PluginDescriptor } from '@ubos/shared';
+import type { PluginDescriptor, PluginManifest } from '@ubos/shared';
 
 const checkedAt = '2026-07-05T00:00:00.000Z';
+const compatibility = {
+  ubosVersionRange: '^2.0.0-rc.1',
+  sdkVersionRange: '^2.21.0',
+  minHostApi: '2.0.0' as const,
+};
+const signature = {
+  algorithm: 'ed25519' as const,
+  publicKeyId: 'ubos-demo-fixtures',
+  digest: 'demo-fixture-digest',
+  signature: 'demo-fixture-signature',
+};
+const runtime = (handles: string[]): PluginManifest['runtime'] => ({
+  kind: 'sandboxed-declarative',
+  sandbox: {
+    network: 'none',
+    filesystem: 'none',
+    process: 'none',
+    privateRuntimeInternals: false,
+  },
+  entrypoint: 'manifest',
+  handles,
+});
 
 export const pluginDashboardDescriptors: PluginDescriptor[] = [
   {
     manifest: {
+      manifestVersion: '2.21',
       id: 'ubos.graphics-pack',
       version: '1.0.0',
       metadata: {
@@ -13,6 +36,8 @@ export const pluginDashboardDescriptors: PluginDescriptor[] = [
         tags: ['graphics', 'overlay'],
       },
       author: { name: 'UBOS' },
+      compatibility,
+      signature,
       categories: ['graphics', 'lower-third', 'scoreboard'],
       dependencies: [],
       capabilities: [
@@ -32,22 +57,35 @@ export const pluginDashboardDescriptors: PluginDescriptor[] = [
           required: true,
         },
       ],
-      runtime: { kind: 'metadata-only', handles: ['manifest', 'graphics-package'] },
+      runtime: runtime(['manifest', 'graphics-package']),
       panels: [
-        { id: 'graphics.inspector', title: 'Graphics Inspector', capabilityId: 'graphics.panels' },
+        {
+          id: 'graphics.inspector',
+          title: 'Graphics Inspector',
+          capabilityId: 'graphics.panels',
+          component: 'declarative-panel',
+          layout: { minWidth: 320, minHeight: 240, preferredDock: 'right' },
+        },
       ],
-      graphicsPackages: [
-        { id: 'broadcast-basics', name: 'Broadcast Basics', templateIds: [], assetIds: [] },
+      graphicsProviders: [
+        {
+          id: 'broadcast-basics',
+          name: 'Broadcast Basics',
+          capabilityId: 'graphics.panels',
+          configSchema: {},
+          graphicsKinds: ['lower-third', 'scoreboard', 'template'],
+        },
       ],
     },
-    lifecycle: 'running',
+    lifecycle: 'enabled',
     health: { status: 'healthy', message: 'Metadata registered', checkedAt },
-    metrics: { events: 18, commands: 4, panels: 1, healthChecks: 12 },
+    metrics: { events: 18, commands: 4, panels: 1, providers: 1, healthChecks: 12 },
     installedAt: checkedAt,
     updatedAt: checkedAt,
   },
   {
     manifest: {
+      manifestVersion: '2.21',
       id: 'ubos.ai-provider',
       version: '1.2.0',
       metadata: {
@@ -56,6 +94,8 @@ export const pluginDashboardDescriptors: PluginDescriptor[] = [
         tags: ['ai', 'automation'],
       },
       author: { name: 'UBOS' },
+      compatibility,
+      signature,
       categories: ['ai', 'automation'],
       dependencies: [{ pluginId: 'ubos.graphics-pack' }],
       capabilities: [
@@ -75,19 +115,19 @@ export const pluginDashboardDescriptors: PluginDescriptor[] = [
           required: true,
         },
       ],
-      runtime: { kind: 'metadata-only', handles: ['manifest', 'provider-metadata'] },
-      aiProviders: [
+      runtime: runtime(['manifest', 'provider-metadata']),
+      commands: [
         {
-          id: 'metadata-ai',
-          name: 'Metadata AI',
-          modelFamilies: ['planning'],
-          capabilityIds: ['ai.suggestions'],
+          id: 'ai.suggestions.request',
+          title: 'Request AI suggestions',
+          capabilityId: 'ai.suggestions',
+          category: 'ai',
         },
       ],
     },
     lifecycle: 'enabled',
     health: { status: 'degraded', message: 'Awaiting provider configuration metadata', checkedAt },
-    metrics: { events: 7, commands: 2, panels: 0, healthChecks: 5 },
+    metrics: { events: 7, commands: 2, panels: 0, providers: 0, healthChecks: 5 },
     installedAt: checkedAt,
     updatedAt: checkedAt,
   },

@@ -2,12 +2,7 @@ import { GuestStatus, type Guest, type SceneSource, type SceneSourceType } from 
 
 export type SourceHealthFilter = 'all' | 'ready' | 'offline' | 'unavailable' | 'mock';
 export type SourceHealthStatus =
-  | 'ready'
-  | 'offline'
-  | 'permission_required'
-  | 'unavailable'
-  | 'mock'
-  | 'hidden';
+  'ready' | 'offline' | 'permission_required' | 'unavailable' | 'mock' | 'live' | 'hidden' | 'loading' | 'failed';
 
 const sourceTypeLabels: Record<SceneSourceType, string> = {
   camera: 'Camera',
@@ -27,8 +22,12 @@ export function deriveSourceHealth(source: SceneSource, guests: Guest[]): Source
   if (!source.isVisible) return 'hidden';
 
   const runtimeStatus = String(source.settings?.runtimeStatus ?? '');
+  if (runtimeStatus === 'loading') return 'loading';
+  if (runtimeStatus === 'live') return 'live';
+  if (runtimeStatus === 'failed') return 'failed';
   if (runtimeStatus === 'mock') return 'mock';
   if (runtimeStatus === 'permission_required') return 'permission_required';
+  if (runtimeStatus === 'offline') return 'offline';
   if (runtimeStatus === 'unavailable') return 'unavailable';
 
   if (source.type === 'guest') {
@@ -50,6 +49,12 @@ export function sourceHealthLabel(status: SourceHealthStatus) {
   switch (status) {
     case 'ready':
       return 'Ready';
+    case 'loading':
+      return 'Loading';
+    case 'live':
+      return 'Live';
+    case 'failed':
+      return 'Failed';
     case 'offline':
       return 'Offline';
     case 'permission_required':
@@ -66,12 +71,15 @@ export function sourceHealthLabel(status: SourceHealthStatus) {
 export function sourceHealthVariant(status: SourceHealthStatus) {
   switch (status) {
     case 'ready':
+    case 'live':
       return 'success' as const;
     case 'mock':
     case 'permission_required':
+    case 'loading':
       return 'warning' as const;
     case 'offline':
     case 'unavailable':
+    case 'failed':
     case 'hidden':
       return 'offline' as const;
   }

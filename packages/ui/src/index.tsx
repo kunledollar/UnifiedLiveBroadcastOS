@@ -1,3 +1,5 @@
+'use client';
+
 import { SceneType } from '@ubos/shared';
 import type {
   AudioChannel,
@@ -15,7 +17,7 @@ import type {
   StreamHealth,
   StreamHealthMetric,
 } from '@ubos/shared';
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'ghost';
 
@@ -654,12 +656,36 @@ function sourceMonitorState(source: SceneSource) {
       tone: 'success' as const,
     };
   }
+  const runtimeStatus = String(source.settings?.runtimeStatus ?? '');
+  const runtimeMessage =
+    typeof source.settings?.message === 'string' ? source.settings.message : undefined;
   switch (source.type) {
     case 'camera':
+      if (runtimeStatus === 'live')
+        return {
+          title: 'Camera Live',
+          subtitle: 'Browser MediaStream is active.',
+          badge: 'LIVE',
+          tone: 'live' as const,
+        };
+      if (runtimeStatus === 'connecting')
+        return {
+          title: 'Connecting',
+          subtitle: 'Requesting browser camera stream.',
+          badge: 'CONNECTING',
+          tone: 'warning' as const,
+        };
+      if (runtimeStatus === 'unavailable')
+        return {
+          title: 'Camera Error',
+          subtitle: runtimeMessage ?? 'Browser camera stream failed.',
+          badge: 'ERROR',
+          tone: 'danger' as const,
+        };
       return {
-        title: 'Waiting for Camera',
-        subtitle: 'Select or connect a camera input.',
-        badge: 'CAMERA',
+        title: 'Permission required',
+        subtitle: 'Allow camera access to start browser media.',
+        badge: 'PERMISSION',
         tone: 'warning' as const,
       };
     case 'screen':
@@ -670,6 +696,14 @@ function sourceMonitorState(source: SceneSource) {
         tone: 'danger' as const,
       };
     case 'media':
+      if (source.settings?.mediaUrl) {
+        return {
+          title: source.settings?.mediaKind === 'image' ? 'Image Ready' : 'Video Ready',
+          subtitle: typeof source.settings?.filename === 'string' ? source.settings.filename : 'Local media source imported.',
+          badge: source.settings?.mediaKind === 'image' ? 'IMAGE' : 'VIDEO',
+          tone: 'success' as const,
+        };
+      }
       return {
         title: 'Waiting for Media',
         subtitle: 'Choose a clip, image or media asset.',
@@ -709,6 +743,108 @@ function sourceMonitorState(source: SceneSource) {
   }
 }
 
+
+function browserUrlFromSource(source: SceneSource) {
+  const rawUrl = source.settings?.url;
+  if (typeof rawUrl !== 'string' || !rawUrl.trim()) return null;
+  try {
+    const parsed = new URL(rawUrl);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.toString() : null;
+  } catch {
+    return null;
+  }
+}
+
+function SourceBrowserRuntime({ source }: { source: SceneSource }) {
+  const url = browserUrlFromSource(source);
+  const [status, setStatus] = useState<'loading' | 'live' | 'failed' | 'offline'>(
+    source.isVisible ? 'loading' : 'offline',
+  );
+  const [lastLoadedAt, setLastLoadedAt] = useState<string | null>(
+    typeof source.settings?.lastLoadedAt === 'string' ? source.settings.lastLoadedAt : null,
+  );
+  if (!url) {
+    return (
+      <MonitorStateScreen
+        title="Invalid Browser URL"
+        subtitle="Enter a valid http:// or https:// URL for this Browser source."
+        icon="🌐"
+        badge="FAILED"
+        tone="danger"
+      />
+    );
+  }
+  return (
+    <div className="absolute inset-0 bg-black">
+      <iframe
+        key={`${source.id}:${url}:${String(source.settings?.reloadNonce ?? '0')}`}
+        src={url}
+        title={source.name}
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-presentation"
+        referrerPolicy="no-referrer"
+        loading="eager"
+        className="h-full w-full border-0 bg-white"
+        onLoad={() => {
+          setStatus('live');
+          setLastLoadedAt(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+        }}
+        onError={() => setStatus('failed')}
+      />
+      <div className="pointer-events-none absolute inset-x-2 bottom-2 z-30 rounded bg-black/70 px-2 py-1 text-[10px] font-bold text-white ring-1 ring-white/10">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate">{url}</span>
+          <span className={status === 'live' ? 'text-emerald-200' : status === 'failed' ? 'text-rose-200' : 'text-amber-200'}>
+            {status.toUpperCase()}
+          </span>
+        </div>
+        <div className="mt-0.5 flex items-center justify-between gap-2 text-white/65">
+          <span>{source.muted || source.settings?.muted !== false ? 'Muted' : 'Audio enabled'}</span>
+          <span>{lastLoadedAt ? `Loaded ${lastLoadedAt}` : 'Loading…'}</span>
+        </div>
+        <p className="mt-0.5 text-amber-100/80">
+          If this page stays blank, it may block iframe embedding. Use another URL or screen capture.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SourceMediaRuntime({ source, muted = false, className = '' }: { source: SceneSource; muted?: boolean; className?: string }) {
+  const url = typeof source.settings?.mediaUrl === 'string' ? source.settings.mediaUrl : undefined;
+  const kind = source.settings?.mediaKind === 'image' ? 'image' : source.settings?.mediaKind === 'video' ? 'video' : undefined;
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [meta, setMeta] = useState<{ duration?: number; resolution?: string }>({});
+  if (!url || !kind) return null;
+  if (kind === 'image') {
+    return <img src={url} alt={source.name} className={`${className} object-contain bg-black`} />;
+  }
+  return (
+    <div className={`${className} bg-black`}>
+      <video
+        ref={videoRef}
+        src={url}
+        autoPlay={source.settings?.autoplay !== false}
+        loop={source.settings?.loop === true}
+        muted={muted || source.muted === true}
+        playsInline
+        controls={false}
+        className="h-full w-full object-contain"
+        onLoadedMetadata={(event) => {
+          const v = event.currentTarget;
+          setMeta({ duration: v.duration, resolution: `${v.videoWidth}×${v.videoHeight}` });
+        }}
+      />
+      <div className="absolute bottom-2 left-2 z-30 flex gap-1 rounded bg-black/60 p-1 text-[10px] font-bold text-white">
+        <button type="button" onClick={() => void videoRef.current?.play()}>Play</button>
+        <button type="button" onClick={() => videoRef.current?.pause()}>Pause</button>
+        <button type="button" onClick={() => { if (videoRef.current) { videoRef.current.pause(); videoRef.current.currentTime = 0; } }}>Stop</button>
+        <button type="button" onClick={() => { if (videoRef.current) { videoRef.current.currentTime = 0; void videoRef.current.play(); } }}>Restart</button>
+      </div>
+      <span className="absolute right-2 bottom-2 z-30 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">{meta.resolution ?? 'media'}{meta.duration ? ` · ${Math.round(meta.duration)}s` : ''}</span>
+    </div>
+  );
+}
+
 function SourceMonitorPreview({ source }: { source: SceneSource }) {
   const theme = sourceThemes[source.type];
   const state = sourceMonitorState(source);
@@ -716,6 +852,8 @@ function SourceMonitorPreview({ source }: { source: SceneSource }) {
     <div
       className={`relative mt-3 aspect-video overflow-hidden rounded-lg border ${theme.ring} bg-black`}
     >
+      {source.type === 'browser' ? <SourceBrowserRuntime source={source} /> : <SourceMediaRuntime source={source} muted className="absolute inset-0 z-0 h-full w-full" />}
+      {!source.settings?.mediaUrl ? (
       <MonitorStateScreen
         title={state.title}
         subtitle={state.subtitle}
@@ -724,6 +862,7 @@ function SourceMonitorPreview({ source }: { source: SceneSource }) {
         tone={state.tone}
         compact
       />
+      ) : null}
       <MonitorHUD
         title={sourceTypeLabels[source.type]}
         position="bottom-left"
@@ -843,9 +982,12 @@ export function SourceManager({
                   tone={
                     source.settings?.runtimeStatus === 'unavailable'
                       ? 'danger'
-                      : source.settings?.runtimeStatus === 'permission_required'
+                      : source.settings?.runtimeStatus === 'permission_required' ||
+                          source.settings?.runtimeStatus === 'connecting'
                         ? 'warning'
-                        : 'neutral'
+                        : source.settings?.runtimeStatus === 'live'
+                          ? 'live'
+                          : 'neutral'
                   }
                 >
                   {String(
@@ -1258,7 +1400,17 @@ function RoutedVideo({ stream }: { stream?: MediaStream | undefined }) {
   return (
     <video
       ref={(element) => {
-        if (element && element.srcObject !== stream) element.srcObject = stream;
+        if (element && element.srcObject !== stream) {
+          console.info('[UBOS media runtime] attaching stream', {
+            target: 'compositor',
+            streamId: stream.id,
+            active: stream.active,
+          });
+          element.srcObject = stream;
+          void element
+            .play()
+            .catch((error) => console.error('[UBOS media runtime] video play failed', error));
+        }
       }}
       autoPlay
       muted
@@ -1610,6 +1762,21 @@ function SourceLayers({ sources, output }: { sources: SceneSource[]; output: Out
   );
 }
 
+
+function SourceMediaLayers({ sources }: { sources: SceneSource[] }) {
+  return (
+    <>
+      {sortedVisibleSources(sources)
+        .filter((source) => (source.type === 'media' && source.settings?.mediaUrl) || source.type === 'browser')
+        .map((source, index) => (
+          <div key={source.id} className="absolute inset-0 z-[18] bg-black" style={{ zIndex: 18 + index }}>
+            {source.type === 'browser' ? <SourceBrowserRuntime source={source} /> : <SourceMediaRuntime source={source} />}
+          </div>
+        ))}
+    </>
+  );
+}
+
 function SceneFooter({
   scene,
   layoutPreset,
@@ -1684,6 +1851,7 @@ function BaseCompositor({
           Program scene contains offline source
         </div>
       ) : null}
+      <SourceMediaLayers sources={scene.sources} />
       <SourceLayers sources={scene.sources} output={output} />
       <SafeAreaOverlay output={output} guides={safeAreaGuides} />
       <SceneFooter

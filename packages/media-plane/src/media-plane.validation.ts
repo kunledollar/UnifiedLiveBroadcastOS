@@ -1,4 +1,10 @@
-import { RecordingPipeline, isRealRecordingEnabled, safeRecordingFilename } from './recording-runtime/index.js';
+import {
+  RecordingPipeline,
+  isRealRecordingEnabled,
+  safeRecordingFilename,
+  createRecordingPipeline as createRecordingPipelineV2,
+  createDemoRecordingSession,
+} from './recording-runtime/index.js';
 const assert = {
   equal(actual: unknown, expected: unknown, message: string) {
     if (actual !== expected)
@@ -32,6 +38,18 @@ import {
   isMediaSyncEnabled,
   assignIntentToFrame,
   assertFramePlanHasFrameIdentity,
+  createBroadcastRuntimeCore,
+  RuntimeIntegrationAdapter,
+  DeviceRegistry as RuntimeDeviceRegistry,
+  DeviceDiscoveryManager,
+  StaticDiscoveryProvider,
+  DeviceConnectionManager,
+  DeviceCapabilityResolver,
+  DeviceProfileManager,
+  DeviceHealthMonitor,
+  assertMetadataSafe,
+  mapDeviceToProductionGraphMetadata,
+  calculateRecoveryDelay,
   assertFrameTimestampFromClock,
   assertMonotonicFrameId,
   assertNoIndependentSubsystemClock,
@@ -100,7 +118,11 @@ import {
   isRealStreamingEnabled,
   validateStreamingDestination,
   createStreamingRuntimeManifest,
+  createStreamingPipeline as createStreamingPipelineV2,
+  createDemoStreamingSession,
+  streamingProviders,
   createMultiviewPlan,
+  createMultiviewLayout,
   validateMultiviewPlan,
   buildTileLayout,
   updateMultiviewTile,
@@ -111,6 +133,9 @@ import {
   summarizeConfidenceStatus,
   validateConfidenceSignals,
   MultiviewStore,
+  MultiviewManager,
+  collectRuntimeDiagnostics,
+  createDemoMultiviewLayout,
   createWebRTCTransportPlan,
   validateWebRTCTransportPlan,
   createWebRTCSession,
@@ -124,6 +149,8 @@ import {
   validateWebRTCSignalMessage,
   redactWebRTCDiagnostics,
   createPeerConnection,
+  createDiagnosticsManager,
+  createDiagnosticsDemo,
   mapWebRTCErrorToFailure,
   isRealWebRTCEnabled,
   createOfferMetadata,
@@ -157,6 +184,16 @@ import {
   summarizeProductionRuntimeHealth,
   createProductionRuntimeManifest,
   mapRuntimeFailure,
+  MonitoringRuntimeController,
+  HealthAggregationManager,
+  TelemetryRegistry,
+  TelemetryHistoryStore,
+  AlertRegistry,
+  AlertLifecycleManager,
+  AlertRuleEngine,
+  IncidentManager,
+  DiagnosticSnapshotManager,
+  ProductionGraphTelemetryAdapter,
   redactRuntimeDiagnostics,
   RuntimeSupervisor,
   createFFmpegRuntime,
@@ -393,7 +430,6 @@ const deterministicB = new MockMediaExecutionAdapter({
 assert.deepEqual(deterministicA, deterministicB, 'latency simulation is deterministic');
 assert.equal(deterministicA.warnings.length, 1, 'warning rate can be configured');
 
-
 const streamingGraph = {
   ...recordingTransition.nextGraph,
   destinations: {
@@ -419,50 +455,104 @@ const streamingPlan = createStreamingPlan({
   frameId: 81,
 });
 assert.equal(streamingPlan.destinations.length, 1, 'stream planning includes enabled destinations');
-assert.equal(streamingPlan.targets[0]?.transport.protocol, 'RTMP', 'stream planning infers protocol');
+assert.equal(
+  streamingPlan.targets[0]?.transport.protocol,
+  'RTMP',
+  'stream planning infers protocol',
+);
 assert.equal(validateStreamingPlan(streamingPlan).valid, true, 'stream plan validation passes');
 const streamingStore = new StreamingStore();
 streamingStore.setStreamingPlan(streamingPlan);
-assert.equal(streamingStore.getStreamingPlan(streamingPlan.id)?.id, streamingPlan.id, 'stream store gets plan');
+assert.equal(
+  streamingStore.getStreamingPlan(streamingPlan.id)?.id,
+  streamingPlan.id,
+  'stream store gets plan',
+);
 assert.equal(streamingStore.getActiveStreams().length, 1, 'stream store lists active streams');
 let streamingResult = prepareStreaming(streamingPlan);
-assert.equal(streamingResult.session.status, 'planned', 'prepare streaming creates planned session');
+assert.equal(
+  streamingResult.session.status,
+  'planned',
+  'prepare streaming creates planned session',
+);
 streamingResult = connectStreaming(streamingResult.session);
-assert.equal(streamingResult.session.targets[0]?.connected, true, 'mock transport connects without sockets');
+assert.equal(
+  streamingResult.session.targets[0]?.connected,
+  true,
+  'mock transport connects without sockets',
+);
 streamingResult = startStreaming(streamingResult.session);
 assert.equal(streamingResult.session.status, 'streaming', 'start streaming moves lifecycle');
 streamingResult = pauseStreaming(streamingResult.session);
 assert.equal(streamingResult.session.status, 'paused', 'pause streaming moves lifecycle');
 streamingResult = resumeStreaming(streamingResult.session);
 assert.equal(streamingResult.session.status, 'streaming', 'resume streaming moves lifecycle');
-const degradedSession = simulateStreamingHealthChange(streamingResult.session, 'streamA', 'degraded');
-assert.equal(summarizeStreamingHealth(degradedSession).health, 'degraded', 'health summarizes degradation');
+const degradedSession = simulateStreamingHealthChange(
+  streamingResult.session,
+  'streamA',
+  'degraded',
+);
+assert.equal(
+  summarizeStreamingHealth(degradedSession).health,
+  'degraded',
+  'health summarizes degradation',
+);
 const switchedSession = simulateTransportSwitch(degradedSession, 'streamA', 'SRT');
-assert.equal(switchedSession.targets[0]?.transport.protocol, 'SRT', 'mock transport switching updates metadata');
+assert.equal(
+  switchedSession.targets[0]?.transport.protocol,
+  'SRT',
+  'mock transport switching updates metadata',
+);
 const disconnectResult = simulateDisconnect(switchedSession, 'streamA');
-assert.equal(disconnectResult.session.status, 'reconnecting', 'mock disconnect simulates reconnect');
+assert.equal(
+  disconnectResult.session.status,
+  'reconnecting',
+  'mock disconnect simulates reconnect',
+);
 const failureResult = simulateDestinationFailure(disconnectResult.session, 'streamA');
 assert.equal(failureResult.session.status, 'failed', 'destination failure fails stream');
 const manifest = createStreamingManifest(streamingPlan);
 assert.equal(manifest.containsMediaPayloads, false, 'stream manifest contains no runtime media');
 assert.equal('mediaPayload' in manifest, false, 'stream manifest stores no media payload object');
-assert.equal(supportedStreamingProtocols.includes('WHIP'), true, 'supported protocols include WHIP');
+assert.equal(
+  supportedStreamingProtocols.includes('WHIP'),
+  true,
+  'supported protocols include WHIP',
+);
 streamingResult = stopStreaming(streamingResult.session);
 assert.equal(streamingResult.session.status, 'stopped', 'stop streaming moves lifecycle');
 streamingStore.clearStreams();
 assert.equal(streamingStore.listStreams().length, 0, 'stream store clears streams');
 
-
-
 const encoderStreamId = streamingPlan.targets[0]?.id;
-const encoderPlan = createEncoderPlan({ graph: streamingGraph, videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, outputId: streamingPlan.broadcastOutputPlanId, ...(encoderStreamId ? { streamId: encoderStreamId } : {}), mediaClock: createClock({ frameRate: 30 }), frameId: 82 });
+const encoderPlan = createEncoderPlan({
+  graph: streamingGraph,
+  videoRoutePlan: streamingVideoPlan,
+  audioRoutePlan: streamingAudioPlan,
+  outputId: streamingPlan.broadcastOutputPlanId,
+  ...(encoderStreamId ? { streamId: encoderStreamId } : {}),
+  mediaClock: createClock({ frameRate: 30 }),
+  frameId: 82,
+});
 assert.equal(encoderPlan.backend, 'mock', 'encoder plan selects mock backend by default');
 assert.equal(validateEncoderPlan(encoderPlan).valid, true, 'encoder plan validation passes');
-assert.equal(validateEncoderProfile(encoderPlan.profile).valid, true, 'encoder profile validation passes');
-assert.equal(selectEncoderBackend({ preferred: 'software', available: ['mock','software'] }), 'software', 'encoder backend selection honors available preference');
+assert.equal(
+  validateEncoderProfile(encoderPlan.profile).valid,
+  true,
+  'encoder profile validation passes',
+);
+assert.equal(
+  selectEncoderBackend({ preferred: 'software', available: ['mock', 'software'] }),
+  'software',
+  'encoder backend selection honors available preference',
+);
 const encoderStore = new EncoderStore();
 encoderStore.setEncoderPlan(encoderPlan);
-assert.equal(encoderStore.getEncoderPlan(encoderPlan.id)?.id, encoderPlan.id, 'encoder store gets plan');
+assert.equal(
+  encoderStore.getEncoderPlan(encoderPlan.id)?.id,
+  encoderPlan.id,
+  'encoder store gets plan',
+);
 assert.equal(encoderStore.getActiveEncoders().length, 1, 'encoder store lists active encoders');
 let encoderResult = prepareEncoder(encoderPlan);
 assert.equal(encoderResult.session.status, 'ready', 'prepare encoder creates ready mock session');
@@ -473,155 +563,584 @@ assert.equal(encoderResult.session.status, 'paused', 'pause encoder moves lifecy
 encoderResult = resumeEncoder(encoderResult.session);
 encoderResult = drainEncoder(encoderResult.session);
 assert.equal(encoderResult.session.status, 'draining', 'drain encoder moves lifecycle');
-const failedEncoder = failEncoder(encoderResult.session, { code: 'MOCK_FATAL', message: 'Mock fatal encoder failure', retryable: false, occurredAt: '2026-07-01T00:00:00.000Z', backend: 'mock' });
-assert.equal(failedEncoder.session.status, 'failed', 'encoder failure handling marks failed session');
+const failedEncoder = failEncoder(encoderResult.session, {
+  code: 'MOCK_FATAL',
+  message: 'Mock fatal encoder failure',
+  retryable: false,
+  occurredAt: '2026-07-01T00:00:00.000Z',
+  backend: 'mock',
+});
+assert.equal(
+  failedEncoder.session.status,
+  'failed',
+  'encoder failure handling marks failed session',
+);
 encoderResult = stopEncoder(encoderResult.session);
 assert.equal(encoderResult.session.status, 'stopped', 'stop encoder moves lifecycle');
 const encoderManifest = createEncoderManifest(encoderPlan);
-assert.equal(encoderManifest.containsMediaPayloads, false, 'encoder manifest excludes raw media payloads');
-assert.equal(encoderManifest.containsEncodedPackets, false, 'encoder manifest excludes encoded packets');
-assert.equal(encoderStore.getEncoderManifest(encoderPlan.id)?.containsEncodedPackets, false, 'encoder store returns packet-free manifest');
-assert.equal(summarizeEncoderHealth(startEncoder(prepareEncoder(encoderPlan).session).session).active, true, 'encoder health summary reports active encoding');
-assert.equal(JSON.stringify(encoderPlan).includes('encodedPacket'), false, 'encoder state does not include encoded packet fields');
+assert.equal(
+  encoderManifest.containsMediaPayloads,
+  false,
+  'encoder manifest excludes raw media payloads',
+);
+assert.equal(
+  encoderManifest.containsEncodedPackets,
+  false,
+  'encoder manifest excludes encoded packets',
+);
+assert.equal(
+  encoderStore.getEncoderManifest(encoderPlan.id)?.containsEncodedPackets,
+  false,
+  'encoder store returns packet-free manifest',
+);
+assert.equal(
+  summarizeEncoderHealth(startEncoder(prepareEncoder(encoderPlan).session).session).active,
+  true,
+  'encoder health summary reports active encoding',
+);
+assert.equal(
+  JSON.stringify(encoderPlan).includes('encodedPacket'),
+  false,
+  'encoder state does not include encoded packet fields',
+);
 const encoderAdapter = new MockMediaExecutionAdapter();
-const encoderIntentResponse = encoderAdapter.execute({ id: 'encoder-intent', type: 'START_ENCODER', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: streamingGraph.metadata.revision, payload: { outputId: streamingPlan.broadcastOutputPlanId, streamId: streamingPlan.targets[0]?.id, frameId: 82 } }, streamingGraph);
+const encoderIntentResponse = encoderAdapter.execute(
+  {
+    id: 'encoder-intent',
+    type: 'START_ENCODER',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: streamingGraph.metadata.revision,
+    payload: {
+      outputId: streamingPlan.broadcastOutputPlanId,
+      streamId: streamingPlan.targets[0]?.id,
+      frameId: 82,
+    },
+  },
+  streamingGraph,
+);
 assert.equal(encoderIntentResponse.success, true, 'mock execution handles encoder intent');
-assert.equal(encoderAdapter.getEncoderStore().listEncoders().length, 1, 'mock encoder execution stores encoder plan');
+assert.equal(
+  encoderAdapter.getEncoderStore().listEncoders().length,
+  1,
+  'mock encoder execution stores encoder plan',
+);
 encoderStore.clearEncoders();
 assert.equal(encoderStore.listEncoders().length, 0, 'encoder store clears encoders');
 
-const ffmpegPlan = createEncoderPlan({ graph: streamingGraph, videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, outputId: streamingPlan.broadcastOutputPlanId, ...(encoderStreamId ? { streamId: encoderStreamId } : {}), mediaClock: createClock({ frameRate: 30 }), frameId: 84, backend: 'ffmpeg', metadata: { url: 'rtmp://live.example/app?key=super-secret' } });
-const ffmpegBackend = new FFmpegEncoderBackend({ enabled: true, runtimeMode: 'dry_run', ffmpegPath: 'ffmpeg' });
-assert.equal(ffmpegBackend.validate(ffmpegPlan).valid, true, 'ffmpeg backend validates placeholder encoder plan');
-const ffmpegCommandPlan = createFFmpegCommandPlan(ffmpegPlan, { runtimeMode: 'dry_run', ffmpegPath: 'ffmpeg' });
-assert.equal(ffmpegCommandPlan.output.kind, 'rtmp', 'ffmpeg command planner maps streaming plan to RTMP placeholder');
+const ffmpegPlan = createEncoderPlan({
+  graph: streamingGraph,
+  videoRoutePlan: streamingVideoPlan,
+  audioRoutePlan: streamingAudioPlan,
+  outputId: streamingPlan.broadcastOutputPlanId,
+  ...(encoderStreamId ? { streamId: encoderStreamId } : {}),
+  mediaClock: createClock({ frameRate: 30 }),
+  frameId: 84,
+  backend: 'ffmpeg',
+  metadata: { url: 'rtmp://live.example/app?key=super-secret' },
+});
+const ffmpegBackend = new FFmpegEncoderBackend({
+  enabled: true,
+  runtimeMode: 'dry_run',
+  ffmpegPath: 'ffmpeg',
+});
+assert.equal(
+  ffmpegBackend.validate(ffmpegPlan).valid,
+  true,
+  'ffmpeg backend validates placeholder encoder plan',
+);
+const ffmpegCommandPlan = createFFmpegCommandPlan(ffmpegPlan, {
+  runtimeMode: 'dry_run',
+  ffmpegPath: 'ffmpeg',
+});
+assert.equal(
+  ffmpegCommandPlan.output.kind,
+  'rtmp',
+  'ffmpeg command planner maps streaming plan to RTMP placeholder',
+);
 assert.equal(ffmpegCommandPlan.output.planOnly, true, 'ffmpeg RTMP output remains plan-only');
-assert.equal(validateFFmpegCommandPlan(ffmpegCommandPlan).valid, true, 'ffmpeg command plan validates');
-assert.deepEqual(buildFFmpegArgs(ffmpegCommandPlan), ffmpegCommandPlan.args, 'ffmpeg args are built as safe array');
+assert.equal(
+  validateFFmpegCommandPlan(ffmpegCommandPlan).valid,
+  true,
+  'ffmpeg command plan validates',
+);
+assert.deepEqual(
+  buildFFmpegArgs(ffmpegCommandPlan),
+  ffmpegCommandPlan.args,
+  'ffmpeg args are built as safe array',
+);
 let rejectedDangerousArg = false;
-try { sanitizeFFmpegArgs(['-i', 'safe', 'bad;rm -rf']); } catch { rejectedDangerousArg = true; }
+try {
+  sanitizeFFmpegArgs(['-i', 'safe', 'bad;rm -rf']);
+} catch {
+  rejectedDangerousArg = true;
+}
 assert.equal(rejectedDangerousArg, true, 'ffmpeg sanitizer rejects shell metacharacters');
-assert.equal(ffmpegCommandPlan.redactedPreview.includes('super-secret'), false, 'ffmpeg command preview redacts secrets');
+assert.equal(
+  ffmpegCommandPlan.redactedPreview.includes('super-secret'),
+  false,
+  'ffmpeg command preview redacts secrets',
+);
 const preparedFFmpeg = await ffmpegBackend.prepare(ffmpegPlan);
 assert.equal(preparedFFmpeg.success, true, 'ffmpeg dry-run prepare succeeds without spawning');
 const startedFFmpeg = await ffmpegBackend.start(preparedFFmpeg.session);
-assert.equal(JSON.stringify(startedFFmpeg.warnings).includes('did not spawn'), true, 'ffmpeg dry-run start does not spawn process');
+assert.equal(
+  JSON.stringify(startedFFmpeg.warnings).includes('did not spawn'),
+  true,
+  'ffmpeg dry-run start does not spawn process',
+);
 const disabledFFmpeg = new FFmpegEncoderBackend({ enabled: false, runtimeMode: 'disabled' });
 const disabledPrepared = await disabledFFmpeg.prepare(ffmpegPlan);
-assert.equal(disabledPrepared.session.status, 'unavailable', 'ffmpeg disabled mode reports unavailable and does not spawn');
+assert.equal(
+  disabledPrepared.session.status,
+  'unavailable',
+  'ffmpeg disabled mode reports unavailable and does not spawn',
+);
 const missingFFmpeg = await detectFFmpegAvailability('__ubos_missing_ffmpeg_binary__');
 assert.equal(missingFFmpeg.available, false, 'ffmpeg availability handles missing binary');
-assert.equal(parseFFmpegVersion('ffmpeg version 6.1.1 Copyright'), '6.1.1', 'ffmpeg version parser handles sample output');
+assert.equal(
+  parseFFmpegVersion('ffmpeg version 6.1.1 Copyright'),
+  '6.1.1',
+  'ffmpeg version parser handles sample output',
+);
 const mappedFFmpegCommand = mapEncoderPlanToFFmpegCommand(ffmpegPlan, { runtimeMode: 'dry_run' });
-assert.equal(mappedFFmpegCommand.encoderPlanId, ffmpegPlan.id, 'encoder plan maps to ffmpeg command plan');
-const ffmpegHealth = createFFmpegHealth({ enabled: true, available: false, processState: 'unavailable' });
-assert.equal(summarizeFFmpegHealth(ffmpegHealth).includes('unavailable'), true, 'ffmpeg health summary works');
-assert.equal(createFFmpegLogEvent({ message: 'stream_key=secret' }).message.includes('secret'), false, 'ffmpeg log event redacts secrets');
-assert.equal(JSON.stringify(ffmpegPlan).includes('ChildProcess'), false, 'production graph-safe encoder plan stores no ffmpeg process handles');
+assert.equal(
+  mappedFFmpegCommand.encoderPlanId,
+  ffmpegPlan.id,
+  'encoder plan maps to ffmpeg command plan',
+);
+const ffmpegHealth = createFFmpegHealth({
+  enabled: true,
+  available: false,
+  processState: 'unavailable',
+});
+assert.equal(
+  summarizeFFmpegHealth(ffmpegHealth).includes('unavailable'),
+  true,
+  'ffmpeg health summary works',
+);
+assert.equal(
+  createFFmpegLogEvent({ message: 'stream_key=secret' }).message.includes('secret'),
+  false,
+  'ffmpeg log event redacts secrets',
+);
+assert.equal(
+  JSON.stringify(ffmpegPlan).includes('ChildProcess'),
+  false,
+  'production graph-safe encoder plan stores no ffmpeg process handles',
+);
 
-const liveStreamingPlan = createFFmpegStreamingPlan({ streamingPlan, encoderPlan: ffmpegPlan, runtimeMode: 'dry_run', dryRun: true, enabled: true, destinationUrls: { streamA: 'rtmp://live.example/app/SUPER_STREAM_KEY' } });
-assert.equal(liveStreamingPlan.targets[0]?.protocol, 'rtmp', 'ffmpeg streaming plan creates RTMP target');
-assert.equal(liveStreamingPlan.redactedPreview.includes('SUPER_STREAM_KEY'), false, 'ffmpeg streaming command preview redacts RTMP stream key');
-assert.equal(sanitizeStreamingUrl('rtmps://live.example/app/SUPER_STREAM_KEY').includes('SUPER_STREAM_KEY'), false, 'RTMPS URL redaction removes stream key');
-assert.equal(sanitizeStreamingUrl('srt://host.example:9000?passphrase=secret').includes('secret'), false, 'SRT passphrase redaction removes secret');
+const liveStreamingPlan = createFFmpegStreamingPlan({
+  streamingPlan,
+  encoderPlan: ffmpegPlan,
+  runtimeMode: 'dry_run',
+  dryRun: true,
+  enabled: true,
+  destinationUrls: { streamA: 'rtmp://live.example/app/SUPER_STREAM_KEY' },
+});
+assert.equal(
+  liveStreamingPlan.targets[0]?.protocol,
+  'rtmp',
+  'ffmpeg streaming plan creates RTMP target',
+);
+assert.equal(
+  liveStreamingPlan.redactedPreview.includes('SUPER_STREAM_KEY'),
+  false,
+  'ffmpeg streaming command preview redacts RTMP stream key',
+);
+assert.equal(
+  sanitizeStreamingUrl('rtmps://live.example/app/SUPER_STREAM_KEY').includes('SUPER_STREAM_KEY'),
+  false,
+  'RTMPS URL redaction removes stream key',
+);
+assert.equal(
+  sanitizeStreamingUrl('srt://host.example:9000?passphrase=secret').includes('secret'),
+  false,
+  'SRT passphrase redaction removes secret',
+);
 let rejectedUnsafeStreamingUrl = false;
-try { sanitizeStreamingUrl('rtmp://live.example/app/key;rm -rf'); } catch { rejectedUnsafeStreamingUrl = true; }
-assert.equal(rejectedUnsafeStreamingUrl, true, 'streaming URL sanitizer rejects shell metacharacters');
-assert.equal(validateFFmpegStreamingPlan(liveStreamingPlan).valid, true, 'ffmpeg streaming plan validates');
-assert.equal(mapStreamingPlanToFFmpegCommand(liveStreamingPlan).args.includes('-nostdin'), true, 'streaming command mapping uses safe ffmpeg args array');
-assert.equal(buildStreamingInputArgs(liveStreamingPlan).includes('-i'), true, 'streaming input args include placeholder input');
-assert.equal(buildStreamingOutputArgs(liveStreamingPlan.targets[0]!).includes('flv'), true, 'RTMP output args use flv muxer');
-assert.equal(redactStreamingDiagnostics('publishing rtmp://live.example/app/SUPER_STREAM_KEY').includes('SUPER_STREAM_KEY'), false, 'streaming diagnostics redact URL keys');
+try {
+  sanitizeStreamingUrl('rtmp://live.example/app/key;rm -rf');
+} catch {
+  rejectedUnsafeStreamingUrl = true;
+}
+assert.equal(
+  rejectedUnsafeStreamingUrl,
+  true,
+  'streaming URL sanitizer rejects shell metacharacters',
+);
+assert.equal(
+  validateFFmpegStreamingPlan(liveStreamingPlan).valid,
+  true,
+  'ffmpeg streaming plan validates',
+);
+assert.equal(
+  mapStreamingPlanToFFmpegCommand(liveStreamingPlan).args.includes('-nostdin'),
+  true,
+  'streaming command mapping uses safe ffmpeg args array',
+);
+assert.equal(
+  buildStreamingInputArgs(liveStreamingPlan).includes('-i'),
+  true,
+  'streaming input args include placeholder input',
+);
+assert.equal(
+  buildStreamingOutputArgs(liveStreamingPlan.targets[0]!).includes('flv'),
+  true,
+  'RTMP output args use flv muxer',
+);
+assert.equal(
+  redactStreamingDiagnostics('publishing rtmp://live.example/app/SUPER_STREAM_KEY').includes(
+    'SUPER_STREAM_KEY',
+  ),
+  false,
+  'streaming diagnostics redact URL keys',
+);
 const ffmpegStreamingManifest = createFFmpegStreamingManifest(streamingPlan, liveStreamingPlan);
-assert.equal(ffmpegStreamingManifest.containsStreamKeys, false, 'ffmpeg streaming manifest declares no stream keys');
-assert.equal(JSON.stringify(ffmpegStreamingManifest).includes('SUPER_STREAM_KEY'), false, 'ffmpeg streaming manifest stores no raw stream key');
-const runtime = new FFmpegStreamingRuntime({ enabled: true, runtimeMode: 'dry_run', dryRun: true, ffmpegPath: 'ffmpeg' });
+assert.equal(
+  ffmpegStreamingManifest.containsStreamKeys,
+  false,
+  'ffmpeg streaming manifest declares no stream keys',
+);
+assert.equal(
+  JSON.stringify(ffmpegStreamingManifest).includes('SUPER_STREAM_KEY'),
+  false,
+  'ffmpeg streaming manifest stores no raw stream key',
+);
+const runtime = new FFmpegStreamingRuntime({
+  enabled: true,
+  runtimeMode: 'dry_run',
+  dryRun: true,
+  ffmpegPath: 'ffmpeg',
+});
 const runtimePrepared = await runtime.prepareStreamingRuntime(streamingPlan, ffmpegPlan);
 assert.equal(runtimePrepared.success, true, 'ffmpeg streaming runtime prepares in dry-run');
 const runtimeStarted = await runtime.startStreamingRuntime(runtimePrepared.session);
-assert.equal(JSON.stringify(runtimeStarted.warnings).includes('did not spawn'), true, 'ffmpeg streaming dry-run start does not spawn');
-const disabledRuntime = new FFmpegStreamingRuntime({ enabled: false, runtimeMode: 'disabled', dryRun: true });
-const disabledRuntimePrepared = await disabledRuntime.prepareStreamingRuntime(streamingPlan, ffmpegPlan);
-assert.equal(disabledRuntimePrepared.session.transport.processState, 'disabled', 'disabled streaming runtime does not spawn');
+assert.equal(
+  JSON.stringify(runtimeStarted.warnings).includes('did not spawn'),
+  true,
+  'ffmpeg streaming dry-run start does not spawn',
+);
+const disabledRuntime = new FFmpegStreamingRuntime({
+  enabled: false,
+  runtimeMode: 'disabled',
+  dryRun: true,
+});
+const disabledRuntimePrepared = await disabledRuntime.prepareStreamingRuntime(
+  streamingPlan,
+  ffmpegPlan,
+);
+assert.equal(
+  disabledRuntimePrepared.session.transport.processState,
+  'disabled',
+  'disabled streaming runtime does not spawn',
+);
 let reconnectState = scheduleStreamReconnect(runtimePrepared.session.transport);
-assert.equal(shouldReconnectStream(reconnectState), true, 'stream reconnect helper permits attempts below max');
-reconnectState = recordStreamReconnectAttempt({ ...reconnectState, reconnectAttempts: 2, maxReconnectAttempts: 3 });
-assert.equal(reconnectState.reconnectState, 'exhausted', 'stream reconnect helper records exhaustion');
-assert.equal(resetStreamReconnectState(reconnectState).reconnectAttempts, 0, 'stream reconnect reset clears attempts');
-assert.equal(mapFFmpegStreamingErrorToFailure({ message: '403 auth denied', retryable: false }).classification, 'auth', 'ffmpeg streaming failure maps auth errors');
-assert.equal(summarizeStreamingRuntimeHealth(runtimePrepared.session.healthDetails).includes('rtmp'), true, 'ffmpeg streaming health summary includes protocol');
-assert.equal(JSON.stringify(runtimePrepared.session).includes('ChildProcess'), false, 'ffmpeg streaming session stores no process handles');
+assert.equal(
+  shouldReconnectStream(reconnectState),
+  true,
+  'stream reconnect helper permits attempts below max',
+);
+reconnectState = recordStreamReconnectAttempt({
+  ...reconnectState,
+  reconnectAttempts: 2,
+  maxReconnectAttempts: 3,
+});
+assert.equal(
+  reconnectState.reconnectState,
+  'exhausted',
+  'stream reconnect helper records exhaustion',
+);
+assert.equal(
+  resetStreamReconnectState(reconnectState).reconnectAttempts,
+  0,
+  'stream reconnect reset clears attempts',
+);
+assert.equal(
+  mapFFmpegStreamingErrorToFailure({ message: '403 auth denied', retryable: false }).classification,
+  'auth',
+  'ffmpeg streaming failure maps auth errors',
+);
+assert.equal(
+  summarizeStreamingRuntimeHealth(runtimePrepared.session.healthDetails).includes('rtmp'),
+  true,
+  'ffmpeg streaming health summary includes protocol',
+);
+assert.equal(
+  JSON.stringify(runtimePrepared.session).includes('ChildProcess'),
+  false,
+  'ffmpeg streaming session stores no process handles',
+);
 
-
-const realStreamingEnv = { UBOS_ENABLE_REAL_STREAMING: 'true', NEXT_PUBLIC_UBOS_REAL_STREAMING: 'true' };
-assert.equal(isRealStreamingEnabled(realStreamingEnv), true, 'real streaming feature flags enable runtime');
-assert.equal(validateStreamingDestination({ name: 'Twitch', platform: 'twitch', url: 'rtmps://live.twitch.tv/app/SUPER_STREAM_KEY' }).sanitizedUrl.includes('SUPER_STREAM_KEY'), false, 'streaming runtime destination redacts stream key');
+const realStreamingEnv = {
+  UBOS_ENABLE_REAL_STREAMING: 'true',
+  NEXT_PUBLIC_UBOS_REAL_STREAMING: 'true',
+};
+assert.equal(
+  isRealStreamingEnabled(realStreamingEnv),
+  true,
+  'real streaming feature flags enable runtime',
+);
+assert.equal(
+  validateStreamingDestination({
+    name: 'Twitch',
+    platform: 'twitch',
+    url: 'rtmps://live.twitch.tv/app/SUPER_STREAM_KEY',
+  }).sanitizedUrl.includes('SUPER_STREAM_KEY'),
+  false,
+  'streaming runtime destination redacts stream key',
+);
 let rejectedRuntimeUrl = false;
-try { validateStreamingDestination({ name: 'Bad', platform: 'custom_rtmp', url: 'rtmp://live.example/app/key;cat /etc/passwd' }); } catch { rejectedRuntimeUrl = true; }
+try {
+  validateStreamingDestination({
+    name: 'Bad',
+    platform: 'custom_rtmp',
+    url: 'rtmp://live.example/app/key;cat /etc/passwd',
+  });
+} catch {
+  rejectedRuntimeUrl = true;
+}
 assert.equal(rejectedRuntimeUrl, true, 'streaming runtime rejects shell injection URLs');
-const streamingRuntime = new StreamingPipeline({ UBOS_ENABLE_REAL_STREAMING: 'false', NEXT_PUBLIC_UBOS_REAL_STREAMING: 'false' }, 1);
-const runtimeJob = streamingRuntime.create({ graphRevision: streamingGraph.metadata.revision, destination: { id: 'yt', name: 'YouTube Live', platform: 'youtube_live', url: 'rtmps://a.rtmps.youtube.com/live2/SUPER_STREAM_KEY' } });
-assert.equal(runtimeJob.runtime, 'mock', 'streaming runtime preserves mock fallback when feature flags disabled');
-assert.equal(JSON.stringify(runtimeJob).includes('SUPER_STREAM_KEY'), false, 'streaming runtime job never stores stream key');
+const streamingRuntime = new StreamingPipeline(
+  { UBOS_ENABLE_REAL_STREAMING: 'false', NEXT_PUBLIC_UBOS_REAL_STREAMING: 'false' },
+  1,
+);
+const runtimeJob = streamingRuntime.create({
+  graphRevision: streamingGraph.metadata.revision,
+  destination: {
+    id: 'yt',
+    name: 'YouTube Live',
+    platform: 'youtube_live',
+    url: 'rtmps://a.rtmps.youtube.com/live2/SUPER_STREAM_KEY',
+  },
+});
+assert.equal(
+  runtimeJob.runtime,
+  'mock',
+  'streaming runtime preserves mock fallback when feature flags disabled',
+);
+assert.equal(
+  JSON.stringify(runtimeJob).includes('SUPER_STREAM_KEY'),
+  false,
+  'streaming runtime job never stores stream key',
+);
 streamingRuntime.validate(runtimeJob.id);
 streamingRuntime.prepare(runtimeJob.id);
 streamingRuntime.connect(runtimeJob.id);
 const publishingJob = await streamingRuntime.startPublishing(runtimeJob.id);
-assert.equal(publishingJob.lifecycle, 'publishing', 'streaming runtime publishes through lifecycle');
-assert.equal(streamingRuntime.diagnostics(runtimeJob.id).protocol, 'rtmps', 'streaming runtime diagnostics expose protocol');
+assert.equal(
+  publishingJob.lifecycle,
+  'publishing',
+  'streaming runtime publishes through lifecycle',
+);
+assert.equal(
+  streamingRuntime.diagnostics(runtimeJob.id).protocol,
+  'rtmps',
+  'streaming runtime diagnostics expose protocol',
+);
 const reconnectingJob = streamingRuntime.reconnect(runtimeJob.id);
 assert.equal(reconnectingJob.lifecycle, 'reconnecting', 'streaming runtime reconnects with policy');
-assert.equal(reconnectingJob.statistics.reconnectCount, 1, 'streaming runtime increments reconnect count');
+assert.equal(
+  reconnectingJob.statistics.reconnectCount,
+  1,
+  'streaming runtime increments reconnect count',
+);
 const manifest93 = createStreamingRuntimeManifest(reconnectingJob);
-assert.equal(manifest93.containsProcessHandles, false, 'streaming runtime manifest contains no process handles');
-assert.equal(manifest93.containsStreamKeys, false, 'streaming runtime manifest contains no stream keys');
-assert.equal(JSON.stringify(manifest93).includes('SUPER_STREAM_KEY'), false, 'streaming runtime manifest redacts secrets');
+assert.equal(
+  manifest93.containsProcessHandles,
+  false,
+  'streaming runtime manifest contains no process handles',
+);
+assert.equal(
+  manifest93.containsStreamKeys,
+  false,
+  'streaming runtime manifest contains no stream keys',
+);
+assert.equal(
+  JSON.stringify(manifest93).includes('SUPER_STREAM_KEY'),
+  false,
+  'streaming runtime manifest redacts secrets',
+);
 streamingRuntime.pause(runtimeJob.id);
 streamingRuntime.resume(runtimeJob.id);
 await streamingRuntime.stop(runtimeJob.id);
 streamingRuntime.disconnect(runtimeJob.id);
 streamingRuntime.cleanup(runtimeJob.id);
 const backpressureRuntime = new StreamingPipeline({}, 1);
-const firstQueued = backpressureRuntime.create({ destination: { name: 'Kick', platform: 'kick', url: 'rtmp://kick.example/live/KICK_SECRET' } });
-const secondQueued = backpressureRuntime.create({ destination: { name: 'Facebook Live', platform: 'facebook_live', url: 'rtmp://facebook.example/live/FB_SECRET' } });
+const firstQueued = backpressureRuntime.create({
+  destination: { name: 'Kick', platform: 'kick', url: 'rtmp://kick.example/live/KICK_SECRET' },
+});
+const secondQueued = backpressureRuntime.create({
+  destination: {
+    name: 'Facebook Live',
+    platform: 'facebook_live',
+    url: 'rtmp://facebook.example/live/FB_SECRET',
+  },
+});
 await backpressureRuntime.startPublishing(firstQueued.id);
 const queuedJob = await backpressureRuntime.startPublishing(secondQueued.id);
 assert.equal(queuedJob.lifecycle, 'queued', 'streaming runtime queues startup under backpressure');
 const failingRuntime = new StreamingPipeline({}, 1);
-const failingJob = failingRuntime.create({ destination: { name: 'Custom', platform: 'custom_rtmp', url: 'rtmp://live.example/app/SECRET' }, reconnectPolicy: { maxRetries: 1 } });
+const failingJob = failingRuntime.create({
+  destination: { name: 'Custom', platform: 'custom_rtmp', url: 'rtmp://live.example/app/SECRET' },
+  reconnectPolicy: { maxRetries: 1 },
+});
 failingRuntime.reconnect(failingJob.id);
 const exhaustedJob = failingRuntime.reconnect(failingJob.id);
 assert.equal(exhaustedJob.lifecycle, 'failed', 'streaming runtime exhausts reconnect policy');
-assert.equal(exhaustedJob.latestFailure?.ubosFailure.category, 'STREAMING_FAILURE', 'streaming runtime maps failures to UBOS model');
-assert.equal(JSON.stringify(exhaustedJob.replay).includes('SECRET'), false, 'streaming runtime replay stores no runtime secrets');
+assert.equal(
+  exhaustedJob.latestFailure?.ubosFailure.category,
+  'STREAMING_FAILURE',
+  'streaming runtime maps failures to UBOS model',
+);
+assert.equal(
+  JSON.stringify(exhaustedJob.replay).includes('SECRET'),
+  false,
+  'streaming runtime replay stores no runtime secrets',
+);
 
-
-const multiviewPlan = createMultiviewPlan({ graph: streamingGraph, preset: 'quad', videoRoutePlan: streamingVideoPlan, audioRoutePlan: streamingAudioPlan, frameId: 82 });
+const multiviewPlan = createMultiviewPlan({
+  graph: streamingGraph,
+  preset: 'quad',
+  videoRoutePlan: streamingVideoPlan,
+  audioRoutePlan: streamingAudioPlan,
+  frameId: 82,
+});
 assert.equal(multiviewPlan.tiles.length, 4, 'multiview plan creation uses quad preset');
-assert.deepEqual(buildTileLayout('two_view', 1, 2), { x: 960, y: 0, width: 960, height: 1080 }, 'two view layout generates right tile');
-assert.equal(validateMultiviewPlan(multiviewPlan).valid, true, 'multiview metadata-only validation passes');
-const updatedMultiview = updateMultiviewTile(multiviewPlan, multiviewPlan.tiles[0]!.id, { health: 'degraded', status: 'degraded', metadata: { simulatedDrop: true } });
+assert.deepEqual(
+  buildTileLayout('two_view', 1, 2),
+  { x: 960, y: 0, width: 960, height: 1080 },
+  'two view layout generates right tile',
+);
+assert.equal(
+  validateMultiviewPlan(multiviewPlan).valid,
+  true,
+  'multiview metadata-only validation passes',
+);
+const updatedMultiview = updateMultiviewTile(multiviewPlan, multiviewPlan.tiles[0]!.id, {
+  health: 'degraded',
+  status: 'degraded',
+  metadata: { simulatedDrop: true },
+});
 assert.equal(updatedMultiview.tiles[0]?.health, 'degraded', 'multiview tile update works');
 const removedMultiview = removeMultiviewTile(updatedMultiview, updatedMultiview.tiles[0]!.id);
 assert.equal(removedMultiview.tiles.length, 3, 'multiview tile remove works');
 const multiviewSummary = summarizeMultiviewHealth(updatedMultiview);
-assert.equal(multiviewSummary.unhealthyTiles > 0, true, 'tile health summary counts unhealthy tiles');
+assert.equal(
+  multiviewSummary.unhealthyTiles > 0,
+  true,
+  'tile health summary counts unhealthy tiles',
+);
 const multiviewSnapshot = createMultiviewSnapshot(multiviewPlan);
-assert.equal(multiviewSnapshot.containsMediaPayloads, false, 'multiview snapshot is replay-safe metadata only');
+assert.equal(
+  multiviewSnapshot.containsMediaPayloads,
+  false,
+  'multiview snapshot is replay-safe metadata only',
+);
 assert.equal('mediaStream' in multiviewSnapshot, false, 'multiview snapshot stores no raw media');
-const confidenceMonitor = createConfidenceMonitor({ plan: multiviewPlan, signals: { stream: 'warning', network: 'degraded' } });
-assert.equal(validateConfidenceSignals(confidenceMonitor).valid, true, 'confidence monitor validation passes');
-assert.equal(summarizeConfidenceStatus(confidenceMonitor).status, 'degraded', 'confidence summary reports worst status');
+const confidenceMonitor = createConfidenceMonitor({
+  plan: multiviewPlan,
+  signals: { stream: 'warning', network: 'degraded' },
+});
+assert.equal(
+  validateConfidenceSignals(confidenceMonitor).valid,
+  true,
+  'confidence monitor validation passes',
+);
+assert.equal(
+  summarizeConfidenceStatus(confidenceMonitor).status,
+  'degraded',
+  'confidence summary reports worst status',
+);
 const multiviewStore = new MultiviewStore();
 multiviewStore.setMultiviewPlan(multiviewPlan);
 multiviewStore.setConfidenceMonitor(confidenceMonitor);
-assert.equal(multiviewStore.getTileById(multiviewPlan.tiles[0]!.id)?.id, multiviewPlan.tiles[0]!.id, 'multiview store gets tile by id');
-assert.equal(multiviewStore.getTilesByType('program').length, 1, 'multiview store filters tiles by type');
+assert.equal(
+  multiviewStore.getTileById(multiviewPlan.tiles[0]!.id)?.id,
+  multiviewPlan.tiles[0]!.id,
+  'multiview store gets tile by id',
+);
+assert.equal(
+  multiviewStore.getTilesByType('program').length,
+  1,
+  'multiview store filters tiles by type',
+);
+
+const customMultiviewLayout = createMultiviewLayout({
+  id: 'validation-multiview-layout',
+  name: 'Validation Multiview',
+  preset: 'custom_grid',
+  tileCount: 8,
+  grid: { columns: 4, rows: 2, gapPx: 12 },
+});
+const runtimeDiagnostics = collectRuntimeDiagnostics();
+assert.equal(
+  runtimeDiagnostics.containsRuntimeHandles,
+  false,
+  'multiview diagnostics are backend independent metadata',
+);
+const multiviewManager = new MultiviewManager();
+const managedPlan = multiviewManager.loadLayout(streamingGraph, customMultiviewLayout, [
+  { kind: 'program', label: 'PGM' },
+  { kind: 'preview', label: 'PVW' },
+  { kind: 'camera', id: 'camera-a', label: 'CAM A' },
+  { kind: 'media', id: 'media-a', label: 'MEDIA A' },
+  { kind: 'audio_meter', label: 'AUDIO' },
+  { kind: 'recording', label: 'REC' },
+  { kind: 'streaming', label: 'STREAM' },
+  { kind: 'runtime_diagnostics', label: 'DIAG' },
+]);
+assert.equal(managedPlan.layout.grid.columns, 4, 'multiview manager supports custom grid layouts');
+assert.equal(
+  managedPlan.tiles.some((tile) => tile.tally === 'program'),
+  true,
+  'multiview tiles include tally indication',
+);
+assert.equal(
+  managedPlan.tiles.every((tile) => tile.overlays.some((overlay) => overlay.kind === 'safe_title')),
+  true,
+  'multiview tiles include safe title overlays',
+);
+const managedSnapshot = multiviewManager.renderSnapshot(streamingGraph);
+assert.equal(
+  managedSnapshot.events.some((event) => event.type === 'multiview_layout_loaded'),
+  true,
+  'multiview manager emits runtime events',
+);
+const demoMultiview = await createDemoMultiviewLayout();
+assert.equal(
+  demoMultiview.layout.tileCount,
+  8,
+  'demo multiview layout exposes eight monitoring tiles',
+);
+
 const multiviewMock = new MockMediaExecutionAdapter({ latencyMs: 1 });
-const multiviewMockResult = multiviewMock.execute({ id: 'mock-multiview', type: 'BUILD_MULTIVIEW_PLAN', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: streamingGraph.metadata.revision, payload: { preset: 'quad', frameId: 82 } }, streamingGraph);
-assert.equal(multiviewMockResult.success, true, 'mock multiview execution intent handling succeeds');
-assert.equal(multiviewMock.getMultiviewStore().getMultiviewPlan()?.preset, 'quad', 'mock multiview execution stores plan');
-assert.equal(validateMultiviewPlan(createMultiviewPlan({ graph: streamingGraph, metadata: { rawFrame: 'forbidden' } })).valid, false, 'multiview validation rejects raw media-like metadata');
+const multiviewMockResult = multiviewMock.execute(
+  {
+    id: 'mock-multiview',
+    type: 'BUILD_MULTIVIEW_PLAN',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: streamingGraph.metadata.revision,
+    payload: { preset: 'quad', frameId: 82 },
+  },
+  streamingGraph,
+);
+assert.equal(
+  multiviewMockResult.success,
+  true,
+  'mock multiview execution intent handling succeeds',
+);
+assert.equal(
+  multiviewMock.getMultiviewStore().getMultiviewPlan()?.preset,
+  'quad',
+  'mock multiview execution stores plan',
+);
+assert.equal(
+  validateMultiviewPlan(
+    createMultiviewPlan({ graph: streamingGraph, metadata: { rawFrame: 'forbidden' } }),
+  ).valid,
+  false,
+  'multiview validation rejects raw media-like metadata',
+);
 multiviewStore.clearMultiview();
 assert.equal(multiviewStore.listMultiviewTiles().length, 0, 'multiview store clears state');
 
@@ -721,10 +1240,15 @@ assert.equal(
   'mock_live mode still selects mock adapter',
 );
 
+import { createTransitionRenderer, createTransitionRendererDemo } from './transition-renderer.js';
+
 import {
   CompositionStore,
   createDefaultCanvas,
   createSceneCompositionFromGraph,
+  createRenderLayer as createCompositorRenderLayer,
+  createSceneCompositor,
+  createSceneCompositorFromComposition,
   diffSceneCompositions,
   getLayoutBounds,
   validateLayerBounds,
@@ -825,6 +1349,120 @@ assert.equal(
   true,
   'composition diff detects changed layers',
 );
+
+const compositorClock = createClock({ frameRate: 30 });
+compositorClock.start();
+const sceneCompositor = createSceneCompositorFromComposition(compositionA, {
+  mediaClock: compositorClock,
+});
+sceneCompositor.addLayer(
+  createCompositorRenderLayer({
+    id: 'compositor-background',
+    label: 'Background',
+    source: { type: 'solid_color', color: '#111827', metadata: {} },
+    position: { x: 0, y: 0 },
+    size: { width: 1920, height: 1080 },
+    zIndex: -1,
+  }),
+);
+sceneCompositor.addLayer(
+  createCompositorRenderLayer({
+    id: 'compositor-logo',
+    label: 'Logo',
+    source: { type: 'image', sourceId: 'asset:logo', metadata: {} },
+    position: { x: 1600, y: 40 },
+    size: { width: 240, height: 120 },
+    opacity: 0.85,
+    rotation: 5,
+    zIndex: 10,
+  }),
+);
+assert.deepEqual(
+  sceneCompositor
+    .getOrderedLayers()
+    .map((layer) => layer.id)
+    .slice(0, 2),
+  ['compositor-background', compositionA.layers[0]?.id],
+  'scene compositor orders layers by z-index and stable id',
+);
+const disabledLogo = sceneCompositor.disableLayer('compositor-logo');
+assert.equal(disabledLogo.enabled, false, 'scene compositor can disable layers');
+const lockedBackground = sceneCompositor.lockLayer('compositor-background');
+assert.equal(lockedBackground.locked, true, 'scene compositor can lock layers');
+let lockedRejected = false;
+try {
+  sceneCompositor.updateLayer('compositor-background', { opacity: 0.5 });
+} catch {
+  lockedRejected = true;
+}
+assert.equal(lockedRejected, true, 'locked compositor layer rejects updates');
+sceneCompositor.unlockLayer('compositor-background');
+sceneCompositor.updateLayer('compositor-background', { opacity: 0.9 });
+sceneCompositor.resizeCanvas({ width: 1280, height: 720 });
+const compositedFrame = sceneCompositor.composeFrame({
+  frameId: 12,
+  rendererBackend: 'mock-renderer',
+  metadata: { demo: 'phase-2.6' },
+});
+assert.equal(compositedFrame.canvas.width, 1280, 'scene compositor supports canvas resizing');
+assert.equal(
+  compositedFrame.layers.some((layer) => layer.layerId === 'compositor-logo'),
+  false,
+  'disabled layers are omitted from render frame',
+);
+assert.equal(
+  compositedFrame.layers[0]?.layerId,
+  'compositor-background',
+  'composited render frame preserves ordered draw layers',
+);
+assert.equal(
+  compositedFrame.frameTimestamp,
+  compositorClock.getFrameTimestamp(12),
+  'composited render frame derives timestamp from MediaClock',
+);
+assert.equal(
+  compositedFrame.rendererBackend,
+  'mock-renderer',
+  'scene compositor stays renderer backend independent',
+);
+assert.equal(
+  sceneCompositor.getSnapshot().containsRuntimeHandles,
+  false,
+  'scene compositor snapshots are metadata-safe',
+);
+assert.equal(
+  JSON.stringify(sceneCompositor.getSnapshot()).includes('mediaPayload'),
+  false,
+  'scene compositor snapshots omit media payloads',
+);
+assert.equal(
+  sceneCompositor.getStatusEvents().some((event) => event.type === 'frame_composited'),
+  true,
+  'scene compositor emits status events',
+);
+const demoCompositor = createSceneCompositor({
+  canvas: { width: 640, height: 360, fps: 30 },
+  layers: [
+    createCompositorRenderLayer({
+      id: 'demo-video',
+      source: { type: 'video', sourceId: 'camera:demo', metadata: {} },
+      zIndex: 1,
+    }),
+    createCompositorRenderLayer({
+      id: 'demo-placeholder',
+      source: { type: 'placeholder', label: 'Guest pending', metadata: {} },
+      position: { x: 420, y: 220 },
+      size: { width: 180, height: 100 },
+      zIndex: 2,
+    }),
+  ],
+});
+assert.equal(
+  demoCompositor.composeFrame({ frameId: 1 }).layers.length,
+  2,
+  'scene compositor demo renders multiple layers together',
+);
+
 const compositionStore = new CompositionStore();
 compositionStore.setComposition('program', compositionA);
 assert.equal(
@@ -1232,25 +1870,116 @@ const store = new BrowserRendererStore();
 store.registerRenderer('preview', renderer);
 store.setActiveComposition('preview', compositionA);
 assert.equal(store.getRenderer('preview'), renderer, 'render target registration works');
-assert.equal(store.getActiveComposition('preview')?.id, compositionA.id, 'renderer store tracks active composition');
+assert.equal(
+  store.getActiveComposition('preview')?.id,
+  compositionA.id,
+  'renderer store tracks active composition',
+);
 
-assert.equal(isBrowserRendererEnabled({}), false, 'feature flag disabled preserves current behavior');
+assert.equal(
+  isBrowserRendererEnabled({}),
+  false,
+  'feature flag disabled preserves current behavior',
+);
 const canvasBackend = new Canvas2DRendererBackend(() => undefined);
 canvasBackend.initialize();
-const gpuFallback = selectRendererBackend([canvasBackend, new WebGLRendererBackend()], 'webgl_preview');
-assert.equal(gpuFallback.backend?.type, 'canvas2d', 'unavailable GPU backend falls back to Canvas2D');
-const frameContext = createRenderFrameContext({ frameId: 1, frameTimestamp: 1000, graphRevision: compositionA.graphRevision, compositionId: compositionA.id, canvas: { width: 1920, height: 1080, getContext: () => null } as unknown as HTMLCanvasElement & { width: number; height: number; getContext(type: '2d'): CanvasRenderingContext2D | null }, layers: compositionA.layers, debugMode: false, renderTarget: 'preview', metadata: {} });
-assert.equal(frameContext.compositionId, compositionA.id, 'render frame context is created correctly');
-assert.equal(getDirtyLayers(compositionA, { ...compositionA, layers: [{ ...compositionA.layers[0]!, opacity: 0.5 }, ...compositionA.layers.slice(1)] }).length, 1, 'dirty-layer detection works');
+const gpuFallback = selectRendererBackend(
+  [canvasBackend, new WebGLRendererBackend()],
+  'webgl_preview',
+);
+assert.equal(
+  gpuFallback.backend?.type,
+  'canvas2d',
+  'unavailable GPU backend falls back to Canvas2D',
+);
+const frameContext = createRenderFrameContext({
+  frameId: 1,
+  frameTimestamp: 1000,
+  graphRevision: compositionA.graphRevision,
+  compositionId: compositionA.id,
+  canvas: { width: 1920, height: 1080, getContext: () => null } as unknown as HTMLCanvasElement & {
+    width: number;
+    height: number;
+    getContext(type: '2d'): CanvasRenderingContext2D | null;
+  },
+  layers: compositionA.layers,
+  debugMode: false,
+  renderTarget: 'preview',
+  metadata: {},
+});
+assert.equal(
+  frameContext.compositionId,
+  compositionA.id,
+  'render frame context is created correctly',
+);
+assert.equal(
+  getDirtyLayers(compositionA, {
+    ...compositionA,
+    layers: [{ ...compositionA.layers[0]!, opacity: 0.5 }, ...compositionA.layers.slice(1)],
+  }).length,
+  1,
+  'dirty-layer detection works',
+);
 const cache = createRenderCache();
-setCachedLayer(cache, { id: 'layer:a', kind: 'layer', layerId: 'a', revision: 1, signature: 'sig', updatedAt: '2026-07-01T00:00:00.000Z', metadata: {} });
+setCachedLayer(cache, {
+  id: 'layer:a',
+  kind: 'layer',
+  layerId: 'a',
+  revision: 1,
+  signature: 'sig',
+  updatedAt: '2026-07-01T00:00:00.000Z',
+  metadata: {},
+});
 assert.equal(getCachedLayer(cache, 'a')?.signature, 'sig', 'cache set/get works');
 assert.equal(invalidateLayer(cache, 'a'), true, 'cache invalidate works');
 assert.equal(calculateFrameBudget(50), 20, 'frame budget calculation works');
-assert.equal(evaluateRenderPerformance({ targetFps: 50, renderDurationMs: 21, dirtyLayerCount: 1, totalLayerCount: 2, cacheHitCount: 1, cacheMissCount: 1 }).overBudget, true, 'render performance detects over-budget frames');
+assert.equal(
+  evaluateRenderPerformance({
+    targetFps: 50,
+    renderDurationMs: 21,
+    dirtyLayerCount: 1,
+    totalLayerCount: 2,
+    cacheHitCount: 1,
+    cacheMissCount: 1,
+  }).overBudget,
+  true,
+  'render performance detects over-budget frames',
+);
 const pipeline = executeRenderPipeline(createRenderPipeline(), frameContext);
-assert.deepEqual(pipeline.executedStages, ['prepare_frame','resolve_sources','compute_dirty_layers','update_cache','draw_background','draw_layers','draw_overlays','draw_guides','finalize_frame'], 'pipeline stages execute in deterministic order');
-assert.equal(summarizeRendererHealth({ backendType: 'canvas2d', targetFps: 30, estimatedFps: 30, averageRenderMs: 3, p95RenderMs: null, droppedFrames: 0, overBudgetFrames: 0, cacheHitRate: 0, activeLayerCount: 1, dirtyLayerCount: 1, memoryPressure: 'unknown', isHealthy: true, warnings: [] }).includes('healthy'), true, 'renderer health summary works');
+assert.deepEqual(
+  pipeline.executedStages,
+  [
+    'prepare_frame',
+    'resolve_sources',
+    'compute_dirty_layers',
+    'update_cache',
+    'draw_background',
+    'draw_layers',
+    'draw_overlays',
+    'draw_guides',
+    'finalize_frame',
+  ],
+  'pipeline stages execute in deterministic order',
+);
+assert.equal(
+  summarizeRendererHealth({
+    backendType: 'canvas2d',
+    targetFps: 30,
+    estimatedFps: 30,
+    averageRenderMs: 3,
+    p95RenderMs: null,
+    droppedFrames: 0,
+    overBudgetFrames: 0,
+    cacheHitRate: 0,
+    activeLayerCount: 1,
+    dirtyLayerCount: 1,
+    memoryPressure: 'unknown',
+    isHealthy: true,
+    warnings: [],
+  }).includes('healthy'),
+  true,
+  'renderer health summary works',
+);
 const browserAdapter = new BrowserRendererAdapter(renderer, 'dry_run');
 const browserAdapterResult = browserAdapter.execute(
   {
@@ -1262,13 +1991,16 @@ const browserAdapterResult = browserAdapter.execute(
   },
   graphWithSources,
 );
-assert.equal(browserAdapterResult.success, true, 'browser renderer adapter returns structured result');
+assert.equal(
+  browserAdapterResult.success,
+  true,
+  'browser renderer adapter returns structured result',
+);
 assert.equal(
   browserAdapter.getCapabilities().includes('RENDER_FRAME'),
   true,
   'browser renderer adapter exposes render frame capability',
 );
-
 
 let mockNow = 1000;
 const clock = createClock({ frameRate: 30, now: () => mockNow });
@@ -1286,31 +2018,89 @@ assert.equal(clock.getCurrentFrame(), 2, 'resumed clock advances frames');
 
 assertMonotonicFrameId(1, 2);
 assertFrameTimestampFromClock(clock, 3, 100);
-const assignedCurrent = assignIntentToFrame({ id: 'timing-current', type: 'sync', executionType: 'EXECUTE_FRAME_SYNC', sourceGraphRevision: 1, dependencies: [], priority: 0, targetSubsystem: 'sync', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' }, clock.getState(), { nowMs: 70, cutoffMs: 8 });
-const assignedLate = assignIntentToFrame({ id: 'timing-late', type: 'sync', executionType: 'EXECUTE_FRAME_SYNC', sourceGraphRevision: 1, dependencies: [], priority: 0, targetSubsystem: 'sync', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' }, clock.getState(), { nowMs: 94, cutoffMs: 8 });
+const assignedCurrent = assignIntentToFrame(
+  {
+    id: 'timing-current',
+    type: 'sync',
+    executionType: 'EXECUTE_FRAME_SYNC',
+    sourceGraphRevision: 1,
+    dependencies: [],
+    priority: 0,
+    targetSubsystem: 'sync',
+    payload: {},
+    timingConstraint: {},
+    submittedAt: '2026-07-01T00:00:00.000Z',
+  },
+  clock.getState(),
+  { nowMs: 70, cutoffMs: 8 },
+);
+const assignedLate = assignIntentToFrame(
+  {
+    id: 'timing-late',
+    type: 'sync',
+    executionType: 'EXECUTE_FRAME_SYNC',
+    sourceGraphRevision: 1,
+    dependencies: [],
+    priority: 0,
+    targetSubsystem: 'sync',
+    payload: {},
+    timingConstraint: {},
+    submittedAt: '2026-07-01T00:00:00.000Z',
+  },
+  clock.getState(),
+  { nowMs: 94, cutoffMs: 8 },
+);
 assert.equal(assignedCurrent.scheduledFrameId, 2, 'intent before cutoff executes on current frame');
-assert.equal(assignedLate.scheduledFrameId, getNextExecutableFrame(clock.getState()), 'late intent moves to next executable frame');
+assert.equal(
+  assignedLate.scheduledFrameId,
+  getNextExecutableFrame(clock.getState()),
+  'late intent moves to next executable frame',
+);
 assert.equal(classifyDrift(21), 'warning', 'drift classification detects warning threshold');
-assert.equal(summarizeFrameDrift({ renderDriftMs: 0, audioDriftMs: 55, videoDriftMs: 0, outputDriftMs: 0 }).worst.severity, 'degraded', 'frame drift summary reports worst severity');
-assert.equal(createDriftWarning('renderDriftMs', 101)?.includes('CRITICAL'), true, 'drift warning includes severity');
+assert.equal(
+  summarizeFrameDrift({ renderDriftMs: 0, audioDriftMs: 55, videoDriftMs: 0, outputDriftMs: 0 })
+    .worst.severity,
+  'degraded',
+  'frame drift summary reports worst severity',
+);
+assert.equal(
+  createDriftWarning('renderDriftMs', 101)?.includes('CRITICAL'),
+  true,
+  'drift warning includes severity',
+);
 assertNoIndependentSubsystemClock({ frameId: 2, frameTimestamp: 67 });
-
 
 const bus = new MediaSyncBus();
 const schedulerClock = createClock({ frameRate: 60, now: () => mockNow });
 const syncStore = new MediaSyncStore(schedulerClock);
 const frameScheduler = new FrameScheduler(schedulerClock, bus);
 let scheduledTick: FrameTickEvent | undefined;
-frameScheduler.onTick((tick) => { scheduledTick = tick; syncStore.recordTick(tick); frameScheduler.stop(); });
+frameScheduler.onTick((tick) => {
+  scheduledTick = tick;
+  syncStore.recordTick(tick);
+  frameScheduler.stop();
+});
 frameScheduler.start();
 await new Promise((resolve) => setTimeout(resolve, 5));
 assert.equal(scheduledTick?.frameId, 0, 'frame scheduler emits deterministic initial frame');
-assert.equal(bus.listEvents().some((event) => event.type === 'FRAME_TICK'), true, 'sync bus records frame ticks');
-assert.equal(syncStore.getState().syncHealthSummary.currentFrame, 0, 'sync store exposes health summary');
+assert.equal(
+  bus.listEvents().some((event) => event.type === 'FRAME_TICK'),
+  true,
+  'sync bus records frame ticks',
+);
+assert.equal(
+  syncStore.getState().syncHealthSummary.currentFrame,
+  0,
+  'sync store exposes health summary',
+);
 
 const monitor = new SyncDriftMonitor(bus, 5);
 monitor.record({ renderDriftMs: 6, audioDriftMs: 0, videoDriftMs: 0, outputDriftMs: 0 });
-assert.equal(bus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'), true, 'drift detection emits event');
+assert.equal(
+  bus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'),
+  true,
+  'drift detection emits event',
+);
 monitor.reset();
 assert.equal(monitor.getHistory().length, 0, 'drift stats reset');
 
@@ -1318,20 +2108,68 @@ const syncEngine = new MediaExecutionEngine(new ExecutionLogStore());
 const syncAdapter = new MockMediaExecutionAdapter({ latencyMs: 0 });
 syncEngine.registerAdapter(syncAdapter);
 syncEngine.setExecutionRuntimeMode('mock_live');
-const frameResults = await syncEngine.executeFrameSync({ frameId: 10, timestamp: 333, broadcastTime: 333, expectedNextFrameTime: 366, jitterEstimate: 0 }, recordingTransition.nextGraph, [
-  { id: 'b-render', type: 'RENDER_FRAME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 4, payload: {} },
-  { id: 'a-video', type: 'ROUTE_PROGRAM_VIDEO', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 4, payload: {} },
-]);
+const frameResults = await syncEngine.executeFrameSync(
+  {
+    frameId: 10,
+    timestamp: 333,
+    broadcastTime: 333,
+    expectedNextFrameTime: 366,
+    jitterEstimate: 0,
+  },
+  recordingTransition.nextGraph,
+  [
+    {
+      id: 'b-render',
+      type: 'RENDER_FRAME',
+      timestamp: '2026-07-01T00:00:00.000Z',
+      graphRevision: 4,
+      payload: {},
+    },
+    {
+      id: 'a-video',
+      type: 'ROUTE_PROGRAM_VIDEO',
+      timestamp: '2026-07-01T00:00:00.000Z',
+      graphRevision: 4,
+      payload: {},
+    },
+  ],
+);
 assert.equal(frameResults.length, 2, 'frame sync executes pending intents');
-assert.equal(syncAdapter.getLoggedIntents()[0]?.type, 'ROUTE_PROGRAM_VIDEO', 'frame sync execution order is deterministic');
-assert.equal(syncAdapter.getLoggedIntents()[0]?.payload.frameId, 10, 'frame sync attaches frame metadata');
+assert.equal(
+  syncAdapter.getLoggedIntents()[0]?.type,
+  'ROUTE_PROGRAM_VIDEO',
+  'frame sync execution order is deterministic',
+);
+assert.equal(
+  syncAdapter.getLoggedIntents()[0]?.payload.frameId,
+  10,
+  'frame sync attaches frame metadata',
+);
 
 const syncRenderer = new BrowserMediaRenderer();
 assert.equal(syncRenderer.getStats().frameCount, 0, 'renderer does not render before frame tick');
-syncRenderer.renderFrame({ frameId: 12, timestamp: 400, broadcastTime: 400, expectedNextFrameTime: 433, jitterEstimate: 0 });
-assert.equal(syncRenderer.getStats().frameCount, 0, 'manual frame tick render avoids free-running scheduler stats without canvas');
-assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'false' }), false, 'feature flag disables sync layer safely');
-assert.equal(isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'true' }), true, 'feature flag enables sync layer');
+syncRenderer.renderFrame({
+  frameId: 12,
+  timestamp: 400,
+  broadcastTime: 400,
+  expectedNextFrameTime: 433,
+  jitterEstimate: 0,
+});
+assert.equal(
+  syncRenderer.getStats().frameCount,
+  0,
+  'manual frame tick render avoids free-running scheduler stats without canvas',
+);
+assert.equal(
+  isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'false' }),
+  false,
+  'feature flag disables sync layer safely',
+);
+assert.equal(
+  isMediaSyncEnabled({ NEXT_PUBLIC_UBOS_MEDIA_SYNC: 'true' }),
+  true,
+  'feature flag enables sync layer',
+);
 
 const orchestrationClock = createClock({ frameRate: 30, now: () => 0 });
 orchestrationClock.startClock();
@@ -1372,21 +2210,55 @@ const repeatedPlan = orchestration.planFrame(
     intents: orchestrationPlan.orderedExecutionSteps,
     edges: [{ from: 'orch-video', to: 'orch-render' }],
   },
-  { frameTimestamp: orchestrationPlan.frameTimestamp, elapsedTime: orchestrationClock.getState().elapsedTime },
+  {
+    frameTimestamp: orchestrationPlan.frameTimestamp,
+    elapsedTime: orchestrationClock.getState().elapsedTime,
+  },
   { video: 'ready', audio: 'ready', render: 'ready', output: 'ready', sync: 'ready' },
 );
-assert.deepEqual(repeatedPlan, orchestrationPlan, 'same media intent graph and clock tick produce the same frame plan');
+assert.deepEqual(
+  repeatedPlan,
+  orchestrationPlan,
+  'same media intent graph and clock tick produce the same frame plan',
+);
 assertFramePlanHasFrameIdentity(orchestrationPlan);
-const mockExecutionResults = await engine.executeMediaFramePlan(orchestrationPlan, transition.nextGraph);
+const mockExecutionResults = await engine.executeMediaFramePlan(
+  orchestrationPlan,
+  transition.nextGraph,
+);
 assert.equal(mockExecutionResults.length, 2, 'execution engine executes orchestration frame plans');
 assert.equal(
-  orchestration.getDiagnostics().events.some((event) => event.type === 'ORCHESTRATION_PLAN_CREATED'),
+  orchestration
+    .getDiagnostics()
+    .events.some((event) => event.type === 'ORCHESTRATION_PLAN_CREATED'),
   true,
   'orchestration emits planning events without execution events',
 );
 const cycleOrchestration = new MediaOrchestrationEngine(orchestrationClock);
-cycleOrchestration.submitIntent({ id: 'cycle-a', type: 'video', executionType: 'ROUTE_PROGRAM_VIDEO', sourceGraphRevision: 1, dependencies: ['cycle-b'], priority: 0, targetSubsystem: 'video', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' });
-cycleOrchestration.submitIntent({ id: 'cycle-b', type: 'audio', executionType: 'BUILD_AUDIO_ROUTE_PLAN', sourceGraphRevision: 1, dependencies: ['cycle-a'], priority: 0, targetSubsystem: 'audio', payload: {}, timingConstraint: {}, submittedAt: '2026-07-01T00:00:00.000Z' });
+cycleOrchestration.submitIntent({
+  id: 'cycle-a',
+  type: 'video',
+  executionType: 'ROUTE_PROGRAM_VIDEO',
+  sourceGraphRevision: 1,
+  dependencies: ['cycle-b'],
+  priority: 0,
+  targetSubsystem: 'video',
+  payload: {},
+  timingConstraint: {},
+  submittedAt: '2026-07-01T00:00:00.000Z',
+});
+cycleOrchestration.submitIntent({
+  id: 'cycle-b',
+  type: 'audio',
+  executionType: 'BUILD_AUDIO_ROUTE_PLAN',
+  sourceGraphRevision: 1,
+  dependencies: ['cycle-a'],
+  priority: 0,
+  targetSubsystem: 'audio',
+  payload: {},
+  timingConstraint: {},
+  submittedAt: '2026-07-01T00:00:00.000Z',
+});
 cycleOrchestration.resolveIntentGraph();
 assert.equal(
   cycleOrchestration.detectConflicts().some((conflict) => conflict.type === 'circular_dependency'),
@@ -1394,237 +2266,1057 @@ assert.equal(
   'orchestration detects circular dependencies',
 );
 
-
-const webRTCPlan = createWebRTCTransportPlan({ sessionId: 'test-session', role: 'host', graphRevision: 8, env: {}, iceServers: [{ kind: 'turn', urls: ['turn:turn.example.invalid'], username: 'placeholder-user', credential: 'super-secret' }] });
+const webRTCPlan = createWebRTCTransportPlan({
+  sessionId: 'test-session',
+  role: 'host',
+  graphRevision: 8,
+  env: {},
+  iceServers: [
+    {
+      kind: 'turn',
+      urls: ['turn:turn.example.invalid'],
+      username: 'placeholder-user',
+      credential: 'super-secret',
+    },
+  ],
+});
 assert.equal(webRTCPlan.enabled, false, 'disabled WebRTC runtime creates metadata-only plan');
-assert.equal(validateWebRTCTransportPlan(webRTCPlan).valid, true, 'WebRTC transport plan validates');
+assert.equal(
+  validateWebRTCTransportPlan(webRTCPlan).valid,
+  true,
+  'WebRTC transport plan validates',
+);
 let webRTCSession = createWebRTCSession(webRTCPlan);
 assert.equal(webRTCSession.status, 'idle', 'disabled WebRTC session remains idle');
 const webRTCPeer = createWebRTCPeer({ id: 'peer-1', role: 'guest' });
 webRTCSession = addWebRTCPeer(webRTCSession, webRTCPeer);
 assert.equal(webRTCSession.peers.length, 1, 'WebRTC peer add works');
-webRTCSession = updateWebRTCPeerState(webRTCSession, 'peer-1', 'connected', { iceState: 'connected', signalingState: 'stable' });
+webRTCSession = updateWebRTCPeerState(webRTCSession, 'peer-1', 'connected', {
+  iceState: 'connected',
+  signalingState: 'stable',
+});
 assert.equal(webRTCSession.peers[0]?.connectionState, 'connected', 'WebRTC peer update works');
-const trackRef = createWebRTCMediaTrackRef({ peerId: 'peer-1', trackId: 'track-audio', kind: 'audio', sourceId: 'guest-source', guestId: 'guest-1', muted: false, enabled: true, connectionState: 'connected', frameId: 1, graphRevision: 8 });
+const trackRef = createWebRTCMediaTrackRef({
+  peerId: 'peer-1',
+  trackId: 'track-audio',
+  kind: 'audio',
+  sourceId: 'guest-source',
+  guestId: 'guest-1',
+  muted: false,
+  enabled: true,
+  connectionState: 'connected',
+  frameId: 1,
+  graphRevision: 8,
+});
 webRTCSession = { ...webRTCSession, remoteTrackRefs: [trackRef] };
-assert.equal(summarizeWebRTCHealth(webRTCSession).connectedPeers, 1, 'WebRTC health summary counts connected peers');
-assert.equal(createWebRTCManifest(webRTCSession).trackRefs[0]?.trackId, 'track-audio', 'WebRTC manifest stores track metadata refs');
-assert.equal(validateWebRTCSignalMessage({ id: 'sig-1', type: 'offer', sessionId: 'test-session', peerId: 'peer-1', timestamp: '2026-07-01T00:00:00.000Z', payload: { description: { type: 'offer' } } }).valid, true, 'WebRTC signal message validates');
-assert.equal(JSON.stringify(redactWebRTCDiagnostics(webRTCPlan)).includes('super-secret'), false, 'WebRTC TURN credentials are redacted');
-assert.equal(createPeerConnection({ env: { UBOS_ENABLE_WEBRTC_RUNTIME: 'true' } }).errors[0], 'RTCPeerConnection unavailable', 'WebRTC browser API unavailable returns structured error');
-assert.equal(mapWebRTCErrorToFailure({ message: 'ICE disconnected' }).classification, 'ice', 'WebRTC failure mapping classifies ICE errors');
-assert.equal(isRealWebRTCEnabled({ UBOS_ENABLE_REAL_WEBRTC: 'true' }), true, 'Phase 9.4 real WebRTC flag enables runtime');
-assert.equal(isRealWebRTCEnabled({ NEXT_PUBLIC_UBOS_REAL_WEBRTC: 'true' }), true, 'Phase 9.4 public real WebRTC flag enables browser runtime');
-assert.equal(createOfferMetadata({ sessionId: 'test-session', peerId: 'peer-1', revision: 8 }).redacted, true, 'WebRTC offer metadata is redacted');
-assert.equal(createAnswerMetadata({ sessionId: 'test-session', peerId: 'peer-1', revision: 8 }).description?.type, 'answer', 'WebRTC answer metadata is metadata-only');
-assert.equal(createIceMetadata({ sessionId: 'test-session', peerId: 'peer-1', protocol: 'udp' }).redacted, true, 'WebRTC ICE metadata redacts candidates');
-assert.equal(validateWebRTCSignalingMetadata({ id: 'bad-sdp', type: 'offer', sessionId: 'test-session', peerId: 'peer-1', timestamp: '2026-07-01T00:00:00.000Z', payload: { description: 'v=0\r\na=sendrecv' } }, ['peer-1']).valid, false, 'WebRTC signaling validator rejects raw SDP injection');
-assert.equal(validateWebRTCSignalingMetadata({ id: 'bad-peer', type: 'peer_joined', sessionId: 'test-session', peerId: '../../bad', timestamp: '2026-07-01T00:00:00.000Z', payload: {} }).valid, false, 'WebRTC signaling validator rejects invalid peer IDs');
-assert.equal(calculateBackpressure({ activeNegotiations: 2, maxConcurrentNegotiations: 2 }).throttled, true, 'WebRTC backpressure limits concurrent negotiations');
-assert.equal(summarizeConnectionQuality(collectWebRTCStatistics({ bitrateKbps: 2500, latencyMs: 50, packetLossRatio: 0.01 })), 'healthy', 'WebRTC statistics summarize healthy connection quality');
-assert.equal(planWebRTCRecovery({ sessionId: 'test-session', peerId: 'peer-1', reason: 'ICE disconnected', attempt: 2 }).action, 'ice_restart', 'WebRTC recovery maps ICE failures to ICE restart');
+assert.equal(
+  summarizeWebRTCHealth(webRTCSession).connectedPeers,
+  1,
+  'WebRTC health summary counts connected peers',
+);
+assert.equal(
+  createWebRTCManifest(webRTCSession).trackRefs[0]?.trackId,
+  'track-audio',
+  'WebRTC manifest stores track metadata refs',
+);
+assert.equal(
+  validateWebRTCSignalMessage({
+    id: 'sig-1',
+    type: 'offer',
+    sessionId: 'test-session',
+    peerId: 'peer-1',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    payload: { description: { type: 'offer' } },
+  }).valid,
+  true,
+  'WebRTC signal message validates',
+);
+assert.equal(
+  JSON.stringify(redactWebRTCDiagnostics(webRTCPlan)).includes('super-secret'),
+  false,
+  'WebRTC TURN credentials are redacted',
+);
+assert.equal(
+  createPeerConnection({ env: { UBOS_ENABLE_WEBRTC_RUNTIME: 'true' } }).errors[0],
+  'RTCPeerConnection unavailable',
+  'WebRTC browser API unavailable returns structured error',
+);
+assert.equal(
+  mapWebRTCErrorToFailure({ message: 'ICE disconnected' }).classification,
+  'ice',
+  'WebRTC failure mapping classifies ICE errors',
+);
+assert.equal(
+  isRealWebRTCEnabled({ UBOS_ENABLE_REAL_WEBRTC: 'true' }),
+  true,
+  'Phase 9.4 real WebRTC flag enables runtime',
+);
+assert.equal(
+  isRealWebRTCEnabled({ NEXT_PUBLIC_UBOS_REAL_WEBRTC: 'true' }),
+  true,
+  'Phase 9.4 public real WebRTC flag enables browser runtime',
+);
+assert.equal(
+  createOfferMetadata({ sessionId: 'test-session', peerId: 'peer-1', revision: 8 }).redacted,
+  true,
+  'WebRTC offer metadata is redacted',
+);
+assert.equal(
+  createAnswerMetadata({ sessionId: 'test-session', peerId: 'peer-1', revision: 8 }).description
+    ?.type,
+  'answer',
+  'WebRTC answer metadata is metadata-only',
+);
+assert.equal(
+  createIceMetadata({ sessionId: 'test-session', peerId: 'peer-1', protocol: 'udp' }).redacted,
+  true,
+  'WebRTC ICE metadata redacts candidates',
+);
+assert.equal(
+  validateWebRTCSignalingMetadata(
+    {
+      id: 'bad-sdp',
+      type: 'offer',
+      sessionId: 'test-session',
+      peerId: 'peer-1',
+      timestamp: '2026-07-01T00:00:00.000Z',
+      payload: { description: 'v=0\r\na=sendrecv' },
+    },
+    ['peer-1'],
+  ).valid,
+  false,
+  'WebRTC signaling validator rejects raw SDP injection',
+);
+assert.equal(
+  validateWebRTCSignalingMetadata({
+    id: 'bad-peer',
+    type: 'peer_joined',
+    sessionId: 'test-session',
+    peerId: '../../bad',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    payload: {},
+  }).valid,
+  false,
+  'WebRTC signaling validator rejects invalid peer IDs',
+);
+assert.equal(
+  calculateBackpressure({ activeNegotiations: 2, maxConcurrentNegotiations: 2 }).throttled,
+  true,
+  'WebRTC backpressure limits concurrent negotiations',
+);
+assert.equal(
+  summarizeConnectionQuality(
+    collectWebRTCStatistics({ bitrateKbps: 2500, latencyMs: 50, packetLossRatio: 0.01 }),
+  ),
+  'healthy',
+  'WebRTC statistics summarize healthy connection quality',
+);
+assert.equal(
+  planWebRTCRecovery({
+    sessionId: 'test-session',
+    peerId: 'peer-1',
+    reason: 'ICE disconnected',
+    attempt: 2,
+  }).action,
+  'ice_restart',
+  'WebRTC recovery maps ICE failures to ICE restart',
+);
 const pcManager = new PeerConnectionManager();
 pcManager.create('peer-1', { env: {} });
-assert.equal(pcManager.close('peer-1').success, true, 'PeerConnectionManager owns and disposes runtime handles');
+assert.equal(
+  pcManager.close('peer-1').success,
+  true,
+  'PeerConnectionManager owns and disposes runtime handles',
+);
 const trackManager = new MediaTrackManager();
-const mutedSession = trackManager.mute({ ...webRTCSession, localTrackRefs: [trackRef] }, 'track-audio', true);
-assert.equal(mutedSession.localTrackRefs[0]?.muted, true, 'MediaTrackManager supports mute lifecycle');
+const mutedSession = trackManager.mute(
+  { ...webRTCSession, localTrackRefs: [trackRef] },
+  'track-audio',
+  true,
+);
+assert.equal(
+  mutedSession.localTrackRefs[0]?.muted,
+  true,
+  'MediaTrackManager supports mute lifecycle',
+);
 const iceManager = new ICEManager();
-assert.equal(iceManager.queueRestart('peer-1').queuedIceRestarts, 1, 'ICEManager queues ICE restarts for backpressure');
+assert.equal(
+  iceManager.queueRestart('peer-1').queuedIceRestarts,
+  1,
+  'ICEManager queues ICE restarts for backpressure',
+);
 const signalingManager = new SignalingManager();
-assert.equal(signalingManager.validate(signalingManager.createMessage({ type: 'peer_joined', sessionId: 'test-session', peerId: 'peer-1', payload: {} }), ['peer-1']).valid, true, 'SignalingManager validates session-owned metadata signals');
-assert.equal(new ConnectionHealth().summarize(webRTCSession, collectWebRTCStatistics({ latencyMs: 400 })).status, 'degraded', 'ConnectionHealth includes connection quality degradation');
-assert.equal(new WebRTCStatistics().collect({ reconnects: 2 }).reconnects, 2, 'WebRTCStatistics tracks reconnect counts');
-assert.equal(new WebRTCRecovery().plan({ sessionId: 'test-session', peerId: 'peer-1', reason: 'peer disconnected' }).notifySupervisor, true, 'WebRTCRecovery plans supervisor notification');
-assert.equal(new WebRTCValidator().validateSignal({ id: 'sig-owned', type: 'peer_joined', sessionId: 'test-session', peerId: 'peer-1', timestamp: '2026-07-01T00:00:00.000Z', payload: {} }, ['peer-1']).valid, true, 'WebRTCValidator validates peer ownership');
+assert.equal(
+  signalingManager.validate(
+    signalingManager.createMessage({
+      type: 'peer_joined',
+      sessionId: 'test-session',
+      peerId: 'peer-1',
+      payload: {},
+    }),
+    ['peer-1'],
+  ).valid,
+  true,
+  'SignalingManager validates session-owned metadata signals',
+);
+assert.equal(
+  new ConnectionHealth().summarize(webRTCSession, collectWebRTCStatistics({ latencyMs: 400 }))
+    .status,
+  'degraded',
+  'ConnectionHealth includes connection quality degradation',
+);
+assert.equal(
+  new WebRTCStatistics().collect({ reconnects: 2 }).reconnects,
+  2,
+  'WebRTCStatistics tracks reconnect counts',
+);
+assert.equal(
+  new WebRTCRecovery().plan({
+    sessionId: 'test-session',
+    peerId: 'peer-1',
+    reason: 'peer disconnected',
+  }).notifySupervisor,
+  true,
+  'WebRTCRecovery plans supervisor notification',
+);
+assert.equal(
+  new WebRTCValidator().validateSignal(
+    {
+      id: 'sig-owned',
+      type: 'peer_joined',
+      sessionId: 'test-session',
+      peerId: 'peer-1',
+      timestamp: '2026-07-01T00:00:00.000Z',
+      payload: {},
+    },
+    ['peer-1'],
+  ).valid,
+  true,
+  'WebRTCValidator validates peer ownership',
+);
 const sessionManager = new WebRTCSessionManager(webRTCPlan);
-assert.equal(sessionManager.addPeer(createWebRTCPeer({ id: 'producer-1', role: 'producer' })).peers[0]?.role, 'producer', 'WebRTCSessionManager supports producer peers');
+assert.equal(
+  sessionManager.addPeer(createWebRTCPeer({ id: 'producer-1', role: 'producer' })).peers[0]?.role,
+  'producer',
+  'WebRTCSessionManager supports producer peers',
+);
 const realRuntime = new RealWebRTCRuntime();
-assert.equal(realRuntime.offer('test-session', 'peer-1').type, 'offer', 'RealWebRTCRuntime creates offer metadata without storing SDP');
-assert.equal(JSON.stringify(createWebRTCManifest(webRTCSession)).includes('RTCPeerConnection'), false, 'WebRTC graph/replay metadata excludes peer connections');
+assert.equal(
+  realRuntime.offer('test-session', 'peer-1').type,
+  'offer',
+  'RealWebRTCRuntime creates offer metadata without storing SDP',
+);
+assert.equal(
+  JSON.stringify(createWebRTCManifest(webRTCSession)).includes('RTCPeerConnection'),
+  false,
+  'WebRTC graph/replay metadata excludes peer connections',
+);
 webRTCSession = removeWebRTCPeer(webRTCSession, 'peer-1');
 assert.equal(webRTCSession.peers.length, 0, 'WebRTC peer remove works');
 const webRTCMock = new MockMediaExecutionAdapter();
-const webRTCMockResult = webRTCMock.execute({ id: 'webrtc-intent', type: 'ADD_WEBRTC_PEER', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: recordingTransition.nextGraph.metadata.revision, payload: { peerId: 'guest-peer', peerRole: 'guest' } }, recordingTransition.nextGraph);
+const webRTCMockResult = webRTCMock.execute(
+  {
+    id: 'webrtc-intent',
+    type: 'ADD_WEBRTC_PEER',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: recordingTransition.nextGraph.metadata.revision,
+    payload: { peerId: 'guest-peer', peerRole: 'guest' },
+  },
+  recordingTransition.nextGraph,
+);
 assert.equal(webRTCMockResult.success, true, 'mock adapter handles WebRTC execution intent');
-assert.equal(webRTCMock.getWebRTCSession()?.peers.length, 1, 'mock WebRTC execution preserves metadata-only session');
+assert.equal(
+  webRTCMock.getWebRTCSession()?.peers.length,
+  1,
+  'mock WebRTC execution preserves metadata-only session',
+);
 
-const brSurface = createRenderSurface({ id: 'surface-program', target: 'Program', graphRevision: 42 });
+const brSurface = createRenderSurface({
+  id: 'surface-program',
+  target: 'Program',
+  graphRevision: 42,
+});
 assert.equal(brSurface.status, 'planned', 'browser renderer surface creation is metadata only');
-const brLayer = createRenderLayer({ id: 'layer-logo', kind: 'Logo', surfaceId: brSurface.id, layout: { left: 10, top: 10 } });
+const brLayer = createRenderLayer({
+  id: 'layer-logo',
+  kind: 'Logo',
+  surfaceId: brSurface.id,
+  layout: { left: 10, top: 10 },
+});
 assert.equal(brLayer.kind, 'Logo', 'browser renderer layer creation supports declared layer kinds');
-const brPass = createRenderPass({ id: 'pass-1', sessionId: 'session-1', frameId: 7, graphRevision: 42, executionBatchId: 'batch-1', surfaceIds: [brSurface.id], layerIds: [brLayer.id] });
-assert.equal(brPass.executionBatchId, 'batch-1', 'browser render pass carries timing batch identity');
-const brPlan = createBrowserRendererPlan({ graphRevision: 42, executionBatchId: 'batch-1', frameId: 7, surfaces: [brSurface], layers: [brLayer], passes: [brPass], layoutMetadata: { layoutId: 'layout-main' }, sceneMetadata: { activeSceneId: 'scene-a' } });
-assert.equal(validateBrowserRendererPlan(brPlan).valid, true, 'browser renderer plan validation accepts valid metadata plans');
-assert.equal(brPlan.replayMetadata['storesDom'], false, 'browser renderer replay metadata never stores DOM');
-const badPlan = createBrowserRendererPlan({ graphRevision: 42, executionBatchId: 'batch-1', frameId: 7, surfaces: [brSurface], layers: [createRenderLayer({ id: 'bad-layer', kind: 'Video', surfaceId: 'missing' })] });
-assert.equal(validateBrowserRendererPlan(badPlan).valid, false, 'browser renderer plan validation rejects missing surfaces');
+const brPass = createRenderPass({
+  id: 'pass-1',
+  sessionId: 'session-1',
+  frameId: 7,
+  graphRevision: 42,
+  executionBatchId: 'batch-1',
+  surfaceIds: [brSurface.id],
+  layerIds: [brLayer.id],
+});
+assert.equal(
+  brPass.executionBatchId,
+  'batch-1',
+  'browser render pass carries timing batch identity',
+);
+const brPlan = createBrowserRendererPlan({
+  graphRevision: 42,
+  executionBatchId: 'batch-1',
+  frameId: 7,
+  surfaces: [brSurface],
+  layers: [brLayer],
+  passes: [brPass],
+  layoutMetadata: { layoutId: 'layout-main' },
+  sceneMetadata: { activeSceneId: 'scene-a' },
+});
+assert.equal(
+  validateBrowserRendererPlan(brPlan).valid,
+  true,
+  'browser renderer plan validation accepts valid metadata plans',
+);
+assert.equal(
+  brPlan.replayMetadata['storesDom'],
+  false,
+  'browser renderer replay metadata never stores DOM',
+);
+const badPlan = createBrowserRendererPlan({
+  graphRevision: 42,
+  executionBatchId: 'batch-1',
+  frameId: 7,
+  surfaces: [brSurface],
+  layers: [createRenderLayer({ id: 'bad-layer', kind: 'Video', surfaceId: 'missing' })],
+});
+assert.equal(
+  validateBrowserRendererPlan(badPlan).valid,
+  false,
+  'browser renderer plan validation rejects missing surfaces',
+);
 const unavailableSession = createBrowserRendererSession(brPlan, {});
-assert.equal(unavailableSession.state, 'unavailable', 'browser renderer defaults to metadata mock behavior when disabled');
-const enabledSession = createBrowserRendererSession(brPlan, { NEXT_PUBLIC_UBOS_BROWSER_RENDERER: 'true' });
-assert.equal(enabledSession.state, 'planned', 'browser renderer session enters planned state when enabled');
-const updatedSession = updateRenderLayer(enabledSession, createRenderLayer({ id: 'layer-ticker', kind: 'Ticker', surfaceId: brSurface.id }));
-assert.equal(updatedSession.backpressure.queuedUpdates, 1, 'browser renderer exposes queued update backpressure metadata');
-assert.equal(removeRenderLayer(updatedSession, 'layer-ticker').layers.some((layer) => layer.id === 'layer-ticker'), false, 'browser renderer removes layer metadata only');
-const rendererFailure = mapRendererFailure({ kind: 'render_timeout', message: 'render timed out', frameId: 7, graphRevision: 42 });
-assert.equal(rendererFailure.ubosFailure.category, 'RENDERER_FAILURE', 'browser renderer failure maps into UBOS failure model');
-const brHealth = summarizeBrowserRendererHealth({ ...enabledSession, failures: [rendererFailure], backpressure: { renderLatencyMs: 45, missedFrames: 2, queuedUpdates: 3, renderBacklog: 1, slowLayout: true, degradedRendering: true, degradedModes: ['reduce_preview_updates', 'pause_diagnostics'] } });
-assert.equal(brHealth.status, 'degraded', 'browser renderer health summarizes degraded backpressure');
-assert.equal(summarizeRendererHealth(brHealth).includes('Browser renderer degraded'), true, 'browser renderer compact health summary works');
+assert.equal(
+  unavailableSession.state,
+  'unavailable',
+  'browser renderer defaults to metadata mock behavior when disabled',
+);
+const enabledSession = createBrowserRendererSession(brPlan, {
+  NEXT_PUBLIC_UBOS_BROWSER_RENDERER: 'true',
+});
+assert.equal(
+  enabledSession.state,
+  'planned',
+  'browser renderer session enters planned state when enabled',
+);
+const updatedSession = updateRenderLayer(
+  enabledSession,
+  createRenderLayer({ id: 'layer-ticker', kind: 'Ticker', surfaceId: brSurface.id }),
+);
+assert.equal(
+  updatedSession.backpressure.queuedUpdates,
+  1,
+  'browser renderer exposes queued update backpressure metadata',
+);
+assert.equal(
+  removeRenderLayer(updatedSession, 'layer-ticker').layers.some(
+    (layer) => layer.id === 'layer-ticker',
+  ),
+  false,
+  'browser renderer removes layer metadata only',
+);
+const rendererFailure = mapRendererFailure({
+  kind: 'render_timeout',
+  message: 'render timed out',
+  frameId: 7,
+  graphRevision: 42,
+});
+assert.equal(
+  rendererFailure.ubosFailure.category,
+  'RENDERER_FAILURE',
+  'browser renderer failure maps into UBOS failure model',
+);
+const brHealth = summarizeBrowserRendererHealth({
+  ...enabledSession,
+  failures: [rendererFailure],
+  backpressure: {
+    renderLatencyMs: 45,
+    missedFrames: 2,
+    queuedUpdates: 3,
+    renderBacklog: 1,
+    slowLayout: true,
+    degradedRendering: true,
+    degradedModes: ['reduce_preview_updates', 'pause_diagnostics'],
+  },
+});
+assert.equal(
+  brHealth.status,
+  'degraded',
+  'browser renderer health summarizes degraded backpressure',
+);
+assert.equal(
+  summarizeRendererHealth(brHealth).includes('Browser renderer degraded'),
+  true,
+  'browser renderer compact health summary works',
+);
 const brManifest = createRendererManifest(enabledSession, { UBOS_ENABLE_BROWSER_RENDERER: 'true' });
-assert.equal(brManifest.capabilities.supportsGpu, false, 'browser renderer manifest does not introduce GPU rendering');
-assert.equal(brManifest.diagnostics.featureFlags.UBOS_ENABLE_BROWSER_RENDERER, true, 'browser renderer diagnostics expose feature flags');
+assert.equal(
+  brManifest.capabilities.supportsGpu,
+  false,
+  'browser renderer manifest does not introduce GPU rendering',
+);
+assert.equal(
+  brManifest.diagnostics.featureFlags.UBOS_ENABLE_BROWSER_RENDERER,
+  true,
+  'browser renderer diagnostics expose feature flags',
+);
 const redactedDiagnostics = redactRendererDiagnostics(brManifest.diagnostics);
-assert.equal(redactedDiagnostics.renderSurfaces[0]?.metadata['redacted'], true, 'browser renderer diagnostics redacts surface metadata');
-assert.equal(createHTMLElement('div'), undefined, 'browser renderer is Node compatible when DOM is unavailable');
+assert.equal(
+  redactedDiagnostics.renderSurfaces[0]?.metadata['redacted'],
+  true,
+  'browser renderer diagnostics redacts surface metadata',
+);
+assert.equal(
+  createHTMLElement('div'),
+  undefined,
+  'browser renderer is Node compatible when DOM is unavailable',
+);
 const frameToken = requestBrowserFrame(() => undefined);
 cancelBrowserFrame(frameToken);
-assert.equal(typeof frameToken, 'number', 'browser renderer mock frame request works without browser RAF');
-assert.equal(JSON.stringify(brPlan).includes('HTMLElement'), false, 'browser renderer graph plan stores no DOM elements');
-assert.equal(JSON.stringify(brPlan).includes('MediaStream'), false, 'browser renderer graph plan stores no media streams');
+assert.equal(
+  typeof frameToken,
+  'number',
+  'browser renderer mock frame request works without browser RAF',
+);
+assert.equal(
+  JSON.stringify(brPlan).includes('HTMLElement'),
+  false,
+  'browser renderer graph plan stores no DOM elements',
+);
+assert.equal(
+  JSON.stringify(brPlan).includes('MediaStream'),
+  false,
+  'browser renderer graph plan stores no media streams',
+);
 
-
-
-
-const ffmpegRuntimeCommand = buildCommand({ executable: 'ffmpeg', args: ['-hide_banner', '-nostdin', '-f', 'lavfi', '-i', 'testsrc2=size=16x16:rate=1', '-t', '0.1', '-f', 'null', '-'], outputs: ['-'], metadata: { graphRevision: 55 } });
-assert.equal(ffmpegRuntimeCommand.args.includes('-nostdin'), true, 'real FFmpeg runtime command generation uses argument arrays');
-assert.equal(validateExecutable('../ffmpeg').valid, false, 'real FFmpeg runtime rejects path traversal executables');
-try { buildCommand({ executable: 'ffmpeg', args: ['-i', 'safe', ';rm -rf /'] }); throw new Error('unsafe arg accepted'); } catch (error) { assert.equal(String(error).includes('unsafe'), true, 'real FFmpeg runtime rejects shell injection arguments'); }
-assert.equal(locateFFmpeg({ UBOS_FFMPEG_PATH: '/usr/bin/ffmpeg' }), '/usr/bin/ffmpeg', 'real FFmpeg runtime locates configured executable');
-const ffmpegRuntime = createFFmpegRuntime({ env: {}, featureFlags: { UBOS_ENABLE_REAL_FFMPEG: false, NEXT_PUBLIC_UBOS_REAL_FFMPEG: false } });
+const ffmpegRuntimeCommand = buildCommand({
+  executable: 'ffmpeg',
+  args: [
+    '-hide_banner',
+    '-nostdin',
+    '-f',
+    'lavfi',
+    '-i',
+    'testsrc2=size=16x16:rate=1',
+    '-t',
+    '0.1',
+    '-f',
+    'null',
+    '-',
+  ],
+  outputs: ['-'],
+  metadata: { graphRevision: 55 },
+});
+assert.equal(
+  ffmpegRuntimeCommand.args.includes('-nostdin'),
+  true,
+  'real FFmpeg runtime command generation uses argument arrays',
+);
+assert.equal(
+  validateExecutable('../ffmpeg').valid,
+  false,
+  'real FFmpeg runtime rejects path traversal executables',
+);
+try {
+  buildCommand({ executable: 'ffmpeg', args: ['-i', 'safe', ';rm -rf /'] });
+  throw new Error('unsafe arg accepted');
+} catch (error) {
+  assert.equal(
+    String(error).includes('unsafe'),
+    true,
+    'real FFmpeg runtime rejects shell injection arguments',
+  );
+}
+assert.equal(
+  locateFFmpeg({ UBOS_FFMPEG_PATH: '/usr/bin/ffmpeg' }),
+  '/usr/bin/ffmpeg',
+  'real FFmpeg runtime locates configured executable',
+);
+const ffmpegRuntime = createFFmpegRuntime({
+  env: {},
+  featureFlags: { UBOS_ENABLE_REAL_FFMPEG: false, NEXT_PUBLIC_UBOS_REAL_FFMPEG: false },
+});
 const ffmpegMockProcess = await ffmpegRuntime.manager.start(ffmpegRuntimeCommand);
-assert.equal(ffmpegMockProcess.state, 'running', 'real FFmpeg runtime mock fallback preserves lifecycle without spawning');
-assert.equal(ffmpegRuntime.summarizeHealth().featureFlag, false, 'real FFmpeg runtime diagnostics expose disabled feature flag');
-assert.equal(summarizeFFmpegRuntimeStatistics(ffmpegMockProcess).lifecycleEvents.some((event) => JSON.stringify(event).includes('pid')), false, 'real FFmpeg runtime replay events omit PID');
+assert.equal(
+  ffmpegMockProcess.state,
+  'running',
+  'real FFmpeg runtime mock fallback preserves lifecycle without spawning',
+);
+assert.equal(
+  ffmpegRuntime.summarizeHealth().featureFlag,
+  false,
+  'real FFmpeg runtime diagnostics expose disabled feature flag',
+);
+assert.equal(
+  summarizeFFmpegRuntimeStatistics(ffmpegMockProcess).lifecycleEvents.some((event) =>
+    JSON.stringify(event).includes('pid'),
+  ),
+  false,
+  'real FFmpeg runtime replay events omit PID',
+);
 const ffmpegRestart = await ffmpegRuntime.manager.restart(ffmpegRuntimeCommand);
-assert.equal(ffmpegRestart.state, 'running', 'real FFmpeg runtime restart re-enters running lifecycle');
+assert.equal(
+  ffmpegRestart.state,
+  'running',
+  'real FFmpeg runtime restart re-enters running lifecycle',
+);
 const ffmpegStopped = await ffmpegRuntime.manager.stop();
 assert.equal(ffmpegStopped?.state, 'stopped', 'real FFmpeg runtime stop lifecycle works');
 const ffmpegFailure = mapFFmpegRuntimeFailure({ kind: 'spawn_failure', message: 'spawn failed' });
-assert.equal(ffmpegFailure.ubosFailure.subsystem, 'ffmpeg-runtime', 'real FFmpeg runtime failure maps into UBOS failure model');
-const ffmpegRuntimeHealth = summarizeFFmpegRuntimeHealth(ffmpegMockProcess, ffmpegRuntime.environment);
-assert.equal(ffmpegRuntimeHealth.queueDepth, 0, 'real FFmpeg runtime health reports backpressure queue depth');
+assert.equal(
+  ffmpegFailure.ubosFailure.subsystem,
+  'ffmpeg-runtime',
+  'real FFmpeg runtime failure maps into UBOS failure model',
+);
+const ffmpegRuntimeHealth = summarizeFFmpegRuntimeHealth(
+  ffmpegMockProcess,
+  ffmpegRuntime.environment,
+);
+assert.equal(
+  ffmpegRuntimeHealth.queueDepth,
+  0,
+  'real FFmpeg runtime health reports backpressure queue depth',
+);
 const ffmpegManifest = createFFmpegRuntimeManifest(ffmpegMockProcess, ffmpegRuntime.environment);
-assert.equal(ffmpegManifest.containsProcessHandles, false, 'real FFmpeg runtime manifest excludes process handles');
-assert.equal(ffmpegManifest.replayStoresStdout, false, 'real FFmpeg runtime manifest excludes stdout from replay');
+assert.equal(
+  ffmpegManifest.containsProcessHandles,
+  false,
+  'real FFmpeg runtime manifest excludes process handles',
+);
+assert.equal(
+  ffmpegManifest.replayStoresStdout,
+  false,
+  'real FFmpeg runtime manifest excludes stdout from replay',
+);
 const ffmpegCapabilities = await probeCapabilities('ffmpeg');
-assert.equal(ffmpegCapabilities.shellExecution, false, 'real FFmpeg runtime capabilities forbid shell execution');
+assert.equal(
+  ffmpegCapabilities.shellExecution,
+  false,
+  'real FFmpeg runtime capabilities forbid shell execution',
+);
 
-const productionRuntimeValidation = createProductionRuntime({ id: 'runtime-validation', latestFrameId: 101, latestGraphRevision: 55 });
-const runtimeSession = createProductionRuntimeSession({ runtimeId: productionRuntimeValidation.id, broadcastSessionId: 'test-session' });
+const productionRuntimeValidation = createProductionRuntime({
+  id: 'runtime-validation',
+  latestFrameId: 101,
+  latestGraphRevision: 55,
+});
+const runtimeSession = createProductionRuntimeSession({
+  runtimeId: productionRuntimeValidation.id,
+  broadcastSessionId: 'test-session',
+});
 assert.equal(runtimeSession.state, 'idle', 'production runtime session defaults to idle');
-const encoderSubsystem: RuntimeSubsystem = { id: 'encoder-subsystem', type: 'encoder', label: 'Encoder', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { pid: 10, safe: 'ok', ffmpegProcess: { unsafe: true } }, latestFrameId: 101, latestGraphRevision: 55 };
+const encoderSubsystem: RuntimeSubsystem = {
+  id: 'encoder-subsystem',
+  type: 'encoder',
+  label: 'Encoder',
+  required: true,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { pid: 10, safe: 'ok', ffmpegProcess: { unsafe: true } },
+  latestFrameId: 101,
+  latestGraphRevision: 55,
+};
 let supervisedRuntime = registerRuntimeSubsystem(productionRuntimeValidation, encoderSubsystem);
 assert.equal(supervisedRuntime.subsystems.length, 1, 'runtime subsystem registration works');
-assert.equal(JSON.stringify(supervisedRuntime.subsystems[0]?.diagnostics).includes('ffmpegProcess'), false, 'runtime diagnostics redacts process handles');
-assert.equal(startProductionRuntime(supervisedRuntime).runtimeState, 'running', 'production runtime starts');
-assert.equal(pauseProductionRuntime(supervisedRuntime).runtimeState, 'ready', 'production runtime pauses to ready');
-assert.equal(resumeProductionRuntime(supervisedRuntime).runtimeState, 'running', 'production runtime resumes');
-assert.equal(stopProductionRuntime(supervisedRuntime).runtimeState, 'stopped', 'production runtime stops');
-const optionalStreaming: RuntimeSubsystem = { id: 'streaming-subsystem', type: 'streaming', label: 'Streaming', required: false, state: 'degraded', health: 'degraded', degradedModes: ['output_disabled_mode'], diagnostics: { status: 'offline', streamHandle: 'unsafe' } };
+assert.equal(
+  JSON.stringify(supervisedRuntime.subsystems[0]?.diagnostics).includes('ffmpegProcess'),
+  false,
+  'runtime diagnostics redacts process handles',
+);
+assert.equal(
+  startProductionRuntime(supervisedRuntime).runtimeState,
+  'running',
+  'production runtime starts',
+);
+assert.equal(
+  pauseProductionRuntime(supervisedRuntime).runtimeState,
+  'ready',
+  'production runtime pauses to ready',
+);
+assert.equal(
+  resumeProductionRuntime(supervisedRuntime).runtimeState,
+  'running',
+  'production runtime resumes',
+);
+assert.equal(
+  stopProductionRuntime(supervisedRuntime).runtimeState,
+  'stopped',
+  'production runtime stops',
+);
+const optionalStreaming: RuntimeSubsystem = {
+  id: 'streaming-subsystem',
+  type: 'streaming',
+  label: 'Streaming',
+  required: false,
+  state: 'degraded',
+  health: 'degraded',
+  degradedModes: ['output_disabled_mode'],
+  diagnostics: { status: 'offline', streamHandle: 'unsafe' },
+};
 supervisedRuntime = registerRuntimeSubsystem(supervisedRuntime, optionalStreaming);
-assert.equal(summarizeProductionRuntimeHealth(supervisedRuntime).health, 'degraded', 'optional degraded subsystem degrades runtime health');
-assert.equal(summarizeProductionRuntimeHealth(supervisedRuntime).degradedModes[0], 'output_disabled_mode', 'runtime health reports degraded modes');
-const runtimeFailure = mapRuntimeFailure({ subsystem: optionalStreaming, message: 'stream offline', graphRevision: 55, frameId: 101 });
-assert.equal(runtimeFailure.ubosFailure.category, 'STREAMING_FAILURE', 'runtime failure maps to UBOS failure model');
-assert.equal(failRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem', 'stream offline').runtimeState, 'degraded', 'optional runtime subsystem failure is degraded');
-assert.equal(restartRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem').runtimeState, 'recovering', 'runtime subsystem restart enters recovering');
+assert.equal(
+  summarizeProductionRuntimeHealth(supervisedRuntime).health,
+  'degraded',
+  'optional degraded subsystem degrades runtime health',
+);
+assert.equal(
+  summarizeProductionRuntimeHealth(supervisedRuntime).degradedModes[0],
+  'output_disabled_mode',
+  'runtime health reports degraded modes',
+);
+const runtimeFailure = mapRuntimeFailure({
+  subsystem: optionalStreaming,
+  message: 'stream offline',
+  graphRevision: 55,
+  frameId: 101,
+});
+assert.equal(
+  runtimeFailure.ubosFailure.category,
+  'STREAMING_FAILURE',
+  'runtime failure maps to UBOS failure model',
+);
+assert.equal(
+  failRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem', 'stream offline').runtimeState,
+  'degraded',
+  'optional runtime subsystem failure is degraded',
+);
+assert.equal(
+  restartRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem').runtimeState,
+  'recovering',
+  'runtime subsystem restart enters recovering',
+);
 const productionRuntimeManifest = createProductionRuntimeManifest(supervisedRuntime);
-assert.equal(productionRuntimeManifest.containsRuntimeHandles, false, 'production runtime manifest declares no runtime handles');
-assert.equal(JSON.stringify(productionRuntimeManifest).includes('streamHandle'), false, 'production runtime manifest excludes handles');
-assert.equal(JSON.stringify(redactRuntimeDiagnostics({ mediaStream: 'unsafe', latestGraphRevision: 55, status: 'ok' })).includes('unsafe'), false, 'runtime diagnostics redaction removes media handles');
+assert.equal(
+  productionRuntimeManifest.containsRuntimeHandles,
+  false,
+  'production runtime manifest declares no runtime handles',
+);
+assert.equal(
+  JSON.stringify(productionRuntimeManifest).includes('streamHandle'),
+  false,
+  'production runtime manifest excludes handles',
+);
+assert.equal(
+  JSON.stringify(
+    redactRuntimeDiagnostics({ mediaStream: 'unsafe', latestGraphRevision: 55, status: 'ok' }),
+  ).includes('unsafe'),
+  false,
+  'runtime diagnostics redaction removes media handles',
+);
 supervisedRuntime = unregisterRuntimeSubsystem(supervisedRuntime, 'streaming-subsystem');
-assert.equal(supervisedRuntime.subsystems.some((subsystem) => subsystem.id === 'streaming-subsystem'), false, 'runtime subsystem unregister works');
+assert.equal(
+  supervisedRuntime.subsystems.some((subsystem) => subsystem.id === 'streaming-subsystem'),
+  false,
+  'runtime subsystem unregister works',
+);
 const supervisor = new RuntimeSupervisor(supervisedRuntime);
-const buildRuntimeResult = supervisor.handleIntent({ id: 'runtime-intent-build', type: 'BUILD_PRODUCTION_RUNTIME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 55, payload: {} });
+const buildRuntimeResult = supervisor.handleIntent({
+  id: 'runtime-intent-build',
+  type: 'BUILD_PRODUCTION_RUNTIME',
+  timestamp: '2026-07-01T00:00:00.000Z',
+  graphRevision: 55,
+  payload: {},
+});
 assert.equal(buildRuntimeResult.success, true, 'mock production runtime build intent handled');
-const reportRuntimeResult = supervisor.handleIntent({ id: 'runtime-intent-report', type: 'REPORT_PRODUCTION_RUNTIME_HEALTH', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: 55, payload: {} });
+const reportRuntimeResult = supervisor.handleIntent({
+  id: 'runtime-intent-report',
+  type: 'REPORT_PRODUCTION_RUNTIME_HEALTH',
+  timestamp: '2026-07-01T00:00:00.000Z',
+  graphRevision: 55,
+  payload: {},
+});
 assert.equal(reportRuntimeResult.errors.length, 0, 'mock runtime health intent handled');
 const runtimeMock = new MockMediaExecutionAdapter();
-const runtimeMockResult = runtimeMock.execute({ id: 'runtime-intent-start', type: 'START_PRODUCTION_RUNTIME', timestamp: '2026-07-01T00:00:00.000Z', graphRevision: recordingTransition.nextGraph.metadata.revision, payload: {} }, recordingTransition.nextGraph);
-assert.equal(runtimeMockResult.success, true, 'mock adapter accepts production runtime execution intent');
-assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('ffmpegProcess'), false, 'production graph contains no runtime process handles');
+const runtimeMockResult = runtimeMock.execute(
+  {
+    id: 'runtime-intent-start',
+    type: 'START_PRODUCTION_RUNTIME',
+    timestamp: '2026-07-01T00:00:00.000Z',
+    graphRevision: recordingTransition.nextGraph.metadata.revision,
+    payload: {},
+  },
+  recordingTransition.nextGraph,
+);
+assert.equal(
+  runtimeMockResult.success,
+  true,
+  'mock adapter accepts production runtime execution intent',
+);
+assert.equal(
+  JSON.stringify(recordingTransition.nextGraph).includes('ffmpegProcess'),
+  false,
+  'production graph contains no runtime process handles',
+);
 
-const orchestrator = new BroadcastOrchestrator({ UBOS_ENABLE_ORCHESTRATOR: 'true', NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'true' });
-orchestrator.register({ id: 'gpu-runtime', type: 'gpu', label: 'GPU Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { backend: 'mock' } });
-orchestrator.register({ id: 'audio-runtime-validation', type: 'audio', label: 'Audio Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { sampleRate: 48000 } });
-orchestrator.register({ id: 'encoder-runtime', type: 'encoder', label: 'Encoder Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { codec: 'h264' } });
-assert.equal(orchestrator.startProduction({ graphRevision: 55 }).success, true, 'broadcast orchestrator starts production through single authority');
-assert.equal(orchestrator.snapshot().state, 'running', 'broadcast orchestrator lifecycle reaches running');
-assert.equal(orchestrator.pauseProduction().runtimeState, 'ready', 'broadcast orchestrator pauses through supervisor');
-assert.equal(orchestrator.resumeProduction().success, true, 'broadcast orchestrator resumes through supervisor');
-assert.equal(orchestrator.activateScene('scene-live').success, true, 'broadcast orchestrator coordinates scene activation');
+const orchestrator = new BroadcastOrchestrator({
+  UBOS_ENABLE_ORCHESTRATOR: 'true',
+  NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'true',
+});
+orchestrator.register({
+  id: 'gpu-runtime',
+  type: 'gpu',
+  label: 'GPU Runtime',
+  required: true,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { backend: 'mock' },
+});
+orchestrator.register({
+  id: 'audio-runtime-validation',
+  type: 'audio',
+  label: 'Audio Runtime',
+  required: false,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { sampleRate: 48000 },
+});
+orchestrator.register({
+  id: 'encoder-runtime',
+  type: 'encoder',
+  label: 'Encoder Runtime',
+  required: true,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { codec: 'h264' },
+});
+assert.equal(
+  orchestrator.startProduction({ graphRevision: 55 }).success,
+  true,
+  'broadcast orchestrator starts production through single authority',
+);
+assert.equal(
+  orchestrator.snapshot().state,
+  'running',
+  'broadcast orchestrator lifecycle reaches running',
+);
+assert.equal(
+  orchestrator.pauseProduction().runtimeState,
+  'ready',
+  'broadcast orchestrator pauses through supervisor',
+);
+assert.equal(
+  orchestrator.resumeProduction().success,
+  true,
+  'broadcast orchestrator resumes through supervisor',
+);
+assert.equal(
+  orchestrator.activateScene('scene-live').success,
+  true,
+  'broadcast orchestrator coordinates scene activation',
+);
 const orchestratorSnapshot = orchestrator.snapshot();
-assert.equal(orchestratorSnapshot.containsRuntimeHandles, false, 'broadcast orchestrator snapshot is metadata-only');
-assert.equal(orchestratorSnapshot.replay.containsRuntimeHandles, false, 'broadcast orchestrator replay is metadata-only');
-assert.equal(orchestratorSnapshot.dashboard.globalHealth, 'healthy', 'broadcast orchestrator control room dashboard reports global health');
-assert.equal(orchestratorSnapshot.plan?.steps[0]?.type, 'gpu', 'broadcast orchestrator schedules dependencies deterministically');
-assert.equal(orchestrator.recoverSubsystem('audio-runtime-validation').runtimeState, 'recovering', 'broadcast orchestrator schedules subsystem recovery');
-assert.equal(orchestrator.stopProduction().runtimeState, 'stopped', 'broadcast orchestrator stops production safely');
-const resourceCoordinator = new ResourceCoordinator({ cpu: 5, gpu: 0, memoryMb: 512, encoders: 0, networkMbps: 10, threads: 1 });
-const resourceAllocation = resourceCoordinator.allocate([{ subsystemId: 'streaming', cpu: 10, networkMbps: 20, priority: 100 }]);
-assert.equal(resourceAllocation[0]?.granted, false, 'broadcast orchestrator rejects over-budget resource allocation');
+assert.equal(
+  orchestratorSnapshot.containsRuntimeHandles,
+  false,
+  'broadcast orchestrator snapshot is metadata-only',
+);
+assert.equal(
+  orchestratorSnapshot.replay.containsRuntimeHandles,
+  false,
+  'broadcast orchestrator replay is metadata-only',
+);
+assert.equal(
+  orchestratorSnapshot.dashboard.globalHealth,
+  'healthy',
+  'broadcast orchestrator control room dashboard reports global health',
+);
+assert.equal(
+  orchestratorSnapshot.plan?.steps[0]?.type,
+  'gpu',
+  'broadcast orchestrator schedules dependencies deterministically',
+);
+assert.equal(
+  orchestrator.recoverSubsystem('audio-runtime-validation').runtimeState,
+  'recovering',
+  'broadcast orchestrator schedules subsystem recovery',
+);
+assert.equal(
+  orchestrator.stopProduction().runtimeState,
+  'stopped',
+  'broadcast orchestrator stops production safely',
+);
+const resourceCoordinator = new ResourceCoordinator({
+  cpu: 5,
+  gpu: 0,
+  memoryMb: 512,
+  encoders: 0,
+  networkMbps: 10,
+  threads: 1,
+});
+const resourceAllocation = resourceCoordinator.allocate([
+  { subsystemId: 'streaming', cpu: 10, networkMbps: 20, priority: 100 },
+]);
+assert.equal(
+  resourceAllocation[0]?.granted,
+  false,
+  'broadcast orchestrator rejects over-budget resource allocation',
+);
 const executionCoordinator = new ExecutionCoordinator();
-const unsafePlan = executionCoordinator.createPlan('start', [], { metadata: { processHandle: 'unsafe' } });
-assert.equal(executionCoordinator.validate(unsafePlan).length > 0, true, 'broadcast orchestrator rejects runtime handles in plans');
-assert.equal(isBroadcastOrchestratorEnabled({ UBOS_ENABLE_ORCHESTRATOR: 'true', NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'true' }), true, 'broadcast orchestrator feature flags enable runtime');
-const disabledOrchestrator = new BroadcastOrchestrator({ UBOS_ENABLE_ORCHESTRATOR: 'false', NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'false' });
+const unsafePlan = executionCoordinator.createPlan('start', [], {
+  metadata: { processHandle: 'unsafe' },
+});
+assert.equal(
+  executionCoordinator.validate(unsafePlan).length > 0,
+  true,
+  'broadcast orchestrator rejects runtime handles in plans',
+);
+assert.equal(
+  isBroadcastOrchestratorEnabled({
+    UBOS_ENABLE_ORCHESTRATOR: 'true',
+    NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'true',
+  }),
+  true,
+  'broadcast orchestrator feature flags enable runtime',
+);
+const disabledOrchestrator = new BroadcastOrchestrator({
+  UBOS_ENABLE_ORCHESTRATOR: 'false',
+  NEXT_PUBLIC_UBOS_ORCHESTRATOR: 'false',
+});
 disabledOrchestrator.register(encoderSubsystem);
-assert.equal(disabledOrchestrator.startProduction().success, true, 'broadcast orchestrator falls back to supervisor when disabled');
+assert.equal(
+  disabledOrchestrator.startProduction().success,
+  true,
+  'broadcast orchestrator falls back to supervisor when disabled',
+);
 
-const haPrimary = createClusterNode({ id: 'node-primary', role: 'primary', state: 'healthy', leaderState: 'leader', priority: 100, subsystems: [encoderSubsystem] });
-const haStandby = createClusterNode({ id: 'node-standby', role: 'standby', standbyMode: 'hot', state: 'healthy', leaderState: 'follower', priority: 90 });
-const haRuntime = new HighAvailabilityRuntime([haPrimary, haStandby], supervisor, orchestrator, { UBOS_ENABLE_HIGH_AVAILABILITY: 'true', NEXT_PUBLIC_UBOS_HIGH_AVAILABILITY: 'true' });
+const haPrimary = createClusterNode({
+  id: 'node-primary',
+  role: 'primary',
+  state: 'healthy',
+  leaderState: 'leader',
+  priority: 100,
+  subsystems: [encoderSubsystem],
+});
+const haStandby = createClusterNode({
+  id: 'node-standby',
+  role: 'standby',
+  standbyMode: 'hot',
+  state: 'healthy',
+  leaderState: 'follower',
+  priority: 90,
+});
+const haRuntime = new HighAvailabilityRuntime([haPrimary, haStandby], supervisor, orchestrator, {
+  UBOS_ENABLE_HIGH_AVAILABILITY: 'true',
+  NEXT_PUBLIC_UBOS_HIGH_AVAILABILITY: 'true',
+});
 assert.equal(haRuntime.enabled(), true, 'high availability feature flags enable runtime');
 haRuntime.beat('node-primary');
 haRuntime.recordHealth('node-primary', 'encoder', 'healthy', true, 'encoder healthy');
 const failoverResult = haRuntime.failoverPrimary('node-primary');
-assert.equal(failoverResult.cluster.leaderNodeId, 'node-standby', 'high availability promotes hot standby on primary failure');
-const recoveryResult = haRuntime.recover('encoder-runtime', ['restart_encoder', 'restart_ffmpeg', 'confirm_recovery', 'stabilize_health']);
-assert.equal(recoveryResult.manifest.containsRuntimeHandles, false, 'recovery manifest is metadata-only');
-assert.equal(recoveryResult.diagnostics.progress, 100, 'automatic recovery reports completion progress');
+assert.equal(
+  failoverResult.cluster.leaderNodeId,
+  'node-standby',
+  'high availability promotes hot standby on primary failure',
+);
+const recoveryResult = haRuntime.recover('encoder-runtime', [
+  'restart_encoder',
+  'restart_ffmpeg',
+  'confirm_recovery',
+  'stabilize_health',
+]);
+assert.equal(
+  recoveryResult.manifest.containsRuntimeHandles,
+  false,
+  'recovery manifest is metadata-only',
+);
+assert.equal(
+  recoveryResult.diagnostics.progress,
+  100,
+  'automatic recovery reports completion progress',
+);
 const haSnapshot = haRuntime.snapshot();
-assert.equal(haSnapshot.containsRuntimeHandles, false, 'high availability snapshot is metadata-only');
-assert.equal(haSnapshot.dashboard.failoverEvents.length > 0, true, 'control room failover events are reported');
-assert.equal(new ClusterManager().validate({ ...haSnapshot.cluster, nodes: haSnapshot.cluster.nodes.map((node) => ({ ...node, leaderState: 'leader' as const })) }).includes('multiple leaders rejected'), true, 'high availability rejects multiple leaders');
-assert.equal(new RecoveryPlanner().validate({ ...recoveryResult.manifest, steps: [{ ...recoveryResult.manifest.steps[0]!, dependsOn: [recoveryResult.manifest.steps[0]!.id] }] }).includes('circular recovery rejected'), true, 'high availability rejects circular recovery plans');
-assert.equal(new ElectionManager().elect([haPrimary, haStandby])?.id, 'node-primary', 'leader election prefers highest-priority healthy node');
-assert.equal(tripCircuitBreaker({ id: 'ha-breaker', status: 'closed', failureCount: 1, threshold: 2, cooldownMs: 1000 }).status, 'open', 'circuit breaker opens at threshold');
-assert.equal(isHighAvailabilityEnabled({ UBOS_ENABLE_HIGH_AVAILABILITY: 'true', NEXT_PUBLIC_UBOS_HIGH_AVAILABILITY: 'true' }), true, 'high availability environment flags are recognized');
-
+assert.equal(
+  haSnapshot.containsRuntimeHandles,
+  false,
+  'high availability snapshot is metadata-only',
+);
+assert.equal(
+  haSnapshot.dashboard.failoverEvents.length > 0,
+  true,
+  'control room failover events are reported',
+);
+assert.equal(
+  new ClusterManager()
+    .validate({
+      ...haSnapshot.cluster,
+      nodes: haSnapshot.cluster.nodes.map((node) => ({ ...node, leaderState: 'leader' as const })),
+    })
+    .includes('multiple leaders rejected'),
+  true,
+  'high availability rejects multiple leaders',
+);
+assert.equal(
+  new RecoveryPlanner()
+    .validate({
+      ...recoveryResult.manifest,
+      steps: [
+        { ...recoveryResult.manifest.steps[0]!, dependsOn: [recoveryResult.manifest.steps[0]!.id] },
+      ],
+    })
+    .includes('circular recovery rejected'),
+  true,
+  'high availability rejects circular recovery plans',
+);
+assert.equal(
+  new ElectionManager().elect([haPrimary, haStandby])?.id,
+  'node-primary',
+  'leader election prefers highest-priority healthy node',
+);
+assert.equal(
+  tripCircuitBreaker({
+    id: 'ha-breaker',
+    status: 'closed',
+    failureCount: 1,
+    threshold: 2,
+    cooldownMs: 1000,
+  }).status,
+  'open',
+  'circuit breaker opens at threshold',
+);
+assert.equal(
+  isHighAvailabilityEnabled({
+    UBOS_ENABLE_HIGH_AVAILABILITY: 'true',
+    NEXT_PUBLIC_UBOS_HIGH_AVAILABILITY: 'true',
+  }),
+  true,
+  'high availability environment flags are recognized',
+);
 
 // Phase 9.2 recording pipeline runtime validation
-const recordingPipeline = new RecordingPipeline({ UBOS_ENABLE_REAL_RECORDING: 'false', NEXT_PUBLIC_UBOS_REAL_RECORDING: 'false' });
-const recordingJob = await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'phase-9-2-validation', format: 'mp4', overwrite: true, graphRevision: recordingTransition.nextGraph.metadata.revision, tracks: ['program-video', 'program-audio'], segment: true });
+const recordingPipeline = new RecordingPipeline({
+  UBOS_ENABLE_REAL_RECORDING: 'false',
+  NEXT_PUBLIC_UBOS_REAL_RECORDING: 'false',
+});
+const recordingJob = await recordingPipeline.create({
+  outputDirectory: '/tmp/ubos-recording-validation',
+  filename: 'phase-9-2-validation',
+  format: 'mp4',
+  overwrite: true,
+  graphRevision: recordingTransition.nextGraph.metadata.revision,
+  tracks: ['program-video', 'program-audio'],
+  segment: true,
+});
 assert.equal(recordingJob.containsRuntimeHandles, false, 'recording job is metadata-only');
-assert.equal(recordingPipeline.prepare(recordingJob.id).state, 'prepared', 'recording prepare lifecycle works');
+assert.equal(
+  recordingPipeline.prepare(recordingJob.id).state,
+  'prepared',
+  'recording prepare lifecycle works',
+);
 const startedRecording = await recordingPipeline.start(recordingJob.id);
 assert.equal(startedRecording.state, 'recording', 'recording start lifecycle works');
-assert.equal(recordingPipeline.health(recordingJob.id).currentFile.endsWith('.mp4'), true, 'recording progress reports current file');
-assert.equal(recordingPipeline.pause(recordingJob.id).state, 'paused', 'recording pause lifecycle works');
-assert.equal(recordingPipeline.resume(recordingJob.id).state, 'recording', 'recording resume lifecycle works');
-assert.equal(recordingPipeline.split(recordingJob.id).segmentIndex, 1, 'recording split increments segment index');
-assert.equal((await recordingPipeline.stop(recordingJob.id)).state, 'stopped', 'recording stop lifecycle works');
+assert.equal(
+  recordingPipeline.health(recordingJob.id).currentFile.endsWith('.mp4'),
+  true,
+  'recording progress reports current file',
+);
+assert.equal(
+  recordingPipeline.pause(recordingJob.id).state,
+  'paused',
+  'recording pause lifecycle works',
+);
+assert.equal(
+  recordingPipeline.resume(recordingJob.id).state,
+  'recording',
+  'recording resume lifecycle works',
+);
+assert.equal(
+  recordingPipeline.split(recordingJob.id).segmentIndex,
+  1,
+  'recording split increments segment index',
+);
+assert.equal(
+  (await recordingPipeline.stop(recordingJob.id)).state,
+  'stopped',
+  'recording stop lifecycle works',
+);
 const finalizedRecording = await recordingPipeline.finalize(recordingJob.id);
 assert.equal(finalizedRecording.state, 'finalized', 'recording finalize lifecycle works');
-assert.equal(recordingPipeline.manifest(recordingJob.id).containsFileHandles, false, 'recording manifest excludes file handles');
-assert.equal(recordingPipeline.manifest(recordingJob.id).containsProcessHandles, false, 'recording manifest excludes process handles');
-{ let rejected = false; try { safeRecordingFilename('../evil', 'mp4'); } catch { rejected = true; } assert.equal(rejected, true, 'recording filename validation rejects traversal'); }
-{ let rejected = false; try { await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'bad/evil', format: 'mp4' }); } catch { rejected = true; } assert.equal(rejected, true, 'recording validator rejects unsafe extension or name'); }
-const queuedA = await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'queued-a', format: 'mkv', overwrite: true });
-const queuedB = await recordingPipeline.create({ outputDirectory: '/tmp/ubos-recording-validation', filename: 'queued-b', format: 'mov', overwrite: true });
+assert.equal(
+  recordingPipeline.manifest(recordingJob.id).containsFileHandles,
+  false,
+  'recording manifest excludes file handles',
+);
+assert.equal(
+  recordingPipeline.manifest(recordingJob.id).containsProcessHandles,
+  false,
+  'recording manifest excludes process handles',
+);
+{
+  let rejected = false;
+  try {
+    safeRecordingFilename('../evil', 'mp4');
+  } catch {
+    rejected = true;
+  }
+  assert.equal(rejected, true, 'recording filename validation rejects traversal');
+}
+{
+  let rejected = false;
+  try {
+    await recordingPipeline.create({
+      outputDirectory: '/tmp/ubos-recording-validation',
+      filename: 'bad/evil',
+      format: 'mp4',
+    });
+  } catch {
+    rejected = true;
+  }
+  assert.equal(rejected, true, 'recording validator rejects unsafe extension or name');
+}
+const queuedA = await recordingPipeline.create({
+  outputDirectory: '/tmp/ubos-recording-validation',
+  filename: 'queued-a',
+  format: 'mkv',
+  overwrite: true,
+});
+const queuedB = await recordingPipeline.create({
+  outputDirectory: '/tmp/ubos-recording-validation',
+  filename: 'queued-b',
+  format: 'mov',
+  overwrite: true,
+});
 recordingPipeline.scheduler.markStarted('synthetic-1');
 recordingPipeline.scheduler.markStarted('synthetic-2');
 await recordingPipeline.start(queuedA.id);
-assert.equal(recordingPipeline.scheduler.queue.length >= 1, true, 'recording scheduler queues over concurrency limit');
+assert.equal(
+  recordingPipeline.scheduler.queue.length >= 1,
+  true,
+  'recording scheduler queues over concurrency limit',
+);
 recordingPipeline.scheduler.markStopped('synthetic-1');
 recordingPipeline.scheduler.markStopped('synthetic-2');
-assert.equal(isRealRecordingEnabled({ UBOS_ENABLE_REAL_RECORDING: 'true', NEXT_PUBLIC_UBOS_REAL_RECORDING: 'true' }), true, 'recording feature flags enable real runtime');
-assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('temporaryPath'), false, 'production graph remains free of recording runtime paths');
-assert.equal(recordingPipeline.archive(recordingJob.id).state, 'archived', 'recording archive lifecycle works');
-assert.equal((await recordingPipeline.delete(recordingJob.id)).state, 'deleted', 'recording delete lifecycle works');
-
+assert.equal(
+  isRealRecordingEnabled({
+    UBOS_ENABLE_REAL_RECORDING: 'true',
+    NEXT_PUBLIC_UBOS_REAL_RECORDING: 'true',
+  }),
+  true,
+  'recording feature flags enable real runtime',
+);
+assert.equal(
+  JSON.stringify(recordingTransition.nextGraph).includes('temporaryPath'),
+  false,
+  'production graph remains free of recording runtime paths',
+);
+assert.equal(
+  recordingPipeline.archive(recordingJob.id).state,
+  'archived',
+  'recording archive lifecycle works',
+);
+assert.equal(
+  (await recordingPipeline.delete(recordingJob.id)).state,
+  'deleted',
+  'recording delete lifecycle works',
+);
 
 const gpuPipeline = createGpuPipeline({ id: 'gpu-pipeline:test', graphRevision: 7 });
 assert.equal(validateGpuPipeline(gpuPipeline).valid, true, 'GPU pipeline metadata validates');
@@ -1661,32 +3353,127 @@ assert.equal(
   'failed GPU runtime reports failed health',
 );
 
-
-const hardwareRuntime = new HardwareRuntime({ UBOS_ENABLE_HARDWARE_RUNTIME: 'true', NEXT_PUBLIC_UBOS_HARDWARE_RUNTIME: 'true' });
+const hardwareRuntime = new HardwareRuntime({
+  UBOS_ENABLE_HARDWARE_RUNTIME: 'true',
+  NEXT_PUBLIC_UBOS_HARDWARE_RUNTIME: 'true',
+});
 const hardwareDevices = hardwareRuntime.detect();
-assert.equal(hardwareDevices.some((device) => device.api === 'NVENC'), true, 'hardware runtime detects metadata NVENC support');
-assert.equal(hardwareDevices.every((device) => device.capabilities.metadataOnly), true, 'hardware capabilities are metadata-only');
+assert.equal(
+  hardwareDevices.some((device) => device.api === 'NVENC'),
+  true,
+  'hardware runtime detects metadata NVENC support',
+);
+assert.equal(
+  hardwareDevices.every((device) => device.capabilities.metadataOnly),
+  true,
+  'hardware capabilities are metadata-only',
+);
 const hardwareSchedule = hardwareRuntime.schedule(encoderPlan);
 assert.equal(hardwareSchedule.success, true, 'hardware scheduler allocates an encoder session');
-assert.equal(hardwareRuntime.manifest().containsRuntimeHandles, false, 'hardware manifest never serializes runtime handles');
-assert.equal(hardwareRuntime.manifest().replay.some((event) => event.type === 'capability_snapshot'), true, 'hardware replay captures capability snapshots');
-assert.equal(new EncoderManager().selectEncoder(createHardwareDevice({ id: 'nvenc-test', api: 'NVENC' })), 'nvenc', 'hardware encoder manager maps NVENC metadata to encoder runtime');
+assert.equal(
+  hardwareRuntime.manifest().containsRuntimeHandles,
+  false,
+  'hardware manifest never serializes runtime handles',
+);
+assert.equal(
+  hardwareRuntime.manifest().replay.some((event) => event.type === 'capability_snapshot'),
+  true,
+  'hardware replay captures capability snapshots',
+);
+assert.equal(
+  new EncoderManager().selectEncoder(createHardwareDevice({ id: 'nvenc-test', api: 'NVENC' })),
+  'nvenc',
+  'hardware encoder manager maps NVENC metadata to encoder runtime',
+);
 const hardwareValidator = new HardwareValidator();
-assert.equal(hardwareValidator.validateDevice(createHardwareDevice({ id: 'bad', vendor: 'Unknown' })).valid, false, 'hardware validator rejects unknown devices');
-assert.equal(hardwareValidator.assertMetadataOnly({ leaked: { runtimeOnly: true, serializable: false } }).valid, false, 'hardware validator rejects serialized runtime handle markers');
-const overloadedDevice = createHardwareDevice({ id: 'overload', api: 'QuickSync', activeEncoders: 3, capabilities: { ...defaultHardwareCapabilitiesForValidation('QuickSync'), encoderCount: 3 } });
-assert.equal(hardwareValidator.validateReservation({ id: 'reservation-over', deviceId: overloadedDevice.id, encoderApi: 'QuickSync', codec: 'h264', priority: 1, budget: { memoryMb: 128, bitrateKbps: 4500, fps: 30 }, createdAt: '2026-07-01T00:00:00.000Z', metadataOnly: true }, overloadedDevice).valid, false, 'hardware validator rejects encoder over allocation');
-const recoveryPlan = new HardwareRecovery().plan(createHardwareFailure({ code: 'DRIVER_RESTART', message: 'driver restarted', ...(hardwareDevices[0]?.id ? { deviceId: hardwareDevices[0].id } : {}) }));
+assert.equal(
+  hardwareValidator.validateDevice(createHardwareDevice({ id: 'bad', vendor: 'Unknown' })).valid,
+  false,
+  'hardware validator rejects unknown devices',
+);
+assert.equal(
+  hardwareValidator.assertMetadataOnly({ leaked: { runtimeOnly: true, serializable: false } })
+    .valid,
+  false,
+  'hardware validator rejects serialized runtime handle markers',
+);
+const overloadedDevice = createHardwareDevice({
+  id: 'overload',
+  api: 'QuickSync',
+  activeEncoders: 3,
+  capabilities: { ...defaultHardwareCapabilitiesForValidation('QuickSync'), encoderCount: 3 },
+});
+assert.equal(
+  hardwareValidator.validateReservation(
+    {
+      id: 'reservation-over',
+      deviceId: overloadedDevice.id,
+      encoderApi: 'QuickSync',
+      codec: 'h264',
+      priority: 1,
+      budget: { memoryMb: 128, bitrateKbps: 4500, fps: 30 },
+      createdAt: '2026-07-01T00:00:00.000Z',
+      metadataOnly: true,
+    },
+    overloadedDevice,
+  ).valid,
+  false,
+  'hardware validator rejects encoder over allocation',
+);
+const recoveryPlan = new HardwareRecovery().plan(
+  createHardwareFailure({
+    code: 'DRIVER_RESTART',
+    message: 'driver restarted',
+    ...(hardwareDevices[0]?.id ? { deviceId: hardwareDevices[0].id } : {}),
+  }),
+);
 assert.equal(recoveryPlan.metadataOnly, true, 'hardware recovery plan is metadata-only');
-assert.equal(hardwareRuntime.recover(createHardwareFailure({ code: 'ENCODER_RESTART', message: 'encoder restart', ...(hardwareDevices[0]?.id ? { deviceId: hardwareDevices[0].id } : {}) })).replaySafe, true, 'hardware recovery is replay-safe');
-assert.equal(isHardwareRuntimeEnabled({ UBOS_ENABLE_HARDWARE_RUNTIME: 'true' }), true, 'hardware feature flag enables runtime');
-assert.equal(new DeviceManager().detect({}).some((device) => device.api === 'Software'), true, 'hardware runtime falls back to software encoder when disabled');
-assert.equal(hardwareRuntime.integrateGpu(gpuSession).gpuRuntimeIntegrated, true, 'hardware runtime integrates GPU runtime metadata');
-assert.equal(JSON.stringify(recordingTransition.nextGraph).includes('hardware-device'), false, 'production graph remains free of hardware runtime devices');
+assert.equal(
+  hardwareRuntime.recover(
+    createHardwareFailure({
+      code: 'ENCODER_RESTART',
+      message: 'encoder restart',
+      ...(hardwareDevices[0]?.id ? { deviceId: hardwareDevices[0].id } : {}),
+    }),
+  ).replaySafe,
+  true,
+  'hardware recovery is replay-safe',
+);
+assert.equal(
+  isHardwareRuntimeEnabled({ UBOS_ENABLE_HARDWARE_RUNTIME: 'true' }),
+  true,
+  'hardware feature flag enables runtime',
+);
+assert.equal(
+  new DeviceManager().detect({}).some((device) => device.api === 'Software'),
+  true,
+  'hardware runtime falls back to software encoder when disabled',
+);
+assert.equal(
+  hardwareRuntime.integrateGpu(gpuSession).gpuRuntimeIntegrated,
+  true,
+  'hardware runtime integrates GPU runtime metadata',
+);
+assert.equal(
+  JSON.stringify(recordingTransition.nextGraph).includes('hardware-device'),
+  false,
+  'production graph remains free of hardware runtime devices',
+);
 
-const audioChannel = createAudioChannel({ id: 'ch-host', sourceId: 'host-mic', routes: ['bus:program'] });
-const audioRuntime = new AudioRuntime({ UBOS_ENABLE_REAL_AUDIO: 'true', NEXT_PUBLIC_UBOS_REAL_AUDIO: 'true' });
-let audioSession = audioRuntime.create({ id: 'audio-test', graphRevision: 95, channels: [audioChannel] });
+const audioChannel = createAudioChannel({
+  id: 'ch-host',
+  sourceId: 'host-mic',
+  routes: ['bus:program'],
+});
+const audioRuntime = new AudioRuntime({
+  UBOS_ENABLE_REAL_AUDIO: 'true',
+  NEXT_PUBLIC_UBOS_REAL_AUDIO: 'true',
+});
+let audioSession = audioRuntime.create({
+  id: 'audio-test',
+  graphRevision: 95,
+  channels: [audioChannel],
+});
 assert.equal(audioSession.mode, 'real', 'real audio feature flag enables runtime mode');
 assert.equal(audioSession.containsRuntimeHandles, false, 'audio session remains metadata-only');
 assert.equal(audioSession.buses.length, 9, 'professional audio buses are created');
@@ -1694,60 +3481,238 @@ audioSession = audioRuntime.mixer.setGain(audioSession, 'ch-host', 1.25);
 audioSession = audioRuntime.mixer.setMute(audioSession, 'ch-host', true);
 audioSession = audioRuntime.mixer.setSolo(audioSession, 'ch-host', true);
 audioSession = audioRuntime.mixer.setDelay(audioSession, 'ch-host', 80);
-audioSession = audioRuntime.mixer.addEffect(audioSession, 'ch-host', { id: 'fx-limit', kind: 'limiter', enabled: true, order: 1, parameters: { ceilingDb: -1 }, containsRuntimeHandles: false });
+audioSession = audioRuntime.mixer.addEffect(audioSession, 'ch-host', {
+  id: 'fx-limit',
+  kind: 'limiter',
+  enabled: true,
+  order: 1,
+  parameters: { ceilingDb: -1 },
+  containsRuntimeHandles: false,
+});
 assert.equal(audioSession.replay.length, 5, 'audio replay captures metadata control changes');
-const mixMinus = new MixMinusManager().create({ id: 'mm-host', role: 'host', sourceChannelId: 'ch-host', busId: 'bus:guest', allSourceIds: ['ch-host', 'ch-guest'] });
+const mixMinus = new MixMinusManager().create({
+  id: 'mm-host',
+  role: 'host',
+  sourceChannelId: 'ch-host',
+  busId: 'bus:guest',
+  allSourceIds: ['ch-host', 'ch-guest'],
+});
 assert.equal(mixMinus.noEcho, true, 'mix-minus enforces no echo');
-const invalidRoute = new AudioValidator().validateRouting(audioSession.buses, audioSession.channels, { routes: [{ from: 'bus:program', to: 'bus:master', gain: 9, enabled: true }], containsRuntimeHandles: false });
+const invalidRoute = new AudioValidator().validateRouting(
+  audioSession.buses,
+  audioSession.channels,
+  {
+    routes: [{ from: 'bus:program', to: 'bus:master', gain: 9, enabled: true }],
+    containsRuntimeHandles: false,
+  },
+);
 assert.equal(invalidRoute.valid, false, 'audio validator rejects invalid gain and protected loops');
 assert.equal(audioRuntime.start().success, true, 'audio runtime supervisor starts');
-assert.equal(audioRuntime.health.summarize(audioSession).status, 'healthy', 'audio health summarizes runtime');
+assert.equal(
+  audioRuntime.health.summarize(audioSession).status,
+  'healthy',
+  'audio health summarizes runtime',
+);
 const mockAudio = new AudioRuntime({}).create({ id: 'audio-mock' });
 assert.equal(mockAudio.mode, 'mock', 'audio runtime preserves mock fallback');
 
-
 // Phase 9.9 Production Broadcast Engine validation
-const productionEngine = new ProductionEngine({ UBOS_ENABLE_PRODUCTION_ENGINE: 'true', NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true' });
-productionEngine.register({ id: 'pe-gpu', type: 'gpu', label: 'GPU Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { backend: 'metadata' } });
-productionEngine.register({ id: 'pe-browser', type: 'browser_renderer', label: 'Browser Renderer', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { renderer: 'browser' } });
-productionEngine.register({ id: 'pe-audio', type: 'audio', label: 'Audio Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { sampleRate: 48000 } });
-productionEngine.register({ id: 'pe-encoder', type: 'encoder', label: 'Encoder Runtime', required: true, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { codec: 'h264' } });
-productionEngine.register({ id: 'pe-ffmpeg', type: 'ffmpeg', label: 'FFmpeg Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { executable: 'ffmpeg' } });
-productionEngine.register({ id: 'pe-recording', type: 'recording', label: 'Recording Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { destination: 'file' } });
-productionEngine.register({ id: 'pe-streaming', type: 'streaming', label: 'Streaming Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { protocol: 'rtmp' } });
-productionEngine.register({ id: 'pe-webrtc', type: 'webrtc', label: 'WebRTC Runtime', required: false, state: 'ready', health: 'healthy', degradedModes: [], diagnostics: { peers: 0 } });
-assert.equal(productionEngine.start({ graphRevision: 99 }).success, true, 'production engine starts through orchestrator and supervisor');
+const productionEngine = new ProductionEngine({
+  UBOS_ENABLE_PRODUCTION_ENGINE: 'true',
+  NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true',
+});
+productionEngine.register({
+  id: 'pe-gpu',
+  type: 'gpu',
+  label: 'GPU Runtime',
+  required: true,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { backend: 'metadata' },
+});
+productionEngine.register({
+  id: 'pe-browser',
+  type: 'browser_renderer',
+  label: 'Browser Renderer',
+  required: false,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { renderer: 'browser' },
+});
+productionEngine.register({
+  id: 'pe-audio',
+  type: 'audio',
+  label: 'Audio Runtime',
+  required: true,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { sampleRate: 48000 },
+});
+productionEngine.register({
+  id: 'pe-encoder',
+  type: 'encoder',
+  label: 'Encoder Runtime',
+  required: true,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { codec: 'h264' },
+});
+productionEngine.register({
+  id: 'pe-ffmpeg',
+  type: 'ffmpeg',
+  label: 'FFmpeg Runtime',
+  required: false,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { executable: 'ffmpeg' },
+});
+productionEngine.register({
+  id: 'pe-recording',
+  type: 'recording',
+  label: 'Recording Runtime',
+  required: false,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { destination: 'file' },
+});
+productionEngine.register({
+  id: 'pe-streaming',
+  type: 'streaming',
+  label: 'Streaming Runtime',
+  required: false,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { protocol: 'rtmp' },
+});
+productionEngine.register({
+  id: 'pe-webrtc',
+  type: 'webrtc',
+  label: 'WebRTC Runtime',
+  required: false,
+  state: 'ready',
+  health: 'healthy',
+  degradedModes: [],
+  diagnostics: { peers: 0 },
+});
+assert.equal(
+  productionEngine.start({ graphRevision: 99 }).success,
+  true,
+  'production engine starts through orchestrator and supervisor',
+);
 const scheduledFrame = productionEngine.scheduleFrame(100);
-assert.equal(scheduledFrame.metadataOnly, true, 'production engine frame schedule is metadata-only');
-assert.equal(productionEngine.health().summary.includes('runtimes coordinated'), true, 'production engine coordinates all runtimes');
-assert.equal(productionEngine.snapshot().containsRuntimeHandles, false, 'production engine snapshot is metadata-only');
-assert.equal(productionEngine.snapshot().history.containsRuntimeHandles, false, 'production engine replay history is metadata-only');
-assert.equal(productionEngine.checkpoint().replaySafe, true, 'production engine checkpoints are replay safe');
-assert.equal(productionEngine.recover('validation recovery').action, 'recover', 'production engine recovery records recovery history');
-assert.equal(productionEngine.dashboard().sessionInspector.metadataOnly, true, 'production engine dashboard exposes metadata-only session inspector');
+assert.equal(
+  scheduledFrame.metadataOnly,
+  true,
+  'production engine frame schedule is metadata-only',
+);
+assert.equal(
+  productionEngine.health().summary.includes('runtimes coordinated'),
+  true,
+  'production engine coordinates all runtimes',
+);
+assert.equal(
+  productionEngine.snapshot().containsRuntimeHandles,
+  false,
+  'production engine snapshot is metadata-only',
+);
+assert.equal(
+  productionEngine.snapshot().history.containsRuntimeHandles,
+  false,
+  'production engine replay history is metadata-only',
+);
+assert.equal(
+  productionEngine.checkpoint().replaySafe,
+  true,
+  'production engine checkpoints are replay safe',
+);
+assert.equal(
+  productionEngine.recover('validation recovery').action,
+  'recover',
+  'production engine recovery records recovery history',
+);
+assert.equal(
+  productionEngine.dashboard().sessionInspector.metadataOnly,
+  true,
+  'production engine dashboard exposes metadata-only session inspector',
+);
 assert.equal(productionEngine.pause().success, true, 'production engine pause lifecycle works');
 assert.equal(productionEngine.resume().success, true, 'production engine resume lifecycle works');
-assert.equal(productionEngine.stop().runtimeState, 'stopped', 'production engine stop lifecycle works');
+assert.equal(
+  productionEngine.stop().runtimeState,
+  'stopped',
+  'production engine stop lifecycle works',
+);
 const productionSteps = new ProductionPipelineScheduler().schedule(['gpu', 'audio', 'encoder']);
-assert.equal(productionSteps[0]?.subsystem, 'gpu', 'production engine scheduler orders pipeline deterministically');
-const invalidManifest = { ...productionEngine.snapshot().manifest, steps: productionEngine.snapshot().manifest.steps.map((step) => step.subsystem === 'audio' ? { ...step, order: 0 } : step) };
-assert.equal(new (await import('./production-engine/index.js')).ExecutionValidator().validateManifest(invalidManifest).length > 0, true, 'production engine rejects unsafe execution order');
-assert.equal(new (await import('./production-engine/index.js')).ExecutionValidator().validateClock([{ timestamp: '2026-07-01T00:00:00.000Z', frameId: 1, clockMs: 1, driftMs: 101, source: 'audio' }]).length > 0, true, 'production engine rejects clock conflicts');
-assert.equal(isProductionEngineEnabled({ UBOS_ENABLE_PRODUCTION_ENGINE: 'true', NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true' }), true, 'production engine feature flags enable runtime');
-
-
+assert.equal(
+  productionSteps[0]?.subsystem,
+  'gpu',
+  'production engine scheduler orders pipeline deterministically',
+);
+const invalidManifest = {
+  ...productionEngine.snapshot().manifest,
+  steps: productionEngine
+    .snapshot()
+    .manifest.steps.map((step) => (step.subsystem === 'audio' ? { ...step, order: 0 } : step)),
+};
+assert.equal(
+  new (await import('./production-engine/index.js')).ExecutionValidator().validateManifest(
+    invalidManifest,
+  ).length > 0,
+  true,
+  'production engine rejects unsafe execution order',
+);
+assert.equal(
+  new (await import('./production-engine/index.js')).ExecutionValidator().validateClock([
+    {
+      timestamp: '2026-07-01T00:00:00.000Z',
+      frameId: 1,
+      clockMs: 1,
+      driftMs: 101,
+      source: 'audio',
+    },
+  ]).length > 0,
+  true,
+  'production engine rejects clock conflicts',
+);
+assert.equal(
+  isProductionEngineEnabled({
+    UBOS_ENABLE_PRODUCTION_ENGINE: 'true',
+    NEXT_PUBLIC_UBOS_PRODUCTION_ENGINE: 'true',
+  }),
+  true,
+  'production engine feature flags enable runtime',
+);
 
 // UBOS 2.0 Phase 2.3 media clock and frame scheduler validation
 let deterministicNow = 10_000;
 const phaseClock = createClock({ frameRate: 29.97, now: () => deterministicNow });
-assert.equal(SUPPORTED_FRAME_RATES.includes(59.94), true, 'media clock exposes broadcast fractional frame rates');
+assert.equal(
+  SUPPORTED_FRAME_RATES.includes(59.94),
+  true,
+  'media clock exposes broadcast fractional frame rates',
+);
 let clockState = phaseClock.start();
 assert.equal(clockState.status, 'running', 'media clock starts');
 deterministicNow += 1000 / 29.97;
 clockState = phaseClock.getState();
 assert.equal(clockState.currentFrame, 1, 'media clock tracks frame number from elapsed time');
-assert.equal(clockState.presentationTimestamp, phaseClock.getFrameTimestamp(1), 'media clock derives PTS from frame rate');
-assert.equal(clockState.mediaTimestamp, clockState.presentationTimestamp, 'media clock exposes media timestamp');
+assert.equal(
+  clockState.presentationTimestamp,
+  phaseClock.getFrameTimestamp(1),
+  'media clock derives PTS from frame rate',
+);
+assert.equal(
+  clockState.mediaTimestamp,
+  clockState.presentationTimestamp,
+  'media clock exposes media timestamp',
+);
 clockState = phaseClock.pause();
 assert.equal(clockState.status, 'paused', 'media clock pauses');
 deterministicNow += 500;
@@ -1757,85 +3722,251 @@ clockState = phaseClock.reset();
 assert.equal(clockState.currentFrame, 0, 'media clock resets frame number');
 phaseClock.start();
 const phaseBus = new MediaSyncBus();
-const phaseScheduler = new FrameScheduler(phaseClock, phaseBus, { lateThresholdMs: 5, driftThresholdMs: 10 });
+const phaseScheduler = new FrameScheduler(phaseClock, phaseBus, {
+  lateThresholdMs: 5,
+  driftThresholdMs: 10,
+});
 deterministicNow += 1000 / 29.97;
 const firstTick = phaseScheduler.createTick(deterministicNow);
 assert.equal(firstTick.metadataOnly, true, 'frame ticks are metadata-only');
 assert.equal(firstTick.containsFrameData, false, 'frame ticks do not contain frame data');
 deterministicNow += (1000 / 29.97) * 3;
 const droppedTick = phaseScheduler.createTick(deterministicNow + 20);
-assert.equal(droppedTick.diagnostics!.droppedFrames >= 1, true, 'frame scheduler detects dropped frames');
-assert.equal(phaseBus.listEvents().some((event) => event.type === 'FRAME_DROPPED'), true, 'frame scheduler emits dropped frame events');
+assert.equal(
+  droppedTick.diagnostics!.droppedFrames >= 1,
+  true,
+  'frame scheduler detects dropped frames',
+);
+assert.equal(
+  phaseBus.listEvents().some((event) => event.type === 'FRAME_DROPPED'),
+  true,
+  'frame scheduler emits dropped frame events',
+);
 const duplicateTick = phaseScheduler.createTick(deterministicNow + 21);
-assert.equal(duplicateTick.diagnostics!.classification, 'duplicated', 'frame scheduler detects duplicated frames');
-assert.equal(phaseScheduler.getStats().lateFrames > 0, true, 'frame scheduler tracks late frame diagnostics');
+assert.equal(
+  duplicateTick.diagnostics!.classification,
+  'duplicated',
+  'frame scheduler detects duplicated frames',
+);
+assert.equal(
+  phaseScheduler.getStats().lateFrames > 0,
+  true,
+  'frame scheduler tracks late frame diagnostics',
+);
 deterministicNow += 15;
 phaseScheduler.createTick(deterministicNow);
-assert.equal(phaseBus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'), true, 'frame scheduler emits clock drift diagnostics');
-assert.equal(JSON.stringify(firstTick).includes('runtimeHandles'), false, 'frame scheduler state remains serializable metadata');
+assert.equal(
+  phaseBus.listEvents().some((event) => event.type === 'DRIFT_DETECTED'),
+  true,
+  'frame scheduler emits clock drift diagnostics',
+);
+assert.equal(
+  JSON.stringify(firstTick).includes('runtimeHandles'),
+  false,
+  'frame scheduler state remains serializable metadata',
+);
 
 // UBOS 2.0 Phase 2.1 media runtime foundation validation
-const fileVideoSource = createMediaSource({ id: 'source:file-video', kind: 'video_file', uri: 'fixtures/video.mp4', graphSourceId: 'graph-video' });
-const fileAudioSource = createMediaSource({ id: 'source:file-audio', kind: 'audio_file', uri: 'fixtures/audio.wav', graphSourceId: 'graph-audio' });
+const fileVideoSource = createMediaSource({
+  id: 'source:file-video',
+  kind: 'video_file',
+  uri: 'fixtures/video.mp4',
+  graphSourceId: 'graph-video',
+});
+const fileAudioSource = createMediaSource({
+  id: 'source:file-audio',
+  kind: 'audio_file',
+  uri: 'fixtures/audio.wav',
+  graphSourceId: 'graph-audio',
+});
 const cameraSource = createMediaSource({ id: 'source:camera', kind: 'camera', uri: '/dev/video0' });
 const micSource = createMediaSource({ id: 'source:mic', kind: 'microphone', uri: 'default' });
-const mp4Sink = createMediaSink({ id: 'sink:recording', kind: 'mp4_recording', uri: 'recordings/test.mp4' });
-const rtmpSink = createMediaSink({ id: 'sink:rtmp', kind: 'rtmp_stream', uri: 'rtmp://example.test/live/key', enabled: false });
-const mediaPipeline = createMediaRuntimePipeline({ id: 'pipeline:phase-2-1', sources: [fileVideoSource, fileAudioSource, cameraSource, micSource], sinks: [mp4Sink, rtmpSink], graphRevision: 121 });
+const mp4Sink = createMediaSink({
+  id: 'sink:recording',
+  kind: 'mp4_recording',
+  uri: 'recordings/test.mp4',
+});
+const rtmpSink = createMediaSink({
+  id: 'sink:rtmp',
+  kind: 'rtmp_stream',
+  uri: 'rtmp://example.test/live/key',
+  enabled: false,
+});
+const mediaPipeline = createMediaRuntimePipeline({
+  id: 'pipeline:phase-2-1',
+  sources: [fileVideoSource, fileAudioSource, cameraSource, micSource],
+  sinks: [mp4Sink, rtmpSink],
+  graphRevision: 121,
+});
 const coreClock = createCoreMediaClock(30);
-const frameSchedule = new DefaultFrameScheduler().schedule(coreClock, mediaPipeline.sources, mediaPipeline.sinks, mediaPipeline.graphRevision);
+const frameSchedule = new DefaultFrameScheduler().schedule(
+  coreClock,
+  mediaPipeline.sources,
+  mediaPipeline.sinks,
+  mediaPipeline.graphRevision,
+);
 assert.equal(frameSchedule.metadataOnly, true, 'frame scheduler emits metadata-only schedules');
-assert.equal(frameSchedule.sources.length, 4, 'frame scheduler includes video, audio, camera, and microphone sources');
-assert.equal(frameSchedule.sinks.includes('sink:recording'), true, 'frame scheduler targets MP4 sink metadata');
-const recordingCommand = createMp4RecordingCommand(mediaPipeline, 'recordings/test.mp4', { executable: 'ffmpeg', env: {} });
-assert.equal(recordingCommand.args.includes('-movflags'), true, 'MP4 recording command enables faststart flags');
-assert.equal(recordingCommand.outputs[0], 'recordings/test.mp4', 'MP4 recording command declares output');
-const rtmpCommand = createRtmpCommand(mediaPipeline, 'rtmp://example.test/live/key', { executable: 'ffmpeg', env: {} });
+assert.equal(
+  frameSchedule.sources.length,
+  4,
+  'frame scheduler includes video, audio, camera, and microphone sources',
+);
+assert.equal(
+  frameSchedule.sinks.includes('sink:recording'),
+  true,
+  'frame scheduler targets MP4 sink metadata',
+);
+const recordingCommand = createMp4RecordingCommand(mediaPipeline, 'recordings/test.mp4', {
+  executable: 'ffmpeg',
+  env: {},
+});
+assert.equal(
+  recordingCommand.args.includes('-movflags'),
+  true,
+  'MP4 recording command enables faststart flags',
+);
+assert.equal(
+  recordingCommand.outputs[0],
+  'recordings/test.mp4',
+  'MP4 recording command declares output',
+);
+const rtmpCommand = createRtmpCommand(mediaPipeline, 'rtmp://example.test/live/key', {
+  executable: 'ffmpeg',
+  env: {},
+});
 assert.equal(rtmpCommand.args.includes('-f'), true, 'RTMP command models output container');
-assert.equal(rtmpCommand.metadata.initiallyStubbed, true, 'RTMP output remains an explicit Phase 2.1 stub');
-const graphMappedPipeline = mapProductionGraphSources({ revision: 122, scenes: [{ sources: [{ id: 'camera-a', type: 'video', name: 'Camera A' }] }] });
-assert.equal(graphMappedPipeline.sources[0]?.graphSourceId, 'camera-a', 'production graph source metadata maps to media runtime source');
+assert.equal(
+  rtmpCommand.metadata.initiallyStubbed,
+  true,
+  'RTMP output remains an explicit Phase 2.1 stub',
+);
+const graphMappedPipeline = mapProductionGraphSources({
+  revision: 122,
+  scenes: [{ sources: [{ id: 'camera-a', type: 'video', name: 'Camera A' }] }],
+});
+assert.equal(
+  graphMappedPipeline.sources[0]?.graphSourceId,
+  'camera-a',
+  'production graph source metadata maps to media runtime source',
+);
 const ffmpegMediaAdapter = createFFmpegMediaRuntimeAdapter({ executable: 'ffmpeg', env: {} });
 const ffmpegPipelineState = await ffmpegMediaAdapter.createPipeline(mediaPipeline);
-assert.equal(ffmpegPipelineState.containsMediaPayloads, false, 'FFmpeg media runtime state never serializes media payloads');
-const ffmpegRecordingState = await ffmpegMediaAdapter.recordMp4(mediaPipeline, 'recordings/test.mp4');
-assert.equal(ffmpegRecordingState.state, 'recording', 'FFmpeg adapter creates basic recording pipeline');
-const ffmpegRtmpState = await ffmpegMediaAdapter.streamRtmp(mediaPipeline, 'rtmp://example.test/live/key');
-assert.equal(ffmpegRtmpState.events[0]?.type, 'rtmp_stubbed', 'FFmpeg adapter exposes RTMP as stubbed output abstraction');
+assert.equal(
+  ffmpegPipelineState.containsMediaPayloads,
+  false,
+  'FFmpeg media runtime state never serializes media payloads',
+);
+const ffmpegRecordingState = await ffmpegMediaAdapter.recordMp4(
+  mediaPipeline,
+  'recordings/test.mp4',
+);
+assert.equal(
+  ffmpegRecordingState.state,
+  'recording',
+  'FFmpeg adapter creates basic recording pipeline',
+);
+const ffmpegRtmpState = await ffmpegMediaAdapter.streamRtmp(
+  mediaPipeline,
+  'rtmp://example.test/live/key',
+);
+assert.equal(
+  ffmpegRtmpState.events[0]?.type,
+  'rtmp_stubbed',
+  'FFmpeg adapter exposes RTMP as stubbed output abstraction',
+);
 await ffmpegMediaAdapter.stop();
-
 
 // UBOS 2.0 Phase 2.4 video decode pipeline validation
 const decodeSource = createVideoDecodeSource({ id: 'decode:mp4', uri: 'fixtures/clip.mp4' });
 assert.equal(decodeSource.container, 'mp4', 'video decode source infers MP4 container');
 const decodeBuffer = new RingFrameBuffer(2);
-const ffmpegDecoder = createFFmpegVideoDecoder({ id: 'decoder:phase-2-4', dryRun: true, maxFrames: 3, bufferCapacity: 2, env: {} });
+const ffmpegDecoder = createFFmpegVideoDecoder({
+  id: 'decoder:phase-2-4',
+  dryRun: true,
+  maxFrames: 3,
+  bufferCapacity: 2,
+  env: {},
+});
 const decoderEvents: string[] = [];
 ffmpegDecoder.onStatus((event) => decoderEvents.push(event.type));
 const openedDecoder = await ffmpegDecoder.open(decodeSource);
 assert.equal(openedDecoder.state, 'decoding', 'FFmpeg video decoder opens into decoding state');
 const firstDecodedFrame = await ffmpegDecoder.decodeNext();
-assert.equal(firstDecodedFrame?.frameIndex, 0, 'video decoder decodes frames sequentially from index zero');
-assert.equal(firstDecodedFrame?.metadataOnly, true, 'decoded video frames are metadata-only serializable objects');
-assert.equal(firstDecodedFrame?.containsFrameData, false, 'decoded video frame payload ownership stays inside runtime');
+assert.equal(
+  firstDecodedFrame?.frameIndex,
+  0,
+  'video decoder decodes frames sequentially from index zero',
+);
+assert.equal(
+  firstDecodedFrame?.metadataOnly,
+  true,
+  'decoded video frames are metadata-only serializable objects',
+);
+assert.equal(
+  firstDecodedFrame?.containsFrameData,
+  false,
+  'decoded video frame payload ownership stays inside runtime',
+);
 assert.equal(typeof firstDecodedFrame?.ptsMs, 'number', 'decoded video frame exposes PTS metadata');
-assert.equal(typeof firstDecodedFrame?.durationMs, 'number', 'decoded video frame exposes duration metadata');
-assert.equal(firstDecodedFrame?.pixelFormat, 'yuv420p', 'decoded video frame exposes pixel format metadata');
+assert.equal(
+  typeof firstDecodedFrame?.durationMs,
+  'number',
+  'decoded video frame exposes duration metadata',
+);
+assert.equal(
+  firstDecodedFrame?.pixelFormat,
+  'yuv420p',
+  'decoded video frame exposes pixel format metadata',
+);
 await ffmpegDecoder.decodeNext();
 await ffmpegDecoder.decodeNext();
 const eosFrame = await ffmpegDecoder.decodeNext();
 assert.equal(eosFrame, undefined, 'video decoder reports end-of-stream after final frame');
-assert.equal(ffmpegDecoder.getSnapshot().state, 'completed', 'video decoder enters completed state at end-of-stream');
-assert.equal(ffmpegDecoder.getSnapshot().endOfStream, true, 'video decoder snapshot exposes end-of-stream detection');
+assert.equal(
+  ffmpegDecoder.getSnapshot().state,
+  'completed',
+  'video decoder enters completed state at end-of-stream',
+);
+assert.equal(
+  ffmpegDecoder.getSnapshot().endOfStream,
+  true,
+  'video decoder snapshot exposes end-of-stream detection',
+);
 assert.equal(ffmpegDecoder.getBuffer().size(), 2, 'frame buffer enforces configured capacity');
 decodeBuffer.push(firstDecodedFrame!);
-assert.equal(decodeBuffer.peek()?.frameIndex, 0, 'frame buffering abstraction supports peeking decoded metadata');
+assert.equal(
+  decodeBuffer.peek()?.frameIndex,
+  0,
+  'frame buffering abstraction supports peeking decoded metadata',
+);
 ffmpegDecoder.pause();
-assert.equal(ffmpegDecoder.getSnapshot().state, 'completed', 'completed decoder does not regress when paused after EOS');
-assert.equal(decoderEvents.includes('frame_decoded'), true, 'video decoder emits runtime status events');
-assert.equal(buildFFprobeFrameMetadataArgs(decodeSource, 2).includes('-show_entries'), true, 'FFmpeg video decoder builds ffprobe metadata command');
-assert.equal(createFFmpegDecodeCommandPreview(decodeSource, { executable: 'ffmpeg', env: {} }).includes('-f null'), true, 'FFmpeg video decoder exposes backend command preview without UI internals');
-assert.equal(JSON.stringify(ffmpegDecoder.getSnapshot()).includes('containsMediaPayloads'), true, 'decoder snapshot declares media payload exclusion');
+assert.equal(
+  ffmpegDecoder.getSnapshot().state,
+  'completed',
+  'completed decoder does not regress when paused after EOS',
+);
+assert.equal(
+  decoderEvents.includes('frame_decoded'),
+  true,
+  'video decoder emits runtime status events',
+);
+assert.equal(
+  buildFFprobeFrameMetadataArgs(decodeSource, 2).includes('-show_entries'),
+  true,
+  'FFmpeg video decoder builds ffprobe metadata command',
+);
+assert.equal(
+  createFFmpegDecodeCommandPreview(decodeSource, { executable: 'ffmpeg', env: {} }).includes(
+    '-f null',
+  ),
+  true,
+  'FFmpeg video decoder exposes backend command preview without UI internals',
+);
+assert.equal(
+  JSON.stringify(ffmpegDecoder.getSnapshot()).includes('containsMediaPayloads'),
+  true,
+  'decoder snapshot declares media payload exclusion',
+);
 
 
 // UBOS 2.0 Phase 2.5 GPU rendering foundation validation
@@ -1871,18 +4002,2213 @@ await videoRenderer.stop();
 assert.equal(videoRenderer.getSnapshot().state, 'stopped', 'renderer stops lifecycle');
 
 // UBOS 2.0 Phase 2.2 real FFmpeg process pipeline validation
-const dryRunRuntime = createFFmpegRuntime(createFFmpegEnvironment({}), { dryRun: true, startupTimeoutMs: 25 });
-const dryRunCommand = buildCommand({ executable: 'ffmpeg', args: ['-version'], outputs: [], metadata: { test: 'dry-run' } });
+const dryRunRuntime = createFFmpegRuntime(createFFmpegEnvironment({}), {
+  dryRun: true,
+  startupTimeoutMs: 25,
+});
+const dryRunCommand = buildCommand({
+  executable: 'ffmpeg',
+  args: ['-version'],
+  outputs: [],
+  metadata: { test: 'dry-run' },
+});
 const dryRunProcess = await dryRunRuntime.manager.start(dryRunCommand);
-assert.equal(dryRunProcess.state, 'running', 'FFmpeg dry-run process enters running lifecycle without spawning');
+assert.equal(
+  dryRunProcess.state,
+  'running',
+  'FFmpeg dry-run process enters running lifecycle without spawning',
+);
 assert.equal(dryRunProcess.dryRun, true, 'FFmpeg dry-run records mock-safe execution mode');
-assert.equal(dryRunProcess.events.some((event) => event.type === 'dry_run_running'), true, 'FFmpeg dry-run emits lifecycle event');
-assert.equal(dryRunRuntime.createManifest().containsProcessHandles, false, 'FFmpeg runtime manifest excludes process handles');
+assert.equal(
+  dryRunProcess.events.some((event) => event.type === 'dry_run_running'),
+  true,
+  'FFmpeg dry-run emits lifecycle event',
+);
+assert.equal(
+  dryRunRuntime.createManifest().containsProcessHandles,
+  false,
+  'FFmpeg runtime manifest excludes process handles',
+);
 const dryRunStopped = await dryRunRuntime.manager.stop();
 assert.equal(dryRunStopped?.state, 'stopped', 'FFmpeg dry-run stop reaches stopped lifecycle');
-const missingRuntime = createFFmpegRuntime(createFFmpegEnvironment({ UBOS_ENABLE_REAL_FFMPEG: 'true', NEXT_PUBLIC_UBOS_REAL_FFMPEG: 'true' }), { startupTimeoutMs: 100 });
-const missingProcess = await missingRuntime.manager.start(buildCommand({ executable: 'ubos-ffmpeg-missing-binary', args: ['-version'], outputs: [] }));
+const missingRuntime = createFFmpegRuntime(
+  createFFmpegEnvironment({
+    UBOS_ENABLE_REAL_FFMPEG: 'true',
+    NEXT_PUBLIC_UBOS_REAL_FFMPEG: 'true',
+  }),
+  { startupTimeoutMs: 100 },
+);
+const missingProcess = await missingRuntime.manager.start(
+  buildCommand({ executable: 'ubos-ffmpeg-missing-binary', args: ['-version'], outputs: [] }),
+);
 await new Promise((resolve) => setTimeout(resolve, 25));
-assert.equal(['failed', 'running'].includes(missingRuntime.manager.getProcess()?.state ?? missingProcess.state), true, 'FFmpeg real process layer tolerates missing binaries without throwing');
-assert.equal(missingRuntime.createManifest().containsPipes, false, 'FFmpeg real process manifest excludes stdio pipes');
+assert.equal(
+  ['failed', 'running'].includes(
+    missingRuntime.manager.getProcess()?.state ?? missingProcess.state,
+  ),
+  true,
+  'FFmpeg real process layer tolerates missing binaries without throwing',
+);
+assert.equal(
+  missingRuntime.createManifest().containsPipes,
+  false,
+  'FFmpeg real process manifest excludes stdio pipes',
+);
 await missingRuntime.manager.kill();
+
+// UBOS 2.0 Phase 2.7 live video source capture validation
+const captureBackend = new FFmpegDeviceCaptureBackend([
+  createVideoCaptureDevice({
+    id: 'camera:test:virtual',
+    label: 'Validation Virtual Camera',
+    kind: 'virtual_camera',
+    backend: 'ffmpeg-device-capture',
+    capabilities: [
+      {
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        pixelFormat: 'nv12',
+        label: '1080p30 NV12',
+        metadata: {},
+      },
+      {
+        width: 1280,
+        height: 720,
+        frameRate: 60,
+        pixelFormat: 'mjpeg',
+        label: '720p60 MJPEG',
+        metadata: {},
+      },
+    ],
+    metadata: { platformNeutral: true },
+  }),
+]);
+const captureSource = createVideoCaptureSource({
+  id: 'capture:phase-2-7',
+  backend: captureBackend,
+  graphRevision: 127,
+});
+const captureDevices = await captureSource.discoverDevices();
+assert.equal(captureDevices.length, 1, 'video capture discovery returns devices');
+assert.equal(
+  captureDevices[0]?.containsRuntimeHandles,
+  false,
+  'video capture devices are serializable metadata',
+);
+assert.equal(
+  captureDevices[0]?.capabilities[0]?.width,
+  1920,
+  'camera capabilities expose resolution',
+);
+assert.equal(
+  captureDevices[0]?.capabilities[0]?.frameRate,
+  30,
+  'camera capabilities expose frame rate',
+);
+assert.equal(
+  captureDevices[0]?.capabilities[0]?.pixelFormat,
+  'nv12',
+  'camera capabilities expose pixel format',
+);
+await captureSource.selectDevice('camera:test:virtual', {
+  width: 1280,
+  height: 720,
+  frameRate: 60,
+  pixelFormat: 'mjpeg',
+});
+assert.equal(
+  captureSource.getSnapshot().selectedCapability?.label,
+  '720p60 MJPEG',
+  'video capture source selects requested device capability',
+);
+await captureSource.start();
+assert.equal(
+  captureSource.getSnapshot().state,
+  'capturing',
+  'video capture enters capturing lifecycle',
+);
+const capturedFrame = captureSource.captureFrame();
+assert.equal(capturedFrame.metadataOnly, true, 'captured camera frames are metadata-only');
+assert.equal(
+  capturedFrame.containsFrameData,
+  false,
+  'captured camera frames do not expose frame payloads',
+);
+assert.equal(capturedFrame.width, 1280, 'captured frame uses selected capability width');
+const captureRender = captureSource.renderLatestFrame();
+assert.equal(
+  captureRender.renderFrame.layers.length,
+  1,
+  'captured camera frame is composited as a render layer',
+);
+assert.equal(
+  captureRender.gpu?.renderPass?.frame.resources[0]?.kind,
+  'texture',
+  'captured camera frame integrates with renderer texture metadata',
+);
+captureSource.pause();
+assert.equal(
+  captureSource.getSnapshot().state,
+  'paused',
+  'video capture supports paused lifecycle',
+);
+captureSource.resume();
+assert.equal(
+  captureSource.getSnapshot().state,
+  'capturing',
+  'video capture supports resume lifecycle',
+);
+await captureSource.stop();
+assert.equal(
+  captureSource.getSnapshot().state,
+  'stopped',
+  'video capture supports stopped lifecycle',
+);
+assert.equal(
+  captureSource.getStatusEvents().some((event) => event.type === 'frame_captured'),
+  true,
+  'video capture emits runtime status events',
+);
+
+// UBOS 2.0 Phase 2.8 audio capture and decode foundation validation
+const audioCaptureBackend = new FFmpegAudioCaptureBackend([
+  createAudioCaptureDevice({
+    id: 'microphone:test:virtual',
+    label: 'Validation Virtual Microphone',
+    kind: 'virtual_audio_device',
+    backend: 'ffmpeg-audio-capture',
+    capabilities: [
+      {
+        sampleRate: 48000,
+        channels: 2,
+        sampleFormat: 'flt',
+        frameDurationMs: 10,
+        label: '48k stereo float',
+        metadata: {},
+      },
+      {
+        sampleRate: 44100,
+        channels: 1,
+        sampleFormat: 's16',
+        frameDurationMs: 20,
+        label: '44.1k mono s16',
+        metadata: {},
+      },
+    ],
+    metadata: { platformNeutral: true },
+  }),
+]);
+const audioCapture = createAudioCaptureSource({
+  id: 'audio-capture:phase-2-8',
+  backend: audioCaptureBackend,
+  graphRevision: 128,
+});
+const audioDevices = await audioCapture.discoverDevices();
+assert.equal(audioDevices.length, 1, 'audio capture discovery returns microphone devices');
+assert.equal(
+  audioDevices[0]?.containsRuntimeHandles,
+  false,
+  'audio capture devices are serializable metadata',
+);
+await audioCapture.selectDevice('microphone:test:virtual', {
+  sampleRate: 44100,
+  channels: 1,
+  sampleFormat: 's16',
+});
+assert.equal(
+  audioCapture.getSnapshot().selectedCapability?.label,
+  '44.1k mono s16',
+  'audio capture source selects requested input device capability',
+);
+await audioCapture.start();
+const capturedAudio = audioCapture.captureFrame();
+assert.equal(capturedAudio.sampleRate, 44100, 'captured audio frame exposes sample rate metadata');
+assert.equal(capturedAudio.channels, 1, 'captured audio frame exposes channel metadata');
+assert.equal(
+  capturedAudio.sampleFormat,
+  's16',
+  'captured audio frame exposes sample format metadata',
+);
+assert.equal(capturedAudio.metadataOnly, true, 'captured audio frames are metadata-only');
+assert.equal(
+  capturedAudio.containsAudioData,
+  false,
+  'captured audio frames do not expose sample payloads',
+);
+audioCapture.pause();
+assert.equal(audioCapture.getSnapshot().state, 'paused', 'audio capture supports paused lifecycle');
+audioCapture.resume();
+assert.equal(
+  audioCapture.getSnapshot().state,
+  'capturing',
+  'audio capture supports resume lifecycle',
+);
+await audioCapture.stop();
+assert.equal(
+  audioCapture.getStatusEvents().some((event) => event.type === 'audio_frame_captured'),
+  true,
+  'audio capture emits runtime status events',
+);
+
+const audioDecodeSource = createAudioDecodeSource({ id: 'decode:wav', uri: 'fixtures/audio.wav' });
+assert.equal(audioDecodeSource.container, 'wav', 'audio decode source infers WAV container');
+for (const uri of ['clip.mp4', 'clip.mov', 'clip.mkv', 'clip.webm', 'clip.wav', 'clip.mp3']) {
+  assert.equal(
+    Boolean(createAudioDecodeSource({ id: `decode:${uri}`, uri: `fixtures/${uri}` }).container),
+    true,
+    `audio decoder supports ${uri}`,
+  );
+}
+const audioBuffer = new RingAudioBuffer(2);
+const ffmpegAudioDecoder = createFFmpegAudioDecoder({
+  id: 'decoder:phase-2-8',
+  dryRun: true,
+  maxFrames: 3,
+  bufferCapacity: 2,
+  env: {},
+});
+const audioDecoderEvents: string[] = [];
+ffmpegAudioDecoder.onStatus((event) => audioDecoderEvents.push(event.type));
+const openedAudioDecoder = await ffmpegAudioDecoder.open(audioDecodeSource);
+assert.equal(
+  openedAudioDecoder.state,
+  'decoding',
+  'FFmpeg audio decoder opens into decoding state',
+);
+const firstAudioFrame = await ffmpegAudioDecoder.decodeNext();
+assert.equal(
+  firstAudioFrame?.frameIndex,
+  0,
+  'audio decoder decodes frames sequentially from index zero',
+);
+assert.equal(
+  firstAudioFrame?.sampleRate,
+  48000,
+  'decoded audio frame exposes sample rate metadata',
+);
+assert.equal(firstAudioFrame?.channels, 2, 'decoded audio frame exposes channel metadata');
+assert.equal(
+  firstAudioFrame?.sampleFormat,
+  's16',
+  'decoded WAV frame exposes sample format metadata',
+);
+assert.equal(
+  typeof firstAudioFrame?.timestamp,
+  'number',
+  'decoded audio frame exposes timestamp metadata',
+);
+assert.equal(
+  typeof firstAudioFrame?.duration,
+  'number',
+  'decoded audio frame exposes duration metadata',
+);
+assert.equal(firstAudioFrame?.metadataOnly, true, 'decoded audio frames are metadata-only');
+assert.equal(
+  firstAudioFrame?.containsAudioData,
+  false,
+  'decoded audio frame payload ownership stays inside runtime',
+);
+await ffmpegAudioDecoder.decodeNext();
+await ffmpegAudioDecoder.decodeNext();
+assert.equal(
+  await ffmpegAudioDecoder.decodeNext(),
+  undefined,
+  'audio decoder reports end-of-stream after final frame',
+);
+assert.equal(
+  ffmpegAudioDecoder.getSnapshot().state,
+  'completed',
+  'audio decoder enters completed state at end-of-stream',
+);
+assert.equal(ffmpegAudioDecoder.getBuffer().size(), 2, 'audio buffer enforces configured capacity');
+audioBuffer.push(firstAudioFrame!);
+assert.equal(
+  audioBuffer.peek()?.frameIndex,
+  0,
+  'audio buffering abstraction supports peeking decoded metadata',
+);
+assert.equal(
+  audioDecoderEvents.includes('audio_frame_decoded'),
+  true,
+  'audio decoder emits runtime status events',
+);
+assert.equal(
+  buildFFprobeAudioFrameMetadataArgs(audioDecodeSource, 2).includes('-show_entries'),
+  true,
+  'FFmpeg audio decoder builds ffprobe metadata command',
+);
+assert.equal(
+  createFFmpegAudioDecodeCommandPreview(audioDecodeSource, {
+    executable: 'ffmpeg',
+    env: {},
+  }).includes('-f null'),
+  true,
+  'FFmpeg audio decoder exposes backend command preview without UI internals',
+);
+assert.equal(
+  JSON.stringify(ffmpegAudioDecoder.getSnapshot()).includes('containsMediaPayloads'),
+  true,
+  'audio decoder snapshot declares media payload exclusion',
+);
+
+// UBOS 2.0 Phase 2.9 audio engine mixer and DSP foundation validation
+const mixerEvents: string[] = [];
+const mixerInputA = new RingAudioBuffer(4);
+const mixerInputB = new RingAudioBuffer(4);
+mixerInputA.push(
+  createSyntheticAudioFrame({
+    id: 'validation:tone:a:0',
+    sourceId: 'tone:a',
+    frequencyHz: 440,
+    amplitude: 0.25,
+  }),
+);
+mixerInputB.push(
+  createSyntheticAudioFrame({
+    id: 'validation:tone:b:0',
+    sourceId: 'tone:b',
+    frequencyHz: 880,
+    amplitude: 0.2,
+  }),
+);
+const audioMixer = createAudioMixer({ id: 'mixer:phase-2-9', sampleRate: 48000 });
+audioMixer.onStatus((event) => mixerEvents.push(event.type));
+audioMixer.addChannel({
+  id: 'channel:music',
+  label: 'Music bed',
+  buffer: mixerInputA,
+  controls: { gain: 0.8, mute: false, solo: false, pan: -0.25 },
+});
+audioMixer.addChannel({
+  id: 'channel:voice',
+  label: 'Voice',
+  buffer: mixerInputB,
+  controls: { gain: 1, mute: false, solo: true, pan: 0.25 },
+});
+audioMixer.addBus({ id: 'bus:program', label: 'Program', channels: 2, sampleRate: 48000 });
+audioMixer.addBus({ id: 'bus:monitor', label: 'Monitor', channels: 2, sampleRate: 48000 });
+audioMixer.addRoute({
+  id: 'route:music:program',
+  inputChannelId: 'channel:music',
+  outputBusId: 'bus:program',
+  gain: 1,
+  enabled: true,
+});
+audioMixer.addRoute({
+  id: 'route:voice:program',
+  inputChannelId: 'channel:voice',
+  outputBusId: 'bus:program',
+  gain: 1,
+  enabled: true,
+});
+audioMixer.addRoute({
+  id: 'route:voice:monitor',
+  inputChannelId: 'channel:voice',
+  outputBusId: 'bus:monitor',
+  gain: 0.5,
+  enabled: true,
+});
+audioMixer.addProcessor('bus:program', createCompressorProcessor({ thresholdDb: -12, ratio: 2 }));
+audioMixer.addProcessor('bus:program', createLimiterProcessor({ ceilingDb: -0.5 }));
+audioMixer.addProcessor(
+  'bus:monitor',
+  createEqualizerProcessor({ bands: [{ frequencyHz: 1000, gainDb: 1, q: 1 }] }),
+);
+audioMixer.addProcessor('bus:monitor', createHighPassFilterProcessor({ cutoffHz: 80 }));
+audioMixer.addProcessor('bus:monitor', createLowPassFilterProcessor({ cutoffHz: 16000 }));
+audioMixer.start();
+const mixedOutputs = audioMixer.mix();
+assert.equal(mixedOutputs.length, 2, 'audio mixer renders every configured output bus');
+assert.equal(mixedOutputs[0]?.metadataOnly, true, 'mixed audio output frames expose metadata only');
+assert.equal(
+  mixedOutputs[0]?.containsAudioData,
+  false,
+  'mixed audio output frames do not expose sample payloads',
+);
+assert.equal(typeof mixedOutputs[0]?.levels.peak, 'number', 'audio mixer reports peak levels');
+assert.equal(typeof mixedOutputs[0]?.levels.rms, 'number', 'audio mixer reports RMS levels');
+assert.equal(typeof mixedOutputs[0]?.levels.lufs, 'number', 'audio mixer reports LUFS levels');
+assert.equal(
+  typeof mixedOutputs[0]?.levels.clipped,
+  'boolean',
+  'audio mixer reports clipping detection',
+);
+assert.equal(
+  audioMixer.getSnapshot().containsRuntimeHandles,
+  false,
+  'audio mixer snapshot preserves backend independence',
+);
+assert.equal(
+  audioMixer.getSnapshot().containsMediaPayloads,
+  false,
+  'audio mixer snapshot excludes media payloads',
+);
+assert.equal(
+  audioMixer.getSnapshot().clock.containsRuntimeHandles,
+  false,
+  'audio mixer synchronizes with serializable MediaClock state',
+);
+assert.equal(audioMixer.getSnapshot().routes.length, 3, 'audio mixer models input-to-bus routing');
+assert.equal(
+  audioMixer.getSnapshot().buses[0]?.processors.length,
+  2,
+  'audio buses own DSP processor chains',
+);
+assert.equal(mixerEvents.includes('levels_updated'), true, 'audio mixer emits level events');
+audioMixer.pause();
+assert.equal(audioMixer.getSnapshot().state, 'paused', 'audio mixer supports pause lifecycle');
+audioMixer.resume();
+assert.equal(audioMixer.getSnapshot().state, 'running', 'audio mixer supports resume lifecycle');
+audioMixer.stop();
+assert.equal(audioMixer.getSnapshot().state, 'stopped', 'audio mixer supports stopped lifecycle');
+const mixerDemo = await createAudioMixerDemo();
+assert.equal(
+  mixerDemo.outputs.length,
+  1,
+  'audio mixer demo mixes multiple synthetic sources to the program bus',
+);
+assert.equal(
+  mixerDemo.snapshot.events.some((event) => event.type === 'buffer_mixed'),
+  true,
+  'audio mixer demo emits runtime status events',
+);
+
+// UBOS 2.0 Phase 2.10 preview and program output pipeline validation
+const previewClock = createClock({ frameRate: 30 });
+const programClock = createClock({ frameRate: 30 });
+const previewCompositor = createSceneCompositor({
+  id: 'compositor:preview:phase-2-10',
+  sceneId: 'scene:preview',
+  mediaClock: previewClock,
+});
+previewCompositor.addLayer(
+  createCompositorRenderLayer({
+    id: 'preview-camera',
+    label: 'Preview Camera',
+    source: { type: 'video', sourceId: 'camera:preview', metadata: {} },
+    position: { x: 0, y: 0 },
+    size: { width: 1280, height: 720 },
+    zIndex: 0,
+  }),
+);
+const programCompositor = createSceneCompositor({
+  id: 'compositor:program:phase-2-10',
+  sceneId: 'scene:program',
+  mediaClock: programClock,
+});
+programCompositor.addLayer(
+  createCompositorRenderLayer({
+    id: 'program-camera',
+    label: 'Program Camera',
+    source: { type: 'video', sourceId: 'camera:program', metadata: {} },
+    position: { x: 0, y: 0 },
+    size: { width: 1920, height: 1080 },
+    zIndex: 0,
+  }),
+);
+const previewMixerBuffer = new RingAudioBuffer(4);
+const programMixerBuffer = new RingAudioBuffer(4);
+previewMixerBuffer.push(
+  createSyntheticAudioFrame({ id: 'preview:tone:0', sourceId: 'tone:preview', frequencyHz: 330 }),
+);
+programMixerBuffer.push(
+  createSyntheticAudioFrame({ id: 'program:tone:0', sourceId: 'tone:program', frequencyHz: 660 }),
+);
+const previewMixer = createAudioMixer({ id: 'mixer:preview:phase-2-10', mediaClock: previewClock });
+previewMixer.addChannel({
+  id: 'channel:preview',
+  buffer: previewMixerBuffer,
+  controls: { gain: 1, mute: false, solo: false, pan: 0 },
+});
+previewMixer.addBus({
+  id: 'bus:preview',
+  label: 'Preview monitor',
+  channels: 2,
+  sampleRate: 48000,
+});
+previewMixer.addRoute({
+  id: 'route:preview',
+  inputChannelId: 'channel:preview',
+  outputBusId: 'bus:preview',
+  gain: 1,
+  enabled: true,
+});
+const programMixer = createAudioMixer({ id: 'mixer:program:phase-2-10', mediaClock: programClock });
+programMixer.addChannel({
+  id: 'channel:program',
+  buffer: programMixerBuffer,
+  controls: { gain: 1, mute: false, solo: false, pan: 0 },
+});
+programMixer.addBus({ id: 'bus:program', label: 'Program master', channels: 2, sampleRate: 48000 });
+programMixer.addRoute({
+  id: 'route:program',
+  inputChannelId: 'channel:program',
+  outputBusId: 'bus:program',
+  gain: 1,
+  enabled: true,
+});
+const previewOutputEvents: string[] = [];
+const previewOutput = createPreviewOutput({
+  id: 'output:preview:phase-2-10',
+  sceneId: 'scene:preview',
+  compositor: previewCompositor,
+  audioMixer: previewMixer,
+  audioBusId: 'bus:preview',
+  mediaClock: previewClock,
+  videoSurface: { width: 1280, height: 720 },
+});
+previewOutput.onStatus((event) => previewOutputEvents.push(event.type));
+const programOutput = createProgramOutput({
+  id: 'output:program:phase-2-10',
+  sceneId: 'scene:program',
+  compositor: programCompositor,
+  audioMixer: programMixer,
+  audioBusId: 'bus:program',
+  mediaClock: programClock,
+  videoSurface: { width: 1920, height: 1080 },
+});
+const outputManager = new OutputPipelineManager({ preview: previewOutput, program: programOutput });
+outputManager.initializeAll();
+outputManager.startAll();
+const outputFrames = outputManager.renderAll();
+assert.equal(outputFrames.preview.state, 'rendering', 'preview output renders through manager');
+assert.equal(outputFrames.program.state, 'rendering', 'program output renders through manager');
+assert.equal(
+  outputFrames.preview.renderState.sceneId,
+  'scene:preview',
+  'preview output owns independent preview scene',
+);
+assert.equal(
+  outputFrames.program.renderState.sceneId,
+  'scene:program',
+  'program output owns independent program scene',
+);
+assert.equal(
+  outputFrames.preview.videoSurface.containsRuntimeHandles,
+  false,
+  'preview video surface is metadata-only',
+);
+
+assert.equal(
+  outputFrames.program.audioBus.containsRuntimeHandles,
+  false,
+  'program audio bus is metadata-only',
+);
+
+// UBOS 2.0 Phase 2.13 recording pipeline validation
+const recordingClock = createClock({ frameRate: 30 });
+const recordingScheduler = new FrameScheduler(recordingClock);
+const recordingEvents: string[] = [];
+const phase213RecordingPipeline = createRecordingPipelineV2({
+  id: 'recording-pipeline:phase-2-13',
+});
+phase213RecordingPipeline.onRuntimeEvent((event) => recordingEvents.push(event.type));
+const recordingSession = phase213RecordingPipeline.createSession({
+  id: 'recording-session:phase-2-13',
+  container: 'mp4',
+  outputUri: 'program-master.mp4',
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: recordingClock,
+  frameScheduler: recordingScheduler,
+});
+assert.equal(recordingSession.state, 'idle', 'recording session starts idle');
+assert.equal(recordingSession.container, 'mp4', 'recording pipeline supports MP4 container');
+assert.equal(
+  recordingSession.source.programOutputId,
+  programOutput.id,
+  'recording session binds ProgramOutput identity',
+);
+assert.equal(
+  recordingSession.source.audioMixerId,
+  programMixer.id,
+  'recording session binds AudioMixer identity',
+);
+phase213RecordingPipeline.prepare(recordingSession.id);
+assert.equal(
+  phase213RecordingPipeline.getSession(recordingSession.id)?.state,
+  'preparing',
+  'recording lifecycle supports preparing',
+);
+phase213RecordingPipeline.start(recordingSession.id);
+const recordingTick = recordingScheduler.createTick();
+phase213RecordingPipeline.recordProgramFrame(recordingSession.id, recordingTick);
+phase213RecordingPipeline.recordAudioFrame(recordingSession.id, 480, recordingTick);
+const activeRecording = phase213RecordingPipeline.getSession(recordingSession.id)!;
+assert.equal(activeRecording.state, 'recording', 'recording lifecycle supports recording');
+assert.equal(activeRecording.metadata.frameCount, 1, 'recording metadata tracks frame count');
+assert.equal(activeRecording.metadata.audioSamples, 480, 'recording metadata tracks audio samples');
+assert.equal(
+  activeRecording.metadata.droppedFrames,
+  recordingTick.diagnostics?.droppedFrames ?? 0,
+  'recording metadata tracks dropped frames',
+);
+assert.equal(
+  typeof activeRecording.metadata.estimatedFileSizeBytes,
+  'number',
+  'recording metadata estimates file size',
+);
+assert.equal(
+  activeRecording.clock.containsRuntimeHandles,
+  false,
+  'recording session synchronizes with serializable MediaClock state',
+);
+assert.equal(
+  activeRecording.scheduler.metadataOnly,
+  true,
+  'recording pipeline integrates FrameScheduler metadata',
+);
+phase213RecordingPipeline.pause(recordingSession.id);
+assert.equal(
+  phase213RecordingPipeline.getSession(recordingSession.id)?.state,
+  'paused',
+  'recording lifecycle supports paused',
+);
+phase213RecordingPipeline.resume(recordingSession.id);
+phase213RecordingPipeline.stop(recordingSession.id);
+assert.equal(
+  phase213RecordingPipeline.getSession(recordingSession.id)?.state,
+  'stopped',
+  'recording lifecycle supports stopped',
+);
+assert.equal(
+  recordingEvents.includes('recording_started'),
+  true,
+  'recording pipeline emits runtime events',
+);
+assert.equal(
+  phase213RecordingPipeline.getSnapshot().backend.mode,
+  'metadata_only',
+  'recording pipeline preserves backend independence',
+);
+assert.equal(
+  phase213RecordingPipeline.getSnapshot().containsMediaPayloads,
+  false,
+  'recording pipeline excludes media payloads',
+);
+
+// UBOS 2.0 Phase 2.14 streaming pipeline validation
+const streamingClock214 = createClock({ frameRate: 30 });
+const streamingScheduler214 = new FrameScheduler(streamingClock214);
+const streamingEvents214: string[] = [];
+const phase214StreamingPipeline = createStreamingPipelineV2({
+  id: 'streaming-pipeline:phase-2-14',
+});
+phase214StreamingPipeline.onRuntimeEvent((event) => streamingEvents214.push(event.type));
+const streamingSession214 = phase214StreamingPipeline.createSession({
+  id: 'streaming-session:phase-2-14',
+  destination: {
+    kind: 'rtmps',
+    provider: 'youtube',
+    label: 'YouTube primary',
+    endpointUrl: 'rtmps://a.rtmps.youtube.com/live2/STREAM_KEY',
+    streamKeyRef: 'secret://youtube/primary',
+  },
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: streamingClock214,
+  frameScheduler: streamingScheduler214,
+  targetBitrateKbps: 6000,
+  latencyEstimateMs: 1800,
+});
+assert.equal(streamingSession214.state, 'idle', 'streaming session starts idle');
+assert.equal(
+  streamingSession214.destination.provider,
+  'youtube',
+  'streaming destination models YouTube provider',
+);
+assert.equal(streamingSession214.destination.kind, 'rtmps', 'streaming destination supports RTMPS');
+assert.equal(
+  streamingSession214.destination.containsStreamKeys,
+  false,
+  'streaming destination excludes stream keys',
+);
+assert.equal(
+  streamingSession214.source.programOutputId,
+  programOutput.id,
+  'streaming session binds ProgramOutput identity',
+);
+assert.equal(
+  streamingSession214.source.audioMixerId,
+  programMixer.id,
+  'streaming session binds AudioMixer identity',
+);
+phase214StreamingPipeline.prepare(streamingSession214.id);
+assert.equal(
+  phase214StreamingPipeline.getSession(streamingSession214.id)?.state,
+  'preparing',
+  'streaming lifecycle supports preparing',
+);
+phase214StreamingPipeline.connect(streamingSession214.id);
+assert.equal(
+  phase214StreamingPipeline.getSession(streamingSession214.id)?.state,
+  'connecting',
+  'streaming lifecycle supports connecting',
+);
+phase214StreamingPipeline.start(streamingSession214.id);
+const streamingTick214 = streamingScheduler214.createTick();
+phase214StreamingPipeline.publishProgramFrame(streamingSession214.id, streamingTick214);
+phase214StreamingPipeline.publishAudioFrame(streamingSession214.id, 960, streamingTick214);
+const activeStream214 = phase214StreamingPipeline.getSession(streamingSession214.id)!;
+assert.equal(activeStream214.state, 'streaming', 'streaming lifecycle supports streaming');
+assert.equal(activeStream214.metadata.bitrateKbps, 6000, 'streaming metadata tracks bitrate');
+assert.equal(
+  activeStream214.metadata.videoFramesPublished,
+  1,
+  'streaming metadata tracks video frames',
+);
+assert.equal(
+  activeStream214.metadata.audioSamplesPublished,
+  960,
+  'streaming metadata tracks audio samples',
+);
+assert.equal(
+  activeStream214.metadata.droppedFrames,
+  streamingTick214.diagnostics?.droppedFrames ?? 0,
+  'streaming metadata tracks dropped frames',
+);
+assert.equal(
+  activeStream214.metadata.latencyEstimateMs,
+  1800,
+  'streaming metadata tracks latency estimate',
+);
+assert.equal(
+  activeStream214.clock.containsRuntimeHandles,
+  false,
+  'streaming session synchronizes with serializable MediaClock state',
+);
+assert.equal(
+  activeStream214.scheduler.metadataOnly,
+  true,
+  'streaming pipeline integrates FrameScheduler metadata',
+);
+phase214StreamingPipeline.reconnect(streamingSession214.id, 'validation reconnect');
+assert.equal(
+  phase214StreamingPipeline.getSession(streamingSession214.id)?.metadata.reconnectCount,
+  1,
+  'streaming metadata tracks reconnect count',
+);
+phase214StreamingPipeline.stop(streamingSession214.id);
+assert.equal(
+  phase214StreamingPipeline.getSession(streamingSession214.id)?.state,
+  'stopped',
+  'streaming lifecycle supports stopped',
+);
+const failedStream214 = phase214StreamingPipeline.fail(
+  streamingSession214.id,
+  'validation failure',
+);
+assert.equal(failedStream214.state, 'failed', 'streaming lifecycle supports failed');
+assert.equal(
+  streamingEvents214.includes('streaming_started'),
+  true,
+  'streaming pipeline emits runtime events',
+);
+assert.equal(
+  phase214StreamingPipeline.getSnapshot().backend.mode,
+  'metadata_only',
+  'streaming pipeline preserves backend independence',
+);
+assert.equal(
+  phase214StreamingPipeline.getSnapshot().backend.transmitsNetworkPackets,
+  false,
+  'streaming pipeline does not perform real RTMP transmission',
+);
+assert.equal(
+  phase214StreamingPipeline.getSnapshot().containsEncodedPackets,
+  false,
+  'streaming snapshot excludes encoded packets',
+);
+assert.equal(
+  streamingProviders.some((p) => p.id === 'twitch'),
+  true,
+  'streaming provider model includes Twitch',
+);
+assert.equal(
+  streamingProviders.some((p) => p.id === 'facebook'),
+  true,
+  'streaming provider model includes Facebook',
+);
+assert.equal(
+  streamingProviders.some((p) => p.id === 'linkedin'),
+  true,
+  'streaming provider model includes LinkedIn',
+);
+assert.equal(
+  streamingProviders.some((p) => p.id === 'tiktok'),
+  true,
+  'streaming provider model includes TikTok',
+);
+const customStream214 = phase214StreamingPipeline.createSession({
+  id: 'streaming-session:custom',
+  destination: {
+    kind: 'custom',
+    provider: 'custom',
+    label: 'Custom endpoint',
+    endpointUrl: 'udp://encoder-placeholder.local/live',
+  },
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: streamingClock214,
+  frameScheduler: streamingScheduler214,
+});
+assert.equal(
+  customStream214.destination.kind,
+  'custom',
+  'streaming destination supports custom endpoint metadata',
+);
+const rtmpStream214 = phase214StreamingPipeline.createSession({
+  id: 'streaming-session:rtmp',
+  destination: {
+    kind: 'rtmp',
+    provider: 'twitch',
+    label: 'Twitch RTMP',
+    endpointUrl: 'rtmp://live.twitch.tv/app/STREAM_KEY',
+  },
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: streamingClock214,
+  frameScheduler: streamingScheduler214,
+});
+assert.equal(rtmpStream214.destination.kind, 'rtmp', 'streaming destination supports RTMP');
+const streamingDemo214 = await createDemoStreamingSession({
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: streamingClock214,
+  frameScheduler: streamingScheduler214,
+});
+assert.equal(
+  streamingDemo214.session.state,
+  'stopped',
+  'demo streaming session completes lifecycle',
+);
+const movSession = phase213RecordingPipeline.createSession({
+  id: 'recording-session:mov',
+  container: 'mov',
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: recordingClock,
+  frameScheduler: recordingScheduler,
+});
+assert.equal(movSession.container, 'mov', 'recording pipeline supports MOV container');
+const mkvSession = phase213RecordingPipeline.createSession({
+  id: 'recording-session:mkv',
+  container: 'mkv',
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: recordingClock,
+  frameScheduler: recordingScheduler,
+});
+assert.equal(mkvSession.container, 'mkv', 'recording pipeline supports MKV container');
+const failedRecording = phase213RecordingPipeline.fail(mkvSession.id, 'validation failure');
+assert.equal(failedRecording.state, 'failed', 'recording lifecycle supports failed');
+const recordingDemo = await createDemoRecordingSession({
+  programOutput,
+  audioMixer: programMixer,
+  mediaClock: recordingClock,
+  frameScheduler: recordingScheduler,
+});
+assert.equal(recordingDemo.session.state, 'stopped', 'demo recording session completes lifecycle');
+
+assert.equal(
+  outputFrames.preview.renderState.audioFrames.length,
+  1,
+  'preview output presents mixed audio with video',
+);
+assert.equal(
+  outputFrames.program.renderState.audioFrames.length,
+  1,
+  'program output presents mixed audio with video',
+);
+assert.equal(
+  typeof outputFrames.preview.renderState.synchronizedPresentationMs,
+  'number',
+  'preview output exposes synchronized presentation timestamp',
+);
+assert.equal(
+  outputFrames.program.containsMediaPayloads,
+  false,
+  'program output runtime state excludes media payloads',
+);
+assert.equal(
+  previewOutputEvents.includes('frame_presented'),
+  true,
+  'preview output emits runtime status events',
+);
+outputManager.pauseAll();
+assert.equal(outputManager.getSnapshot().preview?.state, 'paused', 'output manager pauses outputs');
+outputManager.stopAll();
+assert.equal(outputManager.getSnapshot().program?.state, 'stopped', 'output manager stops outputs');
+const outputDemo = await createPreviewProgramOutputDemo();
+assert.equal(
+  outputDemo.description.includes('Preview and Program'),
+  true,
+  'preview/program output demo describes simultaneous rendering',
+);
+
+// UBOS 2.0 Phase 2.16 graphics and overlay engine validation
+const graphicsCompositor = createSceneCompositor({
+  id: 'compositor:graphics:phase-2-16',
+  sceneId: 'scene:graphics',
+});
+const graphicsEngine = createGraphicsEngine({
+  id: 'graphics-engine:phase-2-16',
+  compositor: graphicsCompositor,
+  renderer: createGpuRuntime(),
+  metadata: { phase: '2.16' },
+});
+const nameObject = graphicsEngine.addObject(
+  createGraphicsObject({
+    id: 'name-strap-text',
+    type: 'text',
+    label: 'Name Strap Text',
+    transform: defaultGraphicsTransform({
+      position: { x: 120, y: 820 },
+      size: { width: 760, height: 84 },
+      opacity: 0.95,
+      rotation: 0,
+      visible: true,
+      zOrder: 2000,
+    }),
+    content: { text: 'Jordan Lee', role: 'Host' },
+  }),
+);
+const logoObject = graphicsEngine.addObject(
+  createGraphicsObject({
+    id: 'bug-logo',
+    type: 'image',
+    label: 'Program Logo',
+    transform: defaultGraphicsTransform({
+      position: { x: 1680, y: 64 },
+      size: { width: 160, height: 80 },
+      opacity: 0.9,
+      zOrder: 2100,
+    }),
+    content: { uri: 'asset://logo.png' },
+  }),
+);
+const graphicsOverlay = graphicsEngine.addOverlay(
+  createOverlay({
+    id: 'overlay:lower-third',
+    type: 'lower_third',
+    label: 'Lower Third Package',
+    objectIds: [nameObject.id, logoObject.id],
+    metadata: { includes: ['lower_third', 'logo'] },
+  }),
+);
+const graphicsLayers = graphicsEngine.renderOverlay(graphicsOverlay.id);
+assert.equal(graphicsLayers.length, 2, 'graphics overlay renders compositor layers');
+assert.equal(
+  graphicsLayers[0]?.source.type,
+  'graphics',
+  'graphics objects use compositor graphics source',
+);
+assert.equal(
+  graphicsCompositor.getOrderedLayers().some((layer) => layer.id === 'graphics:name-strap-text'),
+  true,
+  'graphics engine integrates with SceneCompositor',
+);
+assert.equal(
+  graphicsEngine.getSnapshot().rendererBackend,
+  'Mock',
+  'graphics engine records GPU renderer backend metadata',
+);
+assert.equal(
+  graphicsEngine.getSnapshot().containsRuntimeHandles,
+  false,
+  'graphics snapshot excludes runtime handles',
+);
+assert.equal(
+  graphicsEngine.getRuntimeEvents().some((event) => event.type === 'overlay_rendered'),
+  true,
+  'graphics engine emits overlay render events',
+);
+graphicsEngine.updateObject('name-strap-text', { transform: { opacity: 0.5, visible: false } });
+assert.equal(
+  graphicsEngine.getSnapshot().objects.find((object) => object.id === 'name-strap-text')?.transform
+    .opacity,
+  0.5,
+  'graphics objects support opacity controls',
+);
+assert.equal(
+  graphicsEngine.getSnapshot().objects.find((object) => object.id === 'name-strap-text')?.transform
+    .visible,
+  false,
+  'graphics objects support visibility controls',
+);
+const graphicsDemo = createGraphicsOverlayDemo();
+assert.equal(
+  graphicsDemo.layers.length,
+  4,
+  'graphics demo includes lower third, logo, QR, and countdown layers',
+);
+assert.equal(
+  graphicsDemo.overlay.metadata.includes instanceof Array,
+  true,
+  'graphics demo records supported overlay types',
+);
+
+// UBOS 2.0 Phase 2.11 production switching engine validation
+const switchClock = createClock({ frameRate: 30 });
+const switcher = createProductionSwitcher({
+  id: 'production-switcher:phase-2-11',
+  previewSceneId: 'scene:preview',
+  programSceneId: 'scene:program',
+  previewCompositor,
+  programCompositor,
+  previewOutput,
+  programOutput,
+  mediaClock: switchClock,
+  transitionDurationMs: 500,
+  metadata: { phase: '2.11' },
+});
+const switchEvents: string[] = [];
+switcher.onRuntimeEvent((event) => switchEvents.push(event.type));
+switcher.setPreviewScene('scene:guest', { operatorId: 'director' });
+assert.equal(
+  switcher.getSnapshot().previewSceneId,
+  'scene:guest',
+  'production switcher maintains independent preview assignment',
+);
+assert.equal(
+  switcher.getSnapshot().programSceneId,
+  'scene:program',
+  'production switcher maintains independent program assignment',
+);
+const cutSnapshot = switcher.cut({ operatorId: 'director' });
+assert.equal(cutSnapshot.programSceneId, 'scene:guest', 'cut promotes preview scene to program');
+assert.equal(cutSnapshot.history[0]?.action, 'cut', 'cut records switch history');
+assert.equal(
+  switchEvents.includes('preview_changed'),
+  true,
+  'production switcher emits preview_changed',
+);
+assert.equal(switchEvents.includes('cut'), true, 'production switcher emits cut');
+assert.equal(
+  switchEvents.includes('program_changed'),
+  true,
+  'production switcher emits program_changed',
+);
+switcher.setPreviewScene('scene:wide');
+const scheduled = switcher.scheduleTransition({
+  kind: 'auto',
+  durationMs: 750,
+  metadata: { requestedBy: 'validation' },
+});
+assert.equal(scheduled.durationMs, 750, 'transition metadata preserves duration');
+assert.equal(
+  scheduled.containsRuntimeHandles,
+  false,
+  'transition metadata excludes runtime handles',
+);
+
+// UBOS 2.0 Phase 2.17 remote production foundation validation
+const remoteCompositor = createSceneCompositor({
+  id: 'compositor:remote:phase-2-17',
+  sceneId: 'scene:remote',
+});
+const remoteMixer = createAudioMixer({ id: 'audio-mixer:remote:phase-2-17' });
+const remoteManager = createRemoteProductionManager({
+  id: 'remote-production:phase-2-17',
+  compositors: [remoteCompositor],
+  audioMixer: remoteMixer,
+  previewOutput,
+  programOutput,
+  productionSwitcher: switcher,
+  greenRoom: { id: 'green-room:phase-2-17', capacity: 4, producerApprovalRequired: true },
+});
+const remoteEvents: string[] = [];
+remoteManager.onRuntimeEvent((event) => remoteEvents.push(event.type));
+const invitedGuest = remoteManager.inviteGuest({
+  guestId: 'guest:remote:1',
+  inviteId: 'invite:remote:1',
+  displayName: 'Taylor Remote',
+  role: 'Guest',
+  location: 'Browser',
+});
+assert.equal(invitedGuest.state, 'invited', 'remote guest lifecycle starts invited');
+remoteManager.markConnecting(invitedGuest.id);
+assert.equal(
+  remoteManager.getGuest(invitedGuest.id)?.state,
+  'connecting',
+  'remote guest lifecycle supports connecting',
+);
+remoteManager.markConnected(invitedGuest.id);
+remoteManager.updateGuestMetadata(invitedGuest.id, {
+  cameraStatus: 'enabled',
+  microphoneStatus: 'muted',
+  networkQuality: 'good',
+});
+remoteManager.moveToWaiting(invitedGuest.id);
+assert.equal(
+  remoteManager.getSnapshot().greenRoom.waitingGuestIds.includes(invitedGuest.id),
+  true,
+  'green room tracks waiting guests',
+);
+remoteManager.sendProducerMessage({
+  guestId: invitedGuest.id,
+  kind: 'instruction',
+  body: 'You are next.',
+  fromProducerId: 'producer:validation',
+  metadata: { privateCue: true },
+});
+remoteManager.approveGuest(invitedGuest.id, 'producer:validation');
+const integratedGuest = remoteManager.integrateGuest(invitedGuest.id, { zIndex: 50 });
+assert.equal(
+  Boolean(integratedGuest.sceneLayerId),
+  true,
+  'remote manager creates scene layer identity for guests',
+);
+assert.equal(
+  remoteCompositor.getOrderedLayers().some((layer) => layer.id === integratedGuest.sceneLayerId),
+  true,
+  'remote manager integrates browser guest with SceneCompositor',
+);
+assert.equal(
+  remoteMixer
+    .getSnapshot()
+    .channels.some((channel) => channel.id === integratedGuest.audioChannelId),
+  true,
+  'remote manager integrates guest audio placeholder with AudioMixer',
+);
+remoteManager.configureIFB(invitedGuest.id, {
+  enabled: true,
+  mode: 'producer_only',
+  producerTalkback: true,
+  sourceBusId: 'bus:ifb',
+});
+const liveGuest = remoteManager.makeGuestLive(invitedGuest.id);
+assert.equal(liveGuest.state, 'live', 'remote guest lifecycle supports live after approval');
+assert.equal(
+  remoteManager.getSnapshot().tallyStates.find((tally) => tally.guestId === invitedGuest.id)?.state,
+  'program',
+  'remote manager updates tally on live',
+);
+remoteManager.disconnectGuest(invitedGuest.id);
+assert.equal(
+  remoteManager.getGuest(invitedGuest.id)?.state,
+  'disconnected',
+  'remote guest lifecycle supports disconnected',
+);
+assert.equal(
+  remoteManager.getSnapshot().backend.webrtcTransport,
+  false,
+  'remote production foundation has no real WebRTC transport',
+);
+assert.equal(
+  remoteManager.getSnapshot().backend.signaling,
+  false,
+  'remote production foundation has no browser signaling',
+);
+assert.equal(
+  remoteManager.getSnapshot().backend.screenSharing,
+  false,
+  'remote production foundation has no screen sharing',
+);
+assert.equal(
+  remoteManager.getSnapshot().backend.guestRecording,
+  false,
+  'remote production foundation has no guest recording',
+);
+assert.equal(
+  remoteManager.getSnapshot().backend.chat,
+  false,
+  'remote production foundation has no chat',
+);
+assert.equal(
+  remoteManager.getSnapshot().containsRuntimeHandles,
+  false,
+  'remote production snapshots exclude runtime handles',
+);
+assert.equal(
+  remoteManager.getSnapshot().containsMediaPayloads,
+  false,
+  'remote production snapshots exclude media payloads',
+);
+assert.equal(
+  remoteEvents.includes('guest_live'),
+  true,
+  'remote production manager emits guest_live events',
+);
+assert.equal(
+  remoteEvents.includes('producer_message_sent'),
+  true,
+  'remote production manager emits producer message events',
+);
+const standaloneGuest = createGuestSession({
+  id: 'guest:standalone',
+  metadata: { cameraStatus: 'disabled', microphoneStatus: 'enabled' },
+});
+assert.equal(
+  standaloneGuest.metadata.cameraStatus,
+  'disabled',
+  'GuestSession model supports camera status metadata',
+);
+assert.equal(createGreenRoom({ capacity: 2 }).capacity, 2, 'GreenRoom model supports capacity');
+assert.equal(
+  createTallyState({ guestId: 'guest:tally', state: 'preview', metadata: {} }).state,
+  'preview',
+  'TallyState abstraction supports preview state',
+);
+assert.equal(
+  createIFBState({ guestId: 'guest:ifb', enabled: true, mode: 'custom_mix_minus' }).mixMinus,
+  true,
+  'IFB abstraction defaults to mix-minus foundation',
+);
+const remoteDemo = await createDemoGuestWorkflow({
+  compositors: [remoteCompositor],
+  audioMixer: remoteMixer,
+});
+assert.equal(remoteDemo.guest.state, 'live', 'demo guest workflow brings an approved guest live');
+assert.equal(
+  remoteDemo.snapshot.producerMessages.length,
+  1,
+  'demo guest workflow includes producer approval messaging',
+);
+
+// UBOS 2.0 Phase 2.12 transition rendering engine validation
+const transitionClock = createClock({ frameRate: 30 });
+const transitionFromCompositor = createSceneCompositor({
+  id: 'compositor:transition:from',
+  sceneId: 'scene:program',
+  mediaClock: transitionClock,
+});
+transitionFromCompositor.addLayer(
+  createCompositorRenderLayer({
+    id: 'transition-program-camera',
+    label: 'Program Camera',
+    source: { type: 'video', sourceId: 'camera:program', metadata: {} },
+    position: { x: 0, y: 0 },
+    size: { width: 1920, height: 1080 },
+    zIndex: 0,
+  }),
+);
+const transitionToCompositor = createSceneCompositor({
+  id: 'compositor:transition:to',
+  sceneId: 'scene:preview',
+  mediaClock: transitionClock,
+});
+transitionToCompositor.addLayer(
+  createCompositorRenderLayer({
+    id: 'transition-preview-camera',
+    label: 'Preview Camera',
+    source: { type: 'video', sourceId: 'camera:preview', metadata: {} },
+    position: { x: 0, y: 0 },
+    size: { width: 1920, height: 1080 },
+    zIndex: 0,
+  }),
+);
+const transitionOutputCompositor = createSceneCompositor({
+  id: 'compositor:transition:output',
+  sceneId: 'scene:program',
+  mediaClock: transitionClock,
+});
+const transitionRenderer = createTransitionRenderer({
+  id: 'transition-renderer:phase-2-12',
+  fromCompositor: transitionFromCompositor,
+  toCompositor: transitionToCompositor,
+  outputCompositor: transitionOutputCompositor,
+  mediaClock: transitionClock,
+  renderer: createGpuRuntime(),
+  durationMs: 500,
+  metadata: { phase: '2.12' },
+});
+const transitionEvents: string[] = [];
+transitionRenderer.onRuntimeEvent((event) => transitionEvents.push(event.type));
+const transitionStart = transitionRenderer.start({
+  effect: 'dissolve',
+  fromSceneId: 'scene:program',
+  toSceneId: 'scene:preview',
+  durationMs: 500,
+  metadata: { operatorId: 'director' },
+});
+assert.equal(transitionStart.progress, 0, 'transition timeline starts at zero progress');
+const dissolveFrame = transitionRenderer.renderNextFrame();
+assert.equal(
+  dissolveFrame.frame.metadata.transitionEffect,
+  'dissolve',
+  'dissolve transition renders metadata effect marker',
+);
+assert.equal(
+  dissolveFrame.frame.layers.length,
+  2,
+  'dissolve transition combines program and preview layers',
+);
+assert.equal(
+  dissolveFrame.containsRuntimeHandles,
+  false,
+  'transition render result excludes runtime handles',
+);
+assert.equal(
+  dissolveFrame.containsMediaPayloads,
+  false,
+  'transition render result excludes media payloads',
+);
+assert.equal(
+  Boolean(dissolveFrame.gpuFrame),
+  true,
+  'transition renderer can submit metadata GPU frame',
+);
+assert.equal(
+  transitionEvents.includes('transition_started'),
+  true,
+  'transition renderer emits transition_started',
+);
+assert.equal(
+  transitionEvents.some(
+    (event) => event === 'transition_progress' || event === 'transition_completed',
+  ),
+  true,
+  'transition renderer emits progress lifecycle events',
+);
+const fadeRenderer = createTransitionRenderer({
+  fromCompositor: transitionFromCompositor,
+  toCompositor: transitionToCompositor,
+  outputCompositor: transitionOutputCompositor,
+  mediaClock: transitionClock,
+  durationMs: 400,
+});
+fadeRenderer.start({ effect: 'fade', fromSceneId: 'scene:program', toSceneId: 'scene:preview' });
+assert.equal(
+  fadeRenderer.renderNextFrame().frame.layers.some((layer) => layer.source.type === 'solid_color'),
+  true,
+  'fade transition includes generated black layer',
+);
+const dipRenderer = createTransitionRenderer({
+  fromCompositor: transitionFromCompositor,
+  toCompositor: transitionToCompositor,
+  outputCompositor: transitionOutputCompositor,
+  mediaClock: transitionClock,
+  durationMs: 400,
+});
+dipRenderer.start({
+  effect: 'dip_to_black',
+  fromSceneId: 'scene:program',
+  toSceneId: 'scene:preview',
+});
+assert.equal(
+  dipRenderer.renderNextFrame().frame.metadata.transitionEffect,
+  'dip_to_black',
+  'dip-to-black transition renders effect metadata',
+);
+const transitionDemo = await createTransitionRendererDemo();
+assert.equal(
+  transitionDemo.events.some((event) => event.type === 'transition_completed'),
+  true,
+  'transition renderer demo completes preview-to-program transition',
+);
+
+const autoSnapshot = switcher.completeScheduledTransition({ completedBy: 'validation' });
+assert.equal(
+  autoSnapshot.programSceneId,
+  'scene:wide',
+  'scheduled auto promotes preview scene to program',
+);
+assert.equal(
+  autoSnapshot.history[0]?.transition.kind,
+  'auto',
+  'scheduled transition records auto kind',
+);
+switcher.setPreviewScene('scene:close');
+const takeSnapshot = switcher.take({ operatorId: 'director' });
+assert.equal(
+  takeSnapshot.programSceneId,
+  'scene:close',
+  'take promotes preview using deterministic cut semantics',
+);
+assert.equal(switchEvents.includes('take'), true, 'production switcher emits take');
+switcher.setPreviewScene('scene:graphics');
+const autoDirectSnapshot = switcher.auto({
+  durationMs: 1000,
+  metadata: { operatorId: 'director' },
+});
+assert.equal(
+  autoDirectSnapshot.programSceneId,
+  'scene:graphics',
+  'auto schedules and completes metadata transition',
+);
+assert.equal(switchEvents.includes('auto'), true, 'production switcher emits auto');
+assert.equal(
+  autoDirectSnapshot.containsRuntimeHandles,
+  false,
+  'production switcher snapshot is backend independent',
+);
+assert.equal(
+  autoDirectSnapshot.containsMediaPayloads,
+  false,
+  'production switcher snapshot excludes media payloads',
+);
+assert.equal(
+  autoDirectSnapshot.outputIds.preview,
+  'output:preview:phase-2-10',
+  'production switcher integrates preview output identity',
+);
+assert.equal(
+  autoDirectSnapshot.compositorIds.program,
+  'compositor:program:phase-2-10',
+  'production switcher integrates program compositor identity',
+);
+const switchDemo = await createProductionSwitcherDemo();
+assert.equal(
+  switchDemo.before.programSceneId,
+  'scene:host',
+  'production switcher demo starts with initial program scene',
+);
+assert.equal(
+  switchDemo.after.programSceneId,
+  'scene:guest',
+  'production switcher demo promotes preview to program',
+);
+
+// UBOS 2.0 Phase 2.19 hardware integration foundation validation
+const hardwareManager = createHardwareManager({
+  id: 'hardware-manager:phase-2-19',
+  bindings: {
+    productionSwitcher: switcher,
+    sceneCompositor: programCompositor,
+    streamingPipeline: phase214StreamingPipeline,
+    recordingPipeline: phase213RecordingPipeline,
+    remoteProductionManager: { id: 'remote-production-manager:metadata' },
+    transportManager: { id: 'transport-manager:metadata' },
+  },
+});
+const hardwareEvents: string[] = [];
+hardwareManager.onRuntimeEvent((event) => hardwareEvents.push(event.type));
+const integrationHardwareDevices = await hardwareManager.discover();
+assert.equal(
+  integrationHardwareDevices.length >= 5,
+  true,
+  'hardware manager discovers demo broadcast hardware devices',
+);
+assert.equal(
+  supportedHardwareIntegrationVendors.includes('blackmagic_atem'),
+  true,
+  'hardware integration models Blackmagic ATEM vendor',
+);
+assert.equal(
+  supportedHardwareIntegrationVendors.includes('x_keys'),
+  true,
+  'hardware integration models X-Keys vendor',
+);
+assert.equal(
+  supportedHardwareCategories.includes('ptz_camera'),
+  true,
+  'hardware integration models PTZ camera category',
+);
+const atemDevice = integrationHardwareDevices.find(
+  (device) => device.vendor === 'blackmagic_atem',
+)!;
+const connectedHardware = await hardwareManager.connect(atemDevice.id);
+assert.equal(
+  connectedHardware.connection.lifecycle,
+  'connected',
+  'hardware lifecycle supports connected',
+);
+assert.equal(
+  connectedHardware.capabilities.supportsTally,
+  true,
+  'device capabilities describe tally support',
+);
+const heartbeatHardware = await hardwareManager.heartbeat(atemDevice.id);
+assert.equal(
+  typeof heartbeatHardware.heartbeat.lastSeenAt,
+  'string',
+  'hardware heartbeat records last seen timestamp',
+);
+const plannedHardwareCommand = hardwareManager.planCommand(atemDevice.id, 'cut', {
+  source: 'control_surface',
+});
+assert.equal(
+  plannedHardwareCommand.metadata.backendIndependent,
+  true,
+  'hardware commands are planned as backend-independent metadata',
+);
+const disconnectedHardware = await hardwareManager.disconnect(atemDevice.id);
+assert.equal(
+  disconnectedHardware.connection.lifecycle,
+  'disconnected',
+  'hardware lifecycle supports disconnected',
+);
+const failedHardware = hardwareManager.fail(atemDevice.id, 'simulated adapter failure');
+assert.equal(failedHardware.connection.lifecycle, 'failed', 'hardware lifecycle supports failed');
+assert.equal(
+  hardwareManager.getSnapshot().bindings.productionSwitcher,
+  true,
+  'hardware manager integrates production switcher binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.sceneCompositor,
+  true,
+  'hardware manager integrates scene compositor binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.streamingPipeline,
+  true,
+  'hardware manager integrates streaming pipeline binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.recordingPipeline,
+  true,
+  'hardware manager integrates recording pipeline binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.remoteProductionManager,
+  true,
+  'hardware manager integrates remote production manager binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().bindings.transportManager,
+  true,
+  'hardware manager integrates transport manager binding identity',
+);
+assert.equal(
+  hardwareManager.getSnapshot().containsDeviceHandles,
+  false,
+  'hardware snapshot excludes physical device handles',
+);
+assert.equal(
+  hardwareEvents.includes('hardware_device_connected'),
+  true,
+  'hardware manager emits connected runtime event',
+);
+assert.equal(
+  hardwareEvents.includes('hardware_command_planned'),
+  true,
+  'hardware manager emits command planning runtime event',
+);
+const customHardwareDevice = createHardwareIntegrationDevice({
+  id: 'hardware-device:vizrt:control',
+  label: 'Vizrt Control Surface',
+  vendor: 'vizrt',
+  category: 'control_surface',
+  model: 'Metadata Panel',
+  capabilities: { supportsButtons: true },
+});
+assert.equal(
+  customHardwareDevice.containsDeviceHandles,
+  false,
+  'hardware device model remains backend independent',
+);
+assert.equal(
+  createDeviceCapabilities({ supportsPtz: true }).supportsPtz,
+  true,
+  'device capabilities helper models PTZ support',
+);
+const demoHardwareAdapter = new MetadataHardwareAdapter('hardware-adapter:test');
+assert.equal(
+  demoHardwareAdapter.categories.includes('audio_interface'),
+  true,
+  'hardware adapter advertises audio interface category',
+);
+const hardwareDemo = await createHardwareIntegrationDemo({
+  productionSwitcher: switcher,
+  sceneCompositor: programCompositor,
+});
+assert.equal(
+  hardwareDemo.manager.events.some((event) => event.type === 'hardware_heartbeat'),
+  true,
+  'hardware integration demo records heartbeat workflow',
+);
+
+assert.equal(
+  captureSource.getSnapshot().containsMediaPayloads,
+  false,
+  'video capture snapshots exclude media payloads',
+);
+
+// UBOS 2.0 Phase 2.18 broadcast transport layer validation
+const transportManager = createTransportManager({ id: 'transport-manager:phase-2-18' });
+const transportEvents: string[] = [];
+transportManager.onRuntimeEvent((event) => transportEvents.push(event.type));
+const transportSession = transportManager.createSession({
+  id: 'transport-session:phase-2-18:webrtc',
+  protocol: 'webrtc',
+  endpoint: 'webrtc://remote-production.example/room?token=super-secret',
+  streamingPipeline: createStreamingPipelineV2({ id: 'streaming-pipeline:transport-validation' }),
+  streamingSessionId: 'streaming-session:transport-validation',
+  remoteProductionManager: { id: 'remote-production-manager:phase-2-18' },
+  mediaClock: programClock,
+  frameScheduler: streamingScheduler214,
+  audioMixer: programMixer,
+  sceneCompositor: programCompositor,
+  programOutput,
+  targetBitrateKbps: 6000,
+  expectedLatencyMs: 90,
+  metadata: { phase: '2.18' },
+});
+assert.equal(transportSession.lifecycle, 'idle', 'transport sessions start idle');
+assert.equal(
+  transportSession.sanitizedEndpoint.includes('super-secret'),
+  false,
+  'transport endpoint metadata is sanitized',
+);
+transportManager.negotiate(transportSession.id);
+transportManager.connect(transportSession.id);
+transportManager.markConnected(transportSession.id);
+const transportMetrics = transportManager.updateMetrics(transportSession.id, {
+  bitrateKbps: 5900,
+  latencyMs: 95,
+  jitterMs: 8,
+  packetLossPercent: 0.1,
+  tick: streamingScheduler214.createTick(),
+  audioFrames: 1,
+});
+assert.equal(transportMetrics.metadata.health, 'healthy', 'transport metrics derive healthy state');
+const reconnectingTransport = transportManager.reconnect(
+  transportSession.id,
+  'validation reconnect',
+);
+assert.equal(
+  reconnectingTransport.lifecycle,
+  'reconnecting',
+  'transport supports reconnecting lifecycle',
+);
+assert.equal(reconnectingTransport.metadata.reconnectCount, 1, 'transport tracks reconnect count');
+transportManager.stop(transportSession.id);
+const transportSnapshot = transportManager.getSnapshot();
+assert.equal(transportProtocols.length, 7, 'transport layer models seven professional protocols');
+assert.equal(
+  transportSnapshot.backend.transmitsNetworkPackets,
+  false,
+  'transport backend is metadata-only',
+);
+assert.equal(
+  transportSnapshot.backend.implementsIce,
+  false,
+  'transport backend does not implement ICE',
+);
+assert.equal(
+  transportSnapshot.sessions[0]?.bindings.audioMixerId,
+  programMixer.id,
+  'transport binds AudioMixer identity',
+);
+assert.equal(
+  transportSnapshot.sessions[0]?.bindings.sceneCompositorId,
+  programCompositor.id,
+  'transport binds SceneCompositor identity',
+);
+assert.equal(
+  transportSnapshot.sessions[0]?.containsEncodedPackets,
+  false,
+  'transport sessions exclude encoded packets',
+);
+assert.equal(
+  transportEvents.includes('transport_connected'),
+  true,
+  'transport manager emits runtime events',
+);
+const failedTransport = transportManager.createSession({
+  id: 'transport-session:phase-2-18:rist',
+  protocol: 'rist',
+  endpoint: 'rist://backup.example/live',
+  mediaClock: programClock,
+});
+transportManager.fail(failedTransport.id, 'validation failure');
+assert.equal(
+  transportManager.getSession(failedTransport.id)?.metadata.health,
+  'critical',
+  'failed transport marks critical health',
+);
+const transportDemo = await createDemoTransportWorkflow({
+  programOutput,
+  audioMixer: programMixer,
+  sceneCompositor: programCompositor,
+  mediaClock: programClock,
+  frameScheduler: streamingScheduler214,
+});
+assert.equal(
+  transportDemo.session.lifecycle,
+  'stopped',
+  'transport demo completes stopped lifecycle',
+);
+assert.equal(
+  transportDemo.manager.events.some((event) => event.type === 'transport_reconnecting'),
+  true,
+  'transport demo emits reconnect event',
+);
+
+// UBOS 2.0 Phase 2.23 diagnostics, telemetry and performance profiler validation
+const diagnostics = createDiagnosticsManager('diagnostics-manager:phase-2-23');
+diagnostics.updateCpu({ estimatedPercent: 36, sampleWindowMs: 500 });
+diagnostics.updateGpu({ estimatedPercent: 44, memoryEstimatedMb: 256, queueDepth: 3 });
+diagnostics.updateMemory({ usedMb: 640, reservedMb: 1024 });
+diagnostics.profiler.recordFrame(16.7);
+diagnostics.profiler.recordFrame(20.1, true);
+diagnostics.profiler.recordAudioLatency(5, 7, 9);
+diagnostics.profiler.recordRenderLatency(4, 8, 3);
+diagnostics.healthMonitor.updatePipeline('pipeline:program', 'Program Pipeline', [
+  { name: 'program output', state: 'healthy', message: 'Program output metadata is current' },
+  { name: 'encoder queue', state: 'degraded', message: 'Encoder queue depth is elevated' },
+]);
+diagnostics.trace('program_render', 'begin', { frameId: 42 });
+diagnostics.trace('program_render', 'end', { frameId: 42 });
+diagnostics.recordEvent('warning', 'render_latency', 'Render latency exceeded metadata target', {
+  latencyMs: 15,
+});
+const diagnosticsAlert = diagnostics.raiseAlert(
+  'warning',
+  'UBOS_DIAG_RENDER_LATENCY',
+  'Render latency is above threshold',
+);
+diagnostics.acknowledgeAlert(diagnosticsAlert.id);
+const diagnosticsSnapshot = diagnostics.getSnapshot();
+assert.equal(
+  diagnosticsSnapshot.backend.metadataOnly,
+  true,
+  'diagnostics snapshots are metadata-only',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesOsPerformanceApis,
+  false,
+  'diagnostics avoids OS-specific performance APIs',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesBrowserApis,
+  false,
+  'diagnostics avoids browser-specific APIs',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesNativeProfiler,
+  false,
+  'diagnostics avoids native profiler dependencies',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.usesExternalTelemetry,
+  false,
+  'diagnostics avoids external telemetry services',
+);
+assert.equal(
+  diagnosticsSnapshot.backend.persistsData,
+  false,
+  'diagnostics has no persistence requirement',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.frameTiming.frames,
+  2,
+  'diagnostics records frame timing statistics',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.frameTiming.droppedFrames,
+  1,
+  'diagnostics records dropped frame metadata',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.audioLatency.totalLatencyMs,
+  21,
+  'diagnostics records audio latency metrics',
+);
+assert.equal(
+  diagnosticsSnapshot.metrics.renderLatency.totalLatencyMs,
+  15,
+  'diagnostics records render latency metrics',
+);
+assert.equal(
+  diagnosticsSnapshot.pipelines[0]?.state,
+  'degraded',
+  'health monitor derives worst pipeline health',
+);
+assert.equal(diagnosticsSnapshot.traces.length, 2, 'diagnostics records execution tracing');
+assert.equal(diagnosticsSnapshot.events.length, 1, 'diagnostics records performance event history');
+assert.equal(
+  diagnosticsSnapshot.alerts[0]?.acknowledged,
+  true,
+  'diagnostics alert model supports acknowledgement',
+);
+assert.equal(
+  diagnostics.exportJson().includes('diagnostics-manager:phase-2-23'),
+  true,
+  'diagnostics exposes snapshot export API',
+);
+const diagnosticsDemo = createDiagnosticsDemo();
+assert.equal(diagnosticsDemo.snapshot.alerts.length, 1, 'diagnostics demo produces alert metadata');
+
+
+// UBOS Version 4.1 Broadcast Runtime Core validation
+const broadcastRuntime = createBroadcastRuntimeCore('runtime-core:validation');
+assert.equal(broadcastRuntime.initialize().state, 'initialized', 'runtime core initializes centrally');
+assert.equal(broadcastRuntime.start().state, 'running', 'runtime core starts all lifecycle managers');
+assert.equal(broadcastRuntime.pause().state, 'paused', 'runtime core pauses all lifecycle managers');
+assert.equal(broadcastRuntime.resume().state, 'running', 'runtime core resumes all lifecycle managers');
+const runtimeSnapshot = broadcastRuntime.stop();
+assert.equal(runtimeSnapshot.state, 'stopped', 'runtime core stops deterministically');
+assert.equal(
+  runtimeSnapshot.subsystems.every((subsystem) => subsystem.state === 'stopped'),
+  true,
+  'runtime core applies lifecycle commands to every subsystem',
+);
+assert.equal(
+  broadcastRuntime.bus.replay().every((event, index) => event.sequence === index + 1),
+  true,
+  'runtime event bus assigns deterministic event ordering',
+);
+assert.equal(runtimeSnapshot.containsRuntimeHandles, false, 'runtime snapshots remain metadata-only');
+
+assert.equal(
+  runtimeSnapshot.registrations.some((registration) => registration.subsystemId === 'production-graph-runtime'),
+  true,
+  'runtime core registers ProductionGraph through a non-destructive adapter',
+);
+assert.deepEqual(
+  runtimeSnapshot.startupOrder.slice(0, 6),
+  ['production-graph-runtime', 'audio-runtime', 'graphics-runtime', 'automation-runtime', 'replay-runtime', 'recording-runtime'],
+  'runtime integration startup order is deterministic and dependency aware',
+);
+assert.deepEqual(
+  runtimeSnapshot.shutdownOrder.slice(0, 4),
+  ['streaming-runtime', 'recording-runtime', 'replay-runtime', 'automation-runtime'],
+  'runtime integration shutdown order is deterministic',
+);
+assert.equal(
+  runtimeSnapshot.dependencyGraph['streaming-runtime']?.[0],
+  'recording-runtime',
+  'runtime dependency graph documents streaming dependencies',
+);
+assert.equal(
+  broadcastRuntime.bus.replay().some((event) => event.type === 'HealthChanged'),
+  true,
+  'runtime health manager receives subsystem health updates',
+);
+assert.equal(
+  broadcastRuntime.bus.replay().some((event) => event.source === 'recording-runtime'),
+  true,
+  'runtime event bus receives adapter lifecycle events',
+);
+const invalidRuntime = createBroadcastRuntimeCore('runtime-core:invalid-dependency');
+let rejectedInvalidDependency = false;
+try {
+  invalidRuntime.register(
+    new RuntimeIntegrationAdapter(
+      {
+        subsystemId: 'invalid-runtime',
+        domain: 'automation',
+        dependencies: ['missing-runtime'],
+        startupPriority: 99,
+        shutdownPriority: 99,
+        healthSource: 'invalid-runtime:health',
+      },
+      invalidRuntime.bus,
+    ),
+  );
+} catch {
+  rejectedInvalidDependency = true;
+}
+assert.equal(rejectedInvalidDependency, true, 'runtime controller rejects invalid dependency graphs');
+
+
+// UBOS Version 4.3 Device & Hardware Integration validation
+const deviceFixture = {
+  deviceId: 'camera-1',
+  persistentId: 'browser-media:videoinput:camera-1',
+  displayName: 'Studio Camera 1',
+  manufacturer: 'Unknown',
+  model: 'Browser Camera',
+  deviceType: 'video-camera' as const,
+  connectionType: 'browser-media' as const,
+  capabilities: { video: [{ kind: 'video' as const, width: 1920, height: 1080, frameRate: 30, scan: 'progressive' as const }], canRouteToProgram: true, canRouteToPreview: true },
+  supportedFormats: [{ kind: 'video' as const, width: 1920, height: 1080, frameRate: 30, scan: 'progressive' as const }],
+  sampleRates: [],
+  channelCounts: [],
+  frameRates: [30],
+  resolutions: [{ width: 1920, height: 1080 }],
+  colorFormats: ['unknown'],
+  latencyEstimateMs: 'unknown' as const,
+  health: { state: 'unknown' as const, availability: 'unknown' as const, connectionState: 'discovered' as const, providerAvailability: 'available' as const },
+  connectionState: 'discovered' as const,
+  lastSeenAt: '2026-07-10T00:00:00.000Z',
+  runtimeAdapterId: 'browser-media-adapter',
+  productionGraphNodeId: 'pg-device-camera-1',
+};
+const deviceRegistry = new RuntimeDeviceRegistry();
+const registeredDevice = deviceRegistry.register(deviceFixture);
+assert.equal(registeredDevice.deviceId, 'camera-1', 'device registry registers serializable metadata');
+assert.equal(deviceRegistry.register({ ...deviceFixture, displayName: 'Studio Camera 1 Duplicate' }).deviceId, 'camera-1', 'device registry suppresses deterministic duplicates');
+const provider = new StaticDiscoveryProvider('fixture-provider', [deviceFixture]);
+const discovery = new DeviceDiscoveryManager([provider], deviceRegistry);
+assert.equal(discovery.initialize()[0]?.state, 'initialized', 'discovery provider lifecycle initializes');
+assert.equal(discovery.refresh().length, 0, 'discovery refresh suppresses already registered duplicates');
+assert.equal(discovery.stop()[0]?.state, 'stopped', 'discovery provider lifecycle stops');
+const connectionManager = new DeviceConnectionManager(deviceRegistry);
+connectionManager.transition('camera-1', 'connecting');
+connectionManager.transition('camera-1', 'connected');
+connectionManager.transition('camera-1', 'ready');
+let rejectedIllegalDeviceTransition = false;
+try { connectionManager.transition('camera-1', 'permission-required'); } catch { rejectedIllegalDeviceTransition = true; }
+assert.equal(rejectedIllegalDeviceTransition, true, 'device connection manager rejects illegal transitions');
+const capabilityResolver = new DeviceCapabilityResolver();
+assert.equal(capabilityResolver.select(deviceFixture, { kind: 'video', width: 3840, height: 2160, frameRate: 60 }).fallbackReason, 'requested-format-unsupported', 'capability resolver reports unsupported format fallback');
+assert.equal(capabilityResolver.select(deviceFixture, { kind: 'video', width: 1920, height: 1080, frameRate: 30 }).selectedFormat?.width, 1920, 'capability resolver selects supported explicit format');
+const profileManager = new DeviceProfileManager();
+assert.equal(profileManager.load({ version: 1, deviceId: 'camera-1', preferredDisplayName: 'Main Camera' }).ok, true, 'profile manager accepts current version profiles');
+assert.equal(profileManager.load({ version: 99, deviceId: 'camera-1' }).ok, false, 'profile manager rejects malformed or outdated profiles safely');
+const healthMonitor = new DeviceHealthMonitor();
+assert.equal(healthMonitor.update('camera-1', { state: 'healthy', availability: 'available', connectionState: 'ready', providerAvailability: 'available' }).state, 'healthy', 'device health monitor stores health metadata');
+assert.equal(assertMetadataSafe(mapDeviceToProductionGraphMetadata(deviceFixture, 'DeviceDiscovered')), true, 'ProductionGraph device mapping is metadata safe');
+assert.equal(mapDeviceToProductionGraphMetadata(deviceFixture).containsRuntimeHandles, false, 'ProductionGraph device mapping excludes runtime handles');
+assert.equal(calculateRecoveryDelay({ kind: 'exponential-backoff', maximumAttempts: 3, retryDelayMs: 100, cooldownMs: 1000, operatorAcknowledgementRequired: true }, 3), 400, 'reconnect policy calculates exponential backoff');
+const unavailableProvider = new StaticDiscoveryProvider('native-placeholder', [], false, 'provider-unavailable');
+assert.equal(unavailableProvider.initialize().available, false, 'provider unavailable state is represented without claiming hardware support');
+assert.equal(discovery.dispose()[0]?.state, 'disposed', 'discovery disposal releases provider lifecycle state');
+const v43Runtime = createBroadcastRuntimeCore('runtime-core:v4.3-validation');
+v43Runtime.initialize();
+v43Runtime.start();
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'DeviceDiscovered'), true, 'DeviceManager publishes metadata-only hot-plug discovery events through RuntimeEventBus');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'device-manager' && subsystem.metadata.hardwarePlatform === 'v4.3'), true, 'RuntimeController owns the v4.3 DeviceManager lifecycle adapter');
+
+
+// UBOS Version 4.4 Media Pipeline & Ingest Runtime validation
+const ingestRuntime = new IngestRuntimeController(v43Runtime.bus);
+v43Runtime.register(ingestRuntime);
+const ingestRegistration = {
+  pipelineId: 'pipeline-camera-1',
+  sourceId: 'source-camera-1',
+  deviceId: 'camera-1',
+  sourceType: 'Camera' as const,
+  runtimeAdapter: 'device-manager',
+  mediaAdapter: 'camera-adapter',
+  productionGraphNodeId: 'source-node-camera-1',
+  healthProvider: 'camera-health-provider',
+  selectedFormat: { resolution: '1920x1080', frameRate: 30, pixelFormat: 'yuv420p', colorSpace: 'rec709', sampleRate: 48000, channelLayout: 'stereo' },
+  priority: 10,
+  recoveryStrategy: 'backoff' as const,
+};
+const ingestPipeline = ingestRuntime.registerPipeline(ingestRegistration);
+assert.equal(ingestPipeline.containsMediaHandles, false, 'ingest pipelines are metadata-only objects');
+let duplicateRejected = false;
+try { ingestRuntime.registerPipeline(ingestRegistration); } catch { duplicateRejected = true; }
+assert.equal(duplicateRejected, true, 'pipeline registry rejects duplicate registrations');
+assert.equal(new PipelineFactory().selectAdapter('Camera').id, 'camera-adapter', 'pipeline factory selects camera adapter deterministically');
+assert.equal(new PipelineFactory().selectAdapter('SRT').id, 'network-adapter', 'pipeline factory selects network adapter deterministically');
+ingestRuntime.transitionPipeline('pipeline-camera-1', 'Initializing');
+ingestRuntime.transitionPipeline('pipeline-camera-1', 'Ready');
+ingestRuntime.transitionPipeline('pipeline-camera-1', 'Running');
+let illegalPipelineTransitionRejected = false;
+try { ingestRuntime.transitionPipeline('pipeline-camera-1', 'Created'); } catch { illegalPipelineTransitionRejected = true; }
+assert.equal(illegalPipelineTransitionRejected, true, 'pipeline lifecycle rejects illegal state transitions');
+ingestRuntime.updateHealth('pipeline-camera-1', { latencyMs: 42, bufferUtilization: 3, frameAvailable: true, audioAvailable: true, frameDrops: 1, packetLoss: 0, decoderState: 'decoding', status: 'Running' });
+assert.equal(ingestRuntime.getPipelineHealth('pipeline-camera-1')?.latencyMs, 42, 'pipeline health monitor propagates latency metadata');
+ingestRuntime.updateFormat('pipeline-camera-1', { frameRate: 60, hdrMetadata: { eotf: 'pq' } });
+assert.equal(ingestRuntime.getPipeline('pipeline-camera-1')?.registration.selectedFormat.frameRate, 60, 'pipeline capability resolver negotiates format metadata');
+const recoveredPipeline = ingestRuntime.restartMetadata('pipeline-camera-1');
+assert.equal(recoveredPipeline.metrics.recoveries, 1, 'pipeline recovery records recovery attempts without switching Program');
+assert.equal(ingestRuntime.recovery.calculateDelay(3, 'backoff'), 4000, 'pipeline recovery calculates exponential backoff');
+assert.equal(ingestRuntime.getPipelineMetrics('pipeline-camera-1')?.restarts, 1, 'pipeline metrics collector records metadata restarts');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'PipelineHealthChanged'), true, 'RuntimeEventBus propagates ingest health events');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'PipelineRecovered'), true, 'RuntimeEventBus propagates ingest recovery events');
+const graphWithPipeline = attachPipelineMetadataToGraph(session.graph, ingestRuntime.getPipeline('pipeline-camera-1')!);
+assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.containsMediaHandles, false, 'ProductionGraph ingest node contains metadata only');
+assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.pipelineState, 'Recovering', 'ProductionGraph ingest node exposes pipeline state metadata');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'ingest-runtime-controller'), true, 'RuntimeController owns IngestRuntimeController lifecycle');
+
+
+// UBOS Version 4.5 Broadcast Output & Distribution Runtime validation
+const outputRuntime = new OutputRuntimeController(v43Runtime.bus);
+v43Runtime.register(outputRuntime);
+const outputRegistration = {
+  outputId: 'output-program-rtmp',
+  outputType: 'RTMP' as const,
+  destination: 'rtmp://example.invalid/live/program',
+  encoder: 'existing-streaming-encoder',
+  transport: 'existing-ffmpeg-transport',
+  healthProvider: 'streaming-health-provider',
+  runtimeOwner: 'output-runtime-controller',
+  priority: 10,
+  productionGraphSource: 'Program' as const,
+  productionGraphNodeId: 'destination-program-rtmp',
+  recoveryStrategy: 'backoff' as const,
+};
+const outputNode = outputRuntime.registerOutput(outputRegistration);
+assert.equal(outputNode.containsMediaHandles, false, 'output runtime objects are metadata-only');
+assert.equal(outputNode.containsMediaPayloads, false, 'output runtime objects never contain media payloads');
+let duplicateOutputRejected = false;
+try { outputRuntime.registerOutput(outputRegistration); } catch { duplicateOutputRejected = true; }
+assert.equal(duplicateOutputRejected, true, 'output registry rejects duplicate registrations');
+outputRuntime.transitionOutput('output-program-rtmp', 'Initializing');
+outputRuntime.transitionOutput('output-program-rtmp', 'Ready');
+outputRuntime.transitionOutput('output-program-rtmp', 'Running');
+let illegalOutputTransitionRejected = false;
+try { outputRuntime.transitionOutput('output-program-rtmp', 'Created'); } catch { illegalOutputTransitionRejected = true; }
+assert.equal(illegalOutputTransitionRejected, true, 'output lifecycle rejects illegal state transitions');
+const routedOutput = outputRuntime.updateRoute('output-program-rtmp', { source: 'Program', productionGraphSourceId: 'program-scene-1' });
+assert.equal(routedOutput.route.deterministicRouteKey, 'Program:program-scene-1->output-program-rtmp', 'output routing metadata is deterministic');
+outputRuntime.updateHealth('output-program-rtmp', { latencyMs: 80, bitrateKbps: 6000, frameRate: 30, resolution: '1920x1080', packetLoss: 0.01, encoderStatus: 'encoding', connectionStatus: 'connected', uptimeMs: 1000, status: 'Running' });
+assert.equal(outputRuntime.getOutputHealth('output-program-rtmp')?.bitrateKbps, 6000, 'output health monitor propagates output health metadata');
+outputRuntime.updateMetrics('output-program-rtmp', { framesSent: 300, bytesSent: 2400000, bandwidthKbps: 6000, uptimeMs: 1000 });
+assert.equal(outputRuntime.getOutputMetrics('output-program-rtmp')?.framesSent, 300, 'output metrics collector records frames sent metadata');
+const recoveredOutput = outputRuntime.restartMetadata('output-program-rtmp');
+assert.equal(recoveredOutput.metrics.recoveries, 1, 'output recovery records recoveries without changing Program routing');
+assert.equal(outputRuntime.recovery.calculateDelay(3, 'backoff'), 4000, 'output recovery calculates exponential backoff');
+assert.equal(outputRuntime.getOutputMetrics('output-program-rtmp')?.restarts, 1, 'output metrics collector records output restarts');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'OutputHealthChanged'), true, 'RuntimeEventBus propagates output health events');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'OutputRecovered'), true, 'RuntimeEventBus propagates output recovery events');
+const graphWithOutput = attachOutputMetadataToGraph(session.graph, outputRuntime.getOutput('output-program-rtmp')!);
+assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.containsMediaHandles, false, 'ProductionGraph output node contains metadata only');
+assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.state, 'Recovering', 'ProductionGraph output node exposes output state metadata');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'output-runtime-controller'), true, 'RuntimeController owns OutputRuntimeController lifecycle');
+
+
+// UBOS Version 4.6 Broadcast Session & Show Runtime validation
+const sessionRuntime = new SessionRuntimeController(v43Runtime.bus);
+v43Runtime.register(sessionRuntime);
+const v46Session = sessionRuntime.createSession({
+  sessionId: 'session-v46-main',
+  name: 'Evening Show',
+  operator: 'director-1',
+  productionType: 'Live',
+  workspacePreset: 'studio-a',
+  activeRundown: 'rundown-a',
+  deviceSet: ['camera-1'],
+  inputSet: ['pipeline-camera-1'],
+  outputSet: ['output-program-rtmp'],
+  recordingTargets: ['rec-main'],
+  streamingTargets: ['stream-main'],
+});
+assert.equal(v46Session.containsMediaHandles, false, 'session runtime objects are metadata-only');
+let duplicateSessionRejected = false;
+try { sessionRuntime.createSession({ sessionId: 'session-v46-main', name: 'Duplicate', operator: 'director-1' }); } catch { duplicateSessionRejected = true; }
+assert.equal(duplicateSessionRejected, true, 'session registry rejects duplicate sessions');
+sessionRuntime.loadSession('session-v46-main');
+sessionRuntime.startSession();
+assert.equal(sessionRuntime.currentSession()?.runtimeState, 'Running', 'session lifecycle starts current session');
+sessionRuntime.pauseSession();
+let illegalSessionTransitionRejected = false;
+try { sessionRuntime.archiveSession('session-v46-main'); } catch { illegalSessionTransitionRejected = true; }
+assert.equal(illegalSessionTransitionRejected, true, 'session lifecycle rejects illegal transitions');
+const sessionSnapshot = sessionRuntime.saveSnapshot('session-v46-main', { panelLayout: { left: 'rundown', right: 'program' }, productionGraphMetadata: { graphId: session.graph.id, revision: session.graph.metadata.revision } });
+assert.equal(sessionSnapshot.containsMediaSerialization, false, 'session snapshots never serialize media');
+const recoveredSession = sessionRuntime.restoreSnapshot(sessionSnapshot.snapshotId);
+assert.equal(recoveredSession.runtimeState, 'Recovering', 'session recovery restores metadata into recovering state');
+assert.equal(recoveredSession.deviceSet[0], 'camera-1', 'session recovery restores device registry metadata');
+assert.equal(sessionRuntime.metrics.collect(recoveredSession).activeOutputs, 1, 'session metrics collector reports active outputs');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'SessionCreated'), true, 'RuntimeEventBus propagates session creation events');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'SnapshotRestored'), true, 'RuntimeEventBus propagates snapshot restore events');
+const graphWithSession = attachSessionMetadataToGraph(session.graph, recoveredSession);
+assert.equal(graphWithSession.session.metadata.activeSession, 'session-v46-main', 'ProductionGraph exposes active session metadata');
+assert.equal(graphWithSession.session.metadata.containsMediaHandles, false, 'ProductionGraph session metadata excludes media handles');
+assert.equal(graphWithSession.workspace.selectedPreset, 'studio-a', 'ProductionGraph exposes session workspace metadata');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'session-runtime-controller'), true, 'RuntimeController owns SessionRuntimeController lifecycle');
+sessionRuntime.startSession('session-v46-main');
+sessionRuntime.closeSession('session-v46-main');
+sessionRuntime.archiveSession('session-v46-main');
+sessionRuntime.disposeSession('session-v46-main');
+assert.equal(sessionRuntime.listSessions()[0]?.runtimeState, 'Disposed', 'session API closes, archives, and disposes sessions deterministically');
+
+
+// UBOS Version 4.7 Rundown & Show Control Runtime validation
+const rundownRuntime = new RundownRuntimeController(v43Runtime.bus, v43Runtime.healthManager);
+v43Runtime.register(rundownRuntime);
+const rundown = rundownRuntime.createRundown({ rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Evening Show Rundown' });
+assert.equal(rundown.containsMediaHandles, false, 'rundown runtime objects are metadata-only');
+let duplicateRundownRejected = false;
+try { rundownRuntime.createRundown({ rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Duplicate' }); } catch { duplicateRundownRejected = true; }
+assert.equal(duplicateRundownRejected, true, 'rundown registry rejects duplicate rundowns');
+rundownRuntime.addItem('rundown-v47-main', { itemId: 'item-open', rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Open', itemType: 'scene', order: 1, sceneReference: Object.keys(session.graph.scenes)[0], sourceReferences: [], requiredDevices: ['camera-1'], requiredInputs: ['pipeline-camera-1'], requiredOutputs: ['output-program-rtmp'], executionMode: 'operator-confirmed' });
+rundownRuntime.addItem('rundown-v47-main', { itemId: 'item-lower-third', rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Name Strap', itemType: 'lower third', order: 2, graphicsReference: 'gfx-l3', executionMode: 'manual' });
+assert.equal(rundownRuntime.listRundowns()[0]?.items[0]?.itemId, 'item-open', 'rundown item registry preserves deterministic item ordering');
+let illegalRundownTransitionRejected = false;
+try { rundownRuntime.startRundown('rundown-v47-main'); } catch { illegalRundownTransitionRejected = true; }
+assert.equal(illegalRundownTransitionRejected, true, 'rundown lifecycle rejects illegal state transitions');
+rundownRuntime.loadRundown('rundown-v47-main');
+const validationFailure = rundownRuntime.validateRundown('rundown-v47-main', { session: recoveredSession, graph: session.graph, devices: [], inputs: [], outputs: [], graphicsAssets: [], replayClips: [] });
+assert.equal(validationFailure.validationErrors.some((e) => e.code === 'DEVICE_MISSING'), true, 'rundown validation returns explicit missing dependency errors');
+const validationSuccess = rundownRuntime.validateRundown('rundown-v47-main', { session: recoveredSession, graph: session.graph, devices: ['camera-1'], inputs: ['pipeline-camera-1'], outputs: ['output-program-rtmp'], graphicsAssets: ['gfx-l3'], replayClips: [] });
+assert.equal(validationSuccess.state, 'ready', 'rundown validation promotes valid rundowns to ready');
+rundownRuntime.startRundown('rundown-v47-main');
+const cued = rundownRuntime.cueItem('rundown-v47-main', 'item-open');
+assert.equal(cued.cuedItemId, 'item-open', 'rundown cue behavior records the cued item');
+const executing = rundownRuntime.takeNext('rundown-v47-main', 'cmd-take-open');
+assert.equal(executing.currentItemId, 'item-open', 'rundown take next deterministically sets current item');
+const duplicateTake = rundownRuntime.takeNext('rundown-v47-main', 'cmd-take-open');
+assert.equal(duplicateTake.currentItemId, 'item-open', 'rundown duplicate execution prevention is command-id idempotent');
+rundownRuntime.completeItem('rundown-v47-main', 'item-open');
+const held = rundownRuntime.holdItem('rundown-v47-main', 'item-lower-third');
+assert.equal(held.heldItemId, 'item-lower-third', 'rundown hold behavior records held item');
+rundownRuntime.resumeItem('rundown-v47-main', 'item-lower-third');
+const jumped = rundownRuntime.jumpToItem('rundown-v47-main', 'item-lower-third');
+assert.equal(jumped.cuedItemId, 'item-lower-third', 'rundown jump behavior cues the requested item');
+rundownRuntime.skipItem('rundown-v47-main', 'item-lower-third');
+assert.equal(rundownRuntime.getHistory('rundown-v47-main').some((entry) => entry.command === 'skip item'), true, 'rundown audit history records operator commands');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'RundownItemCued'), true, 'RuntimeEventBus propagates metadata-only rundown item events');
+const graphWithRundown = attachRundownMetadataToGraph(session.graph, rundownRuntime.listRundowns()[0]!);
+assert.equal(graphWithRundown.session.metadata.activeRundown, 'rundown-v47-main', 'ProductionGraph exposes active rundown metadata');
+assert.equal(graphWithRundown.session.metadata.containsMediaHandles, false, 'ProductionGraph rundown metadata excludes media handles');
+assert.equal(rundownRuntime.getHealth('rundown-v47-main').failedItemCount, 0, 'rundown health manager propagates failed item count');
+assert.equal(rundownRuntime.getMetrics('rundown-v47-main').totalItems, 2, 'rundown metrics collector reports total items');
+const rundownSnapshot = rundownRuntime.createSnapshot('rundown-v47-main');
+assert.equal(rundownSnapshot.containsMediaHandles, false, 'rundown snapshots are metadata-only');
+let staleSnapshotRejected = false;
+rundownRuntime.updateRundownMetadata('rundown-v47-main', { title: 'Evening Show Rundown Updated' });
+try { rundownRuntime.restoreSnapshot(rundownSnapshot.snapshotId); } catch { staleSnapshotRejected = true; }
+assert.equal(staleSnapshotRejected, true, 'rundown recovery rejects stale snapshots');
+let noMediaHandleRejected = false;
+try { rundownRuntime.updateItem('rundown-v47-main', 'item-lower-third', { transitionMetadata: { runtimeHandle: 'forbidden' } }); } catch { noMediaHandleRejected = true; }
+assert.equal(noMediaHandleRejected, true, 'rundown safety rejects runtime media handles');
+rundownRuntime.stopRundown('rundown-v47-main');
+rundownRuntime.archiveRundown('rundown-v47-main');
+rundownRuntime.dispose();
+assert.equal(rundownRuntime.listRundowns()[0]?.state, 'disposed', 'rundown disposal cleanup marks rundowns disposed');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'rundown-runtime-controller'), true, 'RuntimeController owns RundownRuntimeController lifecycle');
+
+// UBOS v4.9 Monitoring, Telemetry & Alert Runtime validation
+const monitoringRuntime = new MonitoringRuntimeController(v43Runtime.bus);
+v43Runtime.register(monitoringRuntime);
+monitoringRuntime.initialize();
+monitoringRuntime.start();
+assert.equal(monitoringRuntime.listTelemetrySources().some((source) => source.sourceType === 'devices'), true, 'monitoring telemetry source registration includes devices');
+const telemetryRegistry = new TelemetryRegistry();
+telemetryRegistry.register({ sourceId: 'camera-a', sourceType: 'devices', metadata: { label: 'Camera A', runtimeHandle: 'blocked' } });
+let duplicateSourceRejected = false;
+try { telemetryRegistry.register({ sourceId: 'camera-a', sourceType: 'devices' }); } catch { duplicateSourceRejected = true; }
+assert.equal(duplicateSourceRejected, true, 'monitoring duplicate source rejection is deterministic');
+let unavailableValueRejected = false;
+try { monitoringRuntime.ingest({ sampleId: 'bad-unavailable', timestamp: new Date().toISOString(), sourceId: 'camera-a', sourceType: 'devices', metricName: 'latency', metricKind: 'gauge', value: 12, status: 'unavailable', severity: 'unknown', tags: [], dimensions: {}, availability: 'unavailable', confidence: 1, collectionMethod: 'adapter', metadataVersion: '4.9' }); } catch { unavailableValueRejected = true; }
+assert.equal(unavailableValueRejected, true, 'monitoring telemetry sample validation rejects fabricated unavailable values');
+const staleSample = { sampleId: 'stale-1', timestamp: new Date(Date.now() - 2000).toISOString(), sourceId: 'camera-a', sourceType: 'devices', metricName: 'connectionState', metricKind: 'state' as const, value: 'connected', status: 'ok' as const, severity: 'informational' as const, tags: [], dimensions: {}, availability: 'available' as const, confidence: 1, collectionMethod: 'event' as const, expiresAt: new Date(Date.now() - 1000).toISOString(), metadataVersion: '4.9' };
+monitoringRuntime.ingest(staleSample);
+assert.equal(monitoringRuntime.getHealthSummary().staleSourceIds.includes('camera-a'), true, 'monitoring stale-data detection keeps stale sources visible');
+const healthAggregation = new HealthAggregationManager();
+const criticalHealth = healthAggregation.aggregate([{ ...staleSample, sampleId: 'critical-1', sourceId: 'encoder-a', metricName: 'encoderState', status: 'critical', severity: 'critical', expiresAt: new Date(Date.now() + 1000).toISOString() }]);
+assert.equal(criticalHealth.state, 'critical', 'monitoring health aggregation propagates one critical child');
+const alertRegistry = new AlertRegistry();
+const alertLifecycle = new AlertLifecycleManager();
+const alertEngine = new AlertRuleEngine(alertRegistry, alertLifecycle);
+alertRegistry.register({ ruleId: 'cpu-high', name: 'CPU high', type: 'threshold', metricSelector: { metricName: 'cpu' }, condition: { operator: '>', value: 90 }, severity: 'critical', debounceMs: 0, cooldownMs: 1000, enabled: true, version: '1' });
+const cpuSample = { ...staleSample, sampleId: 'cpu-1', sourceId: 'system', sourceType: 'system', metricName: 'cpu', metricKind: 'gauge' as const, value: 95, status: 'ok' as const, severity: 'informational' as const, expiresAt: new Date(Date.now() + 1000).toISOString() };
+const fired = alertEngine.evaluate(cpuSample);
+assert.equal(fired.length, 1, 'monitoring alert threshold rule fires');
+assert.equal(alertEngine.evaluate({ ...cpuSample, sampleId: 'cpu-2' }).length, 0, 'monitoring cooldown prevents duplicate alert storms');
+alertRegistry.register({ ruleId: 'camera-absent', name: 'Camera absent', type: 'absence', metricSelector: { metricName: 'heartbeat' }, condition: {}, severity: 'warning', debounceMs: 1, cooldownMs: 0, enabled: true, version: '1' });
+assert.equal(alertEngine.evaluate({ ...staleSample, sampleId: 'absence-1', metricName: 'heartbeat', status: 'stale' }).some((alert) => alert.state === 'pending'), true, 'monitoring absence rule supports debounce pending state');
+alertRegistry.register({ ruleId: 'output-state', name: 'Output failed', type: 'state-change', metricSelector: { metricName: 'outputState' }, condition: { to: 'failed' }, severity: 'error', debounceMs: 0, cooldownMs: 0, enabled: true, version: '1' });
+assert.equal(alertEngine.evaluate({ ...cpuSample, sampleId: 'state-1', metricName: 'outputState', value: 'failed' }).length, 1, 'monitoring state-change rule fires deterministically');
+const acknowledged = alertLifecycle.acknowledge(fired[0]!.alertId);
+assert.equal(acknowledged.state, 'acknowledged', 'monitoring alert acknowledgement transition works');
+const suppressed = alertLifecycle.suppress(acknowledged.alertId);
+assert.equal(suppressed.state, 'suppressed', 'monitoring alert suppression transition works');
+const resolved = alertLifecycle.resolve(suppressed.alertId);
+assert.equal(resolved.state, 'resolved', 'monitoring alert resolution transition works');
+const incidentManager = new IncidentManager();
+const incident = incidentManager.group(fired[0]!);
+incidentManager.group({ ...fired[0]!, alertId: 'alert-duplicate' });
+assert.equal(incidentManager.list()[0]!.alertIds.length, 2, 'monitoring incident grouping correlates related alerts');
+const history = new TelemetryHistoryStore({ maxSamples: 1, retentionMs: 60_000 });
+history.ingest(cpuSample);
+history.ingest({ ...cpuSample, sampleId: 'cpu-retained' });
+assert.equal(history.query().length, 1, 'monitoring history retention is bounded');
+const snapshotManager = new DiagnosticSnapshotManager();
+const diagnosticSnapshot = snapshotManager.create({ healthSummary: criticalHealth, activeAlerts: [resolved], incidents: [incident], telemetrySamples: [cpuSample], summaries: { deviceSummary: 'metadata-only' } });
+assert.equal(diagnosticSnapshot.containsRuntimeHandles, false, 'monitoring diagnostic snapshot creation is metadata-only');
+assert.equal(JSON.parse(JSON.stringify(diagnosticSnapshot)).version, '4.9', 'monitoring diagnostic snapshot serialization is versioned');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'TelemetrySampleReceived'), true, 'monitoring RuntimeEventBus propagation publishes telemetry events');
+const beforeRecursive = monitoringRuntime.queryMetricHistory().length;
+v43Runtime.bus.publish({ type: 'TelemetrySampleReceived', domain: 'health', source: 'external-monitor', payload: { monitoringEvent: true } });
+assert.equal(monitoringRuntime.queryMetricHistory().length, beforeRecursive, 'monitoring recursive-loop prevention skips monitoring events');
+const graphMonitoring = monitoringRuntime.mapProductionGraphMonitoringMetadata();
+assert.equal(graphMonitoring.containsRuntimeHandles, false, 'monitoring ProductionGraph metadata mapping is non-destructive and metadata-only');
+assert.equal(new ProductionGraphTelemetryAdapter().mapSummary(graphMonitoring).activeIncidentCount >= 0, true, 'monitoring ProductionGraph adapter exposes summary metadata');
+const noMediaHandleSnapshot = monitoringRuntime.createDiagnosticSnapshot();
+assert.equal(JSON.stringify(noMediaHandleSnapshot).includes('MediaStream'), false, 'monitoring no-media-handle safety excludes media handles');
+monitoringRuntime.stop();
+monitoringRuntime.dispose();
+assert.equal(monitoringRuntime.getSnapshot().state, 'disposed', 'monitoring disposal cleanup releases runtime-only state');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'monitoring-runtime-controller'), true, 'RuntimeController owns MonitoringRuntimeController lifecycle');

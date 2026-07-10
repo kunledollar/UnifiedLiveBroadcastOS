@@ -39,6 +39,12 @@ export function GraphicsInspector({
       <InspectorRow label="Opacity" value={`${Math.round(layer.opacity * 100)}%`} />
       <InspectorRow label="Visible" value={layer.visible ? 'Yes' : 'No'} />
       <InspectorRow label="Locked" value={layer.locked ? 'Yes' : 'No'} />
+      <InspectorRow label="Graphic ID" value={layer.id} />
+      <InspectorRow label="Layer" value={`#${layer.order}`} />
+      <InspectorRow label="Animation" value={`${String((layer.transition as { preset?: string }).preset ?? layer.transition.type)} · ${layer.transition.durationMs}ms`} />
+      <InspectorRow label="Memory" value={String(layer.metadata?.memory ?? 'metadata-only')} />
+      <InspectorRow label="Runtime State" value={String(layer.metadata?.runtimeState ?? layer.programState)} />
+      <InspectorRow label="Visibility" value={layer.visible ? 'Visible' : 'Hidden'} />
       <InspectorRow label="Transition" value={`${layer.transition.type} · ${layer.transition.durationMs}ms`} />
       <InspectorRow label="Program" value={layer.programState} />
       <InspectorRow label="Preview" value={layer.previewState} />
@@ -60,7 +66,7 @@ export function GraphicsInspector({
         </div>
       ) : null}
       <p className="pt-2 text-ubos-metadata text-ubos-fg-muted">
-        Graphics metadata staged · Renderer unavailable
+        Metadata-first: saved graphics metadata is separate from runtime DOM nodes, CSS animations, and requestAnimationFrame clocks
       </p>
     </ConsoleSection>
   );

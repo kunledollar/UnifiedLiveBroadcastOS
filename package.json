@@ -17,7 +17,21 @@
     "release:report": "node scripts/generate-release-report.mjs",
     "media:demo": "node scripts/media-runtime-demo.mjs",
     "media:clock-demo": "pnpm --filter @ubos/media-plane build && node scripts/media-clock-demo.mjs",
-    "media:decode-demo": "pnpm --filter @ubos/media-plane build && node scripts/video-decode-demo.mjs"
+    "media:decode-demo": "pnpm --filter @ubos/media-plane build && node scripts/video-decode-demo.mjs",
+    "media:capture-demo": "pnpm --filter @ubos/media-plane build && node scripts/video-capture-demo.mjs",
+    "media:audio-demo": "pnpm --filter @ubos/media-plane build && node scripts/audio-capture-decode-demo.mjs",
+    "media:mixer-demo": "pnpm --filter @ubos/media-plane build && node scripts/audio-mixer-demo.mjs",
+    "media:recording-demo": "pnpm --filter @ubos/media-plane build && node scripts/recording-pipeline-demo.mjs",
+    "media:remote-demo": "pnpm --filter @ubos/media-plane build && node scripts/remote-production-demo.mjs",
+    "desktop:demo": "pnpm --filter @ubos/desktop desktop:demo",
+    "desktop:build": "pnpm --filter @ubos/desktop build",
+    "collaboration:demo": "pnpm --filter @ubos/shared build && node scripts/collaboration-demo.mjs",
+    "diagnostics:demo": "pnpm --filter @ubos/media-plane build && node scripts/diagnostics-demo.mjs",
+    "ubos:start": "dotenv -- turbo dev --filter=@ubos/web",
+    "ubos:update": "git pull origin main && pnpm install && pnpm db:generate && pnpm db:push",
+    "ubos:clean": "node scripts/clean.mjs",
+    "ubos:doctor": "pnpm lint && pnpm typecheck && pnpm test",
+    "ubos:browser": "dotenv -- pnpm --filter @ubos/web dev"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",

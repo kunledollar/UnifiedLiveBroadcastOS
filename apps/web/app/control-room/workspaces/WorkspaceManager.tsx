@@ -3,6 +3,7 @@
 import { workspaceProfiles } from './workspace-presets';
 import type { ProfessionalWorkspaceId } from './workspace-types';
 import type { DockTabId, NavItemId, OperationsTabId } from '../shell/types';
+import { normalizeDockTabId } from '../broadcast-workspaces';
 import type { OutputViewMode } from '../workspace/monitor-state';
 
 export type WorkspaceSelectionResult = {
@@ -20,7 +21,7 @@ export function applyWorkspaceProfile(id: ProfessionalWorkspaceId): WorkspaceSel
     viewMode: profile.defaultViewMode,
     activeNav: profile.defaultNavItem,
     activeOperationsTab: profile.defaultOperationsTab,
-    activeBottomDock: profile.defaultDockTab,
+    activeBottomDock: normalizeDockTabId(profile.defaultDockTab),
   };
 }
 
