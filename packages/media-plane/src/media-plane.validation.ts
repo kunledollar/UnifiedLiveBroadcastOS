@@ -39,6 +39,7 @@ import {
   assignIntentToFrame,
   assertFramePlanHasFrameIdentity,
   createBroadcastRuntimeCore,
+  RuntimeIntegrationAdapter,
   assertFrameTimestampFromClock,
   assertMonotonicFrameId,
   assertNoIndependentSubsystemClock,
@@ -5832,3 +5833,54 @@ assert.equal(
   'runtime event bus assigns deterministic event ordering',
 );
 assert.equal(runtimeSnapshot.containsRuntimeHandles, false, 'runtime snapshots remain metadata-only');
+
+assert.equal(
+  runtimeSnapshot.registrations.some((registration) => registration.subsystemId === 'production-graph-runtime'),
+  true,
+  'runtime core registers ProductionGraph through a non-destructive adapter',
+);
+assert.deepEqual(
+  runtimeSnapshot.startupOrder.slice(0, 6),
+  ['production-graph-runtime', 'audio-runtime', 'graphics-runtime', 'automation-runtime', 'replay-runtime', 'recording-runtime'],
+  'runtime integration startup order is deterministic and dependency aware',
+);
+assert.deepEqual(
+  runtimeSnapshot.shutdownOrder.slice(0, 4),
+  ['streaming-runtime', 'recording-runtime', 'replay-runtime', 'automation-runtime'],
+  'runtime integration shutdown order is deterministic',
+);
+assert.equal(
+  runtimeSnapshot.dependencyGraph['streaming-runtime']?.[0],
+  'recording-runtime',
+  'runtime dependency graph documents streaming dependencies',
+);
+assert.equal(
+  broadcastRuntime.bus.replay().some((event) => event.type === 'HealthChanged'),
+  true,
+  'runtime health manager receives subsystem health updates',
+);
+assert.equal(
+  broadcastRuntime.bus.replay().some((event) => event.source === 'recording-runtime'),
+  true,
+  'runtime event bus receives adapter lifecycle events',
+);
+const invalidRuntime = createBroadcastRuntimeCore('runtime-core:invalid-dependency');
+let rejectedInvalidDependency = false;
+try {
+  invalidRuntime.register(
+    new RuntimeIntegrationAdapter(
+      {
+        subsystemId: 'invalid-runtime',
+        domain: 'automation',
+        dependencies: ['missing-runtime'],
+        startupPriority: 99,
+        shutdownPriority: 99,
+        healthSource: 'invalid-runtime:health',
+      },
+      invalidRuntime.bus,
+    ),
+  );
+} catch {
+  rejectedInvalidDependency = true;
+}
+assert.equal(rejectedInvalidDependency, true, 'runtime controller rejects invalid dependency graphs');
