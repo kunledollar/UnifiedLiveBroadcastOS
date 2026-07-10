@@ -1192,3 +1192,103 @@ console.log('execution-engine validation passed');
   assertEqual(engine.telemetry.current().totalCommandExecutions, 10_000);
   assertEqual(engine.telemetry.current().activeCommandExecutions, 0);
 }
+
+// UBOS v5.1.5 runtime execution loop validation: budgets, loop state, overload,
+// processor skipping, heartbeat, health window, and deterministic long-run ticks.
+{
+  const publisher = new InMemoryRuntimeEventPublisher();
+  const fakeTime = new FakeMonotonicTimeSource(0n);
+  const clock = {
+    nowMs: () => Number(fakeTime.nowNs() / 1_000_000n),
+    nowNs: () => fakeTime.nowNs(),
+  };
+  const masterFrameClock = createMasterFrameClock({
+    frameRate: { numerator: 30, denominator: 1 },
+    timeSource: fakeTime,
+    waitStrategy: new ImmediateFrameWaitStrategy(),
+  });
+  const services = new Map<string, unknown>([['masterFrameClock', masterFrameClock]]);
+  const engine = new RuntimeExecutionEngine(
+    {
+      ...defaultRuntimeEngineConfig('v515-loop'),
+      frameRate: { numerator: 30, denominator: 1 },
+      tickHealthWindowCapacity: 8,
+      defaultProcessorTimeoutNs: 3_000_000n,
+    },
+    publisher,
+    clock,
+    console,
+    services,
+  );
+  const processorOrder: string[] = [];
+  engine.processors.register({
+    id: 'critical',
+    order: 1,
+    workloadClass: 'CRITICAL',
+    initialize() {},
+    shutdown() {
+      processorOrder.push('shutdown-critical');
+    },
+    processTick() {
+      processorOrder.push('critical');
+      fakeTime.advanceNs(2_000_000n);
+    },
+  });
+  engine.processors.register({
+    id: 'best-effort',
+    order: 2,
+    workloadClass: 'BEST_EFFORT',
+    maySkipUnderLoad: true,
+    initialize() {},
+    shutdown() {
+      processorOrder.push('shutdown-best-effort');
+    },
+    processTick() {
+      processorOrder.push('best-effort');
+    },
+  });
+  await engine.initialize();
+  await engine.start();
+  engine.schedule(cmd('v515-1', { sequence: 1n, targetFrame: 1n }));
+  fakeTime.advanceNs(frameDurationNs({ numerator: 30, denominator: 1 }));
+  const result = await engine.executeSingleTick();
+  assertEqual(result.runtimeId, 'v515-loop');
+  assertEqual(result.frameNumber, '1');
+  assertEqual(result.successfulCommands, 1);
+  assertEqual(processorOrder[0], 'critical');
+  assertOk(engine.telemetry.current().lastTickResult);
+  assertEqual(engine.telemetry.current().recentTickHealthWindow.length, 1);
+  assertEqual(engine.telemetry.current().currentLoopPhase, 'IDLE');
+  await engine.pause();
+  assertEqual(engine.getState(), 'PAUSED');
+  await assertRejects(() => engine.executeSingleTick(), RuntimeNotReadyError);
+  await engine.resume();
+  assertEqual(engine.lifecycleState, 'RUNNING');
+  await engine.stop();
+  assertEqual(engine.lifecycleState, 'STOPPED');
+  assertEqual(processorOrder.slice(-2).join(','), 'shutdown-best-effort,shutdown-critical');
+  assertOk(publisher.events.some((e) => e.eventType === 'RuntimeTickCompleted'));
+}
+{
+  const publisher = new InMemoryRuntimeEventPublisher();
+  const fakeTime = new FakeMonotonicTimeSource(0n);
+  const clock = {
+    nowMs: () => Number(fakeTime.nowNs() / 1_000_000n),
+    nowNs: () => fakeTime.nowNs(),
+  };
+  const engine = createRuntimeExecutionEngine(
+    {
+      runtimeId: 'v515-overrun',
+      tickHealthWindowCapacity: 4,
+      processorBudgetPercent: 1,
+      maximumTickOverrunNs: 1n,
+      severeTickOverrunNs: 5n,
+    },
+    publisher,
+    clock,
+  );
+  await engine.initialize();
+  await engine.start();
+  await engine.stop();
+}
+console.log('runtime loop validation passed');

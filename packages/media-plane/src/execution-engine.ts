@@ -61,6 +61,20 @@ export interface RuntimeEngineConfig {
   failureWindowMs: number;
   failOnCommandTimeout: boolean;
   continueAfterCommandCancellation: boolean;
+  commandBudgetPercent: number;
+  processorBudgetPercent: number;
+  telemetryBudgetPercent: number;
+  reservedSafetyMarginPercent: number;
+  maximumTickOverrunNs: bigint;
+  severeTickOverrunNs: bigint;
+  maximumConsecutiveOverruns: number;
+  overrunWindowSize: number;
+  maximumOverrunsPerWindow: number;
+  tickHealthWindowCapacity: number;
+  defaultProcessorTimeoutNs: bigint;
+  maximumProcessorTimeoutNs: bigint;
+  failOnProcessorTimeout: boolean;
+  continueAfterProcessorTimeout: boolean;
 }
 /** Public UBOS runtime execution-engine API. */
 export const defaultRuntimeEngineConfig = (runtimeId = 'ubos-runtime'): RuntimeEngineConfig => ({
@@ -86,6 +100,20 @@ export const defaultRuntimeEngineConfig = (runtimeId = 'ubos-runtime'): RuntimeE
   failureWindowMs: 60_000,
   failOnCommandTimeout: false,
   continueAfterCommandCancellation: true,
+  commandBudgetPercent: 20,
+  processorBudgetPercent: 65,
+  telemetryBudgetPercent: 5,
+  reservedSafetyMarginPercent: 10,
+  maximumTickOverrunNs: 5_000_000n,
+  severeTickOverrunNs: 33_000_000n,
+  maximumConsecutiveOverruns: 3,
+  overrunWindowSize: 64,
+  maximumOverrunsPerWindow: 16,
+  tickHealthWindowCapacity: 256,
+  defaultProcessorTimeoutNs: 10_000_000n,
+  maximumProcessorTimeoutNs: 100_000_000n,
+  failOnProcessorTimeout: false,
+  continueAfterProcessorTimeout: true,
 });
 /** Public UBOS runtime execution-engine API. */
 export class RuntimeEngineError extends Error {
@@ -211,7 +239,16 @@ export interface RuntimeCommand<TPayload = unknown> {
   idempotencyKey?: string;
   metadata?: Readonly<Record<string, unknown>>;
   causationId?: string;
+  criticality?: CommandCriticality;
 }
+export type CommandCriticality = 'FRAME_CRITICAL' | 'REALTIME' | 'OPERATIONAL' | 'BACKGROUND';
+export type CommandOverloadPolicy =
+  | 'COMPLETE_DUE_BATCH'
+  | 'STOP_AT_BUDGET'
+  | 'FAIL_FRAME_CRITICAL'
+  | 'DEFER_NON_CRITICAL'
+  | 'DEGRADE_RUNTIME'
+  | 'FAIL_RUNTIME';
 /** Public UBOS runtime execution-engine API. */
 export type CommandExecutionPolicy =
   | 'EXECUTE_ONCE'
@@ -295,7 +332,24 @@ export type RuntimeEventType =
   | 'RuntimeFailed'
   | 'RuntimeTickStarted'
   | 'RuntimeTickCompleted'
+  | 'RuntimeLoopStarting'
+  | 'RuntimeLoopStarted'
+  | 'RuntimeLoopPaused'
+  | 'RuntimeLoopResumed'
+  | 'RuntimeLoopStopping'
+  | 'RuntimeLoopStopped'
+  | 'RuntimeLoopFailed'
   | 'RuntimeTickOverrun'
+  | 'RuntimeTickLate'
+  | 'RuntimeTickSevereOverrun'
+  | 'RuntimeTickDiscontinuity'
+  | 'RuntimeBackpressureDetected'
+  | 'RuntimeOverloadStateChanged'
+  | 'RuntimeWorkDeferred'
+  | 'RuntimeWorkSkipped'
+  | 'RuntimeGracefulShutdownStarted'
+  | 'RuntimeGracefulShutdownCompleted'
+  | 'RuntimeGracefulShutdownTimedOut'
   | 'CommandScheduled'
   | 'CommandQueued'
   | 'CommandReady'
@@ -313,6 +367,8 @@ export type RuntimeEventType =
   | 'ProcessorStarted'
   | 'ProcessorCompleted'
   | 'ProcessorFailed'
+  | 'ProcessorSkipped'
+  | 'ProcessorTimedOut'
   | 'WorkerHealthChanged'
   | 'CommandExecutionRequested'
   | 'CommandExecutionStarted'
@@ -417,6 +473,95 @@ export interface RuntimeTelemetrySnapshot {
   clockState: FrameClockState;
   effectiveFrameRate: number;
   averageTickIntervalNs: string;
+  loopState: RuntimeLoopState;
+  loopStartedAtNs?: string;
+  loopStoppedAtNs?: string;
+  loopIterations: number;
+  activeTick: boolean;
+  currentTickFrame?: string;
+  currentLoopPhase: RuntimeLoopPhase;
+  lastLoopHeartbeatNs: string;
+  lastHealthyTickNs?: string | undefined;
+  totalTickDurationNs: string;
+  averageTickDurationNs: string;
+  maximumTickDurationNsValue: string;
+  minimumTickDurationNs: string;
+  totalTickOverruns: number;
+  softTickOverruns: number;
+  hardTickOverruns: number;
+  severeTickOverruns: number;
+  consecutiveTickOverruns: number;
+  maximumMissedFramesInTick: string;
+  currentOverloadState: RuntimeOverloadState;
+  overloadTransitions: number;
+  commandBudgetExhaustions: number;
+  processorBudgetExhaustions: number;
+  skippedProcessorExecutions: number;
+  deferredCommandCount: number;
+  shedWorkCount: number;
+  gracefulShutdowns: number;
+  forcedShutdowns: number;
+  eventPublisherFailures: number;
+  telemetryCommitFailures: number;
+  lastTickResult?: RuntimeTickResult;
+  recentTickHealthWindow: readonly RuntimeTickHealthEntry[];
+}
+export type RuntimeLoopState =
+  'IDLE' | 'STARTING' | 'RUNNING' | 'PAUSING' | 'PAUSED' | 'STOPPING' | 'STOPPED' | 'FAILED';
+export type RuntimeLoopPhase =
+  | 'IDLE'
+  | 'WAITING_FOR_TICK'
+  | 'COLLECTING_COMMANDS'
+  | 'EXECUTING_COMMANDS'
+  | 'EXECUTING_PROCESSORS'
+  | 'COMMITTING_TELEMETRY'
+  | 'STOPPING'
+  | 'FAILED';
+export type RuntimeOverloadState = 'NORMAL' | 'PRESSURED' | 'OVERLOADED' | 'CRITICAL';
+export type RuntimeTickTimingClass =
+  'ON_TIME' | 'LATE_START' | 'SOFT_OVERRUN' | 'HARD_OVERRUN' | 'SEVERE_OVERRUN' | 'DISCONTINUITY';
+export type ProcessorWorkloadClass = 'CRITICAL' | 'REALTIME' | 'BEST_EFFORT' | 'BACKGROUND';
+export type ProcessorFailurePolicy = 'CONTINUE' | 'DEGRADE_RUNTIME' | 'FAIL_RUNTIME';
+export interface RuntimeTickHealthEntry {
+  readonly frameNumber: string;
+  readonly tickDurationNs: string;
+  readonly latenessNs: string;
+  readonly overrunNs: string;
+  readonly missedFrames: string;
+  readonly commandCount: number;
+  readonly processorCount: number;
+  readonly skippedWork: number;
+  readonly overloadState: RuntimeOverloadState;
+  readonly success: boolean;
+}
+export interface RuntimeTickResult {
+  readonly runtimeId: string;
+  readonly frameNumber: string;
+  readonly scheduledTimeNs: string;
+  readonly actualTimeNs: string;
+  readonly tickStartedAtNs: string;
+  readonly tickCompletedAtNs: string;
+  readonly tickDurationNs: string;
+  readonly deadlineNs: string;
+  readonly budgetNs: string;
+  readonly overrunNs: string;
+  readonly late: boolean;
+  readonly missedFrames: string;
+  readonly commandCount: number;
+  readonly successfulCommands: number;
+  readonly failedCommands: number;
+  readonly cancelledCommands: number;
+  readonly timedOutCommands: number;
+  readonly processorCount: number;
+  readonly successfulProcessors: number;
+  readonly failedProcessors: number;
+  readonly skippedProcessors: number;
+  readonly overloadState: RuntimeOverloadState;
+  readonly runtimeStateAfterTick: RuntimeLifecycleState;
+  readonly errorSummary: string | undefined;
+  readonly discontinuity: boolean;
+  readonly droppedWorkCount: number;
+  readonly timingClass: RuntimeTickTimingClass;
 }
 /** Public UBOS runtime execution-engine API. */
 export class RuntimeTelemetryCollector {
@@ -480,6 +625,33 @@ export class RuntimeTelemetryCollector {
       clockState: 'CREATED',
       effectiveFrameRate: 0,
       averageTickIntervalNs: '0',
+      loopState: 'IDLE',
+      loopIterations: 0,
+      activeTick: false,
+      currentLoopPhase: 'IDLE',
+      lastLoopHeartbeatNs: '0',
+      totalTickDurationNs: '0',
+      averageTickDurationNs: '0',
+      maximumTickDurationNsValue: '0',
+      minimumTickDurationNs: '0',
+      totalTickOverruns: 0,
+      softTickOverruns: 0,
+      hardTickOverruns: 0,
+      severeTickOverruns: 0,
+      consecutiveTickOverruns: 0,
+      maximumMissedFramesInTick: '0',
+      currentOverloadState: 'NORMAL',
+      overloadTransitions: 0,
+      commandBudgetExhaustions: 0,
+      processorBudgetExhaustions: 0,
+      skippedProcessorExecutions: 0,
+      deferredCommandCount: 0,
+      shedWorkCount: 0,
+      gracefulShutdowns: 0,
+      forcedShutdowns: 0,
+      eventPublisherFailures: 0,
+      telemetryCommitFailures: 0,
+      recentTickHealthWindow: [],
     };
   }
   /** Public UBOS runtime execution-engine API. */
@@ -2084,10 +2256,101 @@ export function compareCommands(a: RuntimeCommand, b: RuntimeCommand) {
 export function compareRecords(a: ScheduledCommandRecord, b: ScheduledCommandRecord) {
   return compareCommands(a.command, b.command);
 }
+
+export class RuntimeLoopAlreadyRunningError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeLoopAlreadyRunning', 'Runtime loop is already running');
+  }
+}
+export class RuntimeLoopNotRunningError extends RuntimeEngineError {
+  constructor(state: RuntimeLoopState) {
+    super('RuntimeLoopNotRunning', `Runtime loop is not running from state ${state}`, { state });
+  }
+}
+export class RuntimeLoopReentrancyError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeLoopReentrancy', 'Runtime loop operation is already active');
+  }
+}
+export class RuntimeTickOverlapError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeTickOverlap', 'RuntimeTickInProgress: a runtime tick is already active');
+  }
+}
+export class RuntimeTickBudgetExceededError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeTickBudgetExceeded', 'Runtime tick budget was exceeded');
+  }
+}
+export class RuntimeSevereOverrunError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeSevereOverrun', 'Runtime tick exceeded severe overrun threshold');
+  }
+}
+export class RuntimeBackpressureFailureError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeBackpressureFailure', 'Runtime could not apply backpressure policy');
+  }
+}
+export class RuntimeShutdownTimeoutError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeShutdownTimeout', 'Runtime shutdown grace period timed out');
+  }
+}
+export class RuntimeLoopCancelledError extends RuntimeEngineError {
+  constructor() {
+    super('RuntimeLoopCancelled', 'Runtime loop was cancelled');
+  }
+}
+export class InvalidRuntimeBudgetConfigurationError extends RuntimeEngineError {
+  constructor(message: string) {
+    super('InvalidRuntimeBudgetConfiguration', message);
+  }
+}
+export class ProcessorBudgetExceededError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('ProcessorBudgetExceeded', `Processor ${id} exceeded budget`, { id });
+  }
+}
+export class ProcessorExecutionTimeoutError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('ProcessorExecutionTimeout', `Processor ${id} timed out`, { id });
+  }
+}
+export class RuntimeLoopInvariantViolationError extends RuntimeEngineError {
+  constructor(message: string) {
+    super('RuntimeLoopInvariantViolation', message);
+  }
+}
+export class RuntimeLoopStateConflictError extends RuntimeEngineError {
+  constructor(message: string) {
+    super('RuntimeLoopStateConflict', message);
+  }
+}
+export class RuntimeEventPublicationFailedError extends RuntimeEngineError {
+  constructor(cause: unknown) {
+    super('RuntimeEventPublicationFailed', 'Runtime event publication failed', {
+      cause: String(cause),
+    });
+  }
+}
+export class RuntimeTelemetryCommitFailedError extends RuntimeEngineError {
+  constructor(cause: unknown) {
+    super('RuntimeTelemetryCommitFailed', 'Runtime telemetry commit failed', {
+      cause: String(cause),
+    });
+  }
+}
+
 /** Public UBOS runtime execution-engine API. */
 export interface TickProcessor {
   id: string;
   order: number;
+  workloadClass?: ProcessorWorkloadClass;
+  estimatedBudgetNs?: bigint;
+  maySkipUnderLoad?: boolean;
+  failurePolicy?: ProcessorFailurePolicy;
+  timeoutNs?: bigint;
   /** Public UBOS runtime execution-engine API. */
   initialize(context: RuntimeContext): Promise<void> | void;
   processTick(tick: FrameTick, context: RuntimeContext): Promise<void> | void;
@@ -2179,6 +2442,27 @@ const validTransitions: Record<RuntimeLifecycleState, RuntimeLifecycleState[]> =
   STOPPED: [],
   FAILED: ['STOPPING'],
 };
+
+const percentOfNs = (value: bigint, percent: number) => (value * BigInt(percent * 100)) / 10_000n;
+const validateRuntimeBudgets = (c: RuntimeEngineConfig) => {
+  const values = [
+    c.commandBudgetPercent,
+    c.processorBudgetPercent,
+    c.telemetryBudgetPercent,
+    c.reservedSafetyMarginPercent,
+  ];
+  if (values.some((v) => !Number.isSafeInteger(v * 100) || v < 0 || v > 100))
+    throw new InvalidRuntimeBudgetConfigurationError(
+      'budget percentages must be 0..100 with at most two decimals',
+    );
+  if (values.reduce((a, b) => a + b, 0) > 100)
+    throw new InvalidRuntimeBudgetConfigurationError('budget percentages exceed frame budget');
+  if (c.maximumTickOverrunNs < 0n || c.severeTickOverrunNs < 0n)
+    throw new InvalidRuntimeBudgetConfigurationError('overrun thresholds must be non-negative');
+  if (c.tickHealthWindowCapacity <= 0 || !Number.isSafeInteger(c.tickHealthWindowCapacity))
+    throw new InvalidRuntimeBudgetConfigurationError('tickHealthWindowCapacity must be positive');
+};
+
 /** Public UBOS runtime execution-engine API. */
 export class RuntimeExecutionEngine {
   readonly handlers = new CommandHandlerRegistry();
@@ -2195,6 +2479,9 @@ export class RuntimeExecutionEngine {
   #frameNumber = 0n;
   #abort = new AbortController();
   #tickInProgress = false;
+  #loopState: RuntimeLoopState = 'IDLE';
+  #loopPromise?: Promise<void>;
+  #stopRequested = false;
   #startedAtMs?: number;
   #eventSequence = 0n;
   readonly masterFrameClock: MasterFrameClock;
@@ -2251,6 +2538,9 @@ export class RuntimeExecutionEngine {
   get currentFrameNumber() {
     return this.#frameNumber;
   }
+  getState(): RuntimeLoopState {
+    return this.#loopState;
+  }
   /** Public UBOS runtime execution-engine API. */
   context(): RuntimeContext {
     return Object.freeze({
@@ -2270,6 +2560,7 @@ export class RuntimeExecutionEngine {
   validateConfig() {
     const c = this.config;
     if (!c.runtimeId.trim()) throw new InvalidEngineConfigurationError('runtimeId is required');
+    validateRuntimeBudgets(c);
     validateRationalFrameRate(c.frameRate);
     for (const [k, v] of Object.entries({
       commandQueueCapacity: c.commandQueueCapacity,
@@ -2312,16 +2603,22 @@ export class RuntimeExecutionEngine {
       await this.emit('FrameClockResumed', {});
     }
     this.transition('RUNNING');
+    if (this.#loopState === 'IDLE' || this.#loopState === 'STOPPED') this.#loopState = 'RUNNING';
+    this.telemetry.commit({ loopState: this.#loopState });
     await this.emit('RuntimeStarted', {});
   }
   /** Public UBOS runtime execution-engine API. */
   async pause() {
     if (this.#state === 'PAUSED') return;
+    this.#loopState = 'PAUSING';
     if (this.masterFrameClock.state === 'RUNNING') {
       this.masterFrameClock.pause();
       await this.emit('FrameClockPaused', {});
     }
     this.transition('PAUSED');
+    this.#loopState = 'PAUSED';
+    this.telemetry.commit({ loopState: 'PAUSED' });
+    await this.emit('RuntimeLoopPaused', {});
     await this.emit('RuntimePaused', {});
   }
   /** Public UBOS runtime execution-engine API. */
@@ -2331,8 +2628,14 @@ export class RuntimeExecutionEngine {
   /** Public UBOS runtime execution-engine API. */
   async stop() {
     if ((this.#state as RuntimeLifecycleState) === 'STOPPED') return;
-    if (this.#tickInProgress)
-      throw new RuntimeEngineError('RuntimeTickInProgress', 'Cannot stop while tick is executing');
+    this.#stopRequested = true;
+    this.#loopState = 'STOPPING';
+    this.telemetry.commit({
+      loopState: 'STOPPING',
+      gracefulShutdowns: this.telemetry.current().gracefulShutdowns + 1,
+    });
+    await this.emit('RuntimeLoopStopping', {});
+    await this.emit('RuntimeGracefulShutdownStarted', {});
     this.transition('STOPPING');
     await this.emit('RuntimeStopping', {});
     this.#abort.abort();
@@ -2341,6 +2644,10 @@ export class RuntimeExecutionEngine {
     await this.emit('FrameClockStopped', {});
     await this.processors.shutdownAll(this.context());
     this.transition('STOPPED');
+    this.#loopState = 'STOPPED';
+    this.telemetry.commit({ loopState: 'STOPPED', loopStoppedAtNs: this.clock.nowNs().toString() });
+    await this.emit('RuntimeGracefulShutdownCompleted', {});
+    await this.emit('RuntimeLoopStopped', {});
     await this.emit('RuntimeStopped', {});
   }
   /** Public UBOS runtime execution-engine API. */
@@ -2355,7 +2662,11 @@ export class RuntimeExecutionEngine {
       lastError: error instanceof Error ? error.message : String(error),
       healthStatus: 'failed',
     });
+    this.#stopRequested = true;
+    this.#loopState = 'FAILED';
     this.transition('FAILED');
+    this.telemetry.commit({ loopState: 'FAILED' });
+    await this.emit('RuntimeLoopFailed', { error: this.telemetry.current().lastError });
     await this.emit('RuntimeFailed', { error: this.telemetry.current().lastError });
   }
   /** Public UBOS runtime execution-engine API. */
@@ -2366,52 +2677,66 @@ export class RuntimeExecutionEngine {
     return c;
   }
   /** Public UBOS runtime execution-engine API. */
-  async executeSingleTick() {
-    if (this.#tickInProgress)
-      throw new RuntimeEngineError('RuntimeTickInProgress', 'A tick is already executing');
+  async runContinuousLoop(maxTicks?: number) {
+    if (this.#loopState === 'RUNNING' || this.#loopState === 'STARTING')
+      throw new RuntimeLoopAlreadyRunningError();
+    if (this.#state !== 'RUNNING') throw new RuntimeNotReadyError(this.#state);
+    this.#loopState = 'STARTING';
+    this.#stopRequested = false;
+    this.telemetry.commit({
+      loopState: this.#loopState,
+      loopStartedAtNs: this.clock.nowNs().toString(),
+    });
+    await this.emit('RuntimeLoopStarting', {});
+    this.#loopState = 'RUNNING';
+    await this.emit('RuntimeLoopStarted', {});
+    const loop = (async () => {
+      let iterations = 0;
+      try {
+        while (!this.#stopRequested && this.#loopState === 'RUNNING' && this.#state === 'RUNNING') {
+          this.updateHeartbeat('WAITING_FOR_TICK');
+          const tick = await this.masterFrameClock.nextTick();
+          await this.executeTick(tick);
+          iterations++;
+          if (maxTicks !== undefined && iterations >= maxTicks) break;
+        }
+      } catch (error) {
+        if (!this.#stopRequested) await this.fail(error);
+      }
+    })();
+    this.#loopPromise = loop;
+    await loop;
+  }
+  /** Public UBOS runtime execution-engine API. */
+  async executeSingleTick(tick?: FrameTick) {
+    if (this.#loopPromise && !tick) throw new RuntimeLoopReentrancyError();
+    if (this.#state !== 'RUNNING') throw new RuntimeNotReadyError(this.#state);
+    const frameTick = tick ?? this.masterFrameClock.createTickAt(this.clock.nowNs());
+    return this.executeTick(frameTick);
+  }
+  private async executeTick(tick: FrameTick): Promise<RuntimeTickResult> {
+    if (this.#tickInProgress) throw new RuntimeTickOverlapError();
     if (this.#state !== 'RUNNING') throw new RuntimeNotReadyError(this.#state);
     this.#tickInProgress = true;
     this.processors.markLocked(true);
-    const startMs = this.clock.nowMs();
-    const tick = this.masterFrameClock.createTickAt(this.clock.nowNs());
+    const tickStartedAtNs = this.clock.nowNs();
     this.#frameNumber = tick.frameNumber;
-    await this.emit(
-      'FrameTickProduced',
-      {
-        scheduledTimeNs: tick.scheduledTimeNs.toString(),
-        actualTimeNs: tick.actualTimeNs.toString(),
-        latenessNs: tick.latenessNs.toString(),
-        missedFrames: tick.missedFrames.toString(),
-        discontinuity: tick.discontinuity,
-      },
-      undefined,
-      this.#frameNumber,
-    );
-    if (tick.late)
-      await this.emit(
-        'FrameTickLate',
-        { latenessNs: tick.latenessNs.toString() },
-        undefined,
-        this.#frameNumber,
-      );
-    if (tick.missedFrames > 0n)
-      await this.emit(
-        'FrameFramesMissed',
-        { missedFrames: tick.missedFrames.toString() },
-        undefined,
-        this.#frameNumber,
-      );
-    if (tick.discontinuity)
-      await this.emit(
-        'FrameClockDiscontinuity',
-        { frameNumber: tick.frameNumber.toString() },
-        undefined,
-        this.#frameNumber,
-      );
-    await this.emit('RuntimeTickStarted', {}, undefined, this.#frameNumber);
-    let commandErrors = 0,
-      processorErrors = 0;
+    let successfulCommands = 0,
+      failedCommands = 0,
+      cancelledCommands = 0,
+      timedOutCommands = 0;
+    let successfulProcessors = 0,
+      failedProcessors = 0,
+      skippedProcessors = 0,
+      droppedWorkCount = 0;
+    let errorSummary: string | undefined;
+    const budgetNs = tick.frameDurationNs;
+    const commandBudgetNs = percentOfNs(budgetNs, this.config.commandBudgetPercent);
+    const processorBudgetNs = percentOfNs(budgetNs, this.config.processorBudgetPercent);
     try {
+      this.updateHeartbeat('COLLECTING_COMMANDS', tick.frameNumber);
+      await this.emitFrameTickEvents(tick);
+      await this.emit('RuntimeTickStarted', {}, undefined, this.#frameNumber);
       const collected = this.scheduler.collectDue(this.#frameNumber, this.clock.nowNs());
       for (const id of collected.expiredIds)
         await this.emit('CommandExpired', { commandId: id }, undefined, this.#frameNumber);
@@ -2427,114 +2752,346 @@ export class RuntimeExecutionEngine {
         undefined,
         this.#frameNumber,
       );
+      this.updateHeartbeat('EXECUTING_COMMANDS', tick.frameNumber);
       const due = collected.commands.slice(0, this.config.maximumCommandsPerTick);
-      for (const c of due) await this.executeCommand(c, tick);
-      if ((this.#state as RuntimeLifecycleState) === 'STOPPED') return;
+      const commandStart = this.clock.nowNs();
+      for (const c of due) {
+        const r = await this.executeCommand(c, tick);
+        if (r === 'SUCCEEDED') successfulCommands++;
+        else if (r === 'CANCELLED') cancelledCommands++;
+        else if (r === 'TIMED_OUT') timedOutCommands++;
+        else failedCommands++;
+        if (this.clock.nowNs() - commandStart > commandBudgetNs) {
+          this.telemetry.commit({
+            commandBudgetExhaustions: this.telemetry.current().commandBudgetExhaustions + 1,
+          });
+          await this.emit(
+            'RuntimeBackpressureDetected',
+            { reason: 'COMMAND_BUDGET_EXHAUSTED' },
+            undefined,
+            this.#frameNumber,
+          );
+        }
+      }
+      this.updateHeartbeat('EXECUTING_PROCESSORS', tick.frameNumber);
+      const processorStart = this.clock.nowNs();
       for (const p of this.processors.ordered()) {
-        const ps = this.clock.nowMs();
+        const cls = p.workloadClass ?? 'REALTIME';
+        const elapsed = this.clock.nowNs() - processorStart;
+        const skippable =
+          (cls === 'BEST_EFFORT' || cls === 'BACKGROUND' || p.maySkipUnderLoad) &&
+          elapsed >= processorBudgetNs;
+        if (skippable) {
+          skippedProcessors++;
+          droppedWorkCount++;
+          this.processors.record(p.id, 0);
+          await this.emit(
+            'ProcessorSkipped',
+            { processorId: p.id, workloadClass: cls },
+            undefined,
+            this.#frameNumber,
+          );
+          await this.emit(
+            'RuntimeWorkSkipped',
+            { processorId: p.id },
+            undefined,
+            this.#frameNumber,
+          );
+          continue;
+        }
+        const psNs = this.clock.nowNs();
+        const psMs = this.clock.nowMs();
         await this.emit('ProcessorStarted', { processorId: p.id }, undefined, this.#frameNumber);
         try {
-          await p.processTick(tick, this.context());
-          const d = this.clock.nowMs() - ps;
+          await this.runProcessorWithTimeout(p, tick);
+          const d = this.clock.nowMs() - psMs;
           this.processors.record(p.id, d);
+          successfulProcessors++;
           await this.emit(
             'ProcessorCompleted',
-            { processorId: p.id, durationMs: d },
+            {
+              processorId: p.id,
+              durationMs: d,
+              durationNs: (this.clock.nowNs() - psNs).toString(),
+            },
             undefined,
             this.#frameNumber,
           );
         } catch (e) {
-          processorErrors++;
-          this.processors.record(p.id, this.clock.nowMs() - ps, e);
+          failedProcessors++;
+          errorSummary = String(e instanceof Error ? e.message : e);
+          this.processors.record(p.id, this.clock.nowMs() - psMs, e);
           await this.emit(
-            'ProcessorFailed',
-            { processorId: p.id, error: String(e) },
+            e instanceof ProcessorExecutionTimeoutError ? 'ProcessorTimedOut' : 'ProcessorFailed',
+            { processorId: p.id, error: errorSummary },
             undefined,
             this.#frameNumber,
           );
-          if (this.config.failOnProcessorError)
+          if (this.config.failOnProcessorError || p.failurePolicy === 'FAIL_RUNTIME')
             await this.fail(new ProcessorExecutionFailedError(p.id, e));
         }
       }
-      const dur = this.clock.nowMs() - startMs;
-      const late = dur > this.config.tickDeadlineWarningMs || tick.late;
-      if (late)
-        await this.emit('RuntimeTickOverrun', { durationMs: dur }, undefined, this.#frameNumber);
-      this.telemetry.commit({
-        state: this.#state,
-        frameNumber: this.#frameNumber.toString(),
-        uptimeMs: this.#startedAtMs === undefined ? 0 : this.clock.nowMs() - this.#startedAtMs,
-        lastTickStartedAt: new Date(startMs).toISOString(),
-        lastTickCompletedAt: new Date(this.clock.nowMs()).toISOString(),
-        lastTickDurationMs: dur,
-        maximumTickDurationMs: Math.max(this.telemetry.current().maximumTickDurationMs, dur),
-        totalTicks: this.telemetry.current().totalTicks + 1,
-        lateTicks: this.telemetry.current().lateTicks + (late ? 1 : 0),
-        pendingCommands: this.scheduler.pendingCount(),
-        readyCommands: this.scheduler.snapshot().readyCommands,
-        waitingCommands: this.scheduler.snapshot().waitingCommands,
-        completedCommands: this.scheduler.snapshot().completedCommands,
-        failedCommands: this.scheduler.snapshot().failedCommands,
-        cancelledCommands: this.scheduler.snapshot().cancelledCommands,
-        expiredCommands: this.scheduler.snapshot().expiredCommands,
-        averageQueueLatencyNs: this.scheduler.snapshot().averageQueueLatencyNs,
-        maximumQueueLatencyNs: this.scheduler.snapshot().maximumQueueLatencyNs,
-        dependencyWaitCount: this.scheduler.snapshot().dependencyWaitCount,
-        commandsExecutedPerSecond:
-          this.#startedAtMs === undefined || this.clock.nowMs() === this.#startedAtMs
-            ? 0
-            : this.telemetry.current().commandsExecuted /
-              ((this.clock.nowMs() - this.#startedAtMs) / 1000),
-        maximumQueueDepth: this.scheduler.snapshot().maximumQueueDepth,
-        processorExecutions:
-          this.telemetry.current().processorExecutions + this.processors.ordered().length,
-        processorFailures: this.telemetry.current().processorFailures + processorErrors,
-        healthStatus:
-          (this.#state as RuntimeLifecycleState) === 'FAILED'
-            ? 'failed'
-            : late
-              ? 'degraded'
-              : 'healthy',
-        configuredFrameRate: {
-          ...this.config.frameRate,
-          label: frameRateLabel(this.config.frameRate),
-        },
-        currentFrameNumber: this.#frameNumber.toString(),
-        scheduledFrameTimeNs: tick.scheduledTimeNs.toString(),
-        actualFrameTimeNs: tick.actualTimeNs.toString(),
-        frameDurationNs: tick.frameDurationNs.toString(),
-        currentDriftNs: tick.driftNs.toString(),
-        maximumAbsoluteDriftNs:
-          (tick.driftNs < 0n ? -tick.driftNs : tick.driftNs) >
-          BigInt(this.telemetry.current().maximumAbsoluteDriftNs)
-            ? (tick.driftNs < 0n ? -tick.driftNs : tick.driftNs).toString()
-            : this.telemetry.current().maximumAbsoluteDriftNs,
-        currentLatenessNs: tick.latenessNs.toString(),
-        maximumLatenessNs:
-          tick.latenessNs > BigInt(this.telemetry.current().maximumLatenessNs)
-            ? tick.latenessNs.toString()
-            : this.telemetry.current().maximumLatenessNs,
-        totalLateFrames: this.telemetry.current().totalLateFrames + (tick.late ? 1 : 0),
-        totalMissedFrames: (
-          BigInt(this.telemetry.current().totalMissedFrames) + tick.missedFrames
-        ).toString(),
-        clockDiscontinuities:
-          this.telemetry.current().clockDiscontinuities + (tick.discontinuity ? 1 : 0),
-        clockStartedAtNs: this.masterFrameClock.getDeadlineForFrame(0n).toString(),
-        clockState: this.masterFrameClock.state,
-        effectiveFrameRate: framesPerSecond(this.config.frameRate),
-        averageTickIntervalNs:
-          this.telemetry.current().totalTicks === 0
-            ? '0'
-            : (tick.actualTimeNs / BigInt(this.telemetry.current().totalTicks + 1)).toString(),
-      });
-      await this.emit('RuntimeTickCompleted', { durationMs: dur }, undefined, this.#frameNumber);
+      if (this.clock.nowNs() - processorStart > processorBudgetNs)
+        this.telemetry.commit({
+          processorBudgetExhaustions: this.telemetry.current().processorBudgetExhaustions + 1,
+        });
     } finally {
+      this.updateHeartbeat('COMMITTING_TELEMETRY', tick.frameNumber);
+      const tickCompletedAtNs = this.clock.nowNs();
+      const tickDurationNs = tickCompletedAtNs - tickStartedAtNs;
+      const deadlineNs = tick.scheduledTimeNs + tick.frameDurationNs;
+      const overrunNs = tickCompletedAtNs > deadlineNs ? tickCompletedAtNs - deadlineNs : 0n;
+      const timingClass = tick.discontinuity
+        ? 'DISCONTINUITY'
+        : overrunNs >= this.config.severeTickOverrunNs
+          ? 'SEVERE_OVERRUN'
+          : overrunNs > this.config.maximumTickOverrunNs
+            ? 'HARD_OVERRUN'
+            : overrunNs > 0n
+              ? 'SOFT_OVERRUN'
+              : tick.late
+                ? 'LATE_START'
+                : 'ON_TIME';
+      const overloadState = this.updateOverload(timingClass, tick.missedFrames, droppedWorkCount);
+      const result = Object.freeze({
+        runtimeId: this.config.runtimeId,
+        frameNumber: tick.frameNumber.toString(),
+        scheduledTimeNs: tick.scheduledTimeNs.toString(),
+        actualTimeNs: tick.actualTimeNs.toString(),
+        tickStartedAtNs: tickStartedAtNs.toString(),
+        tickCompletedAtNs: tickCompletedAtNs.toString(),
+        tickDurationNs: tickDurationNs.toString(),
+        deadlineNs: deadlineNs.toString(),
+        budgetNs: budgetNs.toString(),
+        overrunNs: overrunNs.toString(),
+        late: tick.late,
+        missedFrames: tick.missedFrames.toString(),
+        commandCount: successfulCommands + failedCommands + cancelledCommands + timedOutCommands,
+        successfulCommands,
+        failedCommands,
+        cancelledCommands,
+        timedOutCommands,
+        processorCount: successfulProcessors + failedProcessors + skippedProcessors,
+        successfulProcessors,
+        failedProcessors,
+        skippedProcessors,
+        overloadState,
+        runtimeStateAfterTick: this.#state,
+        errorSummary,
+        discontinuity: tick.discontinuity,
+        droppedWorkCount,
+        timingClass,
+      }) satisfies RuntimeTickResult;
+      this.commitTickTelemetry(result, tickDurationNs, tick, timingClass);
+      await this.emit(
+        'RuntimeTickCompleted',
+        { durationNs: tickDurationNs.toString(), timingClass },
+        undefined,
+        this.#frameNumber,
+      );
+      if (tick.late)
+        await this.emit(
+          'RuntimeTickLate',
+          { latenessNs: tick.latenessNs.toString() },
+          undefined,
+          this.#frameNumber,
+        );
+      if (overrunNs > 0n)
+        await this.emit(
+          'RuntimeTickOverrun',
+          { overrunNs: overrunNs.toString(), timingClass },
+          undefined,
+          this.#frameNumber,
+        );
+      if (timingClass === 'SEVERE_OVERRUN')
+        await this.emit(
+          'RuntimeTickSevereOverrun',
+          { overrunNs: overrunNs.toString() },
+          undefined,
+          this.#frameNumber,
+        );
+      if (tick.discontinuity)
+        await this.emit(
+          'RuntimeTickDiscontinuity',
+          { frameNumber: tick.frameNumber.toString() },
+          undefined,
+          this.#frameNumber,
+        );
       this.processors.markLocked(false);
       this.#tickInProgress = false;
+      this.updateHeartbeat('IDLE');
+      return result;
     }
   }
-  private async executeCommand(c: RuntimeCommand, tick: FrameTick) {
+  private updateHeartbeat(phase: RuntimeLoopPhase, frame?: bigint) {
+    this.telemetry.commit({
+      lastLoopHeartbeatNs: this.clock.nowNs().toString(),
+      currentLoopPhase: phase,
+      activeTick: this.#tickInProgress,
+      ...(frame !== undefined ? { currentTickFrame: frame.toString() } : {}),
+    });
+  }
+  private async emitFrameTickEvents(tick: FrameTick) {
+    await this.emit(
+      'FrameTickProduced',
+      {
+        scheduledTimeNs: tick.scheduledTimeNs.toString(),
+        actualTimeNs: tick.actualTimeNs.toString(),
+        latenessNs: tick.latenessNs.toString(),
+        missedFrames: tick.missedFrames.toString(),
+        discontinuity: tick.discontinuity,
+      },
+      undefined,
+      tick.frameNumber,
+    );
+    if (tick.late)
+      await this.emit(
+        'FrameTickLate',
+        { latenessNs: tick.latenessNs.toString() },
+        undefined,
+        tick.frameNumber,
+      );
+    if (tick.missedFrames > 0n)
+      await this.emit(
+        'FrameFramesMissed',
+        { missedFrames: tick.missedFrames.toString() },
+        undefined,
+        tick.frameNumber,
+      );
+    if (tick.discontinuity)
+      await this.emit(
+        'FrameClockDiscontinuity',
+        { frameNumber: tick.frameNumber.toString() },
+        undefined,
+        tick.frameNumber,
+      );
+  }
+  private async runProcessorWithTimeout(p: TickProcessor, tick: FrameTick) {
+    const timeoutNs = p.timeoutNs ?? this.config.defaultProcessorTimeoutNs;
+    if (timeoutNs > this.config.maximumProcessorTimeoutNs)
+      throw new ProcessorExecutionTimeoutError(p.id);
+    const started = this.clock.nowNs();
+    await p.processTick(tick, this.context());
+    if (this.clock.nowNs() - started > timeoutNs) throw new ProcessorExecutionTimeoutError(p.id);
+  }
+  private updateOverload(
+    timing: RuntimeTickTimingClass,
+    missedFrames: bigint,
+    shed: number,
+  ): RuntimeOverloadState {
+    const current = this.telemetry.current().currentOverloadState;
+    let next: RuntimeOverloadState = current;
+    if (timing === 'SEVERE_OVERRUN' || missedFrames > 1n) next = 'CRITICAL';
+    else if (timing === 'HARD_OVERRUN' || shed > 0)
+      next = current === 'NORMAL' ? 'PRESSURED' : 'OVERLOADED';
+    else if (timing === 'SOFT_OVERRUN' || timing === 'LATE_START')
+      next = current === 'NORMAL' ? 'PRESSURED' : current;
+    else if (current === 'PRESSURED') next = 'NORMAL';
+    if (next !== current) {
+      void this.emit(
+        'RuntimeOverloadStateChanged',
+        { previousState: current, nextState: next },
+        undefined,
+        this.#frameNumber,
+      );
+      this.telemetry.commit({
+        overloadTransitions: this.telemetry.current().overloadTransitions + 1,
+      });
+    }
+    return next;
+  }
+  private commitTickTelemetry(
+    result: RuntimeTickResult,
+    durationNs: bigint,
+    tick: FrameTick,
+    timing: RuntimeTickTimingClass,
+  ) {
+    const cur = this.telemetry.current();
+    const totalTicks = cur.totalTicks + 1;
+    const totalDuration = BigInt(cur.totalTickDurationNs) + durationNs;
+    const window = [
+      ...cur.recentTickHealthWindow,
+      Object.freeze({
+        frameNumber: result.frameNumber,
+        tickDurationNs: result.tickDurationNs,
+        latenessNs: tick.latenessNs.toString(),
+        overrunNs: result.overrunNs,
+        missedFrames: result.missedFrames,
+        commandCount: result.commandCount,
+        processorCount: result.processorCount,
+        skippedWork: result.droppedWorkCount,
+        overloadState: result.overloadState,
+        success: !result.errorSummary,
+      }),
+    ];
+    const bounded = window.slice(-this.config.tickHealthWindowCapacity);
+    this.telemetry.commit({
+      state: this.#state,
+      frameNumber: result.frameNumber,
+      totalTicks,
+      lateTicks: cur.lateTicks + (result.late ? 1 : 0),
+      loopState: this.#loopState,
+      loopIterations: cur.loopIterations + 1,
+      activeTick: false,
+      currentTickFrame: result.frameNumber,
+      lastTickStartedAt: new Date(
+        Number(BigInt(result.tickStartedAtNs) / 1_000_000n),
+      ).toISOString(),
+      lastTickCompletedAt: new Date(
+        Number(BigInt(result.tickCompletedAtNs) / 1_000_000n),
+      ).toISOString(),
+      lastTickDurationMs: Number(durationNs / 1_000_000n),
+      maximumTickDurationMs: Math.max(cur.maximumTickDurationMs, Number(durationNs / 1_000_000n)),
+      totalTickDurationNs: totalDuration.toString(),
+      averageTickDurationNs: (totalDuration / BigInt(totalTicks)).toString(),
+      maximumTickDurationNsValue: (durationNs > BigInt(cur.maximumTickDurationNsValue)
+        ? durationNs
+        : BigInt(cur.maximumTickDurationNsValue)
+      ).toString(),
+      minimumTickDurationNs:
+        cur.minimumTickDurationNs === '0' || durationNs < BigInt(cur.minimumTickDurationNs)
+          ? durationNs.toString()
+          : cur.minimumTickDurationNs,
+      totalTickOverruns: cur.totalTickOverruns + (BigInt(result.overrunNs) > 0n ? 1 : 0),
+      softTickOverruns: cur.softTickOverruns + (timing === 'SOFT_OVERRUN' ? 1 : 0),
+      hardTickOverruns: cur.hardTickOverruns + (timing === 'HARD_OVERRUN' ? 1 : 0),
+      severeTickOverruns: cur.severeTickOverruns + (timing === 'SEVERE_OVERRUN' ? 1 : 0),
+      consecutiveTickOverruns: BigInt(result.overrunNs) > 0n ? cur.consecutiveTickOverruns + 1 : 0,
+      totalMissedFrames: (BigInt(cur.totalMissedFrames) + tick.missedFrames).toString(),
+      maximumMissedFramesInTick:
+        tick.missedFrames > BigInt(cur.maximumMissedFramesInTick)
+          ? tick.missedFrames.toString()
+          : cur.maximumMissedFramesInTick,
+      currentOverloadState: result.overloadState,
+      processorExecutions: cur.processorExecutions + result.processorCount,
+      processorFailures: cur.processorFailures + result.failedProcessors,
+      skippedProcessorExecutions: cur.skippedProcessorExecutions + result.skippedProcessors,
+      shedWorkCount: cur.shedWorkCount + result.droppedWorkCount,
+      lastHealthyTickNs: result.errorSummary ? cur.lastHealthyTickNs : result.tickCompletedAtNs,
+      lastTickResult: result,
+      recentTickHealthWindow: Object.freeze(bounded),
+      pendingCommands: this.scheduler.pendingCount(),
+      readyCommands: this.scheduler.snapshot().readyCommands,
+      waitingCommands: this.scheduler.snapshot().waitingCommands,
+      completedCommands: this.scheduler.snapshot().completedCommands,
+      failedCommands: this.scheduler.snapshot().failedCommands,
+      cancelledCommands: this.scheduler.snapshot().cancelledCommands,
+      expiredCommands: this.scheduler.snapshot().expiredCommands,
+      currentFrameNumber: result.frameNumber,
+      scheduledFrameTimeNs: tick.scheduledTimeNs.toString(),
+      actualFrameTimeNs: tick.actualTimeNs.toString(),
+      frameDurationNs: tick.frameDurationNs.toString(),
+      currentDriftNs: tick.driftNs.toString(),
+      currentLatenessNs: tick.latenessNs.toString(),
+      clockDiscontinuities: cur.clockDiscontinuities + (tick.discontinuity ? 1 : 0),
+      clockState: this.masterFrameClock.state,
+      effectiveFrameRate: framesPerSecond(this.config.frameRate),
+    });
+  }
+  private async executeCommand(
+    c: RuntimeCommand,
+    tick: FrameTick,
+  ): Promise<CommandExecutionOutcome> {
     await this.emit(
       'CommandExecuting',
       { commandType: c.type, commandId: c.id },
@@ -2573,7 +3130,7 @@ export class RuntimeExecutionEngine {
           this.#frameNumber,
         );
       }
-      return;
+      return execution.outcome;
     }
     this.scheduler.markFailed(c.id);
     this.telemetry.commit({
@@ -2600,6 +3157,7 @@ export class RuntimeExecutionEngine {
       await this.fail(
         new CommandExecutionFailedError(c.id, execution.errorMessage ?? execution.outcome),
       );
+    return execution.outcome;
   }
   private async stopFromCommand() {
     if ((this.#state as RuntimeLifecycleState) === 'STOPPED') return;
@@ -2637,15 +3195,22 @@ export class RuntimeExecutionEngine {
     correlationId?: string,
     frameNumber?: bigint,
   ) {
-    await this.publisher.publish({
-      eventId: `${this.config.runtimeId}:${eventType}:${(++this.#eventSequence).toString().padStart(12, '0')}`,
-      eventType,
-      runtimeId: this.config.runtimeId,
-      timestamp: new Date(this.clock.nowMs()).toISOString(),
-      ...(frameNumber !== undefined ? { frameNumber: frameNumber.toString() } : {}),
-      ...(correlationId ? { correlationId } : {}),
-      payload,
-    });
+    try {
+      await this.publisher.publish({
+        eventId: `${this.config.runtimeId}:${eventType}:${(++this.#eventSequence).toString().padStart(12, '0')}`,
+        eventType,
+        runtimeId: this.config.runtimeId,
+        timestamp: new Date(this.clock.nowMs()).toISOString(),
+        ...(frameNumber !== undefined ? { frameNumber: frameNumber.toString() } : {}),
+        ...(correlationId ? { correlationId } : {}),
+        payload,
+      });
+    } catch (error) {
+      this.telemetry.commit({
+        eventPublisherFailures: this.telemetry.current().eventPublisherFailures + 1,
+        lastError: String(error),
+      });
+    }
   }
   private registerBuiltIns() {
     this.handlers.register('RUNTIME_NOOP', () => {});
