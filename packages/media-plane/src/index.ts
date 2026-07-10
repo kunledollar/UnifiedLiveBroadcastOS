@@ -75,6 +75,34 @@ import {
   summarizeGpuHealth,
   type GpuSession,
 } from './gpu-runtime/index.js';
+
+export { RuntimeIntegrationAdapter, createBroadcastRuntimeCore } from './broadcast-runtime-core.js';
+export type { RuntimeSubsystem as BroadcastRuntimeSubsystem } from './broadcast-runtime-core.js';
+export {
+  DeviceRegistry,
+  DeviceDiscoveryManager,
+  StaticDiscoveryProvider,
+  DeviceConnectionManager,
+  DeviceCapabilityResolver,
+  DeviceProfileManager,
+  DeviceHealthMonitor,
+  assertMetadataSafe,
+  mapDeviceToProductionGraphMetadata,
+  calculateRecoveryDelay,
+} from './device-platform.js';
+export { createDiagnosticsManager, createDiagnosticsDemo } from './diagnostics/index.js';
+export {
+  MonitoringRuntimeController,
+  HealthAggregationManager,
+  TelemetryRegistry,
+  TelemetryHistoryStore,
+  AlertRegistry,
+  AlertLifecycleManager,
+  AlertRuleEngine,
+  IncidentManager,
+  DiagnosticSnapshotManager,
+  ProductionGraphTelemetryAdapter,
+} from './monitoring-runtime.js';
 export * from './ingest-runtime.js';
 export * from './output-runtime.js';
 export * from './session-runtime.js';
@@ -1698,44 +1726,54 @@ export type {
   ClockSample,
   SynchronizationReport,
 } from './production-engine/index.js';
+export {
+  RuntimeExecutionEngine,
+  createRuntimeExecutionEngine,
+  createMasterFrameClock,
+  DeterministicCommandScheduler,
+  RuntimeCommandExecutionEngine,
+  TickProcessorRegistry,
+  RuntimeWatchdog,
+  createRuntimeWatchdog,
+  defaultRuntimeEngineConfig,
+  InMemoryRuntimeEventPublisher,
+  FakeMonotonicTimeSource,
+  ImmediateFrameWaitStrategy,
+  frameDurationNs,
+  frameNumberToTimestampNs,
+  timestampNsToFrameNumber,
+  frameRateLabel,
+  validateRationalFrameRate,
+} from './execution-engine.js';
+export type {
+  RuntimeEngineConfig,
+  RationalFrameRate,
+  RuntimeFrameRate,
+  RuntimeClock,
+  RuntimeContext,
+  RuntimeEventPublisher,
+  FrameTick,
+  MasterFrameClock,
+  RuntimeTelemetrySnapshot,
+  RuntimeWatchdogSnapshot,
+  RuntimeWatchdogOptions,
+  RuntimeWatchdogIncident,
+  TickProcessor,
+  TickProcessorDescriptor,
+  ProcessorExecutionRecord,
+} from './execution-engine.js';
 export * from './media-runtime/index.js';
 export * from './output-pipeline.js';
 export * from './media-runtime/ffmpeg/index.js';
 
-export * from './production-switcher.js';
-export * from './transition-renderer.js';
-export * from './graphics-engine.js';
-
 export {
-  TransportManager,
-  createTransportManager,
-  createDemoTransportWorkflow,
-  transportProtocols,
-} from './transport-layer.js';
-export type {
-  BroadcastTransportProtocol,
-  TransportBackendDescriptor,
-  TransportHealth,
-  TransportProtocolModel,
-  TransportRuntimeBindings,
-  TransportRuntimeEvent,
-  TransportRuntimeEventType,
-  TransportSession,
-  TransportSessionLifecycle,
-  TransportSessionMetadata,
-  TransportManagerSnapshot,
-  CreateTransportSessionInput,
-  UpdateTransportMetricsInput,
-  RemoteProductionBinding,
-} from './transport-layer.js';
-
-export {
-  DiagnosticsManager,
-  PerformanceProfiler,
-  HealthMonitor as DiagnosticsHealthMonitor,
-  createDiagnosticsManager,
-  createDiagnosticsDemo,
-} from './diagnostics/index.js';
+  FallbackRenderer,
+  WebGPURenderer,
+  calculateAspectFit,
+  createRenderer as createVideoRenderer,
+  createRenderSurface as createVideoRenderSurface,
+  createRendererStatusEvent,
+} from './rendering/index.js';
 export type {
   DiagnosticsSeverity,
   PipelineHealthState,

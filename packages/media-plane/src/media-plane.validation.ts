@@ -206,7 +206,6 @@ import {
   summarizeStatistics as summarizeFFmpegRuntimeStatistics,
   createManifest as createFFmpegRuntimeManifest,
   mapFailure as mapFFmpegRuntimeFailure,
-  type RuntimeSubsystem,
   type FrameTickEvent,
   createGpuPipeline,
   validateGpuPipeline,
@@ -257,62 +256,82 @@ import {
   createFFmpegVideoDecoder,
   buildFFprobeFrameMetadataArgs,
   createFFmpegDecodeCommandPreview,
-  createVideoCaptureSource,
+  createVideoRenderer,
+  createVideoRenderSurface,
+  calculateAspectFit,
+} from './index.js';
+
+import type { RuntimeSubsystem } from './production-runtime/index.js';
+import {
   FFmpegDeviceCaptureBackend,
   createVideoCaptureDevice,
-  createAudioCaptureSource,
+  createVideoCaptureSource,
+} from './media-runtime/video-capture.js';
+import {
   FFmpegAudioCaptureBackend,
   createAudioCaptureDevice,
-  createAudioDecodeSource,
-  RingAudioBuffer,
+  createAudioCaptureSource,
+} from './media-runtime/audio-capture.js';
+import { RingAudioBuffer, createAudioDecodeSource } from './media-runtime/audio-decoder.js';
+import {
   createFFmpegAudioDecoder,
   buildFFprobeAudioFrameMetadataArgs,
   createFFmpegAudioDecodeCommandPreview,
+} from './media-runtime/ffmpeg/audio-decoder.js';
+import {
   createAudioMixer,
   createSyntheticAudioFrame,
-  createLimiterProcessor,
   createCompressorProcessor,
+  createLimiterProcessor,
   createEqualizerProcessor,
   createHighPassFilterProcessor,
   createLowPassFilterProcessor,
   createAudioMixerDemo,
+} from './media-runtime/audio-mixer.js';
+import {
   createPreviewOutput,
   createProgramOutput,
   OutputPipelineManager,
   createPreviewProgramOutputDemo,
-  createProductionSwitcher,
-  createProductionSwitcherDemo,
+} from './output-pipeline.js';
+import {
   createGraphicsEngine,
   createGraphicsObject,
-  createOverlay,
   defaultGraphicsTransform,
+  createOverlay,
   createGraphicsOverlayDemo,
-  createHardwareManager,
-  MetadataHardwareAdapter,
-  createHardwareIntegrationDevice,
-  createDeviceCapabilities,
-  supportedHardwareIntegrationVendors,
-  supportedHardwareCategories,
-  createHardwareIntegrationDemo,
+} from './graphics-engine.js';
+import { createProductionSwitcher, createProductionSwitcherDemo } from './production-switcher.js';
+import {
   createRemoteProductionManager,
   createGuestSession,
   createGreenRoom,
   createTallyState,
   createIFBState,
   createDemoGuestWorkflow,
+} from './remote-production.js';
+import {
+  createHardwareManager,
+  supportedHardwareIntegrationVendors,
+  supportedHardwareCategories,
+  createHardwareIntegrationDevice,
+  createDeviceCapabilities,
+  MetadataHardwareAdapter,
+  createHardwareIntegrationDemo,
+} from './hardware-integration.js';
+import {
   createTransportManager,
-  createDemoTransportWorkflow,
   transportProtocols,
+  createDemoTransportWorkflow,
+} from './transport-layer.js';
+import {
   IngestRuntimeController,
   PipelineFactory,
   attachPipelineMetadataToGraph,
-  OutputRuntimeController,
-  attachOutputMetadataToGraph,
-  SessionRuntimeController,
-  attachSessionMetadataToGraph,
-  RundownRuntimeController,
-  attachRundownMetadataToGraph,
-} from './index.js';
+} from './ingest-runtime.js';
+import { OutputRuntimeController, attachOutputMetadataToGraph } from './output-runtime.js';
+import { SessionRuntimeController, attachSessionMetadataToGraph } from './session-runtime.js';
+import { RundownRuntimeController, attachRundownMetadataToGraph } from './rundown-runtime.js';
 
 const command = (
   type: Parameters<typeof applyProductionCommand>[1]['type'],
@@ -4020,6 +4039,89 @@ assert.equal(
   'decoder snapshot declares media payload exclusion',
 );
 
+// UBOS 2.0 Phase 2.5 GPU rendering foundation validation
+const renderClock = createClock({ frameRate: 30 });
+renderClock.start();
+const videoRenderer = createVideoRenderer({
+  id: 'renderer:phase-2-5',
+  preferredBackend: 'webgpu',
+  webgpuSupported: false,
+  clock: renderClock,
+});
+const renderEvents: string[] = [];
+videoRenderer.onStatus((event) => renderEvents.push(event.type));
+const renderSurface = createVideoRenderSurface({
+  id: 'surface:preview',
+  kind: 'canvas',
+  width: 1280,
+  height: 720,
+  devicePixelRatio: 1,
+});
+const initializedRenderer = await videoRenderer.initialize(renderSurface);
+assert.equal(initializedRenderer.state, 'ready', 'renderer initializes into ready state');
+assert.equal(
+  initializedRenderer.backend,
+  'fallback',
+  'unsupported WebGPU selects fallback renderer abstraction',
+);
+const renderSnapshot = await videoRenderer.renderDecodedFrame(firstDecodedFrame!);
+assert.equal(renderSnapshot.state, 'rendering', 'renderer presents decoded video frame');
+assert.equal(renderSnapshot.presentedFrames, 1, 'renderer tracks presented frame count');
+assert.equal(
+  renderSnapshot.latestFrame?.videoFrame.frameIndex,
+  0,
+  'render frame accepts decoded VideoFrame metadata',
+);
+assert.equal(
+  renderSnapshot.latestFrame?.layerIndex,
+  0,
+  'renderer only emits single video layer in Phase 2.5',
+);
+assert.equal(
+  renderSnapshot.latestFrame?.destinationRect.width,
+  1280,
+  'renderer aspect-fits landscape video to viewport width',
+);
+assert.equal(
+  renderSnapshot.latestFrame?.destinationRect.height,
+  720,
+  'renderer maintains aspect ratio in viewport',
+);
+const resizedRenderer = videoRenderer.resize(720, 720);
+assert.equal(resizedRenderer.surface?.width, 720, 'renderer supports viewport resizing');
+assert.equal(
+  resizedRenderer.latestFrame?.destinationRect.width,
+  720,
+  'renderer recalculates aspect fit after resize',
+);
+assert.equal(
+  resizedRenderer.latestFrame?.destinationRect.height,
+  405,
+  'renderer letterboxes resized viewport while preserving aspect ratio',
+);
+videoRenderer.pause();
+assert.equal(videoRenderer.getSnapshot().state, 'paused', 'renderer pauses lifecycle');
+videoRenderer.resume();
+assert.equal(videoRenderer.getSnapshot().state, 'rendering', 'renderer resumes lifecycle');
+assert.equal(renderEvents.includes('frame_presented'), true, 'renderer emits status events');
+assert.equal(
+  videoRenderer.getSnapshot().containsRuntimeHandles,
+  false,
+  'renderer snapshot keeps backend handles isolated from UI',
+);
+assert.equal(
+  videoRenderer.getSnapshot().containsMediaPayloads,
+  false,
+  'renderer preserves metadata-first payload exclusion',
+);
+assert.equal(
+  calculateAspectFit(1920, 1080, 1000, 1000).height,
+  563,
+  'aspect-fit helper maintains video ratio',
+);
+await videoRenderer.stop();
+assert.equal(videoRenderer.getSnapshot().state, 'stopped', 'renderer stops lifecycle');
+
 // UBOS 2.0 Phase 2.2 real FFmpeg process pipeline validation
 const dryRunRuntime = createFFmpegRuntime(createFFmpegEnvironment({}), {
   dryRun: true,
@@ -5842,13 +5944,28 @@ assert.equal(
 const diagnosticsDemo = createDiagnosticsDemo();
 assert.equal(diagnosticsDemo.snapshot.alerts.length, 1, 'diagnostics demo produces alert metadata');
 
-
 // UBOS Version 4.1 Broadcast Runtime Core validation
 const broadcastRuntime = createBroadcastRuntimeCore('runtime-core:validation');
-assert.equal(broadcastRuntime.initialize().state, 'initialized', 'runtime core initializes centrally');
-assert.equal(broadcastRuntime.start().state, 'running', 'runtime core starts all lifecycle managers');
-assert.equal(broadcastRuntime.pause().state, 'paused', 'runtime core pauses all lifecycle managers');
-assert.equal(broadcastRuntime.resume().state, 'running', 'runtime core resumes all lifecycle managers');
+assert.equal(
+  broadcastRuntime.initialize().state,
+  'initialized',
+  'runtime core initializes centrally',
+);
+assert.equal(
+  broadcastRuntime.start().state,
+  'running',
+  'runtime core starts all lifecycle managers',
+);
+assert.equal(
+  broadcastRuntime.pause().state,
+  'paused',
+  'runtime core pauses all lifecycle managers',
+);
+assert.equal(
+  broadcastRuntime.resume().state,
+  'running',
+  'runtime core resumes all lifecycle managers',
+);
 const runtimeSnapshot = broadcastRuntime.stop();
 assert.equal(runtimeSnapshot.state, 'stopped', 'runtime core stops deterministically');
 assert.equal(
@@ -5861,16 +5978,29 @@ assert.equal(
   true,
   'runtime event bus assigns deterministic event ordering',
 );
-assert.equal(runtimeSnapshot.containsRuntimeHandles, false, 'runtime snapshots remain metadata-only');
+assert.equal(
+  runtimeSnapshot.containsRuntimeHandles,
+  false,
+  'runtime snapshots remain metadata-only',
+);
 
 assert.equal(
-  runtimeSnapshot.registrations.some((registration) => registration.subsystemId === 'production-graph-runtime'),
+  runtimeSnapshot.registrations.some(
+    (registration) => registration.subsystemId === 'production-graph-runtime',
+  ),
   true,
   'runtime core registers ProductionGraph through a non-destructive adapter',
 );
 assert.deepEqual(
   runtimeSnapshot.startupOrder.slice(0, 6),
-  ['production-graph-runtime', 'audio-runtime', 'graphics-runtime', 'automation-runtime', 'replay-runtime', 'recording-runtime'],
+  [
+    'production-graph-runtime',
+    'audio-runtime',
+    'graphics-runtime',
+    'automation-runtime',
+    'replay-runtime',
+    'recording-runtime',
+  ],
   'runtime integration startup order is deterministic and dependency aware',
 );
 assert.deepEqual(
@@ -5912,8 +6042,11 @@ try {
 } catch {
   rejectedInvalidDependency = true;
 }
-assert.equal(rejectedInvalidDependency, true, 'runtime controller rejects invalid dependency graphs');
-
+assert.equal(
+  rejectedInvalidDependency,
+  true,
+  'runtime controller rejects invalid dependency graphs',
+);
 
 // UBOS Version 4.3 Device & Hardware Integration validation
 const deviceFixture = {
@@ -5924,15 +6057,40 @@ const deviceFixture = {
   model: 'Browser Camera',
   deviceType: 'video-camera' as const,
   connectionType: 'browser-media' as const,
-  capabilities: { video: [{ kind: 'video' as const, width: 1920, height: 1080, frameRate: 30, scan: 'progressive' as const }], canRouteToProgram: true, canRouteToPreview: true },
-  supportedFormats: [{ kind: 'video' as const, width: 1920, height: 1080, frameRate: 30, scan: 'progressive' as const }],
+  capabilities: {
+    video: [
+      {
+        kind: 'video' as const,
+        width: 1920,
+        height: 1080,
+        frameRate: 30,
+        scan: 'progressive' as const,
+      },
+    ],
+    canRouteToProgram: true,
+    canRouteToPreview: true,
+  },
+  supportedFormats: [
+    {
+      kind: 'video' as const,
+      width: 1920,
+      height: 1080,
+      frameRate: 30,
+      scan: 'progressive' as const,
+    },
+  ],
   sampleRates: [],
   channelCounts: [],
   frameRates: [30],
   resolutions: [{ width: 1920, height: 1080 }],
   colorFormats: ['unknown'],
   latencyEstimateMs: 'unknown' as const,
-  health: { state: 'unknown' as const, availability: 'unknown' as const, connectionState: 'discovered' as const, providerAvailability: 'available' as const },
+  health: {
+    state: 'unknown' as const,
+    availability: 'unknown' as const,
+    connectionState: 'discovered' as const,
+    providerAvailability: 'available' as const,
+  },
   connectionState: 'discovered' as const,
   lastSeenAt: '2026-07-10T00:00:00.000Z',
   runtimeAdapterId: 'browser-media-adapter',
@@ -5940,40 +6098,145 @@ const deviceFixture = {
 };
 const deviceRegistry = new RuntimeDeviceRegistry();
 const registeredDevice = deviceRegistry.register(deviceFixture);
-assert.equal(registeredDevice.deviceId, 'camera-1', 'device registry registers serializable metadata');
-assert.equal(deviceRegistry.register({ ...deviceFixture, displayName: 'Studio Camera 1 Duplicate' }).deviceId, 'camera-1', 'device registry suppresses deterministic duplicates');
+assert.equal(
+  registeredDevice.deviceId,
+  'camera-1',
+  'device registry registers serializable metadata',
+);
+assert.equal(
+  deviceRegistry.register({ ...deviceFixture, displayName: 'Studio Camera 1 Duplicate' }).deviceId,
+  'camera-1',
+  'device registry suppresses deterministic duplicates',
+);
 const provider = new StaticDiscoveryProvider('fixture-provider', [deviceFixture]);
 const discovery = new DeviceDiscoveryManager([provider], deviceRegistry);
-assert.equal(discovery.initialize()[0]?.state, 'initialized', 'discovery provider lifecycle initializes');
-assert.equal(discovery.refresh().length, 0, 'discovery refresh suppresses already registered duplicates');
+assert.equal(
+  discovery.initialize()[0]?.state,
+  'initialized',
+  'discovery provider lifecycle initializes',
+);
+assert.equal(
+  discovery.refresh().length,
+  0,
+  'discovery refresh suppresses already registered duplicates',
+);
 assert.equal(discovery.stop()[0]?.state, 'stopped', 'discovery provider lifecycle stops');
 const connectionManager = new DeviceConnectionManager(deviceRegistry);
 connectionManager.transition('camera-1', 'connecting');
 connectionManager.transition('camera-1', 'connected');
 connectionManager.transition('camera-1', 'ready');
 let rejectedIllegalDeviceTransition = false;
-try { connectionManager.transition('camera-1', 'permission-required'); } catch { rejectedIllegalDeviceTransition = true; }
-assert.equal(rejectedIllegalDeviceTransition, true, 'device connection manager rejects illegal transitions');
+try {
+  connectionManager.transition('camera-1', 'permission-required');
+} catch {
+  rejectedIllegalDeviceTransition = true;
+}
+assert.equal(
+  rejectedIllegalDeviceTransition,
+  true,
+  'device connection manager rejects illegal transitions',
+);
 const capabilityResolver = new DeviceCapabilityResolver();
-assert.equal(capabilityResolver.select(deviceFixture, { kind: 'video', width: 3840, height: 2160, frameRate: 60 }).fallbackReason, 'requested-format-unsupported', 'capability resolver reports unsupported format fallback');
-assert.equal(capabilityResolver.select(deviceFixture, { kind: 'video', width: 1920, height: 1080, frameRate: 30 }).selectedFormat?.width, 1920, 'capability resolver selects supported explicit format');
+assert.equal(
+  capabilityResolver.select(deviceFixture, {
+    kind: 'video',
+    width: 3840,
+    height: 2160,
+    frameRate: 60,
+  }).fallbackReason,
+  'requested-format-unsupported',
+  'capability resolver reports unsupported format fallback',
+);
+assert.equal(
+  capabilityResolver.select(deviceFixture, {
+    kind: 'video',
+    width: 1920,
+    height: 1080,
+    frameRate: 30,
+  }).selectedFormat?.width,
+  1920,
+  'capability resolver selects supported explicit format',
+);
 const profileManager = new DeviceProfileManager();
-assert.equal(profileManager.load({ version: 1, deviceId: 'camera-1', preferredDisplayName: 'Main Camera' }).ok, true, 'profile manager accepts current version profiles');
-assert.equal(profileManager.load({ version: 99, deviceId: 'camera-1' }).ok, false, 'profile manager rejects malformed or outdated profiles safely');
+assert.equal(
+  profileManager.load({ version: 1, deviceId: 'camera-1', preferredDisplayName: 'Main Camera' }).ok,
+  true,
+  'profile manager accepts current version profiles',
+);
+assert.equal(
+  profileManager.load({ version: 99, deviceId: 'camera-1' }).ok,
+  false,
+  'profile manager rejects malformed or outdated profiles safely',
+);
 const healthMonitor = new DeviceHealthMonitor();
-assert.equal(healthMonitor.update('camera-1', { state: 'healthy', availability: 'available', connectionState: 'ready', providerAvailability: 'available' }).state, 'healthy', 'device health monitor stores health metadata');
-assert.equal(assertMetadataSafe(mapDeviceToProductionGraphMetadata(deviceFixture, 'DeviceDiscovered')), true, 'ProductionGraph device mapping is metadata safe');
-assert.equal(mapDeviceToProductionGraphMetadata(deviceFixture).containsRuntimeHandles, false, 'ProductionGraph device mapping excludes runtime handles');
-assert.equal(calculateRecoveryDelay({ kind: 'exponential-backoff', maximumAttempts: 3, retryDelayMs: 100, cooldownMs: 1000, operatorAcknowledgementRequired: true }, 3), 400, 'reconnect policy calculates exponential backoff');
-const unavailableProvider = new StaticDiscoveryProvider('native-placeholder', [], false, 'provider-unavailable');
-assert.equal(unavailableProvider.initialize().available, false, 'provider unavailable state is represented without claiming hardware support');
-assert.equal(discovery.dispose()[0]?.state, 'disposed', 'discovery disposal releases provider lifecycle state');
+assert.equal(
+  healthMonitor.update('camera-1', {
+    state: 'healthy',
+    availability: 'available',
+    connectionState: 'ready',
+    providerAvailability: 'available',
+  }).state,
+  'healthy',
+  'device health monitor stores health metadata',
+);
+assert.equal(
+  assertMetadataSafe(mapDeviceToProductionGraphMetadata(deviceFixture, 'DeviceDiscovered')),
+  true,
+  'ProductionGraph device mapping is metadata safe',
+);
+assert.equal(
+  mapDeviceToProductionGraphMetadata(deviceFixture).containsRuntimeHandles,
+  false,
+  'ProductionGraph device mapping excludes runtime handles',
+);
+assert.equal(
+  calculateRecoveryDelay(
+    {
+      kind: 'exponential-backoff',
+      maximumAttempts: 3,
+      retryDelayMs: 100,
+      cooldownMs: 1000,
+      operatorAcknowledgementRequired: true,
+    },
+    3,
+  ),
+  400,
+  'reconnect policy calculates exponential backoff',
+);
+const unavailableProvider = new StaticDiscoveryProvider(
+  'native-placeholder',
+  [],
+  false,
+  'provider-unavailable',
+);
+assert.equal(
+  unavailableProvider.initialize().available,
+  false,
+  'provider unavailable state is represented without claiming hardware support',
+);
+assert.equal(
+  discovery.dispose()[0]?.state,
+  'disposed',
+  'discovery disposal releases provider lifecycle state',
+);
 const v43Runtime = createBroadcastRuntimeCore('runtime-core:v4.3-validation');
 v43Runtime.initialize();
 v43Runtime.start();
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'DeviceDiscovered'), true, 'DeviceManager publishes metadata-only hot-plug discovery events through RuntimeEventBus');
-assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'device-manager' && subsystem.metadata.hardwarePlatform === 'v4.3'), true, 'RuntimeController owns the v4.3 DeviceManager lifecycle adapter');
-
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'DeviceDiscovered'),
+  true,
+  'DeviceManager publishes metadata-only hot-plug discovery events through RuntimeEventBus',
+);
+assert.equal(
+  v43Runtime
+    .snapshot()
+    .subsystems.some(
+      (subsystem) =>
+        subsystem.id === 'device-manager' && subsystem.metadata.hardwarePlatform === 'v4.3',
+    ),
+  true,
+  'RuntimeController owns the v4.3 DeviceManager lifecycle adapter',
+);
 
 // UBOS Version 4.4 Media Pipeline & Ingest Runtime validation
 const ingestRuntime = new IngestRuntimeController(v43Runtime.bus);
@@ -5987,38 +6250,122 @@ const ingestRegistration = {
   mediaAdapter: 'camera-adapter',
   productionGraphNodeId: 'source-node-camera-1',
   healthProvider: 'camera-health-provider',
-  selectedFormat: { resolution: '1920x1080', frameRate: 30, pixelFormat: 'yuv420p', colorSpace: 'rec709', sampleRate: 48000, channelLayout: 'stereo' },
+  selectedFormat: {
+    resolution: '1920x1080',
+    frameRate: 30,
+    pixelFormat: 'yuv420p',
+    colorSpace: 'rec709',
+    sampleRate: 48000,
+    channelLayout: 'stereo',
+  },
   priority: 10,
   recoveryStrategy: 'backoff' as const,
 };
 const ingestPipeline = ingestRuntime.registerPipeline(ingestRegistration);
-assert.equal(ingestPipeline.containsMediaHandles, false, 'ingest pipelines are metadata-only objects');
+assert.equal(
+  ingestPipeline.containsMediaHandles,
+  false,
+  'ingest pipelines are metadata-only objects',
+);
 let duplicateRejected = false;
-try { ingestRuntime.registerPipeline(ingestRegistration); } catch { duplicateRejected = true; }
+try {
+  ingestRuntime.registerPipeline(ingestRegistration);
+} catch {
+  duplicateRejected = true;
+}
 assert.equal(duplicateRejected, true, 'pipeline registry rejects duplicate registrations');
-assert.equal(new PipelineFactory().selectAdapter('Camera').id, 'camera-adapter', 'pipeline factory selects camera adapter deterministically');
-assert.equal(new PipelineFactory().selectAdapter('SRT').id, 'network-adapter', 'pipeline factory selects network adapter deterministically');
+assert.equal(
+  new PipelineFactory().selectAdapter('Camera').id,
+  'camera-adapter',
+  'pipeline factory selects camera adapter deterministically',
+);
+assert.equal(
+  new PipelineFactory().selectAdapter('SRT').id,
+  'network-adapter',
+  'pipeline factory selects network adapter deterministically',
+);
 ingestRuntime.transitionPipeline('pipeline-camera-1', 'Initializing');
 ingestRuntime.transitionPipeline('pipeline-camera-1', 'Ready');
 ingestRuntime.transitionPipeline('pipeline-camera-1', 'Running');
 let illegalPipelineTransitionRejected = false;
-try { ingestRuntime.transitionPipeline('pipeline-camera-1', 'Created'); } catch { illegalPipelineTransitionRejected = true; }
-assert.equal(illegalPipelineTransitionRejected, true, 'pipeline lifecycle rejects illegal state transitions');
-ingestRuntime.updateHealth('pipeline-camera-1', { latencyMs: 42, bufferUtilization: 3, frameAvailable: true, audioAvailable: true, frameDrops: 1, packetLoss: 0, decoderState: 'decoding', status: 'Running' });
-assert.equal(ingestRuntime.getPipelineHealth('pipeline-camera-1')?.latencyMs, 42, 'pipeline health monitor propagates latency metadata');
+try {
+  ingestRuntime.transitionPipeline('pipeline-camera-1', 'Created');
+} catch {
+  illegalPipelineTransitionRejected = true;
+}
+assert.equal(
+  illegalPipelineTransitionRejected,
+  true,
+  'pipeline lifecycle rejects illegal state transitions',
+);
+ingestRuntime.updateHealth('pipeline-camera-1', {
+  latencyMs: 42,
+  bufferUtilization: 3,
+  frameAvailable: true,
+  audioAvailable: true,
+  frameDrops: 1,
+  packetLoss: 0,
+  decoderState: 'decoding',
+  status: 'Running',
+});
+assert.equal(
+  ingestRuntime.getPipelineHealth('pipeline-camera-1')?.latencyMs,
+  42,
+  'pipeline health monitor propagates latency metadata',
+);
 ingestRuntime.updateFormat('pipeline-camera-1', { frameRate: 60, hdrMetadata: { eotf: 'pq' } });
-assert.equal(ingestRuntime.getPipeline('pipeline-camera-1')?.registration.selectedFormat.frameRate, 60, 'pipeline capability resolver negotiates format metadata');
+assert.equal(
+  ingestRuntime.getPipeline('pipeline-camera-1')?.registration.selectedFormat.frameRate,
+  60,
+  'pipeline capability resolver negotiates format metadata',
+);
 const recoveredPipeline = ingestRuntime.restartMetadata('pipeline-camera-1');
-assert.equal(recoveredPipeline.metrics.recoveries, 1, 'pipeline recovery records recovery attempts without switching Program');
-assert.equal(ingestRuntime.recovery.calculateDelay(3, 'backoff'), 4000, 'pipeline recovery calculates exponential backoff');
-assert.equal(ingestRuntime.getPipelineMetrics('pipeline-camera-1')?.restarts, 1, 'pipeline metrics collector records metadata restarts');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'PipelineHealthChanged'), true, 'RuntimeEventBus propagates ingest health events');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'PipelineRecovered'), true, 'RuntimeEventBus propagates ingest recovery events');
-const graphWithPipeline = attachPipelineMetadataToGraph(session.graph, ingestRuntime.getPipeline('pipeline-camera-1')!);
-assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.containsMediaHandles, false, 'ProductionGraph ingest node contains metadata only');
-assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.pipelineState, 'Recovering', 'ProductionGraph ingest node exposes pipeline state metadata');
-assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'ingest-runtime-controller'), true, 'RuntimeController owns IngestRuntimeController lifecycle');
-
+assert.equal(
+  recoveredPipeline.metrics.recoveries,
+  1,
+  'pipeline recovery records recovery attempts without switching Program',
+);
+assert.equal(
+  ingestRuntime.recovery.calculateDelay(3, 'backoff'),
+  4000,
+  'pipeline recovery calculates exponential backoff',
+);
+assert.equal(
+  ingestRuntime.getPipelineMetrics('pipeline-camera-1')?.restarts,
+  1,
+  'pipeline metrics collector records metadata restarts',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'PipelineHealthChanged'),
+  true,
+  'RuntimeEventBus propagates ingest health events',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'PipelineRecovered'),
+  true,
+  'RuntimeEventBus propagates ingest recovery events',
+);
+const graphWithPipeline = attachPipelineMetadataToGraph(
+  session.graph,
+  ingestRuntime.getPipeline('pipeline-camera-1')!,
+);
+assert.equal(
+  graphWithPipeline.sources['source-node-camera-1']?.metadata.containsMediaHandles,
+  false,
+  'ProductionGraph ingest node contains metadata only',
+);
+assert.equal(
+  graphWithPipeline.sources['source-node-camera-1']?.metadata.pipelineState,
+  'Recovering',
+  'ProductionGraph ingest node exposes pipeline state metadata',
+);
+assert.equal(
+  v43Runtime
+    .snapshot()
+    .subsystems.some((subsystem) => subsystem.id === 'ingest-runtime-controller'),
+  true,
+  'RuntimeController owns IngestRuntimeController lifecycle',
+);
 
 // UBOS Version 4.5 Broadcast Output & Distribution Runtime validation
 const outputRuntime = new OutputRuntimeController(v43Runtime.bus);
@@ -6038,33 +6385,115 @@ const outputRegistration = {
 };
 const outputNode = outputRuntime.registerOutput(outputRegistration);
 assert.equal(outputNode.containsMediaHandles, false, 'output runtime objects are metadata-only');
-assert.equal(outputNode.containsMediaPayloads, false, 'output runtime objects never contain media payloads');
+assert.equal(
+  outputNode.containsMediaPayloads,
+  false,
+  'output runtime objects never contain media payloads',
+);
 let duplicateOutputRejected = false;
-try { outputRuntime.registerOutput(outputRegistration); } catch { duplicateOutputRejected = true; }
+try {
+  outputRuntime.registerOutput(outputRegistration);
+} catch {
+  duplicateOutputRejected = true;
+}
 assert.equal(duplicateOutputRejected, true, 'output registry rejects duplicate registrations');
 outputRuntime.transitionOutput('output-program-rtmp', 'Initializing');
 outputRuntime.transitionOutput('output-program-rtmp', 'Ready');
 outputRuntime.transitionOutput('output-program-rtmp', 'Running');
 let illegalOutputTransitionRejected = false;
-try { outputRuntime.transitionOutput('output-program-rtmp', 'Created'); } catch { illegalOutputTransitionRejected = true; }
-assert.equal(illegalOutputTransitionRejected, true, 'output lifecycle rejects illegal state transitions');
-const routedOutput = outputRuntime.updateRoute('output-program-rtmp', { source: 'Program', productionGraphSourceId: 'program-scene-1' });
-assert.equal(routedOutput.route.deterministicRouteKey, 'Program:program-scene-1->output-program-rtmp', 'output routing metadata is deterministic');
-outputRuntime.updateHealth('output-program-rtmp', { latencyMs: 80, bitrateKbps: 6000, frameRate: 30, resolution: '1920x1080', packetLoss: 0.01, encoderStatus: 'encoding', connectionStatus: 'connected', uptimeMs: 1000, status: 'Running' });
-assert.equal(outputRuntime.getOutputHealth('output-program-rtmp')?.bitrateKbps, 6000, 'output health monitor propagates output health metadata');
-outputRuntime.updateMetrics('output-program-rtmp', { framesSent: 300, bytesSent: 2400000, bandwidthKbps: 6000, uptimeMs: 1000 });
-assert.equal(outputRuntime.getOutputMetrics('output-program-rtmp')?.framesSent, 300, 'output metrics collector records frames sent metadata');
+try {
+  outputRuntime.transitionOutput('output-program-rtmp', 'Created');
+} catch {
+  illegalOutputTransitionRejected = true;
+}
+assert.equal(
+  illegalOutputTransitionRejected,
+  true,
+  'output lifecycle rejects illegal state transitions',
+);
+const routedOutput = outputRuntime.updateRoute('output-program-rtmp', {
+  source: 'Program',
+  productionGraphSourceId: 'program-scene-1',
+});
+assert.equal(
+  routedOutput.route.deterministicRouteKey,
+  'Program:program-scene-1->output-program-rtmp',
+  'output routing metadata is deterministic',
+);
+outputRuntime.updateHealth('output-program-rtmp', {
+  latencyMs: 80,
+  bitrateKbps: 6000,
+  frameRate: 30,
+  resolution: '1920x1080',
+  packetLoss: 0.01,
+  encoderStatus: 'encoding',
+  connectionStatus: 'connected',
+  uptimeMs: 1000,
+  status: 'Running',
+});
+assert.equal(
+  outputRuntime.getOutputHealth('output-program-rtmp')?.bitrateKbps,
+  6000,
+  'output health monitor propagates output health metadata',
+);
+outputRuntime.updateMetrics('output-program-rtmp', {
+  framesSent: 300,
+  bytesSent: 2400000,
+  bandwidthKbps: 6000,
+  uptimeMs: 1000,
+});
+assert.equal(
+  outputRuntime.getOutputMetrics('output-program-rtmp')?.framesSent,
+  300,
+  'output metrics collector records frames sent metadata',
+);
 const recoveredOutput = outputRuntime.restartMetadata('output-program-rtmp');
-assert.equal(recoveredOutput.metrics.recoveries, 1, 'output recovery records recoveries without changing Program routing');
-assert.equal(outputRuntime.recovery.calculateDelay(3, 'backoff'), 4000, 'output recovery calculates exponential backoff');
-assert.equal(outputRuntime.getOutputMetrics('output-program-rtmp')?.restarts, 1, 'output metrics collector records output restarts');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'OutputHealthChanged'), true, 'RuntimeEventBus propagates output health events');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'OutputRecovered'), true, 'RuntimeEventBus propagates output recovery events');
-const graphWithOutput = attachOutputMetadataToGraph(session.graph, outputRuntime.getOutput('output-program-rtmp')!);
-assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.containsMediaHandles, false, 'ProductionGraph output node contains metadata only');
-assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.state, 'Recovering', 'ProductionGraph output node exposes output state metadata');
-assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'output-runtime-controller'), true, 'RuntimeController owns OutputRuntimeController lifecycle');
-
+assert.equal(
+  recoveredOutput.metrics.recoveries,
+  1,
+  'output recovery records recoveries without changing Program routing',
+);
+assert.equal(
+  outputRuntime.recovery.calculateDelay(3, 'backoff'),
+  4000,
+  'output recovery calculates exponential backoff',
+);
+assert.equal(
+  outputRuntime.getOutputMetrics('output-program-rtmp')?.restarts,
+  1,
+  'output metrics collector records output restarts',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'OutputHealthChanged'),
+  true,
+  'RuntimeEventBus propagates output health events',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'OutputRecovered'),
+  true,
+  'RuntimeEventBus propagates output recovery events',
+);
+const graphWithOutput = attachOutputMetadataToGraph(
+  session.graph,
+  outputRuntime.getOutput('output-program-rtmp')!,
+);
+assert.equal(
+  graphWithOutput.destinations['destination-program-rtmp']?.metadata.containsMediaHandles,
+  false,
+  'ProductionGraph output node contains metadata only',
+);
+assert.equal(
+  graphWithOutput.destinations['destination-program-rtmp']?.metadata.state,
+  'Recovering',
+  'ProductionGraph output node exposes output state metadata',
+);
+assert.equal(
+  v43Runtime
+    .snapshot()
+    .subsystems.some((subsystem) => subsystem.id === 'output-runtime-controller'),
+  true,
+  'RuntimeController owns OutputRuntimeController lifecycle',
+);
 
 // UBOS Version 4.6 Broadcast Session & Show Runtime validation
 const sessionRuntime = new SessionRuntimeController(v43Runtime.bus);
@@ -6084,124 +6513,463 @@ const v46Session = sessionRuntime.createSession({
 });
 assert.equal(v46Session.containsMediaHandles, false, 'session runtime objects are metadata-only');
 let duplicateSessionRejected = false;
-try { sessionRuntime.createSession({ sessionId: 'session-v46-main', name: 'Duplicate', operator: 'director-1' }); } catch { duplicateSessionRejected = true; }
+try {
+  sessionRuntime.createSession({
+    sessionId: 'session-v46-main',
+    name: 'Duplicate',
+    operator: 'director-1',
+  });
+} catch {
+  duplicateSessionRejected = true;
+}
 assert.equal(duplicateSessionRejected, true, 'session registry rejects duplicate sessions');
 sessionRuntime.loadSession('session-v46-main');
 sessionRuntime.startSession();
-assert.equal(sessionRuntime.currentSession()?.runtimeState, 'Running', 'session lifecycle starts current session');
+assert.equal(
+  sessionRuntime.currentSession()?.runtimeState,
+  'Running',
+  'session lifecycle starts current session',
+);
 sessionRuntime.pauseSession();
 let illegalSessionTransitionRejected = false;
-try { sessionRuntime.archiveSession('session-v46-main'); } catch { illegalSessionTransitionRejected = true; }
-assert.equal(illegalSessionTransitionRejected, true, 'session lifecycle rejects illegal transitions');
-const sessionSnapshot = sessionRuntime.saveSnapshot('session-v46-main', { panelLayout: { left: 'rundown', right: 'program' }, productionGraphMetadata: { graphId: session.graph.id, revision: session.graph.metadata.revision } });
-assert.equal(sessionSnapshot.containsMediaSerialization, false, 'session snapshots never serialize media');
+try {
+  sessionRuntime.archiveSession('session-v46-main');
+} catch {
+  illegalSessionTransitionRejected = true;
+}
+assert.equal(
+  illegalSessionTransitionRejected,
+  true,
+  'session lifecycle rejects illegal transitions',
+);
+const sessionSnapshot = sessionRuntime.saveSnapshot('session-v46-main', {
+  panelLayout: { left: 'rundown', right: 'program' },
+  productionGraphMetadata: { graphId: session.graph.id, revision: session.graph.metadata.revision },
+});
+assert.equal(
+  sessionSnapshot.containsMediaSerialization,
+  false,
+  'session snapshots never serialize media',
+);
 const recoveredSession = sessionRuntime.restoreSnapshot(sessionSnapshot.snapshotId);
-assert.equal(recoveredSession.runtimeState, 'Recovering', 'session recovery restores metadata into recovering state');
-assert.equal(recoveredSession.deviceSet[0], 'camera-1', 'session recovery restores device registry metadata');
-assert.equal(sessionRuntime.metrics.collect(recoveredSession).activeOutputs, 1, 'session metrics collector reports active outputs');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'SessionCreated'), true, 'RuntimeEventBus propagates session creation events');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'SnapshotRestored'), true, 'RuntimeEventBus propagates snapshot restore events');
+assert.equal(
+  recoveredSession.runtimeState,
+  'Recovering',
+  'session recovery restores metadata into recovering state',
+);
+assert.equal(
+  recoveredSession.deviceSet[0],
+  'camera-1',
+  'session recovery restores device registry metadata',
+);
+assert.equal(
+  sessionRuntime.metrics.collect(recoveredSession).activeOutputs,
+  1,
+  'session metrics collector reports active outputs',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'SessionCreated'),
+  true,
+  'RuntimeEventBus propagates session creation events',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'SnapshotRestored'),
+  true,
+  'RuntimeEventBus propagates snapshot restore events',
+);
 const graphWithSession = attachSessionMetadataToGraph(session.graph, recoveredSession);
-assert.equal(graphWithSession.session.metadata.activeSession, 'session-v46-main', 'ProductionGraph exposes active session metadata');
-assert.equal(graphWithSession.session.metadata.containsMediaHandles, false, 'ProductionGraph session metadata excludes media handles');
-assert.equal(graphWithSession.workspace.selectedPreset, 'studio-a', 'ProductionGraph exposes session workspace metadata');
-assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'session-runtime-controller'), true, 'RuntimeController owns SessionRuntimeController lifecycle');
+assert.equal(
+  graphWithSession.session.metadata.activeSession,
+  'session-v46-main',
+  'ProductionGraph exposes active session metadata',
+);
+assert.equal(
+  graphWithSession.session.metadata.containsMediaHandles,
+  false,
+  'ProductionGraph session metadata excludes media handles',
+);
+assert.equal(
+  graphWithSession.workspace.selectedPreset,
+  'studio-a',
+  'ProductionGraph exposes session workspace metadata',
+);
+assert.equal(
+  v43Runtime
+    .snapshot()
+    .subsystems.some((subsystem) => subsystem.id === 'session-runtime-controller'),
+  true,
+  'RuntimeController owns SessionRuntimeController lifecycle',
+);
 sessionRuntime.startSession('session-v46-main');
 sessionRuntime.closeSession('session-v46-main');
 sessionRuntime.archiveSession('session-v46-main');
 sessionRuntime.disposeSession('session-v46-main');
-assert.equal(sessionRuntime.listSessions()[0]?.runtimeState, 'Disposed', 'session API closes, archives, and disposes sessions deterministically');
-
+assert.equal(
+  sessionRuntime.listSessions()[0]?.runtimeState,
+  'Disposed',
+  'session API closes, archives, and disposes sessions deterministically',
+);
 
 // UBOS Version 4.7 Rundown & Show Control Runtime validation
 const rundownRuntime = new RundownRuntimeController(v43Runtime.bus, v43Runtime.healthManager);
 v43Runtime.register(rundownRuntime);
-const rundown = rundownRuntime.createRundown({ rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Evening Show Rundown' });
+const rundown = rundownRuntime.createRundown({
+  rundownId: 'rundown-v47-main',
+  sessionId: 'session-v46-main',
+  title: 'Evening Show Rundown',
+});
 assert.equal(rundown.containsMediaHandles, false, 'rundown runtime objects are metadata-only');
 let duplicateRundownRejected = false;
-try { rundownRuntime.createRundown({ rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Duplicate' }); } catch { duplicateRundownRejected = true; }
+try {
+  rundownRuntime.createRundown({
+    rundownId: 'rundown-v47-main',
+    sessionId: 'session-v46-main',
+    title: 'Duplicate',
+  });
+} catch {
+  duplicateRundownRejected = true;
+}
 assert.equal(duplicateRundownRejected, true, 'rundown registry rejects duplicate rundowns');
-rundownRuntime.addItem('rundown-v47-main', { itemId: 'item-open', rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Open', itemType: 'scene', order: 1, sceneReference: Object.keys(session.graph.scenes)[0], sourceReferences: [], requiredDevices: ['camera-1'], requiredInputs: ['pipeline-camera-1'], requiredOutputs: ['output-program-rtmp'], executionMode: 'operator-confirmed' });
-rundownRuntime.addItem('rundown-v47-main', { itemId: 'item-lower-third', rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Name Strap', itemType: 'lower third', order: 2, graphicsReference: 'gfx-l3', executionMode: 'manual' });
-assert.equal(rundownRuntime.listRundowns()[0]?.items[0]?.itemId, 'item-open', 'rundown item registry preserves deterministic item ordering');
+rundownRuntime.addItem('rundown-v47-main', {
+  itemId: 'item-open',
+  rundownId: 'rundown-v47-main',
+  sessionId: 'session-v46-main',
+  title: 'Open',
+  itemType: 'scene',
+  order: 1,
+  sceneReference: Object.keys(session.graph.scenes)[0],
+  sourceReferences: [],
+  requiredDevices: ['camera-1'],
+  requiredInputs: ['pipeline-camera-1'],
+  requiredOutputs: ['output-program-rtmp'],
+  executionMode: 'operator-confirmed',
+});
+rundownRuntime.addItem('rundown-v47-main', {
+  itemId: 'item-lower-third',
+  rundownId: 'rundown-v47-main',
+  sessionId: 'session-v46-main',
+  title: 'Name Strap',
+  itemType: 'lower third',
+  order: 2,
+  graphicsReference: 'gfx-l3',
+  executionMode: 'manual',
+});
+assert.equal(
+  rundownRuntime.listRundowns()[0]?.items[0]?.itemId,
+  'item-open',
+  'rundown item registry preserves deterministic item ordering',
+);
 let illegalRundownTransitionRejected = false;
-try { rundownRuntime.startRundown('rundown-v47-main'); } catch { illegalRundownTransitionRejected = true; }
-assert.equal(illegalRundownTransitionRejected, true, 'rundown lifecycle rejects illegal state transitions');
+try {
+  rundownRuntime.startRundown('rundown-v47-main');
+} catch {
+  illegalRundownTransitionRejected = true;
+}
+assert.equal(
+  illegalRundownTransitionRejected,
+  true,
+  'rundown lifecycle rejects illegal state transitions',
+);
 rundownRuntime.loadRundown('rundown-v47-main');
-const validationFailure = rundownRuntime.validateRundown('rundown-v47-main', { session: recoveredSession, graph: session.graph, devices: [], inputs: [], outputs: [], graphicsAssets: [], replayClips: [] });
-assert.equal(validationFailure.validationErrors.some((e) => e.code === 'DEVICE_MISSING'), true, 'rundown validation returns explicit missing dependency errors');
-const validationSuccess = rundownRuntime.validateRundown('rundown-v47-main', { session: recoveredSession, graph: session.graph, devices: ['camera-1'], inputs: ['pipeline-camera-1'], outputs: ['output-program-rtmp'], graphicsAssets: ['gfx-l3'], replayClips: [] });
-assert.equal(validationSuccess.state, 'ready', 'rundown validation promotes valid rundowns to ready');
+const validationFailure = rundownRuntime.validateRundown('rundown-v47-main', {
+  session: recoveredSession,
+  graph: session.graph,
+  devices: [],
+  inputs: [],
+  outputs: [],
+  graphicsAssets: [],
+  replayClips: [],
+});
+assert.equal(
+  validationFailure.validationErrors.some((e) => e.code === 'DEVICE_MISSING'),
+  true,
+  'rundown validation returns explicit missing dependency errors',
+);
+const validationSuccess = rundownRuntime.validateRundown('rundown-v47-main', {
+  session: recoveredSession,
+  graph: session.graph,
+  devices: ['camera-1'],
+  inputs: ['pipeline-camera-1'],
+  outputs: ['output-program-rtmp'],
+  graphicsAssets: ['gfx-l3'],
+  replayClips: [],
+});
+assert.equal(
+  validationSuccess.state,
+  'ready',
+  'rundown validation promotes valid rundowns to ready',
+);
 rundownRuntime.startRundown('rundown-v47-main');
 const cued = rundownRuntime.cueItem('rundown-v47-main', 'item-open');
 assert.equal(cued.cuedItemId, 'item-open', 'rundown cue behavior records the cued item');
 const executing = rundownRuntime.takeNext('rundown-v47-main', 'cmd-take-open');
-assert.equal(executing.currentItemId, 'item-open', 'rundown take next deterministically sets current item');
+assert.equal(
+  executing.currentItemId,
+  'item-open',
+  'rundown take next deterministically sets current item',
+);
 const duplicateTake = rundownRuntime.takeNext('rundown-v47-main', 'cmd-take-open');
-assert.equal(duplicateTake.currentItemId, 'item-open', 'rundown duplicate execution prevention is command-id idempotent');
+assert.equal(
+  duplicateTake.currentItemId,
+  'item-open',
+  'rundown duplicate execution prevention is command-id idempotent',
+);
 rundownRuntime.completeItem('rundown-v47-main', 'item-open');
 const held = rundownRuntime.holdItem('rundown-v47-main', 'item-lower-third');
 assert.equal(held.heldItemId, 'item-lower-third', 'rundown hold behavior records held item');
 rundownRuntime.resumeItem('rundown-v47-main', 'item-lower-third');
 const jumped = rundownRuntime.jumpToItem('rundown-v47-main', 'item-lower-third');
-assert.equal(jumped.cuedItemId, 'item-lower-third', 'rundown jump behavior cues the requested item');
+assert.equal(
+  jumped.cuedItemId,
+  'item-lower-third',
+  'rundown jump behavior cues the requested item',
+);
 rundownRuntime.skipItem('rundown-v47-main', 'item-lower-third');
-assert.equal(rundownRuntime.getHistory('rundown-v47-main').some((entry) => entry.command === 'skip item'), true, 'rundown audit history records operator commands');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'RundownItemCued'), true, 'RuntimeEventBus propagates metadata-only rundown item events');
-const graphWithRundown = attachRundownMetadataToGraph(session.graph, rundownRuntime.listRundowns()[0]!);
-assert.equal(graphWithRundown.session.metadata.activeRundown, 'rundown-v47-main', 'ProductionGraph exposes active rundown metadata');
-assert.equal(graphWithRundown.session.metadata.containsMediaHandles, false, 'ProductionGraph rundown metadata excludes media handles');
-assert.equal(rundownRuntime.getHealth('rundown-v47-main').failedItemCount, 0, 'rundown health manager propagates failed item count');
-assert.equal(rundownRuntime.getMetrics('rundown-v47-main').totalItems, 2, 'rundown metrics collector reports total items');
+assert.equal(
+  rundownRuntime.getHistory('rundown-v47-main').some((entry) => entry.command === 'skip item'),
+  true,
+  'rundown audit history records operator commands',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'RundownItemCued'),
+  true,
+  'RuntimeEventBus propagates metadata-only rundown item events',
+);
+const graphWithRundown = attachRundownMetadataToGraph(
+  session.graph,
+  rundownRuntime.listRundowns()[0]!,
+);
+assert.equal(
+  graphWithRundown.session.metadata.activeRundown,
+  'rundown-v47-main',
+  'ProductionGraph exposes active rundown metadata',
+);
+assert.equal(
+  graphWithRundown.session.metadata.containsMediaHandles,
+  false,
+  'ProductionGraph rundown metadata excludes media handles',
+);
+assert.equal(
+  rundownRuntime.getHealth('rundown-v47-main').failedItemCount,
+  0,
+  'rundown health manager propagates failed item count',
+);
+assert.equal(
+  rundownRuntime.getMetrics('rundown-v47-main').totalItems,
+  2,
+  'rundown metrics collector reports total items',
+);
 const rundownSnapshot = rundownRuntime.createSnapshot('rundown-v47-main');
 assert.equal(rundownSnapshot.containsMediaHandles, false, 'rundown snapshots are metadata-only');
 let staleSnapshotRejected = false;
 rundownRuntime.updateRundownMetadata('rundown-v47-main', { title: 'Evening Show Rundown Updated' });
-try { rundownRuntime.restoreSnapshot(rundownSnapshot.snapshotId); } catch { staleSnapshotRejected = true; }
+try {
+  rundownRuntime.restoreSnapshot(rundownSnapshot.snapshotId);
+} catch {
+  staleSnapshotRejected = true;
+}
 assert.equal(staleSnapshotRejected, true, 'rundown recovery rejects stale snapshots');
 let noMediaHandleRejected = false;
-try { rundownRuntime.updateItem('rundown-v47-main', 'item-lower-third', { transitionMetadata: { runtimeHandle: 'forbidden' } }); } catch { noMediaHandleRejected = true; }
+try {
+  rundownRuntime.updateItem('rundown-v47-main', 'item-lower-third', {
+    transitionMetadata: { runtimeHandle: 'forbidden' },
+  });
+} catch {
+  noMediaHandleRejected = true;
+}
 assert.equal(noMediaHandleRejected, true, 'rundown safety rejects runtime media handles');
 rundownRuntime.stopRundown('rundown-v47-main');
 rundownRuntime.archiveRundown('rundown-v47-main');
 rundownRuntime.dispose();
-assert.equal(rundownRuntime.listRundowns()[0]?.state, 'disposed', 'rundown disposal cleanup marks rundowns disposed');
-assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'rundown-runtime-controller'), true, 'RuntimeController owns RundownRuntimeController lifecycle');
+assert.equal(
+  rundownRuntime.listRundowns()[0]?.state,
+  'disposed',
+  'rundown disposal cleanup marks rundowns disposed',
+);
+assert.equal(
+  v43Runtime
+    .snapshot()
+    .subsystems.some((subsystem) => subsystem.id === 'rundown-runtime-controller'),
+  true,
+  'RuntimeController owns RundownRuntimeController lifecycle',
+);
 
 // UBOS v4.9 Monitoring, Telemetry & Alert Runtime validation
 const monitoringRuntime = new MonitoringRuntimeController(v43Runtime.bus);
 v43Runtime.register(monitoringRuntime);
 monitoringRuntime.initialize();
 monitoringRuntime.start();
-assert.equal(monitoringRuntime.listTelemetrySources().some((source) => source.sourceType === 'devices'), true, 'monitoring telemetry source registration includes devices');
+assert.equal(
+  monitoringRuntime.listTelemetrySources().some((source) => source.sourceType === 'devices'),
+  true,
+  'monitoring telemetry source registration includes devices',
+);
 const telemetryRegistry = new TelemetryRegistry();
-telemetryRegistry.register({ sourceId: 'camera-a', sourceType: 'devices', metadata: { label: 'Camera A', runtimeHandle: 'blocked' } });
+telemetryRegistry.register({
+  sourceId: 'camera-a',
+  sourceType: 'devices',
+  metadata: { label: 'Camera A', runtimeHandle: 'blocked' },
+});
 let duplicateSourceRejected = false;
-try { telemetryRegistry.register({ sourceId: 'camera-a', sourceType: 'devices' }); } catch { duplicateSourceRejected = true; }
-assert.equal(duplicateSourceRejected, true, 'monitoring duplicate source rejection is deterministic');
+try {
+  telemetryRegistry.register({ sourceId: 'camera-a', sourceType: 'devices' });
+} catch {
+  duplicateSourceRejected = true;
+}
+assert.equal(
+  duplicateSourceRejected,
+  true,
+  'monitoring duplicate source rejection is deterministic',
+);
 let unavailableValueRejected = false;
-try { monitoringRuntime.ingest({ sampleId: 'bad-unavailable', timestamp: new Date().toISOString(), sourceId: 'camera-a', sourceType: 'devices', metricName: 'latency', metricKind: 'gauge', value: 12, status: 'unavailable', severity: 'unknown', tags: [], dimensions: {}, availability: 'unavailable', confidence: 1, collectionMethod: 'adapter', metadataVersion: '4.9' }); } catch { unavailableValueRejected = true; }
-assert.equal(unavailableValueRejected, true, 'monitoring telemetry sample validation rejects fabricated unavailable values');
-const staleSample = { sampleId: 'stale-1', timestamp: new Date(Date.now() - 2000).toISOString(), sourceId: 'camera-a', sourceType: 'devices', metricName: 'connectionState', metricKind: 'state' as const, value: 'connected', status: 'ok' as const, severity: 'informational' as const, tags: [], dimensions: {}, availability: 'available' as const, confidence: 1, collectionMethod: 'event' as const, expiresAt: new Date(Date.now() - 1000).toISOString(), metadataVersion: '4.9' };
+try {
+  monitoringRuntime.ingest({
+    sampleId: 'bad-unavailable',
+    timestamp: new Date().toISOString(),
+    sourceId: 'camera-a',
+    sourceType: 'devices',
+    metricName: 'latency',
+    metricKind: 'gauge',
+    value: 12,
+    status: 'unavailable',
+    severity: 'unknown',
+    tags: [],
+    dimensions: {},
+    availability: 'unavailable',
+    confidence: 1,
+    collectionMethod: 'adapter',
+    metadataVersion: '4.9',
+  });
+} catch {
+  unavailableValueRejected = true;
+}
+assert.equal(
+  unavailableValueRejected,
+  true,
+  'monitoring telemetry sample validation rejects fabricated unavailable values',
+);
+const staleSample = {
+  sampleId: 'stale-1',
+  timestamp: new Date(Date.now() - 2000).toISOString(),
+  sourceId: 'camera-a',
+  sourceType: 'devices',
+  metricName: 'connectionState',
+  metricKind: 'state' as const,
+  value: 'connected',
+  status: 'ok' as const,
+  severity: 'informational' as const,
+  tags: [],
+  dimensions: {},
+  availability: 'available' as const,
+  confidence: 1,
+  collectionMethod: 'event' as const,
+  expiresAt: new Date(Date.now() - 1000).toISOString(),
+  metadataVersion: '4.9',
+};
 monitoringRuntime.ingest(staleSample);
-assert.equal(monitoringRuntime.getHealthSummary().staleSourceIds.includes('camera-a'), true, 'monitoring stale-data detection keeps stale sources visible');
+assert.equal(
+  monitoringRuntime.getHealthSummary().staleSourceIds.includes('camera-a'),
+  true,
+  'monitoring stale-data detection keeps stale sources visible',
+);
 const healthAggregation = new HealthAggregationManager();
-const criticalHealth = healthAggregation.aggregate([{ ...staleSample, sampleId: 'critical-1', sourceId: 'encoder-a', metricName: 'encoderState', status: 'critical', severity: 'critical', expiresAt: new Date(Date.now() + 1000).toISOString() }]);
-assert.equal(criticalHealth.state, 'critical', 'monitoring health aggregation propagates one critical child');
+const criticalHealth = healthAggregation.aggregate([
+  {
+    ...staleSample,
+    sampleId: 'critical-1',
+    sourceId: 'encoder-a',
+    metricName: 'encoderState',
+    status: 'critical',
+    severity: 'critical',
+    expiresAt: new Date(Date.now() + 1000).toISOString(),
+  },
+]);
+assert.equal(
+  criticalHealth.state,
+  'critical',
+  'monitoring health aggregation propagates one critical child',
+);
 const alertRegistry = new AlertRegistry();
 const alertLifecycle = new AlertLifecycleManager();
 const alertEngine = new AlertRuleEngine(alertRegistry, alertLifecycle);
-alertRegistry.register({ ruleId: 'cpu-high', name: 'CPU high', type: 'threshold', metricSelector: { metricName: 'cpu' }, condition: { operator: '>', value: 90 }, severity: 'critical', debounceMs: 0, cooldownMs: 1000, enabled: true, version: '1' });
-const cpuSample = { ...staleSample, sampleId: 'cpu-1', sourceId: 'system', sourceType: 'system', metricName: 'cpu', metricKind: 'gauge' as const, value: 95, status: 'ok' as const, severity: 'informational' as const, expiresAt: new Date(Date.now() + 1000).toISOString() };
+alertRegistry.register({
+  ruleId: 'cpu-high',
+  name: 'CPU high',
+  type: 'threshold',
+  metricSelector: { metricName: 'cpu' },
+  condition: { operator: '>', value: 90 },
+  severity: 'critical',
+  debounceMs: 0,
+  cooldownMs: 1000,
+  enabled: true,
+  version: '1',
+});
+const cpuSample = {
+  ...staleSample,
+  sampleId: 'cpu-1',
+  sourceId: 'system',
+  sourceType: 'system',
+  metricName: 'cpu',
+  metricKind: 'gauge' as const,
+  value: 95,
+  status: 'ok' as const,
+  severity: 'informational' as const,
+  expiresAt: new Date(Date.now() + 1000).toISOString(),
+};
 const fired = alertEngine.evaluate(cpuSample);
 assert.equal(fired.length, 1, 'monitoring alert threshold rule fires');
-assert.equal(alertEngine.evaluate({ ...cpuSample, sampleId: 'cpu-2' }).length, 0, 'monitoring cooldown prevents duplicate alert storms');
-alertRegistry.register({ ruleId: 'camera-absent', name: 'Camera absent', type: 'absence', metricSelector: { metricName: 'heartbeat' }, condition: {}, severity: 'warning', debounceMs: 1, cooldownMs: 0, enabled: true, version: '1' });
-assert.equal(alertEngine.evaluate({ ...staleSample, sampleId: 'absence-1', metricName: 'heartbeat', status: 'stale' }).some((alert) => alert.state === 'pending'), true, 'monitoring absence rule supports debounce pending state');
-alertRegistry.register({ ruleId: 'output-state', name: 'Output failed', type: 'state-change', metricSelector: { metricName: 'outputState' }, condition: { to: 'failed' }, severity: 'error', debounceMs: 0, cooldownMs: 0, enabled: true, version: '1' });
-assert.equal(alertEngine.evaluate({ ...cpuSample, sampleId: 'state-1', metricName: 'outputState', value: 'failed' }).length, 1, 'monitoring state-change rule fires deterministically');
+assert.equal(
+  alertEngine.evaluate({ ...cpuSample, sampleId: 'cpu-2' }).length,
+  0,
+  'monitoring cooldown prevents duplicate alert storms',
+);
+alertRegistry.register({
+  ruleId: 'camera-absent',
+  name: 'Camera absent',
+  type: 'absence',
+  metricSelector: { metricName: 'heartbeat' },
+  condition: {},
+  severity: 'warning',
+  debounceMs: 1,
+  cooldownMs: 0,
+  enabled: true,
+  version: '1',
+});
+assert.equal(
+  alertEngine
+    .evaluate({ ...staleSample, sampleId: 'absence-1', metricName: 'heartbeat', status: 'stale' })
+    .some((alert) => alert.state === 'pending'),
+  true,
+  'monitoring absence rule supports debounce pending state',
+);
+alertRegistry.register({
+  ruleId: 'output-state',
+  name: 'Output failed',
+  type: 'state-change',
+  metricSelector: { metricName: 'outputState' },
+  condition: { to: 'failed' },
+  severity: 'error',
+  debounceMs: 0,
+  cooldownMs: 0,
+  enabled: true,
+  version: '1',
+});
+assert.equal(
+  alertEngine.evaluate({
+    ...cpuSample,
+    sampleId: 'state-1',
+    metricName: 'outputState',
+    value: 'failed',
+  }).length,
+  1,
+  'monitoring state-change rule fires deterministically',
+);
 const acknowledged = alertLifecycle.acknowledge(fired[0]!.alertId);
-assert.equal(acknowledged.state, 'acknowledged', 'monitoring alert acknowledgement transition works');
+assert.equal(
+  acknowledged.state,
+  'acknowledged',
+  'monitoring alert acknowledgement transition works',
+);
 const suppressed = alertLifecycle.suppress(acknowledged.alertId);
 assert.equal(suppressed.state, 'suppressed', 'monitoring alert suppression transition works');
 const resolved = alertLifecycle.resolve(suppressed.alertId);
@@ -6209,25 +6977,78 @@ assert.equal(resolved.state, 'resolved', 'monitoring alert resolution transition
 const incidentManager = new IncidentManager();
 const incident = incidentManager.group(fired[0]!);
 incidentManager.group({ ...fired[0]!, alertId: 'alert-duplicate' });
-assert.equal(incidentManager.list()[0]!.alertIds.length, 2, 'monitoring incident grouping correlates related alerts');
+assert.equal(
+  incidentManager.list()[0]!.alertIds.length,
+  2,
+  'monitoring incident grouping correlates related alerts',
+);
 const history = new TelemetryHistoryStore({ maxSamples: 1, retentionMs: 60_000 });
 history.ingest(cpuSample);
 history.ingest({ ...cpuSample, sampleId: 'cpu-retained' });
 assert.equal(history.query().length, 1, 'monitoring history retention is bounded');
 const snapshotManager = new DiagnosticSnapshotManager();
-const diagnosticSnapshot = snapshotManager.create({ healthSummary: criticalHealth, activeAlerts: [resolved], incidents: [incident], telemetrySamples: [cpuSample], summaries: { deviceSummary: 'metadata-only' } });
-assert.equal(diagnosticSnapshot.containsRuntimeHandles, false, 'monitoring diagnostic snapshot creation is metadata-only');
-assert.equal(JSON.parse(JSON.stringify(diagnosticSnapshot)).version, '4.9', 'monitoring diagnostic snapshot serialization is versioned');
-assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'TelemetrySampleReceived'), true, 'monitoring RuntimeEventBus propagation publishes telemetry events');
+const diagnosticSnapshot = snapshotManager.create({
+  healthSummary: criticalHealth,
+  activeAlerts: [resolved],
+  incidents: [incident],
+  telemetrySamples: [cpuSample],
+  summaries: { deviceSummary: 'metadata-only' },
+});
+assert.equal(
+  diagnosticSnapshot.containsRuntimeHandles,
+  false,
+  'monitoring diagnostic snapshot creation is metadata-only',
+);
+assert.equal(
+  JSON.parse(JSON.stringify(diagnosticSnapshot)).version,
+  '4.9',
+  'monitoring diagnostic snapshot serialization is versioned',
+);
+assert.equal(
+  v43Runtime.bus.replay().some((event) => event.type === 'TelemetrySampleReceived'),
+  true,
+  'monitoring RuntimeEventBus propagation publishes telemetry events',
+);
 const beforeRecursive = monitoringRuntime.queryMetricHistory().length;
-v43Runtime.bus.publish({ type: 'TelemetrySampleReceived', domain: 'health', source: 'external-monitor', payload: { monitoringEvent: true } });
-assert.equal(monitoringRuntime.queryMetricHistory().length, beforeRecursive, 'monitoring recursive-loop prevention skips monitoring events');
+v43Runtime.bus.publish({
+  type: 'TelemetrySampleReceived',
+  domain: 'health',
+  source: 'external-monitor',
+  payload: { monitoringEvent: true },
+});
+assert.equal(
+  monitoringRuntime.queryMetricHistory().length,
+  beforeRecursive,
+  'monitoring recursive-loop prevention skips monitoring events',
+);
 const graphMonitoring = monitoringRuntime.mapProductionGraphMonitoringMetadata();
-assert.equal(graphMonitoring.containsRuntimeHandles, false, 'monitoring ProductionGraph metadata mapping is non-destructive and metadata-only');
-assert.equal(new ProductionGraphTelemetryAdapter().mapSummary(graphMonitoring).activeIncidentCount >= 0, true, 'monitoring ProductionGraph adapter exposes summary metadata');
+assert.equal(
+  graphMonitoring.containsRuntimeHandles,
+  false,
+  'monitoring ProductionGraph metadata mapping is non-destructive and metadata-only',
+);
+assert.equal(
+  new ProductionGraphTelemetryAdapter().mapSummary(graphMonitoring).activeIncidentCount >= 0,
+  true,
+  'monitoring ProductionGraph adapter exposes summary metadata',
+);
 const noMediaHandleSnapshot = monitoringRuntime.createDiagnosticSnapshot();
-assert.equal(JSON.stringify(noMediaHandleSnapshot).includes('MediaStream'), false, 'monitoring no-media-handle safety excludes media handles');
+assert.equal(
+  JSON.stringify(noMediaHandleSnapshot).includes('MediaStream'),
+  false,
+  'monitoring no-media-handle safety excludes media handles',
+);
 monitoringRuntime.stop();
 monitoringRuntime.dispose();
-assert.equal(monitoringRuntime.getSnapshot().state, 'disposed', 'monitoring disposal cleanup releases runtime-only state');
-assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'monitoring-runtime-controller'), true, 'RuntimeController owns MonitoringRuntimeController lifecycle');
+assert.equal(
+  monitoringRuntime.getSnapshot().state,
+  'disposed',
+  'monitoring disposal cleanup releases runtime-only state',
+);
+assert.equal(
+  v43Runtime
+    .snapshot()
+    .subsystems.some((subsystem) => subsystem.id === 'monitoring-runtime-controller'),
+  true,
+  'RuntimeController owns MonitoringRuntimeController lifecycle',
+);
