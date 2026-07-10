@@ -859,3 +859,336 @@ const serializeSchedulerSnapshot = (scheduler: DeterministicCommandScheduler) =>
 }
 
 console.log('execution-engine validation passed');
+
+// v5.1.4 command execution engine: typed results, history, idempotency, retries, and runtime integration.
+{
+  const publisher = new InMemoryRuntimeEventPublisher();
+  const engine = await readyEngine(publisher, new FakeClock(), {
+    runtimeId: 'v514',
+    executionHistoryCapacity: 2,
+  });
+  engine.handlers.register('SYNC_OK', {
+    commandType: 'SYNC_OK',
+    execute: () => ({ status: 'SUCCEEDED', metadata: { ok: true } }),
+  });
+  engine.handlers.register('ASYNC_OK', {
+    commandType: 'ASYNC_OK',
+    execute: async () => ({ status: 'SUCCEEDED' }),
+  });
+  engine.handlers.register('TYPED_FAIL', {
+    commandType: 'TYPED_FAIL',
+    execute: () => ({
+      status: 'FAILED',
+      error: { code: 'TypedFailure', message: 'typed failure' },
+      retryable: false,
+    }),
+  });
+  await engine.start();
+  engine.schedule(
+    cmd('ce1', {
+      type: 'SYNC_OK',
+      sequence: 900n,
+      correlationId: 'corr',
+      idempotencyKey: 'idem-1',
+    }),
+  );
+  engine.schedule(cmd('ce2', { type: 'ASYNC_OK', sequence: 901n }));
+  engine.schedule(cmd('ce3', { type: 'TYPED_FAIL', sequence: 902n }));
+  await engine.executeSingleTick();
+  assertEqual(engine.commandExecutionEngine.getExecution('ce1'), undefined);
+  assertEqual(engine.commandExecutionEngine.getExecutionByIdempotencyKey('idem-1'), undefined);
+  assertEqual(engine.commandExecutionEngine.listByCorrelationId('corr').length, 0);
+  assertEqual(engine.commandExecutionEngine.listExecutions().length, 2);
+  assertEqual(engine.commandExecutionEngine.getExecution('ce3')?.errorCode, 'TypedFailure');
+  assertDeepEqual(engine.commandExecutionEngine.assertInvariants().historySize, 2);
+  assertOk(publisher.events.some((e) => e.eventType === 'CommandExecutionSucceeded'));
+  assertOk(publisher.events.some((e) => e.eventType === 'CommandExecutionFailed'));
+  assertEqual(engine.telemetry.current().totalCommandExecutions, 3);
+}
+{
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    runtimeId: 'duplicate-exec',
+  });
+  const c = cmd('dup-exec', { type: 'RUNTIME_NOOP', sequence: 910n });
+  const tick = {
+    frameNumber: 1n,
+    startedAtNs: 1n,
+    deadlineAtNs: 1n,
+    scheduledTimeNs: 1n,
+    actualTimeNs: 1n,
+    presentationTimeNs: 1n,
+    frameDurationNs: 1n,
+    driftNs: 0n,
+    latenessNs: 0n,
+    late: false,
+    missedFrames: 0n,
+    discontinuity: false,
+  };
+  await engine.commandExecutionEngine.execute(c, {
+    runtimeContext: engine.context(),
+    frameTick: tick,
+  });
+  await assertRejects(
+    () =>
+      engine.commandExecutionEngine.execute(c, {
+        runtimeContext: engine.context(),
+        frameTick: tick,
+      }),
+    /CommandExecutionAlreadyTerminal/,
+  );
+  await assertRejects(
+    () =>
+      engine.commandExecutionEngine
+        .execute(cmd('dup-conflict', { sequence: 911n, idempotencyKey: 'idem-x' }), {
+          runtimeContext: engine.context(),
+          frameTick: tick,
+        })
+        .then(async () =>
+          engine.commandExecutionEngine.execute(
+            cmd('dup-conflict-2', { sequence: 912n, idempotencyKey: 'idem-x' }),
+            { runtimeContext: engine.context(), frameTick: tick },
+          ),
+        ),
+    /ConflictingIdempotencyKey/,
+  );
+}
+{
+  let attempts = 0;
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    runtimeId: 'retry',
+  });
+  engine.handlers.register('FLAKY', {
+    commandType: 'FLAKY',
+    execute: () =>
+      ++attempts < 2
+        ? { status: 'FAILED', error: { code: 'Transient', message: 'try again' }, retryable: true }
+        : { status: 'SUCCEEDED' },
+  });
+  await engine.start();
+  engine.schedule(
+    cmd('retry-1', {
+      type: 'FLAKY',
+      sequence: 920n,
+      policy: 'EXECUTE_UNTIL_SUCCESS',
+      retryPolicy: { maxAttempts: 3, initialDelayMs: 0, backoffMultiplier: 2, maximumDelayMs: 10 },
+    }),
+  );
+  await engine.executeSingleTick();
+  assertEqual(attempts, 2);
+  assertEqual(engine.commandExecutionEngine.getExecution('retry-1')?.outcome, 'SUCCEEDED');
+  assertEqual(engine.telemetry.current().retriedCommandExecutions, 1);
+}
+{
+  const publisher = new InMemoryRuntimeEventPublisher();
+  const engine = await readyEngine(publisher, new FakeClock(), { runtimeId: 'barrier' });
+  await engine.start();
+  engine.schedule(cmd('bar-1', { sequence: 930n }));
+  engine.schedule(cmd('bar-2', { type: 'RUNTIME_BARRIER', sequence: 931n }));
+  engine.schedule(cmd('bar-3', { sequence: 932n }));
+  await engine.executeSingleTick();
+  const started = publisher.events
+    .filter((e) => e.eventType === 'CommandExecutionStarted')
+    .map((e) => e.payload.commandId);
+  assertDeepEqual(started, ['bar-1', 'bar-2', 'bar-3']);
+  assertOk(publisher.events.some((e) => e.eventType === 'CommandBarrierReleased'));
+}
+
+// v5.1.4 final audit regressions: cancellation is not timeout, evicted terminal ids stay terminal,
+// non-Error throws normalize, runtime failure clears active state, and 10k direct executions stay bounded.
+{
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    runtimeId: 'cancel-audit',
+  });
+  engine.handlers.register('WAIT_FOR_CANCEL', {
+    commandType: 'WAIT_FOR_CANCEL',
+    execute: (_command, context) =>
+      new Promise((resolve) => {
+        context.cancellationSignal.addEventListener(
+          'abort',
+          () => resolve({ status: 'CANCELLED', reason: String(context.cancellationSignal.reason) }),
+          { once: true },
+        );
+      }),
+  });
+  const tick = {
+    frameNumber: 1n,
+    startedAtNs: 1n,
+    deadlineAtNs: 1n,
+    scheduledTimeNs: 1n,
+    actualTimeNs: 1n,
+    presentationTimeNs: 1n,
+    frameDurationNs: 1n,
+    driftNs: 0n,
+    latenessNs: 0n,
+    late: false,
+    missedFrames: 0n,
+    discontinuity: false,
+  };
+  const executing = engine.commandExecutionEngine.execute(
+    cmd('cancel-audit-1', { type: 'WAIT_FOR_CANCEL', sequence: 940n, timeoutMs: 30_000 }),
+    { runtimeContext: engine.context(), frameTick: tick },
+  );
+  for (let i = 0; i < 10 && engine.telemetry.current().activeCommandExecutions === 0; i++)
+    await Promise.resolve();
+  assertEqual(engine.commandExecutionEngine.cancel('cancel-audit-1', 'operator cancelled'), true);
+  const record = await executing;
+  assertEqual(record.outcome, 'CANCELLED');
+  assertEqual(record.timeout, false);
+  assertEqual(engine.telemetry.current().activeCommandExecutions, 0);
+  assertEqual(engine.telemetry.current().currentlyExecutingCommandId, undefined);
+}
+{
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    runtimeId: 'eviction-audit',
+    executionHistoryCapacity: 1,
+  });
+  const tick = {
+    frameNumber: 1n,
+    startedAtNs: 1n,
+    deadlineAtNs: 1n,
+    scheduledTimeNs: 1n,
+    actualTimeNs: 1n,
+    presentationTimeNs: 1n,
+    frameDurationNs: 1n,
+    driftNs: 0n,
+    latenessNs: 0n,
+    late: false,
+    missedFrames: 0n,
+    discontinuity: false,
+  };
+  await engine.commandExecutionEngine.execute(
+    cmd('evicted-terminal-1', { sequence: 950n, idempotencyKey: 'evicted-idem' }),
+    { runtimeContext: engine.context(), frameTick: tick },
+  );
+  await engine.commandExecutionEngine.execute(cmd('evicted-terminal-2', { sequence: 951n }), {
+    runtimeContext: engine.context(),
+    frameTick: tick,
+  });
+  assertEqual(engine.commandExecutionEngine.getExecution('evicted-terminal-1'), undefined);
+  await assertRejects(
+    () =>
+      engine.commandExecutionEngine.execute(cmd('evicted-terminal-1', { sequence: 952n }), {
+        runtimeContext: engine.context(),
+        frameTick: tick,
+      }),
+    /CommandExecutionAlreadyTerminal/,
+  );
+  await assertRejects(
+    () =>
+      engine.commandExecutionEngine.execute(
+        cmd('evicted-terminal-3', { sequence: 953n, idempotencyKey: 'evicted-idem' }),
+        { runtimeContext: engine.context(), frameTick: tick },
+      ),
+    /ConflictingIdempotencyKey/,
+  );
+  assertEqual(engine.commandExecutionEngine.assertInvariants().historySize, 1);
+  assertEqual(engine.commandExecutionEngine.assertInvariants().terminalCommands, 2);
+}
+{
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    runtimeId: 'throw-audit',
+  });
+  engine.handlers.register('THROW_STRING', {
+    commandType: 'THROW_STRING',
+    execute: () => {
+      throw 'string failure';
+    },
+  });
+  const tick = {
+    frameNumber: 1n,
+    startedAtNs: 1n,
+    deadlineAtNs: 1n,
+    scheduledTimeNs: 1n,
+    actualTimeNs: 1n,
+    presentationTimeNs: 1n,
+    frameDurationNs: 1n,
+    driftNs: 0n,
+    latenessNs: 0n,
+    late: false,
+    missedFrames: 0n,
+    discontinuity: false,
+  };
+  const record = await engine.commandExecutionEngine.execute(
+    cmd('throw-string-1', { type: 'THROW_STRING', sequence: 960n }),
+    { runtimeContext: engine.context(), frameTick: tick },
+  );
+  assertEqual(record.outcome, 'FAILED');
+  assertEqual(record.errorCode, 'NonErrorThrown');
+}
+{
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    runtimeId: 'failure-active-audit',
+  });
+  engine.handlers.register('WAIT_FOR_RUNTIME_FAIL', {
+    commandType: 'WAIT_FOR_RUNTIME_FAIL',
+    execute: (_command, context) =>
+      new Promise((resolve) => {
+        context.cancellationSignal.addEventListener(
+          'abort',
+          () => resolve({ status: 'CANCELLED', reason: String(context.cancellationSignal.reason) }),
+          { once: true },
+        );
+      }),
+  });
+  const tick = {
+    frameNumber: 1n,
+    startedAtNs: 1n,
+    deadlineAtNs: 1n,
+    scheduledTimeNs: 1n,
+    actualTimeNs: 1n,
+    presentationTimeNs: 1n,
+    frameDurationNs: 1n,
+    driftNs: 0n,
+    latenessNs: 0n,
+    late: false,
+    missedFrames: 0n,
+    discontinuity: false,
+  };
+  const executing = engine.commandExecutionEngine.execute(
+    cmd('runtime-fail-active-1', {
+      type: 'WAIT_FOR_RUNTIME_FAIL',
+      sequence: 970n,
+      timeoutMs: 30_000,
+    }),
+    { runtimeContext: engine.context(), frameTick: tick },
+  );
+  for (let i = 0; i < 10 && engine.telemetry.current().activeCommandExecutions === 0; i++)
+    await Promise.resolve();
+  await engine.fail(new Error('fatal runtime audit'));
+  const record = await executing;
+  assertEqual(record.outcome, 'CANCELLED');
+  assertEqual(engine.commandExecutionEngine.assertInvariants().activeExecutions, 0);
+}
+{
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    runtimeId: 'heavy-active-audit',
+    executionHistoryCapacity: 32,
+  });
+  const tick = {
+    frameNumber: 1n,
+    startedAtNs: 1n,
+    deadlineAtNs: 1n,
+    scheduledTimeNs: 1n,
+    actualTimeNs: 1n,
+    presentationTimeNs: 1n,
+    frameDurationNs: 1n,
+    driftNs: 0n,
+    latenessNs: 0n,
+    late: false,
+    missedFrames: 0n,
+    discontinuity: false,
+  };
+  const start = performance.now();
+  for (let i = 0; i < 10_000; i++)
+    await engine.commandExecutionEngine.execute(
+      cmd(`heavy-${i}`, { sequence: BigInt(20_000 + i), correlationId: `heavy-${i % 4}` }),
+      { runtimeContext: engine.context(), frameTick: tick },
+    );
+  const durationMs = performance.now() - start;
+  console.log('command execution heavy measurement', JSON.stringify({ count: 10_000, durationMs }));
+  assertEqual(engine.commandExecutionEngine.assertInvariants().activeExecutions, 0);
+  assertEqual(engine.commandExecutionEngine.assertInvariants().historySize, 32);
+  assertEqual(engine.commandExecutionEngine.assertInvariants().terminalCommands, 10_000);
+  assertEqual(engine.telemetry.current().totalCommandExecutions, 10_000);
+  assertEqual(engine.telemetry.current().activeCommandExecutions, 0);
+}
