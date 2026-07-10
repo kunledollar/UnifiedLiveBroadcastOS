@@ -45,12 +45,25 @@ import {
   DeterministicCommandScheduler,
   DuplicateCommandError,
   DuplicateProcessorError,
+  FakeMonotonicTimeSource,
+  FrameClockAlreadyRunningError,
+  FrameClockNotRunningError,
+  FrameClockStoppedError,
+  ImmediateFrameWaitStrategy,
   InMemoryRuntimeEventPublisher,
   InvalidEngineConfigurationError,
   InvalidLifecycleTransitionError,
   RuntimeExecutionEngine,
   RuntimeNotReadyError,
+  TimeSourceMovedBackwardError,
   UnknownCommandTypeError,
+  createMasterFrameClock,
+  frameDurationNs,
+  frameNumberToTimestampNs,
+  frameRateLabel,
+  supportedRationalFrameRates,
+  timestampNsToFrameNumber,
+  validateRationalFrameRate,
   createRuntimeExecutionEngine,
   defaultRuntimeEngineConfig,
   type RuntimeClock,
@@ -354,6 +367,139 @@ async function readyEngine(
   );
   config.frameRate.numerator = 1;
   assertEqual(engine.config.frameRate.numerator, 30000);
+}
+
+// UBOS v5.1.2 master frame-clock validation.
+{
+  for (const rate of supportedRationalFrameRates)
+    assertDeepEqual(validateRationalFrameRate(rate), rate);
+  assertThrows(() => validateRationalFrameRate({ numerator: 0, denominator: 1 }));
+  assertThrows(() => validateRationalFrameRate({ numerator: 1, denominator: -1 }));
+  assertEqual(frameRateLabel({ numerator: 24000, denominator: 1001 }), '23.976');
+  assertEqual(frameRateLabel({ numerator: 30000, denominator: 1001 }), '29.97');
+  assertEqual(frameRateLabel({ numerator: 60000, denominator: 1001 }), '59.94');
+  assertEqual(frameDurationNs({ numerator: 25, denominator: 1 }), 40_000_000n);
+  assertEqual(frameNumberToTimestampNs(1n, { numerator: 24, denominator: 1 }), 41_666_666n);
+  assertEqual(frameNumberToTimestampNs(1n, { numerator: 30, denominator: 1 }), 33_333_333n);
+  assertEqual(frameNumberToTimestampNs(1n, { numerator: 30000, denominator: 1001 }), 33_366_666n);
+  assertEqual(frameNumberToTimestampNs(1n, { numerator: 60000, denominator: 1001 }), 16_683_333n);
+  assertEqual(
+    timestampNsToFrameNumber(frameNumberToTimestampNs(10n, { numerator: 25, denominator: 1 }), {
+      numerator: 25,
+      denominator: 1,
+    }),
+    10n,
+  );
+  const dayNs = 86_400n * 1_000_000_000n;
+  const f2997 = timestampNsToFrameNumber(dayNs, { numerator: 30000, denominator: 1001 });
+  const f5994 = timestampNsToFrameNumber(dayNs, { numerator: 60000, denominator: 1001 });
+  assertOk(
+    dayNs - frameNumberToTimestampNs(f2997, { numerator: 30000, denominator: 1001 }) <
+      frameDurationNs({ numerator: 30000, denominator: 1001 }),
+  );
+  assertOk(
+    dayNs - frameNumberToTimestampNs(f5994, { numerator: 60000, denominator: 1001 }) <
+      frameDurationNs({ numerator: 60000, denominator: 1001 }),
+  );
+}
+{
+  const timeSource = new FakeMonotonicTimeSource();
+  const clock = createMasterFrameClock({
+    frameRate: { numerator: 30000, denominator: 1001 },
+    timeSource,
+    waitStrategy: new ImmediateFrameWaitStrategy(),
+    lateFrameToleranceNs: 1_000_000n,
+    discontinuityThresholdNs: 1n,
+  });
+  assertEqual(clock.state, 'CREATED');
+  clock.start();
+  assertThrows(() => clock.start(), FrameClockAlreadyRunningError);
+  timeSource.advanceTo(clock.getDeadlineForFrame(1n));
+  const tick1 = await clock.nextTick();
+  timeSource.advanceTo(clock.getDeadlineForFrame(2n));
+  const tick2 = await clock.nextTick();
+  assertEqual(tick1.frameNumber, 1n);
+  assertEqual(tick2.frameNumber, 2n);
+  assertOk(tick2.scheduledTimeNs > tick1.scheduledTimeNs);
+  assertEqual(tick2.late, false);
+  assertEqual(tick2.missedFrames, 0n);
+  assertEqual(
+    tick2.presentationTimeNs,
+    frameNumberToTimestampNs(2n, { numerator: 30000, denominator: 1001 }),
+  );
+  timeSource.advanceTo(clock.getDeadlineForFrame(6n) + 2_000_000n);
+  const late = await clock.nextTick();
+  assertEqual(late.frameNumber, 6n);
+  assertEqual(late.late, true);
+  assertEqual(late.missedFrames, 3n);
+  timeSource.advanceTo(clock.getDeadlineForFrame(40n) + 200_000_000n);
+  const discontinuity = await clock.nextTick();
+  assertEqual(discontinuity.discontinuity, true);
+  clock.pause();
+  timeSource.advanceMs(10_000);
+  clock.resume();
+  timeSource.advanceTo(clock.getDeadlineForFrame(clock.currentFrame + 1n));
+  assertEqual((await clock.nextTick()).discontinuity, true);
+  timeSource.setNowNs(1n);
+  assertThrows(() => clock.createTickAt(1n), TimeSourceMovedBackwardError);
+  clock.stop();
+  await assertRejects(() => clock.nextTick(), FrameClockStoppedError);
+  assertThrows(() => clock.resume());
+}
+{
+  const timeSource = new FakeMonotonicTimeSource();
+  const clock = createMasterFrameClock({
+    frameRate: { numerator: 25, denominator: 1 },
+    timeSource,
+    waitStrategy: new ImmediateFrameWaitStrategy(),
+  });
+  clock.start();
+  clock.pause();
+  clock.reset();
+  assertEqual(clock.state, 'CREATED');
+  clock.start();
+  timeSource.advanceTo(clock.getDeadlineForFrame(1n));
+  assertEqual((await clock.nextTick()).frameNumber, 1n);
+}
+{
+  const timeSource = new FakeMonotonicTimeSource();
+  const clock = createMasterFrameClock({
+    frameRate: { numerator: 30, denominator: 1 },
+    timeSource,
+    waitStrategy: new ImmediateFrameWaitStrategy(),
+  });
+  const publisher = new InMemoryRuntimeEventPublisher();
+  const engine = createRuntimeExecutionEngine({ runtimeId: 'v512-integration' }, publisher, {
+    nowMs: () => Number(timeSource.nowNs() / 1_000_000n),
+    nowNs: () => timeSource.nowNs(),
+  });
+  await engine.initialize();
+  await engine.start();
+  engine.schedule(cmd('target1', { sequence: 501n, targetFrame: 1n }));
+  engine.schedule(cmd('target10', { sequence: 502n, targetFrame: 10n }));
+  engine.schedule(cmd('sameA', { sequence: 503n, targetFrame: 10n, priority: 2 }));
+  engine.schedule(cmd('sameB', { sequence: 504n, targetFrame: 10n, priority: 1 }));
+  timeSource.advanceTo(engine.masterFrameClock.getDeadlineForFrame(1n));
+  await engine.executeSingleTick();
+  assertEqual(engine.currentFrameNumber, 1n);
+  timeSource.advanceTo(engine.masterFrameClock.getDeadlineForFrame(12n));
+  await engine.executeSingleTick();
+  assertEqual(engine.scheduler.pendingCount(), 0);
+  assertOk(engine.telemetry.current().totalMissedFrames !== '0');
+  assertOk(publisher.events.some((e) => e.eventType === 'FrameTickProduced'));
+  assertOk(publisher.events.some((e) => e.eventType === 'FrameFramesMissed'));
+  await engine.pause();
+  engine.schedule(
+    cmd('afterPause', { sequence: 505n, targetFrame: engine.currentFrameNumber + 1n }),
+  );
+  timeSource.advanceMs(1000);
+  await engine.resume();
+  timeSource.advanceTo(engine.masterFrameClock.getDeadlineForFrame(engine.currentFrameNumber + 1n));
+  await engine.executeSingleTick();
+  assertEqual(engine.scheduler.pendingCount(), 0);
+  await assertRejects(() => Promise.all([engine.executeSingleTick(), engine.executeSingleTick()]));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  await engine.stop();
 }
 
 console.log('execution-engine validation passed');

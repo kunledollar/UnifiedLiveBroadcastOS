@@ -31,10 +31,12 @@ export const RUNTIME_COMMAND_TYPES = [
 /** Public UBOS runtime execution-engine API. */
 export type RuntimeCommandType = (typeof RUNTIME_COMMAND_TYPES)[number] | string;
 /** Public UBOS runtime execution-engine API. */
-export interface RuntimeFrameRate {
+export interface RationalFrameRate {
   numerator: number;
   denominator: number;
 }
+/** Public UBOS runtime execution-engine API. */
+export type RuntimeFrameRate = RationalFrameRate;
 /** Public UBOS runtime execution-engine API. */
 export interface RuntimeEngineConfig {
   runtimeId: string;
@@ -44,6 +46,11 @@ export interface RuntimeEngineConfig {
   tickDeadlineWarningMs: number;
   watchdogTimeoutMs: number;
   telemetryIntervalMs: number;
+  lateFrameToleranceNs: bigint;
+  maximumCatchUpFrames: number;
+  discontinuityThresholdNs: bigint;
+  clockSpinThresholdNs: bigint;
+  coarseSleepThresholdNs: bigint;
   failOnProcessorError: boolean;
   failOnCommandError: boolean;
 }
@@ -56,6 +63,11 @@ export const defaultRuntimeEngineConfig = (runtimeId = 'ubos-runtime'): RuntimeE
   tickDeadlineWarningMs: 20,
   watchdogTimeoutMs: 1000,
   telemetryIntervalMs: 1000,
+  lateFrameToleranceNs: 2_000_000n,
+  maximumCatchUpFrames: 5,
+  discontinuityThresholdNs: 500_000_000n,
+  clockSpinThresholdNs: 500_000n,
+  coarseSleepThresholdNs: 2_000_000n,
   failOnProcessorError: true,
   failOnCommandError: false,
 });
@@ -189,6 +201,16 @@ export const systemRuntimeClock: RuntimeClock = {
 };
 /** Public UBOS runtime execution-engine API. */
 export type RuntimeEventType =
+  | 'FrameClockStarted'
+  | 'FrameClockPaused'
+  | 'FrameClockResumed'
+  | 'FrameClockStopped'
+  | 'FrameClockReset'
+  | 'FrameTickProduced'
+  | 'FrameTickLate'
+  | 'FrameFramesMissed'
+  | 'FrameClockDiscontinuity'
+  | 'FrameClockError'
   | 'RuntimeStateChanged'
   | 'RuntimeInitialized'
   | 'RuntimeStarted'
@@ -254,6 +276,22 @@ export interface RuntimeTelemetrySnapshot {
   processorFailures: number;
   lastError?: string;
   healthStatus: RuntimeHealthStatus;
+  configuredFrameRate: { numerator: number; denominator: number; label: string };
+  currentFrameNumber: string;
+  scheduledFrameTimeNs: string;
+  actualFrameTimeNs: string;
+  frameDurationNs: string;
+  currentDriftNs: string;
+  maximumAbsoluteDriftNs: string;
+  currentLatenessNs: string;
+  maximumLatenessNs: string;
+  totalLateFrames: number;
+  totalMissedFrames: string;
+  clockDiscontinuities: number;
+  clockStartedAtNs?: string;
+  clockState: FrameClockState;
+  effectiveFrameRate: number;
+  averageTickIntervalNs: string;
 }
 /** Public UBOS runtime execution-engine API. */
 export class RuntimeTelemetryCollector {
@@ -276,6 +314,21 @@ export class RuntimeTelemetryCollector {
       processorExecutions: 0,
       processorFailures: 0,
       healthStatus: 'stopped',
+      configuredFrameRate: { numerator: 30000, denominator: 1001, label: '29.97' },
+      currentFrameNumber: '0',
+      scheduledFrameTimeNs: '0',
+      actualFrameTimeNs: '0',
+      frameDurationNs: '0',
+      currentDriftNs: '0',
+      maximumAbsoluteDriftNs: '0',
+      currentLatenessNs: '0',
+      maximumLatenessNs: '0',
+      totalLateFrames: 0,
+      totalMissedFrames: '0',
+      clockDiscontinuities: 0,
+      clockState: 'CREATED',
+      effectiveFrameRate: 0,
+      averageTickIntervalNs: '0',
     };
   }
   /** Public UBOS runtime execution-engine API. */
@@ -288,6 +341,181 @@ export class RuntimeTelemetryCollector {
     return Object.freeze({ ...this.snapshot });
   }
 }
+
+/** Public UBOS runtime execution-engine API. */
+export type FrameClockState = 'CREATED' | 'RUNNING' | 'PAUSED' | 'STOPPED';
+/** Public UBOS runtime execution-engine API. */
+export interface MonotonicTimeSource {
+  nowNs(): bigint;
+}
+/** Public UBOS runtime execution-engine API. */
+export interface FrameWaitStrategy {
+  waitUntil(
+    deadlineNs: bigint,
+    timeSource: MonotonicTimeSource,
+    signal?: AbortSignal,
+  ): Promise<void>;
+}
+const NS_PER_SECOND = 1_000_000_000n;
+export const supportedRationalFrameRates: readonly RationalFrameRate[] = Object.freeze([
+  { numerator: 24000, denominator: 1001 },
+  { numerator: 24, denominator: 1 },
+  { numerator: 25, denominator: 1 },
+  { numerator: 30000, denominator: 1001 },
+  { numerator: 30, denominator: 1 },
+  { numerator: 50, denominator: 1 },
+  { numerator: 60000, denominator: 1001 },
+  { numerator: 60, denominator: 1 },
+]);
+export class FrameClockError extends RuntimeEngineError {}
+export class InvalidFrameRateError extends FrameClockError {
+  constructor(message: string) {
+    super('InvalidFrameRate', message);
+  }
+}
+export class InvalidFrameClockTransitionError extends FrameClockError {
+  constructor(from: FrameClockState, to: FrameClockState) {
+    super('InvalidFrameClockTransition', `Invalid frame clock transition from ${from} to ${to}`, {
+      from,
+      to,
+    });
+  }
+}
+export class FrameClockNotRunningError extends FrameClockError {
+  constructor(state: FrameClockState) {
+    super('FrameClockNotRunning', `Frame clock is not running from state ${state}`, { state });
+  }
+}
+export class FrameClockAlreadyRunningError extends FrameClockError {
+  constructor() {
+    super('FrameClockAlreadyRunning', 'Frame clock is already running');
+  }
+}
+export class FrameClockStoppedError extends FrameClockError {
+  constructor() {
+    super('FrameClockStopped', 'Frame clock is stopped');
+  }
+}
+export class FrameClockWaitCancelledError extends FrameClockError {
+  constructor() {
+    super('FrameClockWaitCancelled', 'Frame clock wait was cancelled');
+  }
+}
+export class InvalidFrameNumberError extends FrameClockError {
+  constructor(frameNumber: bigint) {
+    super('InvalidFrameNumber', 'Frame number cannot be negative', {
+      frameNumber: frameNumber.toString(),
+    });
+  }
+}
+export class InvalidClockConfigurationError extends FrameClockError {
+  constructor(message: string) {
+    super('InvalidClockConfiguration', message);
+  }
+}
+export class TimeSourceMovedBackwardError extends FrameClockError {
+  constructor(previous: bigint, current: bigint) {
+    super('TimeSourceMovedBackward', 'Monotonic time source moved backward', {
+      previous: previous.toString(),
+      current: current.toString(),
+    });
+  }
+}
+export const validateRationalFrameRate = (rate: RationalFrameRate): RationalFrameRate => {
+  for (const [name, value] of Object.entries(rate))
+    if (!Number.isSafeInteger(value) || value <= 0)
+      throw new InvalidFrameRateError(`${name} must be a positive safe integer`);
+  return Object.freeze({ numerator: rate.numerator, denominator: rate.denominator });
+};
+export const rationalFrameRatesEqual = (a: RationalFrameRate, b: RationalFrameRate) =>
+  BigInt(a.numerator) * BigInt(b.denominator) === BigInt(b.numerator) * BigInt(a.denominator);
+export const framesPerSecond = (rate: RationalFrameRate) =>
+  validateRationalFrameRate(rate).numerator / rate.denominator;
+export const frameRateLabel = (rate: RationalFrameRate) =>
+  rationalFrameRatesEqual(rate, { numerator: 24000, denominator: 1001 })
+    ? '23.976'
+    : rationalFrameRatesEqual(rate, { numerator: 30000, denominator: 1001 })
+      ? '29.97'
+      : rationalFrameRatesEqual(rate, { numerator: 60000, denominator: 1001 })
+        ? '59.94'
+        : String(framesPerSecond(rate));
+export const frameDurationNs = (rate: RationalFrameRate) =>
+  (NS_PER_SECOND * BigInt(validateRationalFrameRate(rate).denominator)) / BigInt(rate.numerator);
+export const frameNumberToTimestampNs = (frameNumber: bigint, rate: RationalFrameRate) => {
+  if (frameNumber < 0n) throw new InvalidFrameNumberError(frameNumber);
+  return (
+    (frameNumber * NS_PER_SECOND * BigInt(validateRationalFrameRate(rate).denominator)) /
+    BigInt(rate.numerator)
+  );
+};
+export const timestampNsToFrameNumber = (timestampNs: bigint, rate: RationalFrameRate) => {
+  if (timestampNs < 0n) throw new InvalidClockConfigurationError('timestamp cannot be negative');
+  return (
+    (timestampNs * BigInt(validateRationalFrameRate(rate).numerator)) /
+    (NS_PER_SECOND * BigInt(rate.denominator))
+  );
+};
+export class NodeMonotonicTimeSource implements MonotonicTimeSource {
+  nowNs() {
+    return BigInt(Math.floor(performance.now() * 1_000_000));
+  }
+}
+export class AsyncTimerFrameWaitStrategy implements FrameWaitStrategy {
+  async waitUntil(deadlineNs: bigint, timeSource: MonotonicTimeSource, signal?: AbortSignal) {
+    const delayMs = Number((deadlineNs - timeSource.nowNs()) / 1_000_000n);
+    if (delayMs <= 0) return;
+    await new Promise<void>((resolve, reject) => {
+      const t = setTimeout(resolve, delayMs);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(t);
+          reject(new FrameClockWaitCancelledError());
+        },
+        { once: true },
+      );
+    });
+  }
+}
+export class FakeMonotonicTimeSource implements MonotonicTimeSource {
+  constructor(private currentNs = 0n) {}
+  nowNs() {
+    return this.currentNs;
+  }
+  setNowNs(ns: bigint) {
+    this.currentNs = ns;
+  }
+  advanceNs(ns: bigint) {
+    this.currentNs += ns;
+  }
+  advanceMs(ms: number) {
+    this.advanceNs(BigInt(ms) * 1_000_000n);
+  }
+  advanceByFrames(frames: bigint, rate: RationalFrameRate) {
+    this.advanceNs(frameNumberToTimestampNs(frames, rate));
+  }
+  advanceTo(ns: bigint) {
+    this.currentNs = ns;
+  }
+  simulateLateWakeup(ns: bigint) {
+    this.advanceNs(ns);
+  }
+  simulateLargeTimeJump(ns: bigint) {
+    this.advanceNs(ns);
+  }
+}
+export class ImmediateFrameWaitStrategy implements FrameWaitStrategy {
+  async waitUntil() {}
+}
+export interface MasterFrameClockConfig {
+  frameRate: RationalFrameRate;
+  timeSource?: MonotonicTimeSource;
+  waitStrategy?: FrameWaitStrategy;
+  lateFrameToleranceNs?: bigint;
+  maximumCatchUpFrames?: number;
+  discontinuityThresholdNs?: bigint;
+}
+
 /** Public UBOS runtime execution-engine API. */
 export interface RuntimeContext {
   readonly runtimeId: string;
@@ -303,10 +531,174 @@ export interface RuntimeContext {
 }
 /** Public UBOS runtime execution-engine API. */
 export interface FrameTick {
+  /** Logical frame being executed; UBOS v5.1.2 emits frame 1 after one complete frame interval. */
   frameNumber: bigint;
+  /** Backward-compatible alias for actualTimeNs. */
   startedAtNs: bigint;
+  /** Backward-compatible alias for scheduledTimeNs. */
   deadlineAtNs: bigint;
+  /** Absolute monotonic deadline for this frame. */
+  scheduledTimeNs: bigint;
+  /** Monotonic time when the tick was produced. */
+  actualTimeNs: bigint;
+  /** Media timeline timestamp for this frame relative to the clock epoch. */
+  presentationTimeNs: bigint;
+  /** Floor of one rational frame duration for diagnostics only. */
+  frameDurationNs: bigint;
+  /** actualTimeNs - scheduledTimeNs. */
+  driftNs: bigint;
+  /** Positive amount by which execution missed its deadline. */
+  latenessNs: bigint;
+  /** True when lateness exceeds configured tolerance. */
+  late: boolean;
+  /** Frame boundaries skipped since the previous emitted tick. */
+  missedFrames: bigint;
+  /** True after pause/resume/reset, severe delay, or time-source jump. */
+  discontinuity: boolean;
 }
+
+/** Public UBOS runtime execution-engine API. */
+export interface MasterFrameClock {
+  readonly state: FrameClockState;
+  readonly frameRate: RationalFrameRate;
+  readonly currentFrame: bigint;
+  start(): void;
+  pause(): void;
+  resume(): void;
+  stop(): void;
+  reset(): void;
+  nextTick(): Promise<FrameTick>;
+  createTickAt(nowNs: bigint): FrameTick;
+  getDeadlineForFrame(frameNumber: bigint): bigint;
+}
+/** Public UBOS runtime execution-engine API. */
+export class RationalMasterFrameClock implements MasterFrameClock {
+  readonly frameRate: RationalFrameRate;
+  private readonly timeSource: MonotonicTimeSource;
+  private readonly waitStrategy: FrameWaitStrategy;
+  private readonly lateFrameToleranceNs: bigint;
+  private readonly maximumCatchUpFrames: number;
+  private readonly discontinuityThresholdNs: bigint;
+  private abort = new AbortController();
+  private epochNs = 0n;
+  private nextFrame = 1n;
+  private lastEmittedFrame = 0n;
+  private lastNowNs: bigint | undefined;
+  private markDiscontinuity = false;
+  #state: FrameClockState = 'CREATED';
+  constructor(config: MasterFrameClockConfig) {
+    this.frameRate = validateRationalFrameRate(config.frameRate);
+    this.timeSource = config.timeSource ?? new NodeMonotonicTimeSource();
+    this.waitStrategy = config.waitStrategy ?? new AsyncTimerFrameWaitStrategy();
+    this.lateFrameToleranceNs = config.lateFrameToleranceNs ?? 2_000_000n;
+    this.maximumCatchUpFrames = config.maximumCatchUpFrames ?? 5;
+    this.discontinuityThresholdNs = config.discontinuityThresholdNs ?? 500_000_000n;
+    if (this.maximumCatchUpFrames < 0 || !Number.isSafeInteger(this.maximumCatchUpFrames))
+      throw new InvalidClockConfigurationError(
+        'maximumCatchUpFrames must be a non-negative safe integer',
+      );
+  }
+  get state() {
+    return this.#state;
+  }
+  get currentFrame() {
+    return this.lastEmittedFrame;
+  }
+  start() {
+    if (this.#state === 'RUNNING') throw new FrameClockAlreadyRunningError();
+    if (this.#state === 'STOPPED') throw new FrameClockStoppedError();
+    if (this.#state !== 'CREATED')
+      throw new InvalidFrameClockTransitionError(this.#state, 'RUNNING');
+    this.epochNs = this.timeSource.nowNs();
+    this.nextFrame = 1n;
+    this.lastEmittedFrame = 0n;
+    this.lastNowNs = this.epochNs;
+    this.abort = new AbortController();
+    this.#state = 'RUNNING';
+  }
+  pause() {
+    if (this.#state !== 'RUNNING')
+      throw new InvalidFrameClockTransitionError(this.#state, 'PAUSED');
+    this.#state = 'PAUSED';
+    this.markDiscontinuity = true;
+  }
+  resume() {
+    if (this.#state !== 'PAUSED')
+      throw new InvalidFrameClockTransitionError(this.#state, 'RUNNING');
+    const now = this.timeSource.nowNs();
+    this.epochNs = now - frameNumberToTimestampNs(this.nextFrame - 1n, this.frameRate);
+    this.lastNowNs = now;
+    this.#state = 'RUNNING';
+    this.markDiscontinuity = true;
+  }
+  stop() {
+    if (this.#state === 'STOPPED') return;
+    this.abort.abort();
+    this.#state = 'STOPPED';
+  }
+  reset() {
+    if (this.#state === 'RUNNING')
+      throw new InvalidFrameClockTransitionError(this.#state, 'CREATED');
+    this.epochNs = 0n;
+    this.nextFrame = 1n;
+    this.lastEmittedFrame = 0n;
+    this.lastNowNs = undefined;
+    this.markDiscontinuity = true;
+    this.abort = new AbortController();
+    this.#state = 'CREATED';
+  }
+  async nextTick() {
+    if (this.#state === 'STOPPED') throw new FrameClockStoppedError();
+    if (this.#state !== 'RUNNING') throw new FrameClockNotRunningError(this.#state);
+    const deadline = this.getDeadlineForFrame(this.nextFrame);
+    await this.waitStrategy.waitUntil(deadline, this.timeSource, this.abort.signal);
+    if ((this.#state as FrameClockState) === 'STOPPED') throw new FrameClockWaitCancelledError();
+    return this.createTickAt(this.timeSource.nowNs());
+  }
+  getDeadlineForFrame(frameNumber: bigint) {
+    if (frameNumber < 0n) throw new InvalidFrameNumberError(frameNumber);
+    return this.epochNs + frameNumberToTimestampNs(frameNumber, this.frameRate);
+  }
+  createTickAt(nowNs: bigint) {
+    if (this.#state !== 'RUNNING') throw new FrameClockNotRunningError(this.#state);
+    if (this.lastNowNs !== undefined && nowNs < this.lastNowNs)
+      throw new TimeSourceMovedBackwardError(this.lastNowNs, nowNs);
+    const timelineFrame = timestampNsToFrameNumber(
+      nowNs - this.epochNs > 0n ? nowNs - this.epochNs : 0n,
+      this.frameRate,
+    );
+    const frameNumber = timelineFrame > this.nextFrame ? timelineFrame : this.nextFrame;
+    const scheduledTimeNs = this.getDeadlineForFrame(frameNumber);
+    const presentationTimeNs = frameNumberToTimestampNs(frameNumber, this.frameRate);
+    const driftNs = nowNs - scheduledTimeNs;
+    const latenessNs = driftNs > 0n ? driftNs : 0n;
+    const skipped =
+      frameNumber > this.lastEmittedFrame + 1n ? frameNumber - this.lastEmittedFrame - 1n : 0n;
+    const missedFrames = skipped > BigInt(this.maximumCatchUpFrames) ? skipped : skipped;
+    const tick = Object.freeze({
+      frameNumber,
+      startedAtNs: nowNs,
+      deadlineAtNs: scheduledTimeNs,
+      scheduledTimeNs,
+      actualTimeNs: nowNs,
+      presentationTimeNs,
+      frameDurationNs: frameDurationNs(this.frameRate),
+      driftNs,
+      latenessNs,
+      late: latenessNs > this.lateFrameToleranceNs,
+      missedFrames,
+      discontinuity: this.markDiscontinuity || latenessNs > this.discontinuityThresholdNs,
+    }) satisfies FrameTick;
+    this.lastEmittedFrame = frameNumber;
+    this.nextFrame = frameNumber + 1n;
+    this.lastNowNs = nowNs;
+    this.markDiscontinuity = false;
+    return tick;
+  }
+}
+export const createMasterFrameClock = (config: MasterFrameClockConfig) =>
+  new RationalMasterFrameClock(config);
+
 /** Public UBOS runtime execution-engine API. */
 export type RuntimeCommandHandler<T extends RuntimeCommand = RuntimeCommand> = (
   command: T,
@@ -547,6 +939,7 @@ export class RuntimeExecutionEngine {
   #tickInProgress = false;
   #startedAtMs?: number;
   #eventSequence = 0n;
+  readonly masterFrameClock: MasterFrameClock;
   /** Public UBOS runtime execution-engine API. */
   constructor(
     config: RuntimeEngineConfig = defaultRuntimeEngineConfig(),
@@ -560,9 +953,25 @@ export class RuntimeExecutionEngine {
     this.clock = clock;
     this.logger = logger;
     this.services = new Map([...services.entries()].sort(([a], [b]) => a.localeCompare(b)));
+    const injectedClock = services.get('masterFrameClock') as MasterFrameClock | undefined;
+    this.masterFrameClock =
+      injectedClock ??
+      createMasterFrameClock({
+        frameRate:
+          Number.isSafeInteger(this.config.frameRate.numerator) &&
+          this.config.frameRate.numerator > 0 &&
+          Number.isSafeInteger(this.config.frameRate.denominator) &&
+          this.config.frameRate.denominator > 0
+            ? this.config.frameRate
+            : defaultRuntimeEngineConfig().frameRate,
+        timeSource: this.clock,
+        lateFrameToleranceNs: this.config.lateFrameToleranceNs,
+        maximumCatchUpFrames: this.config.maximumCatchUpFrames,
+        discontinuityThresholdNs: this.config.discontinuityThresholdNs,
+      });
     this.scheduler = new DeterministicCommandScheduler(
       this.config.commandQueueCapacity,
-      () => this.#frameNumber,
+      () => this.masterFrameClock.currentFrame || this.#frameNumber,
     );
     this.telemetry = new RuntimeTelemetryCollector(this.config.runtimeId);
     this.registerBuiltIns();
@@ -594,17 +1003,24 @@ export class RuntimeExecutionEngine {
   validateConfig() {
     const c = this.config;
     if (!c.runtimeId.trim()) throw new InvalidEngineConfigurationError('runtimeId is required');
+    validateRationalFrameRate(c.frameRate);
     for (const [k, v] of Object.entries({
-      numerator: c.frameRate.numerator,
-      denominator: c.frameRate.denominator,
       commandQueueCapacity: c.commandQueueCapacity,
       maximumCommandsPerTick: c.maximumCommandsPerTick,
       tickDeadlineWarningMs: c.tickDeadlineWarningMs,
       watchdogTimeoutMs: c.watchdogTimeoutMs,
       telemetryIntervalMs: c.telemetryIntervalMs,
+      maximumCatchUpFrames: c.maximumCatchUpFrames,
     }))
       if (!Number.isFinite(v) || v <= 0)
         throw new InvalidEngineConfigurationError(`${k} must be positive`);
+    for (const [k, v] of Object.entries({
+      lateFrameToleranceNs: c.lateFrameToleranceNs,
+      discontinuityThresholdNs: c.discontinuityThresholdNs,
+      clockSpinThresholdNs: c.clockSpinThresholdNs,
+      coarseSleepThresholdNs: c.coarseSleepThresholdNs,
+    }))
+      if (v < 0n) throw new InvalidEngineConfigurationError(`${k} must be non-negative`);
   }
   /** Public UBOS runtime execution-engine API. */
   async initialize() {
@@ -621,12 +1037,23 @@ export class RuntimeExecutionEngine {
     if (this.#state !== 'READY' && this.#state !== 'PAUSED' && this.#state !== 'DEGRADED')
       throw new RuntimeNotReadyError(this.#state);
     this.#startedAtMs ??= this.clock.nowMs();
+    if (this.masterFrameClock.state === 'CREATED') {
+      this.masterFrameClock.start();
+      await this.emit('FrameClockStarted', { frameRate: frameRateLabel(this.config.frameRate) });
+    } else if (this.masterFrameClock.state === 'PAUSED') {
+      this.masterFrameClock.resume();
+      await this.emit('FrameClockResumed', {});
+    }
     this.transition('RUNNING');
     await this.emit('RuntimeStarted', {});
   }
   /** Public UBOS runtime execution-engine API. */
   async pause() {
     if (this.#state === 'PAUSED') return;
+    if (this.masterFrameClock.state === 'RUNNING') {
+      this.masterFrameClock.pause();
+      await this.emit('FrameClockPaused', {});
+    }
     this.transition('PAUSED');
     await this.emit('RuntimePaused', {});
   }
@@ -642,6 +1069,8 @@ export class RuntimeExecutionEngine {
     this.transition('STOPPING');
     await this.emit('RuntimeStopping', {});
     this.#abort.abort();
+    this.masterFrameClock.stop();
+    await this.emit('FrameClockStopped', {});
     await this.processors.shutdownAll(this.context());
     this.transition('STOPPED');
     await this.emit('RuntimeStopped', {});
@@ -674,17 +1103,41 @@ export class RuntimeExecutionEngine {
     this.#tickInProgress = true;
     this.processors.markLocked(true);
     const startMs = this.clock.nowMs();
-    const tick: FrameTick = {
-      frameNumber: this.#frameNumber,
-      startedAtNs: this.clock.nowNs(),
-      deadlineAtNs:
-        this.clock.nowNs() +
-        BigInt(
-          Math.round(
-            (1_000_000_000 * this.config.frameRate.denominator) / this.config.frameRate.numerator,
-          ),
-        ),
-    };
+    const tick = this.masterFrameClock.createTickAt(this.clock.nowNs());
+    this.#frameNumber = tick.frameNumber;
+    await this.emit(
+      'FrameTickProduced',
+      {
+        scheduledTimeNs: tick.scheduledTimeNs.toString(),
+        actualTimeNs: tick.actualTimeNs.toString(),
+        latenessNs: tick.latenessNs.toString(),
+        missedFrames: tick.missedFrames.toString(),
+        discontinuity: tick.discontinuity,
+      },
+      undefined,
+      this.#frameNumber,
+    );
+    if (tick.late)
+      await this.emit(
+        'FrameTickLate',
+        { latenessNs: tick.latenessNs.toString() },
+        undefined,
+        this.#frameNumber,
+      );
+    if (tick.missedFrames > 0n)
+      await this.emit(
+        'FrameFramesMissed',
+        { missedFrames: tick.missedFrames.toString() },
+        undefined,
+        this.#frameNumber,
+      );
+    if (tick.discontinuity)
+      await this.emit(
+        'FrameClockDiscontinuity',
+        { frameNumber: tick.frameNumber.toString() },
+        undefined,
+        this.#frameNumber,
+      );
     await this.emit('RuntimeTickStarted', {}, undefined, this.#frameNumber);
     let commandErrors = 0,
       processorErrors = 0;
@@ -720,7 +1173,7 @@ export class RuntimeExecutionEngine {
         }
       }
       const dur = this.clock.nowMs() - startMs;
-      const late = dur > this.config.tickDeadlineWarningMs;
+      const late = dur > this.config.tickDeadlineWarningMs || tick.late;
       if (late)
         await this.emit('RuntimeTickOverrun', { durationMs: dur }, undefined, this.#frameNumber);
       this.telemetry.commit({
@@ -743,9 +1196,40 @@ export class RuntimeExecutionEngine {
             : late
               ? 'degraded'
               : 'healthy',
+        configuredFrameRate: {
+          ...this.config.frameRate,
+          label: frameRateLabel(this.config.frameRate),
+        },
+        currentFrameNumber: this.#frameNumber.toString(),
+        scheduledFrameTimeNs: tick.scheduledTimeNs.toString(),
+        actualFrameTimeNs: tick.actualTimeNs.toString(),
+        frameDurationNs: tick.frameDurationNs.toString(),
+        currentDriftNs: tick.driftNs.toString(),
+        maximumAbsoluteDriftNs:
+          (tick.driftNs < 0n ? -tick.driftNs : tick.driftNs) >
+          BigInt(this.telemetry.current().maximumAbsoluteDriftNs)
+            ? (tick.driftNs < 0n ? -tick.driftNs : tick.driftNs).toString()
+            : this.telemetry.current().maximumAbsoluteDriftNs,
+        currentLatenessNs: tick.latenessNs.toString(),
+        maximumLatenessNs:
+          tick.latenessNs > BigInt(this.telemetry.current().maximumLatenessNs)
+            ? tick.latenessNs.toString()
+            : this.telemetry.current().maximumLatenessNs,
+        totalLateFrames: this.telemetry.current().totalLateFrames + (tick.late ? 1 : 0),
+        totalMissedFrames: (
+          BigInt(this.telemetry.current().totalMissedFrames) + tick.missedFrames
+        ).toString(),
+        clockDiscontinuities:
+          this.telemetry.current().clockDiscontinuities + (tick.discontinuity ? 1 : 0),
+        clockStartedAtNs: this.masterFrameClock.getDeadlineForFrame(0n).toString(),
+        clockState: this.masterFrameClock.state,
+        effectiveFrameRate: framesPerSecond(this.config.frameRate),
+        averageTickIntervalNs:
+          this.telemetry.current().totalTicks === 0
+            ? '0'
+            : (tick.actualTimeNs / BigInt(this.telemetry.current().totalTicks + 1)).toString(),
       });
       await this.emit('RuntimeTickCompleted', { durationMs: dur }, undefined, this.#frameNumber);
-      this.#frameNumber++;
     } finally {
       this.processors.markLocked(false);
       this.#tickInProgress = false;
