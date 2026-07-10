@@ -148,7 +148,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   const [viewport, setViewport] = useState(DEFAULT_VIEWPORT);
   const [hydrated, setHydrated] = useState(false);
   /** User-chosen dock sizes (keyed by zone id, in px). Persisted as part of prefs. */
-  const [zoneSizes, setZoneSizesState] = useState<Record<string, number>>({});
+  const [zoneSizes, setZoneSizesState] = useState<Partial<Record<WorkspaceZoneId, number>>>({});
   // Ref so persist() always writes the latest zone sizes without taking them as deps.
   const zoneSizesRef = useRef(zoneSizes);
   zoneSizesRef.current = zoneSizes;

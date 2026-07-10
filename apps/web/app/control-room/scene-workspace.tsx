@@ -4779,7 +4779,7 @@ export function SceneWorkspace({
         droppedLabel:
           safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
         latencyLabel:
-          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : undefined,
+          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
       }}
       previewOverlay={{
         sceneName: previewScene.name,
@@ -4787,6 +4787,8 @@ export function SceneWorkspace({
         armedGraphicsCount: previewSceneComposition.layers.filter(
           (layer) => layer.previewState === 'preview',
         ).length,
+        latencyLabel:
+          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
       }}
     />
   );

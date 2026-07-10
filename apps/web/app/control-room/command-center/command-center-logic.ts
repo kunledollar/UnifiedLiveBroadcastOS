@@ -18,7 +18,7 @@ import type {
   WorkspacePresetId,
   WorkspaceZoneId,
 } from '@ubos/shared';
-import { WORKSPACE_PANEL_IDS, WORKSPACE_ZONE_IDS } from '@ubos/shared';
+import { WORKSPACE_PANEL_IDS, WORKSPACE_ZONE_IDS, clampZoneSize, workspaceZoneDefinitions } from '@ubos/shared';
 import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../shell/types';
 import type { OperationsDockSectionId } from '../operations/operations-dock-types';
 import type { UbosWorkspaceModeId } from '../menu/ubos-menu-types';
@@ -351,7 +351,7 @@ export type CommandCenterPrefs = {
   layoutLocked: boolean;
   safeAreasVisible: boolean;
   /** User-chosen dock sizes in pixels, keyed by zone id. */
-  zoneSizes: Record<string, number>;
+  zoneSizes: Partial<Record<WorkspaceZoneId, number>>;
 };
 
 export const COMMAND_CENTER_PREFS_STORAGE_KEY = 'ubos.command-center.prefs.v1';
@@ -423,12 +423,15 @@ export function parseCommandCenterPrefs(serialized: string): CommandCenterPrefs 
  * Validate and sanitize a raw `zoneSizes` value from stored prefs.
  * Only numeric values for known resizable zone ids are retained.
  */
-function parseZoneSizes(raw: unknown): Record<string, number> {
+function parseZoneSizes(raw: unknown): Partial<Record<WorkspaceZoneId, number>> {
   if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
-  const result: Record<string, number> = {};
+  const result: Partial<Record<WorkspaceZoneId, number>> = {};
   for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
     if (zoneIdSet.has(key) && typeof value === 'number' && isFinite(value) && value > 0) {
-      result[key] = value;
+      const zoneId = key as WorkspaceZoneId;
+      if (workspaceZoneDefinitions[zoneId]?.resizable) {
+        result[zoneId] = clampZoneSize(zoneId, value);
+      }
     }
   }
   return result;

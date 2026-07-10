@@ -42,7 +42,7 @@ import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../
 import type { MonitorStatusInfo } from '../broadcast-command-center/CenterProgramPreviewDeck';
 import type { OperationsDockSection } from '../broadcast-command-center/RightOperationsDock';
 import { broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
-import { DockResizeHandle } from '../broadcast-command-center/DockResizeHandle';
+import { DockResizeHandle } from './DockResizeHandle';
 import { CommandCenterBottomWorkspace } from './CommandCenterBottomWorkspace';
 import { CommandCenterLeftDock } from './CommandCenterLeftDock';
 import { CommandCenterLeftRail } from './CommandCenterLeftRail';

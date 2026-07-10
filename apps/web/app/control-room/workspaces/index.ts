@@ -7,7 +7,6 @@ export { WorkspacePanel, WorkspacePanelEmpty } from './WorkspacePanel';
 export { MultiViewRenderer, type MonitorCellKind, type MonitorCellSpec } from './MultiViewRenderer';
 export { MonitorGrid } from './MonitorGrid';
 export { SafeAreaControls } from './SafeAreaControls';
-export { WorkspaceSelector } from './WorkspaceSelector';
 export { LayoutFocusSelector } from './LayoutFocusSelector';
 export { WorkspaceLayout } from './WorkspaceLayout';
 export {
