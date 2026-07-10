@@ -296,6 +296,8 @@ import {
   IngestRuntimeController,
   PipelineFactory,
   attachPipelineMetadataToGraph,
+  OutputRuntimeController,
+  attachOutputMetadataToGraph,
 } from './index.js';
 
 const command = (
@@ -6002,3 +6004,49 @@ const graphWithPipeline = attachPipelineMetadataToGraph(session.graph, ingestRun
 assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.containsMediaHandles, false, 'ProductionGraph ingest node contains metadata only');
 assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.pipelineState, 'Recovering', 'ProductionGraph ingest node exposes pipeline state metadata');
 assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'ingest-runtime-controller'), true, 'RuntimeController owns IngestRuntimeController lifecycle');
+
+
+// UBOS Version 4.5 Broadcast Output & Distribution Runtime validation
+const outputRuntime = new OutputRuntimeController(v43Runtime.bus);
+v43Runtime.register(outputRuntime);
+const outputRegistration = {
+  outputId: 'output-program-rtmp',
+  outputType: 'RTMP' as const,
+  destination: 'rtmp://example.invalid/live/program',
+  encoder: 'existing-streaming-encoder',
+  transport: 'existing-ffmpeg-transport',
+  healthProvider: 'streaming-health-provider',
+  runtimeOwner: 'output-runtime-controller',
+  priority: 10,
+  productionGraphSource: 'Program' as const,
+  productionGraphNodeId: 'destination-program-rtmp',
+  recoveryStrategy: 'backoff' as const,
+};
+const outputNode = outputRuntime.registerOutput(outputRegistration);
+assert.equal(outputNode.containsMediaHandles, false, 'output runtime objects are metadata-only');
+assert.equal(outputNode.containsMediaPayloads, false, 'output runtime objects never contain media payloads');
+let duplicateOutputRejected = false;
+try { outputRuntime.registerOutput(outputRegistration); } catch { duplicateOutputRejected = true; }
+assert.equal(duplicateOutputRejected, true, 'output registry rejects duplicate registrations');
+outputRuntime.transitionOutput('output-program-rtmp', 'Initializing');
+outputRuntime.transitionOutput('output-program-rtmp', 'Ready');
+outputRuntime.transitionOutput('output-program-rtmp', 'Running');
+let illegalOutputTransitionRejected = false;
+try { outputRuntime.transitionOutput('output-program-rtmp', 'Created'); } catch { illegalOutputTransitionRejected = true; }
+assert.equal(illegalOutputTransitionRejected, true, 'output lifecycle rejects illegal state transitions');
+const routedOutput = outputRuntime.updateRoute('output-program-rtmp', { source: 'Program', productionGraphSourceId: 'program-scene-1' });
+assert.equal(routedOutput.route.deterministicRouteKey, 'Program:program-scene-1->output-program-rtmp', 'output routing metadata is deterministic');
+outputRuntime.updateHealth('output-program-rtmp', { latencyMs: 80, bitrateKbps: 6000, frameRate: 30, resolution: '1920x1080', packetLoss: 0.01, encoderStatus: 'encoding', connectionStatus: 'connected', uptimeMs: 1000, status: 'Running' });
+assert.equal(outputRuntime.getOutputHealth('output-program-rtmp')?.bitrateKbps, 6000, 'output health monitor propagates output health metadata');
+outputRuntime.updateMetrics('output-program-rtmp', { framesSent: 300, bytesSent: 2400000, bandwidthKbps: 6000, uptimeMs: 1000 });
+assert.equal(outputRuntime.getOutputMetrics('output-program-rtmp')?.framesSent, 300, 'output metrics collector records frames sent metadata');
+const recoveredOutput = outputRuntime.restartMetadata('output-program-rtmp');
+assert.equal(recoveredOutput.metrics.recoveries, 1, 'output recovery records recoveries without changing Program routing');
+assert.equal(outputRuntime.recovery.calculateDelay(3, 'backoff'), 4000, 'output recovery calculates exponential backoff');
+assert.equal(outputRuntime.getOutputMetrics('output-program-rtmp')?.restarts, 1, 'output metrics collector records output restarts');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'OutputHealthChanged'), true, 'RuntimeEventBus propagates output health events');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'OutputRecovered'), true, 'RuntimeEventBus propagates output recovery events');
+const graphWithOutput = attachOutputMetadataToGraph(session.graph, outputRuntime.getOutput('output-program-rtmp')!);
+assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.containsMediaHandles, false, 'ProductionGraph output node contains metadata only');
+assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.state, 'Recovering', 'ProductionGraph output node exposes output state metadata');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'output-runtime-controller'), true, 'RuntimeController owns OutputRuntimeController lifecycle');
