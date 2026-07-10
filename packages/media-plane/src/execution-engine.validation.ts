@@ -523,14 +523,14 @@ async function readyEngine(
   const collected = scheduler.collectDue(120n, 120_000n);
   assertDeepEqual(
     collected.commands.map((c) => c.id),
-    ['GRAPHIC_OUT', 'CUT_CAMERA_2', 'AUDIO_FADE', 'LOWER_THIRD_TAKE'],
+    ['GRAPHIC_OUT', 'AUDIO_FADE', 'LOWER_THIRD_TAKE'],
   );
-  assertDeepEqual(collected.readyIds, [
-    'GRAPHIC_OUT',
-    'CUT_CAMERA_2',
-    'AUDIO_FADE',
-    'LOWER_THIRD_TAKE',
-  ]);
+  assertDeepEqual(collected.readyIds, ['GRAPHIC_OUT', 'AUDIO_FADE', 'LOWER_THIRD_TAKE']);
+  scheduler.markCompleted('GRAPHIC_OUT');
+  assertDeepEqual(
+    scheduler.collectDue(120n, 120_000n).commands.map((c) => c.id),
+    ['CUT_CAMERA_2'],
+  );
   assertEqual(scheduler.snapshot().maximumQueueDepth, 4);
 }
 {
@@ -591,6 +591,271 @@ async function readyEngine(
   scheduler.schedule(cmd('late-drop', { targetFrame: 1n, policy: 'DROP_IF_LATE' }));
   assertDeepEqual(scheduler.collectDue(10n, 1_000n).expiredIds, ['late-drop']);
   assertEqual(scheduler.snapshot().expiredCommands, 1);
+}
+
+// UBOS v5.1.3 final deterministic scheduler audit coverage.
+const makePrng = (seed: number) => () => {
+  seed = (seed * 1664525 + 1013904223) >>> 0;
+  return seed / 0x100000000;
+};
+const shuffled = <T>(items: readonly T[], seed: number) => {
+  const rand = makePrng(seed);
+  const out = [...items];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
+};
+const serializeSchedulerSnapshot = (scheduler: DeterministicCommandScheduler) =>
+  JSON.stringify({
+    pending: scheduler.inspectPendingCommands().map((c) => c.id),
+    snapshot: scheduler.snapshot(),
+  });
+{
+  const base = [
+    cmd('A1', {
+      sequence: 1n,
+      targetFrame: 10n,
+      scheduledTimeNs: 100n,
+      priority: 5,
+      groupId: 'g1',
+    }),
+    cmd('A2', {
+      sequence: 2n,
+      targetFrame: 10n,
+      scheduledTimeNs: 100n,
+      priority: 5,
+      groupId: 'g1',
+    }),
+    cmd('B1', { sequence: 3n, targetFrame: 9n, scheduledTimeNs: 90n, priority: 1 }),
+    cmd('D1', { sequence: 4n, targetFrame: 10n, scheduledTimeNs: 100n, priority: 9 }),
+    cmd('D2', {
+      sequence: 5n,
+      targetFrame: 10n,
+      scheduledTimeNs: 100n,
+      priority: 8,
+      dependencies: ['D1'],
+    }),
+    cmd('D3', {
+      sequence: 6n,
+      targetFrame: 10n,
+      scheduledTimeNs: 100n,
+      priority: 8,
+      dependencies: ['D1'],
+    }),
+    cmd('D4', {
+      sequence: 7n,
+      targetFrame: 11n,
+      scheduledTimeNs: 100n,
+      priority: 8,
+      dependencies: ['D2', 'D3'],
+    }),
+    cmd('LATE', {
+      sequence: 8n,
+      targetFrame: 1n,
+      scheduledTimeNs: 1n,
+      priority: 99,
+      policy: 'DROP_IF_LATE',
+    }),
+    cmd('CANCEL', { sequence: 9n, targetFrame: 10n, scheduledTimeNs: 100n, priority: 99 }),
+  ];
+  const run = (order: readonly RuntimeCommand[]) => {
+    const scheduler = new DeterministicCommandScheduler(
+      50,
+      () => 10n,
+      () => 100n,
+    );
+    for (const c of order) scheduler.schedule(c);
+    scheduler.cancel('CANCEL');
+    scheduler.assertInvariants();
+    const ready: string[] = [],
+      executed: string[] = [],
+      dep: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const batch = scheduler.collectDue(11n, 100n);
+      ready.push(...batch.readyIds);
+      dep.push(...batch.dependencySatisfied);
+      for (const c of batch.commands) {
+        executed.push(c.id);
+        scheduler.markCompleted(c.id);
+      }
+      scheduler.assertInvariants();
+    }
+    return {
+      ready,
+      executed,
+      dep,
+      snapshot: scheduler.snapshot(),
+      pending: scheduler.inspectPendingCommands().map((c) => c.id),
+    };
+  };
+  const expected = run(base);
+  for (let seed = 1; seed <= 200; seed++) assertDeepEqual(run(shuffled(base, seed)), expected);
+}
+{
+  const linear = new DeterministicCommandScheduler(
+    10,
+    () => 1n,
+    () => 1n,
+  );
+  ['L3', 'L1', 'L2'].forEach((id, i) =>
+    linear.schedule(
+      cmd(id, {
+        sequence: BigInt(i + 1),
+        dependencies: id === 'L1' ? [] : [id === 'L2' ? 'L1' : 'L2'],
+      }),
+    ),
+  );
+  assertDeepEqual(
+    linear.collectDue(1n, 1n).commands.map((c) => c.id),
+    ['L1'],
+  );
+  linear.markCompleted('L1');
+  assertDeepEqual(
+    linear.collectDue(1n, 1n).commands.map((c) => c.id),
+    ['L2'],
+  );
+  linear.markCompleted('L2');
+  assertDeepEqual(
+    linear.collectDue(1n, 1n).commands.map((c) => c.id),
+    ['L3'],
+  );
+  const failed = new DeterministicCommandScheduler(10);
+  failed.schedule(cmd('root', { sequence: 10n }));
+  failed.schedule(cmd('child', { sequence: 11n, dependencies: ['root'] }));
+  failed.markFailed('root');
+  assertDeepEqual(failed.collectDue(1n, 1n).failedDependencyIds, ['child']);
+  const cancelled = new DeterministicCommandScheduler(10);
+  cancelled.schedule(cmd('root', { sequence: 20n }));
+  cancelled.schedule(cmd('child', { sequence: 21n, dependencies: ['root'] }));
+  cancelled.cancel('root');
+  assertDeepEqual(cancelled.collectDue(1n, 1n).failedDependencyIds, ['child']);
+  const expired = new DeterministicCommandScheduler(10);
+  expired.schedule(cmd('root', { sequence: 30n, expiresAtFrame: 0n }));
+  expired.schedule(cmd('child', { sequence: 31n, dependencies: ['root'] }));
+  assertDeepEqual(expired.collectDue(1n, 1n).failedDependencyIds, ['child']);
+  const missing = new DeterministicCommandScheduler(10);
+  missing.schedule(cmd('orphan', { dependencies: ['never'] }));
+  assertDeepEqual(missing.collectDue(1n, 1n).failedDependencyIds, ['orphan']);
+  const cycle = new DeterministicCommandScheduler(10);
+  cycle.schedule(cmd('C1', { sequence: 41n, dependencies: ['C2'] }));
+  assertThrows(
+    () => cycle.schedule(cmd('C2', { sequence: 42n, dependencies: ['C1'] })),
+    /DependencyCycle/,
+  );
+}
+{
+  const scheduler = new DeterministicCommandScheduler(10);
+  scheduler.schedule(
+    cmd('immutable', {
+      payload: { nested: { value: 1 }, list: [1, 2] },
+      dependencies: ['dep'],
+      groupId: 'group',
+    }),
+  );
+  const pending = scheduler.listPending() as RuntimeCommand<{
+    nested: { value: number };
+    list: number[];
+  }>[];
+  assertThrows(() => {
+    pending[0]!.payload.nested.value = 99;
+  }, TypeError);
+  assertThrows(() => {
+    (pending[0]!.dependencies as string[]).push('evil');
+  }, TypeError);
+  const rec = scheduler.lookupById('immutable')! as typeof scheduler.lookupById extends (
+    id: string,
+  ) => infer R
+    ? R
+    : never;
+  assertThrows(() => {
+    (
+      rec as { command: RuntimeCommand<{ nested: { value: number } }> }
+    ).command.payload.nested.value = 88;
+  }, TypeError);
+  assertDeepEqual(scheduler.lookupById('immutable')?.command.payload, {
+    nested: { value: 1 },
+    list: [1, 2],
+  });
+  const snap = scheduler.snapshot() as { pendingCommands: number };
+  assertThrows(() => {
+    snap.pendingCommands = 999;
+  }, TypeError);
+  assertEqual(scheduler.snapshot().pendingCommands, 1);
+}
+{
+  const counts = new Map<string, number>();
+  const engine = await readyEngine(new InMemoryRuntimeEventPublisher(), new FakeClock(), {
+    commandQueueCapacity: 100,
+    maximumCommandsPerTick: 100,
+  });
+  engine.handlers.register('COUNT', (c) => {
+    counts.set(c.id, (counts.get(c.id) ?? 0) + 1);
+  });
+  await engine.start();
+  engine.schedule(cmd('once', { type: 'COUNT', sequence: 501n }));
+  await engine.executeSingleTick();
+  await engine.executeSingleTick();
+  assertEqual(counts.get('once'), 1);
+  assertThrows(
+    () => engine.schedule(cmd('once', { type: 'COUNT', sequence: 502n })),
+    DuplicateCommandError,
+  );
+  engine.schedule(cmd('cancelled-once', { type: 'COUNT', sequence: 503n }));
+  engine.scheduler.cancel('cancelled-once');
+  await engine.executeSingleTick();
+  assertEqual(counts.get('cancelled-once') ?? 0, 0);
+  const p1 = engine.executeSingleTick();
+  await assertRejects(() => engine.executeSingleTick(), /RuntimeTickInProgress/);
+  await p1;
+}
+{
+  const measurements: Record<string, Record<string, number>> = {};
+  for (const n of [10_000, 25_000]) {
+    const scheduler = new DeterministicCommandScheduler(
+      n + 10,
+      () => 1n,
+      () => 1n,
+    );
+    const start = performance.now();
+    for (let i = 0; i < n; i++)
+      scheduler.schedule(
+        cmd(`P${i}`, {
+          sequence: BigInt(i + 10_000),
+          groupId: `G${i % 10}`,
+          targetFrame: 1n,
+          scheduledTimeNs: 1n,
+          priority: i % 5,
+        }),
+      );
+    const inserted = performance.now();
+    scheduler.lookupById(`P${Math.floor(n / 2)}`);
+    const lookup = performance.now();
+    scheduler.lookupByGroup('G3');
+    const group = performance.now();
+    scheduler.cancel(`P${n - 1}`);
+    const cancel = performance.now();
+    scheduler.snapshot();
+    const snapshot = performance.now();
+    scheduler.collectDue(1n, 1n);
+    const due = performance.now();
+    measurements[String(n)] = {
+      insertionMs: inserted - start,
+      lookupByIdMs: lookup - inserted,
+      groupLookupMs: group - lookup,
+      cancelByIdMs: cancel - group,
+      snapshotMs: snapshot - cancel,
+      dueSortResolveMs: due - snapshot,
+    };
+    scheduler.assertInvariants();
+  }
+  console.log('scheduler large-queue measurements', JSON.stringify(measurements));
+  assertOk(
+    (measurements['25000']!.dueSortResolveMs ?? 0) /
+      (measurements['10000']!.dueSortResolveMs ?? 1) <
+      10,
+  );
 }
 
 console.log('execution-engine validation passed');
