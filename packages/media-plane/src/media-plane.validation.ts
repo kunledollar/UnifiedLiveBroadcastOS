@@ -293,6 +293,9 @@ import {
   createTransportManager,
   createDemoTransportWorkflow,
   transportProtocols,
+  IngestRuntimeController,
+  PipelineFactory,
+  attachPipelineMetadataToGraph,
 } from './index.js';
 
 const command = (
@@ -5954,3 +5957,48 @@ v43Runtime.initialize();
 v43Runtime.start();
 assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'DeviceDiscovered'), true, 'DeviceManager publishes metadata-only hot-plug discovery events through RuntimeEventBus');
 assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'device-manager' && subsystem.metadata.hardwarePlatform === 'v4.3'), true, 'RuntimeController owns the v4.3 DeviceManager lifecycle adapter');
+
+
+// UBOS Version 4.4 Media Pipeline & Ingest Runtime validation
+const ingestRuntime = new IngestRuntimeController(v43Runtime.bus);
+v43Runtime.register(ingestRuntime);
+const ingestRegistration = {
+  pipelineId: 'pipeline-camera-1',
+  sourceId: 'source-camera-1',
+  deviceId: 'camera-1',
+  sourceType: 'Camera' as const,
+  runtimeAdapter: 'device-manager',
+  mediaAdapter: 'camera-adapter',
+  productionGraphNodeId: 'source-node-camera-1',
+  healthProvider: 'camera-health-provider',
+  selectedFormat: { resolution: '1920x1080', frameRate: 30, pixelFormat: 'yuv420p', colorSpace: 'rec709', sampleRate: 48000, channelLayout: 'stereo' },
+  priority: 10,
+  recoveryStrategy: 'backoff' as const,
+};
+const ingestPipeline = ingestRuntime.registerPipeline(ingestRegistration);
+assert.equal(ingestPipeline.containsMediaHandles, false, 'ingest pipelines are metadata-only objects');
+let duplicateRejected = false;
+try { ingestRuntime.registerPipeline(ingestRegistration); } catch { duplicateRejected = true; }
+assert.equal(duplicateRejected, true, 'pipeline registry rejects duplicate registrations');
+assert.equal(new PipelineFactory().selectAdapter('Camera').id, 'camera-adapter', 'pipeline factory selects camera adapter deterministically');
+assert.equal(new PipelineFactory().selectAdapter('SRT').id, 'network-adapter', 'pipeline factory selects network adapter deterministically');
+ingestRuntime.transitionPipeline('pipeline-camera-1', 'Initializing');
+ingestRuntime.transitionPipeline('pipeline-camera-1', 'Ready');
+ingestRuntime.transitionPipeline('pipeline-camera-1', 'Running');
+let illegalPipelineTransitionRejected = false;
+try { ingestRuntime.transitionPipeline('pipeline-camera-1', 'Created'); } catch { illegalPipelineTransitionRejected = true; }
+assert.equal(illegalPipelineTransitionRejected, true, 'pipeline lifecycle rejects illegal state transitions');
+ingestRuntime.updateHealth('pipeline-camera-1', { latencyMs: 42, bufferUtilization: 3, frameAvailable: true, audioAvailable: true, frameDrops: 1, packetLoss: 0, decoderState: 'decoding', status: 'Running' });
+assert.equal(ingestRuntime.getPipelineHealth('pipeline-camera-1')?.latencyMs, 42, 'pipeline health monitor propagates latency metadata');
+ingestRuntime.updateFormat('pipeline-camera-1', { frameRate: 60, hdrMetadata: { eotf: 'pq' } });
+assert.equal(ingestRuntime.getPipeline('pipeline-camera-1')?.registration.selectedFormat.frameRate, 60, 'pipeline capability resolver negotiates format metadata');
+const recoveredPipeline = ingestRuntime.restartMetadata('pipeline-camera-1');
+assert.equal(recoveredPipeline.metrics.recoveries, 1, 'pipeline recovery records recovery attempts without switching Program');
+assert.equal(ingestRuntime.recovery.calculateDelay(3, 'backoff'), 4000, 'pipeline recovery calculates exponential backoff');
+assert.equal(ingestRuntime.getPipelineMetrics('pipeline-camera-1')?.restarts, 1, 'pipeline metrics collector records metadata restarts');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'PipelineHealthChanged'), true, 'RuntimeEventBus propagates ingest health events');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'PipelineRecovered'), true, 'RuntimeEventBus propagates ingest recovery events');
+const graphWithPipeline = attachPipelineMetadataToGraph(session.graph, ingestRuntime.getPipeline('pipeline-camera-1')!);
+assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.containsMediaHandles, false, 'ProductionGraph ingest node contains metadata only');
+assert.equal(graphWithPipeline.sources['source-node-camera-1']?.metadata.pipelineState, 'Recovering', 'ProductionGraph ingest node exposes pipeline state metadata');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'ingest-runtime-controller'), true, 'RuntimeController owns IngestRuntimeController lifecycle');
