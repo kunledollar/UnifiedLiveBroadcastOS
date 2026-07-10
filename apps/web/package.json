@@ -2,7 +2,6 @@
   "name": "@ubos/web",
   "version": "1.0.0-rc.1",
   "private": true,
-  "type": "module",
   "scripts": {
     "clean": "rimraf .next",
     "dev": "next dev",
