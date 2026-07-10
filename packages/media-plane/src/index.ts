@@ -75,6 +75,34 @@ import {
   summarizeGpuHealth,
   type GpuSession,
 } from './gpu-runtime/index.js';
+
+export { RuntimeIntegrationAdapter, createBroadcastRuntimeCore } from './broadcast-runtime-core.js';
+export type { RuntimeSubsystem as BroadcastRuntimeSubsystem } from './broadcast-runtime-core.js';
+export {
+  DeviceRegistry,
+  DeviceDiscoveryManager,
+  StaticDiscoveryProvider,
+  DeviceConnectionManager,
+  DeviceCapabilityResolver,
+  DeviceProfileManager,
+  DeviceHealthMonitor,
+  assertMetadataSafe,
+  mapDeviceToProductionGraphMetadata,
+  calculateRecoveryDelay,
+} from './device-platform.js';
+export { createDiagnosticsManager, createDiagnosticsDemo } from './diagnostics/index.js';
+export {
+  MonitoringRuntimeController,
+  HealthAggregationManager,
+  TelemetryRegistry,
+  TelemetryHistoryStore,
+  AlertRegistry,
+  AlertLifecycleManager,
+  AlertRuleEngine,
+  IncidentManager,
+  DiagnosticSnapshotManager,
+  ProductionGraphTelemetryAdapter,
+} from './monitoring-runtime.js';
 export * from './ingest-runtime.js';
 export * from './output-runtime.js';
 export * from './session-runtime.js';
