@@ -518,6 +518,30 @@ export interface RuntimeTelemetrySnapshot {
   telemetryCommitFailures: number;
   lastTickResult?: RuntimeTickResult;
   recentTickHealthWindow: readonly RuntimeTickHealthEntry[];
+  watchdogState?: string;
+  watchdogStartedAtNs?: string;
+  watchdogStoppedAtNs?: string;
+  watchdogHeartbeatNs?: string;
+  watchdogEvaluations?: number;
+  watchdogEvaluationFailures?: number;
+  lastWatchdogEvaluationNs?: string;
+  lastWatchdogEvaluationDurationNs?: string;
+  maximumWatchdogEvaluationDurationNs?: string;
+  activeIncidentCount?: number;
+  resolvedIncidentCount?: number;
+  acknowledgedIncidentCount?: number;
+  criticalIncidentCount?: number;
+  recoveryAttempts?: number;
+  recoverySuccesses?: number;
+  recoveryFailures?: number;
+  recoveryBudgetExhaustions?: number;
+  healthStateTransitions?: number;
+  overallHealth?: string;
+  subsystemHealthSummary?: Readonly<Record<string, unknown>>;
+  staleSubsystemCount?: number;
+  lastRecoveryAction?: unknown;
+  lastIncident?: unknown;
+  diagnosticHistorySize?: number;
 }
 export type RuntimeLoopState =
   'IDLE' | 'STARTING' | 'RUNNING' | 'PAUSING' | 'PAUSED' | 'STOPPING' | 'STOPPED' | 'FAILED';
@@ -664,6 +688,26 @@ export class RuntimeTelemetryCollector {
       eventPublisherFailures: 0,
       telemetryCommitFailures: 0,
       recentTickHealthWindow: [],
+      watchdogState: 'CREATED',
+      watchdogHeartbeatNs: '0',
+      watchdogEvaluations: 0,
+      watchdogEvaluationFailures: 0,
+      lastWatchdogEvaluationNs: '0',
+      lastWatchdogEvaluationDurationNs: '0',
+      maximumWatchdogEvaluationDurationNs: '0',
+      activeIncidentCount: 0,
+      resolvedIncidentCount: 0,
+      acknowledgedIncidentCount: 0,
+      criticalIncidentCount: 0,
+      recoveryAttempts: 0,
+      recoverySuccesses: 0,
+      recoveryFailures: 0,
+      recoveryBudgetExhaustions: 0,
+      healthStateTransitions: 0,
+      overallHealth: 'UNKNOWN',
+      subsystemHealthSummary: {},
+      staleSubsystemCount: 0,
+      diagnosticHistorySize: 0,
     };
   }
   /** Public UBOS runtime execution-engine API. */
