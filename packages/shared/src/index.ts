@@ -706,3 +706,4 @@ export * from './workspace-manager/index.js';
 export * from './rundown-runtime/index.js';
 
 export * from './automation-runtime/index.js';
+export * from './control-api/index.js';
