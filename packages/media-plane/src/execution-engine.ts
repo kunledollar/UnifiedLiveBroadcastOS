@@ -53,6 +53,14 @@ export interface RuntimeEngineConfig {
   coarseSleepThresholdNs: bigint;
   failOnProcessorError: boolean;
   failOnCommandError: boolean;
+  defaultCommandTimeoutMs: number;
+  maximumCommandTimeoutMs: number;
+  executionHistoryCapacity: number;
+  maximumConsecutiveCommandFailures: number;
+  maximumFailuresPerWindow: number;
+  failureWindowMs: number;
+  failOnCommandTimeout: boolean;
+  continueAfterCommandCancellation: boolean;
 }
 /** Public UBOS runtime execution-engine API. */
 export const defaultRuntimeEngineConfig = (runtimeId = 'ubos-runtime'): RuntimeEngineConfig => ({
@@ -70,6 +78,14 @@ export const defaultRuntimeEngineConfig = (runtimeId = 'ubos-runtime'): RuntimeE
   coarseSleepThresholdNs: 2_000_000n,
   failOnProcessorError: true,
   failOnCommandError: false,
+  defaultCommandTimeoutMs: 1000,
+  maximumCommandTimeoutMs: 30_000,
+  executionHistoryCapacity: 1024,
+  maximumConsecutiveCommandFailures: 0,
+  maximumFailuresPerWindow: 0,
+  failureWindowMs: 60_000,
+  failOnCommandTimeout: false,
+  continueAfterCommandCancellation: true,
 });
 /** Public UBOS runtime execution-engine API. */
 export class RuntimeEngineError extends Error {
@@ -190,6 +206,11 @@ export interface RuntimeCommand<TPayload = unknown> {
   expiresAtFrame?: bigint;
   expiresAtNs?: bigint;
   policy?: CommandExecutionPolicy;
+  timeoutMs?: number;
+  retryPolicy?: CommandRetryPolicy;
+  idempotencyKey?: string;
+  metadata?: Readonly<Record<string, unknown>>;
+  causationId?: string;
 }
 /** Public UBOS runtime execution-engine API. */
 export type CommandExecutionPolicy =
@@ -292,7 +313,21 @@ export type RuntimeEventType =
   | 'ProcessorStarted'
   | 'ProcessorCompleted'
   | 'ProcessorFailed'
-  | 'WorkerHealthChanged';
+  | 'WorkerHealthChanged'
+  | 'CommandExecutionRequested'
+  | 'CommandExecutionStarted'
+  | 'CommandExecutionSucceeded'
+  | 'CommandExecutionFailed'
+  | 'CommandExecutionCancelled'
+  | 'CommandExecutionTimedOut'
+  | 'CommandRetryScheduled'
+  | 'CommandRetryStarted'
+  | 'CommandRetryExhausted'
+  | 'CommandDuplicateRejected'
+  | 'CommandHandlerResolved'
+  | 'CommandHandlerMissing'
+  | 'CommandBarrierReached'
+  | 'CommandBarrierReleased';
 /** Public UBOS runtime execution-engine API. */
 export interface RuntimeEvent<TPayload = Record<string, unknown>> {
   eventId: string;
@@ -344,6 +379,24 @@ export interface RuntimeTelemetrySnapshot {
   maximumQueueDepth: number;
   commandsExecuted: number;
   commandsFailed: number;
+  activeCommandExecutions: number;
+  totalCommandExecutions: number;
+  successfulCommandExecutions: number;
+  failedCommandExecutions: number;
+  cancelledCommandExecutions: number;
+  timedOutCommandExecutions: number;
+  retriedCommandExecutions: number;
+  exhaustedRetries: number;
+  duplicateExecutionRejections: number;
+  unknownHandlerFailures: number;
+  averageCommandDurationNs: string;
+  maximumCommandDurationNs: string;
+  consecutiveCommandFailures: number;
+  commandFailuresInWindow: number;
+  currentlyExecutingCommandId?: string | undefined;
+  currentlyExecutingCommandType?: string | undefined;
+  lastCommandExecution?: Readonly<Record<string, unknown>>;
+  executionHistorySize: number;
   processorExecutions: number;
   processorFailures: number;
   lastError?: string;
@@ -394,6 +447,21 @@ export class RuntimeTelemetryCollector {
       maximumQueueDepth: 0,
       commandsExecuted: 0,
       commandsFailed: 0,
+      activeCommandExecutions: 0,
+      totalCommandExecutions: 0,
+      successfulCommandExecutions: 0,
+      failedCommandExecutions: 0,
+      cancelledCommandExecutions: 0,
+      timedOutCommandExecutions: 0,
+      retriedCommandExecutions: 0,
+      exhaustedRetries: 0,
+      duplicateExecutionRejections: 0,
+      unknownHandlerFailures: 0,
+      averageCommandDurationNs: '0',
+      maximumCommandDurationNs: '0',
+      consecutiveCommandFailures: 0,
+      commandFailuresInWindow: 0,
+      executionHistorySize: 0,
       processorExecutions: 0,
       processorFailures: 0,
       healthStatus: 'stopped',
@@ -715,7 +783,7 @@ export class RationalMasterFrameClock implements MasterFrameClock {
     this.markDiscontinuity = true;
   }
   stop() {
-    if (this.#state === 'STOPPED') return;
+    if ((this.#state as RuntimeLifecycleState) === 'STOPPED') return;
     this.abort.abort();
     this.#state = 'STOPPED';
   }
@@ -783,10 +851,733 @@ export const createMasterFrameClock = (config: MasterFrameClockConfig) =>
   new RationalMasterFrameClock(config);
 
 /** Public UBOS runtime execution-engine API. */
-export type RuntimeCommandHandler<T extends RuntimeCommand = RuntimeCommand> = (
+export type CommandExecutionState =
+  | 'PENDING'
+  | 'STARTING'
+  | 'RUNNING'
+  | 'SUCCEEDED'
+  | 'FAILED'
+  | 'CANCELLED'
+  | 'TIMED_OUT'
+  | 'RETRY_WAIT';
+export type CommandExecutionOutcome = 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'TIMED_OUT';
+export interface RuntimeCommandError {
+  readonly code: string;
+  readonly message: string;
+  readonly details?: Readonly<Record<string, unknown>>;
+}
+export type CommandHandlerResult<TResult = unknown> =
+  | {
+      readonly status: 'SUCCEEDED';
+      readonly value?: TResult;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'FAILED';
+      readonly error: RuntimeCommandError | Error | string;
+      readonly retryable?: boolean;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'CANCELLED';
+      readonly reason?: string;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    };
+export interface RuntimeCommandContext extends Omit<RuntimeContext, 'telemetry'> {
+  readonly commandId: string;
+  readonly commandType: string;
+  readonly correlationId?: string;
+  readonly causationId?: string;
+  readonly source?: string;
+  readonly frameTick: FrameTick;
+  readonly currentFrameNumber: bigint;
+  readonly targetFrame?: bigint;
+  readonly executionStartedAtNs: bigint;
+  readonly cancellationSignal: AbortSignal;
+  readonly attempt: number;
+  readonly executionDeadlineNs: bigint;
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+export interface TypedRuntimeCommandHandler<TPayload = unknown, TResult = unknown> {
+  readonly commandType: string;
+  readonly handlerName?: string;
+  readonly idempotent?: boolean;
+  execute(
+    command: RuntimeCommand<TPayload>,
+    context: RuntimeCommandContext,
+  ): Promise<CommandHandlerResult<TResult>> | CommandHandlerResult<TResult>;
+}
+export type LegacyRuntimeCommandHandler<T extends RuntimeCommand = RuntimeCommand> = (
   command: T,
   context: RuntimeContext,
 ) => void | Promise<void>;
+export type RuntimeCommandHandler<T extends RuntimeCommand = RuntimeCommand> =
+  LegacyRuntimeCommandHandler<T> | TypedRuntimeCommandHandler;
+export interface CommandRetryPolicy {
+  readonly maxAttempts: number;
+  readonly initialDelayMs: number;
+  readonly backoffMultiplier: number;
+  readonly maximumDelayMs: number;
+  readonly retryableErrorCodes?: readonly string[];
+}
+export interface CommandHistoryClearPolicy {
+  readonly retainSuccessfulExecutions?: boolean;
+  readonly retainFailedExecutions?: boolean;
+  readonly retainCancelledExecutions?: boolean;
+  readonly retainTimedOutExecutions?: boolean;
+}
+export interface RuntimeCommandExecutionContextInput {
+  readonly runtimeContext: RuntimeContext;
+  readonly frameTick: FrameTick;
+}
+export interface CommandExecutionRecord {
+  readonly executionId: string;
+  readonly commandId: string;
+  readonly commandType: string;
+  readonly runtimeId: string;
+  readonly correlationId?: string;
+  readonly causationId?: string;
+  readonly frameNumber: string;
+  readonly targetFrame?: string;
+  readonly scheduledTimeNs?: string;
+  readonly startedAtNs: string;
+  readonly completedAtNs: string;
+  readonly durationNs: string;
+  readonly attempt: number;
+  readonly executionState: CommandExecutionState;
+  readonly outcome: CommandExecutionOutcome;
+  readonly handlerName?: string;
+  readonly retryable: boolean;
+  readonly timeout: boolean;
+  readonly cancellationReason?: string;
+  readonly errorCode?: string;
+  readonly errorMessage?: string;
+  readonly metadata: Readonly<Record<string, unknown>>;
+  readonly latenessNs: string;
+  readonly queueLatencyNs: string;
+  readonly idempotencyKey?: string;
+}
+export class UnknownCommandHandlerError extends RuntimeEngineError {
+  constructor(type: string) {
+    super('UnknownCommandHandler', `Unknown command handler for ${type}`, { type });
+  }
+}
+export class DuplicateCommandExecutionError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('DuplicateCommandExecution', `Command ${id} already has an execution`, { id });
+  }
+}
+export class CommandExecutionAlreadyTerminalError extends RuntimeEngineError {
+  constructor(id: string) {
+    super(
+      'CommandExecutionAlreadyTerminal',
+      `Command ${id} already reached a terminal execution state`,
+      { id },
+    );
+  }
+}
+export class CommandExecutionTimeoutError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('CommandExecutionTimeout', `Command ${id} timed out`, { id });
+  }
+}
+export class CommandExecutionCancelledError extends RuntimeEngineError {
+  constructor(id: string, reason?: string) {
+    super('CommandExecutionCancelled', `Command ${id} cancelled${reason ? `: ${reason}` : ''}`, {
+      id,
+      reason,
+    });
+  }
+}
+export class InvalidRetryPolicyError extends RuntimeEngineError {
+  constructor(message: string) {
+    super('InvalidRetryPolicy', message);
+  }
+}
+export class RetryAttemptsExhaustedError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('RetryAttemptsExhausted', `Retry attempts exhausted for ${id}`, { id });
+  }
+}
+export class ConflictingIdempotencyKeyError extends RuntimeEngineError {
+  constructor(key: string) {
+    super('ConflictingIdempotencyKey', `Conflicting idempotency key ${key}`, { key });
+  }
+}
+export class InvalidCommandTimeoutError extends RuntimeEngineError {
+  constructor(message: string) {
+    super('InvalidCommandTimeout', message);
+  }
+}
+export class HandlerReturnedInvalidResultError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('HandlerReturnedInvalidResult', `Handler returned invalid result for ${id}`, { id });
+  }
+}
+export class CommandExecutionInvariantViolationError extends RuntimeEngineError {
+  constructor(message: string) {
+    super('CommandExecutionInvariantViolation', message);
+  }
+}
+export class BarrierExecutionFailedError extends RuntimeEngineError {
+  constructor(id: string) {
+    super('BarrierExecutionFailed', `Barrier ${id} failed`, { id });
+  }
+}
+export interface CommandTimer {
+  sleep(ms: number, signal?: AbortSignal): Promise<void>;
+}
+export class DefaultCommandTimer implements CommandTimer {
+  sleep(ms: number, signal?: AbortSignal) {
+    return new Promise<void>((resolve, reject) => {
+      const t = setTimeout(resolve, ms);
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(t);
+          resolve();
+        },
+        { once: true },
+      );
+    });
+  }
+}
+const asError = (e: unknown): RuntimeCommandError =>
+  e instanceof RuntimeEngineError
+    ? { code: e.code, message: e.message }
+    : e instanceof Error
+      ? { code: e.name || 'Error', message: e.message }
+      : typeof e === 'object' && e && 'code' in e && 'message' in e
+        ? {
+            code: String((e as { code: unknown }).code),
+            message: String((e as { message: unknown }).message),
+          }
+        : { code: 'NonErrorThrown', message: String(e) };
+const validResult = (r: unknown): r is CommandHandlerResult =>
+  !!r &&
+  typeof r === 'object' &&
+  ['SUCCEEDED', 'FAILED', 'CANCELLED'].includes(String((r as { status?: unknown }).status));
+const retryDelayMs = (p: CommandRetryPolicy, attempt: number) =>
+  Math.min(
+    p.maximumDelayMs,
+    Math.trunc(
+      p.initialDelayMs * Math.max(1, Math.trunc(p.backoffMultiplier)) ** Math.max(0, attempt - 1),
+    ),
+  );
+export class RuntimeCommandExecutionEngine {
+  private active = new Map<string, AbortController>();
+  private terminalCommandIds = new Set<string>();
+  private terminalByCommand = new Map<string, CommandExecutionRecord>();
+  private byExecution = new Map<string, CommandExecutionRecord>();
+  private byCorrelation = new Map<string, CommandExecutionRecord[]>();
+  private byType = new Map<string, CommandExecutionRecord[]>();
+  private byOutcome = new Map<CommandExecutionOutcome, CommandExecutionRecord[]>();
+  private byIdempotency = new Map<string, CommandExecutionRecord>();
+  private idempotencyOwners = new Map<string, string>();
+  private order: string[] = [];
+  private seq = 0n;
+  constructor(
+    private readonly registry: CommandHandlerRegistry,
+    private readonly config: Readonly<RuntimeEngineConfig>,
+    private readonly clock: RuntimeClock,
+    private readonly emitEvent: (
+      eventType: RuntimeEventType,
+      payload: Record<string, unknown>,
+      correlationId?: string,
+      frameNumber?: bigint,
+    ) => Promise<void>,
+    private readonly telemetry: RuntimeTelemetryCollector,
+    private readonly timer: CommandTimer = new DefaultCommandTimer(),
+  ) {}
+  async execute(
+    command: RuntimeCommand,
+    input: RuntimeCommandExecutionContextInput,
+  ): Promise<CommandExecutionRecord> {
+    if (this.active.has(command.id)) {
+      this.telemetry.commit({
+        duplicateExecutionRejections: this.telemetry.current().duplicateExecutionRejections + 1,
+      });
+      await this.emitEvent(
+        'CommandDuplicateRejected',
+        { commandId: command.id, commandType: command.type },
+        command.correlationId,
+        input.frameTick.frameNumber,
+      );
+      throw new DuplicateCommandExecutionError(command.id);
+    }
+    if (this.terminalCommandIds.has(command.id))
+      throw new CommandExecutionAlreadyTerminalError(command.id);
+    if (command.idempotencyKey) {
+      const priorOwner = this.idempotencyOwners.get(command.idempotencyKey);
+      if (priorOwner && priorOwner !== command.id)
+        throw new ConflictingIdempotencyKeyError(command.idempotencyKey);
+    }
+    await this.emitEvent(
+      'CommandExecutionRequested',
+      { commandId: command.id, commandType: command.type },
+      command.correlationId,
+      input.frameTick.frameNumber,
+    );
+    let handler: RuntimeCommandHandler;
+    try {
+      handler = this.registry.resolve(command.type);
+      await this.emitEvent(
+        'CommandHandlerResolved',
+        { commandId: command.id, commandType: command.type },
+        command.correlationId,
+        input.frameTick.frameNumber,
+      );
+    } catch {
+      this.telemetry.commit({
+        unknownHandlerFailures: this.telemetry.current().unknownHandlerFailures + 1,
+      });
+      await this.emitEvent(
+        'CommandHandlerMissing',
+        { commandId: command.id, commandType: command.type },
+        command.correlationId,
+        input.frameTick.frameNumber,
+      );
+      return this.record(
+        command,
+        input,
+        1,
+        'FAILED',
+        { code: 'UnknownCommandHandler', message: `Unknown command handler for ${command.type}` },
+        undefined,
+        false,
+        true,
+      );
+    }
+    const policy = command.retryPolicy;
+    if (policy) this.validateRetry(policy);
+    let attempt = 1;
+    let last: CommandExecutionRecord;
+    while (true) {
+      if (attempt > 1)
+        await this.emitEvent(
+          'CommandRetryStarted',
+          { commandId: command.id, attempt },
+          command.correlationId,
+          input.frameTick.frameNumber,
+        );
+      last = await this.runAttempt(command, input, handler, attempt);
+      if (
+        last.outcome !== 'FAILED' ||
+        !policy ||
+        !last.retryable ||
+        attempt >= policy.maxAttempts ||
+        command.policy !== 'EXECUTE_UNTIL_SUCCESS'
+      )
+        break;
+      const delay = retryDelayMs(policy, attempt);
+      this.telemetry.commit({
+        retriedCommandExecutions: this.telemetry.current().retriedCommandExecutions + 1,
+      });
+      await this.emitEvent(
+        'CommandRetryScheduled',
+        { commandId: command.id, attempt: attempt + 1, delayMs: delay },
+        command.correlationId,
+        input.frameTick.frameNumber,
+      );
+      attempt++;
+      continue;
+    }
+    if (policy && last.outcome === 'FAILED' && last.retryable && attempt >= policy.maxAttempts) {
+      this.telemetry.commit({ exhaustedRetries: this.telemetry.current().exhaustedRetries + 1 });
+      await this.emitEvent(
+        'CommandRetryExhausted',
+        { commandId: command.id, attempts: attempt },
+        command.correlationId,
+        input.frameTick.frameNumber,
+      );
+    }
+    return last;
+  }
+  private async runAttempt(
+    command: RuntimeCommand,
+    input: RuntimeCommandExecutionContextInput,
+    handler: RuntimeCommandHandler,
+    attempt: number,
+  ) {
+    const ac = new AbortController();
+    this.active.set(command.id, ac);
+    const timeoutMs = this.timeoutFor(command);
+    const started = this.clock.nowNs();
+    const deadline = started + BigInt(timeoutMs) * 1_000_000n;
+    this.telemetry.commit({
+      activeCommandExecutions: this.active.size,
+      currentlyExecutingCommandId: command.id,
+      currentlyExecutingCommandType: command.type,
+    });
+    await this.emitEvent(
+      'CommandExecutionStarted',
+      { commandId: command.id, commandType: command.type, attempt },
+      command.correlationId,
+      input.frameTick.frameNumber,
+    );
+    await this.emitEvent(
+      'CommandStarted',
+      { commandId: command.id, commandType: command.type, attempt },
+      command.correlationId,
+      input.frameTick.frameNumber,
+    );
+    let timeout = false;
+    let result: CommandHandlerResult | undefined;
+    let error: RuntimeCommandError | undefined;
+    const ctx = Object.freeze({
+      ...input.runtimeContext,
+      telemetry: undefined,
+      commandId: command.id,
+      commandType: command.type,
+      correlationId: command.correlationId,
+      causationId: command.causationId,
+      source: command.source,
+      frameTick: input.frameTick,
+      currentFrameNumber: input.frameTick.frameNumber,
+      targetFrame: command.targetFrame,
+      executionStartedAtNs: started,
+      cancellationSignal: ac.signal,
+      attempt,
+      executionDeadlineNs: deadline,
+      metadata: Object.freeze({ ...(command.metadata ?? {}) }),
+    }) as RuntimeCommandContext;
+    const timeoutPromise = this.timer.sleep(timeoutMs, ac.signal).then(() => {
+      if (ac.signal.aborted) return;
+      timeout = true;
+      ac.abort('timeout');
+    });
+    try {
+      const invoke = (handler as TypedRuntimeCommandHandler).execute
+        ? (handler as TypedRuntimeCommandHandler).execute(command, ctx)
+        : (handler as LegacyRuntimeCommandHandler)(command, input.runtimeContext);
+      const value = await Promise.race([
+        Promise.resolve(invoke),
+        timeoutPromise.then(() => undefined),
+      ]);
+      if (timeout) error = asError(new CommandExecutionTimeoutError(command.id));
+      else result = value === undefined ? { status: 'SUCCEEDED' } : (value as CommandHandlerResult);
+    } catch (e) {
+      if (timeout) error = asError(new CommandExecutionTimeoutError(command.id));
+      else error = asError(e);
+    } finally {
+      ac.abort('complete');
+      this.active.delete(command.id);
+    }
+    if (timeout)
+      return this.record(command, input, attempt, 'TIMED_OUT', error, undefined, false, true);
+    if (ac.signal.aborted && ac.signal.reason !== 'complete')
+      return this.record(
+        command,
+        input,
+        attempt,
+        'CANCELLED',
+        undefined,
+        String(ac.signal.reason),
+        false,
+        false,
+      );
+    if (!result)
+      return this.record(
+        command,
+        input,
+        attempt,
+        'FAILED',
+        error ?? { code: 'UnknownFailure', message: 'Command failed' },
+        undefined,
+        false,
+        true,
+      );
+    if (!validResult(result))
+      return this.record(
+        command,
+        input,
+        attempt,
+        'FAILED',
+        asError(new HandlerReturnedInvalidResultError(command.id)),
+        undefined,
+        false,
+        true,
+      );
+    if (result.status === 'SUCCEEDED')
+      return this.record(
+        command,
+        input,
+        attempt,
+        'SUCCEEDED',
+        undefined,
+        undefined,
+        false,
+        false,
+        result.metadata,
+      );
+    if (result.status === 'CANCELLED')
+      return this.record(
+        command,
+        input,
+        attempt,
+        'CANCELLED',
+        undefined,
+        result.reason,
+        false,
+        false,
+        result.metadata,
+      );
+    const re = asError(result.error);
+    return this.record(
+      command,
+      input,
+      attempt,
+      'FAILED',
+      re,
+      undefined,
+      !!result.retryable,
+      true,
+      result.metadata,
+    );
+  }
+  cancel(commandId: string, reason = 'cancelled') {
+    const a = this.active.get(commandId);
+    if (!a) return false;
+    a.abort(reason);
+    return true;
+  }
+  cancelAll(reason = 'runtime stopping') {
+    let cancelled = 0;
+    for (const [commandId, controller] of this.active) {
+      controller.abort(reason);
+      cancelled++;
+    }
+    return cancelled;
+  }
+  getExecution(commandId: string) {
+    return this.terminalByCommand.get(commandId);
+  }
+  getExecutionById(id: string) {
+    return this.byExecution.get(id);
+  }
+  getExecutionByIdempotencyKey(key: string) {
+    return this.byIdempotency.get(key);
+  }
+  listExecutions() {
+    return Object.freeze(this.order.map((id) => this.byExecution.get(id)!).filter(Boolean));
+  }
+  listByCorrelationId(id: string) {
+    return Object.freeze([...(this.byCorrelation.get(id) ?? [])]);
+  }
+  listByCommandType(type: string) {
+    return Object.freeze([...(this.byType.get(type) ?? [])]);
+  }
+  listByOutcome(outcome: CommandExecutionOutcome) {
+    return Object.freeze([...(this.byOutcome.get(outcome) ?? [])]);
+  }
+  clearHistory(policy: CommandHistoryClearPolicy = {}) {
+    for (const r of this.listExecutions()) {
+      const keep =
+        (r.outcome === 'SUCCEEDED' && policy.retainSuccessfulExecutions) ||
+        (r.outcome === 'FAILED' && policy.retainFailedExecutions) ||
+        (r.outcome === 'CANCELLED' && policy.retainCancelledExecutions) ||
+        (r.outcome === 'TIMED_OUT' && policy.retainTimedOutExecutions);
+      if (!keep) this.deleteRecord(r);
+    }
+  }
+  private record(
+    command: RuntimeCommand,
+    input: RuntimeCommandExecutionContextInput,
+    attempt: number,
+    outcome: CommandExecutionOutcome,
+    error?: RuntimeCommandError,
+    cancellationReason?: string,
+    retryable = false,
+    failure = false,
+    metadata: Readonly<Record<string, unknown>> = {},
+  ) {
+    const completed = this.clock.nowNs();
+    const started = input.runtimeContext.monotonicTimeNs;
+    const executionId = `${this.config.runtimeId}:command:${(++this.seq).toString().padStart(12, '0')}`;
+    const rec = deepFreeze({
+      executionId,
+      commandId: command.id,
+      commandType: command.type,
+      runtimeId: this.config.runtimeId,
+      ...(command.correlationId ? { correlationId: command.correlationId } : {}),
+      ...(command.causationId ? { causationId: command.causationId } : {}),
+      frameNumber: input.frameTick.frameNumber.toString(),
+      ...(command.targetFrame !== undefined ? { targetFrame: command.targetFrame.toString() } : {}),
+      ...(command.scheduledTimeNs !== undefined
+        ? { scheduledTimeNs: command.scheduledTimeNs.toString() }
+        : {}),
+      startedAtNs: started.toString(),
+      completedAtNs: completed.toString(),
+      durationNs: (completed - started).toString(),
+      attempt,
+      executionState: outcome === 'TIMED_OUT' ? 'TIMED_OUT' : outcome,
+      outcome,
+      handlerName: command.type,
+      retryable,
+      timeout: outcome === 'TIMED_OUT',
+      ...(cancellationReason ? { cancellationReason } : {}),
+      ...(error ? { errorCode: error.code, errorMessage: error.message } : {}),
+      metadata: deepFreeze({ ...metadata }),
+      latenessNs: input.frameTick.latenessNs.toString(),
+      queueLatencyNs: (started - command.issuedAtNs > 0n
+        ? started - command.issuedAtNs
+        : 0n
+      ).toString(),
+      ...(command.idempotencyKey ? { idempotencyKey: command.idempotencyKey } : {}),
+    }) as CommandExecutionRecord;
+    this.insert(rec);
+    const t = this.telemetry.current();
+    const total = t.totalCommandExecutions + 1;
+    const dur = BigInt(rec.durationNs);
+    const avg = (
+      (BigInt(t.averageCommandDurationNs) * BigInt(t.totalCommandExecutions) + dur) /
+      BigInt(total)
+    ).toString();
+    const qavg = (
+      (BigInt(t.averageQueueLatencyNs) * BigInt(t.totalCommandExecutions) +
+        BigInt(rec.queueLatencyNs)) /
+      BigInt(total)
+    ).toString();
+    this.telemetry.commit({
+      activeCommandExecutions: this.active.size,
+      currentlyExecutingCommandId: undefined,
+      currentlyExecutingCommandType: undefined,
+      totalCommandExecutions: total,
+      successfulCommandExecutions:
+        t.successfulCommandExecutions + (outcome === 'SUCCEEDED' ? 1 : 0),
+      failedCommandExecutions: t.failedCommandExecutions + (outcome === 'FAILED' ? 1 : 0),
+      cancelledCommandExecutions: t.cancelledCommandExecutions + (outcome === 'CANCELLED' ? 1 : 0),
+      timedOutCommandExecutions: t.timedOutCommandExecutions + (outcome === 'TIMED_OUT' ? 1 : 0),
+      averageCommandDurationNs: avg,
+      maximumCommandDurationNs:
+        dur > BigInt(t.maximumCommandDurationNs) ? dur.toString() : t.maximumCommandDurationNs,
+      averageQueueLatencyNs: qavg,
+      maximumQueueLatencyNs:
+        BigInt(rec.queueLatencyNs) > BigInt(t.maximumQueueLatencyNs)
+          ? rec.queueLatencyNs
+          : t.maximumQueueLatencyNs,
+      consecutiveCommandFailures: failure ? t.consecutiveCommandFailures + 1 : 0,
+      commandFailuresInWindow: t.commandFailuresInWindow + (failure ? 1 : 0),
+      lastCommandExecution: {
+        executionId: rec.executionId,
+        commandId: rec.commandId,
+        outcome: rec.outcome,
+      },
+      executionHistorySize: this.order.length,
+    });
+    void this.emitEvent(
+      outcome === 'SUCCEEDED'
+        ? 'CommandExecutionSucceeded'
+        : outcome === 'FAILED'
+          ? 'CommandExecutionFailed'
+          : outcome === 'CANCELLED'
+            ? 'CommandExecutionCancelled'
+            : 'CommandExecutionTimedOut',
+      {
+        commandId: command.id,
+        commandType: command.type,
+        executionId,
+        attempt,
+        durationNs: rec.durationNs,
+        outcome,
+        errorCode: rec.errorCode,
+        errorMessage: rec.errorMessage,
+      },
+      command.correlationId,
+      input.frameTick.frameNumber,
+    );
+    return rec;
+  }
+  private insert(r: CommandExecutionRecord) {
+    this.terminalCommandIds.add(r.commandId);
+    this.terminalByCommand.set(r.commandId, r);
+    this.byExecution.set(r.executionId, r);
+    if (r.correlationId)
+      this.byCorrelation.set(r.correlationId, [
+        ...(this.byCorrelation.get(r.correlationId) ?? []),
+        r,
+      ]);
+    this.byType.set(r.commandType, [...(this.byType.get(r.commandType) ?? []), r]);
+    this.byOutcome.set(r.outcome, [...(this.byOutcome.get(r.outcome) ?? []), r]);
+    if (r.idempotencyKey) {
+      this.idempotencyOwners.set(r.idempotencyKey, r.commandId);
+      this.byIdempotency.set(r.idempotencyKey, r);
+    }
+    this.order.push(r.executionId);
+    while (this.order.length > this.config.executionHistoryCapacity) {
+      const old = this.byExecution.get(this.order.shift()!);
+      if (old) this.deleteRecord(old);
+    }
+  }
+  private deleteRecord(r: CommandExecutionRecord) {
+    this.byExecution.delete(r.executionId);
+    this.terminalByCommand.delete(r.commandId);
+    if (r.idempotencyKey) this.byIdempotency.delete(r.idempotencyKey);
+    this.byCorrelation.forEach((v, k) =>
+      this.byCorrelation.set(
+        k,
+        v.filter((x) => x.executionId !== r.executionId),
+      ),
+    );
+    this.byType.forEach((v, k) =>
+      this.byType.set(
+        k,
+        v.filter((x) => x.executionId !== r.executionId),
+      ),
+    );
+    this.byOutcome.forEach((v, k) =>
+      this.byOutcome.set(
+        k,
+        v.filter((x) => x.executionId !== r.executionId),
+      ),
+    );
+    this.order = this.order.filter((id) => id !== r.executionId);
+  }
+  private timeoutFor(c: RuntimeCommand) {
+    const ms = c.timeoutMs ?? this.config.defaultCommandTimeoutMs;
+    if (!Number.isSafeInteger(ms) || ms <= 0)
+      throw new InvalidCommandTimeoutError('Command timeout must be a positive safe integer');
+    if (ms > this.config.maximumCommandTimeoutMs)
+      throw new InvalidCommandTimeoutError('Command timeout exceeds maximumCommandTimeoutMs');
+    return ms;
+  }
+  private validateRetry(p: CommandRetryPolicy) {
+    if (!Number.isSafeInteger(p.maxAttempts) || p.maxAttempts < 1)
+      throw new InvalidRetryPolicyError('maxAttempts must be >= 1');
+    if (
+      !Number.isSafeInteger(p.initialDelayMs) ||
+      p.initialDelayMs < 0 ||
+      !Number.isSafeInteger(p.maximumDelayMs) ||
+      p.maximumDelayMs < 0 ||
+      !Number.isFinite(p.backoffMultiplier) ||
+      p.backoffMultiplier < 1
+    )
+      throw new InvalidRetryPolicyError('retry delays and multiplier are invalid');
+  }
+  assertInvariants() {
+    if (this.telemetry.current().activeCommandExecutions !== this.active.size)
+      throw new CommandExecutionInvariantViolationError(
+        'Telemetry active count does not match active map',
+      );
+    for (const id of this.active.keys())
+      if (this.terminalCommandIds.has(id))
+        throw new CommandExecutionInvariantViolationError(`Terminal command ${id} is still active`);
+    for (const id of this.order)
+      if (!this.byExecution.has(id))
+        throw new CommandExecutionInvariantViolationError(
+          `History index references missing record ${id}`,
+        );
+    for (const [key, record] of this.byIdempotency)
+      if (this.idempotencyOwners.get(key) !== record.commandId)
+        throw new CommandExecutionInvariantViolationError(`Idempotency owner mismatch for ${key}`);
+    return Object.freeze({
+      activeExecutions: this.active.size,
+      historySize: this.order.length,
+      terminalCommands: this.terminalCommandIds.size,
+    });
+  }
+}
+
 /** Public UBOS runtime execution-engine API. */
 export class CommandHandlerRegistry {
   private handlers = new Map<string, RuntimeCommandHandler>();
@@ -1394,6 +2185,7 @@ export class RuntimeExecutionEngine {
   readonly processors = new TickProcessorRegistry();
   readonly scheduler: DeterministicCommandScheduler;
   readonly telemetry: RuntimeTelemetryCollector;
+  readonly commandExecutionEngine: RuntimeCommandExecutionEngine;
   readonly config: Readonly<RuntimeEngineConfig>;
   private readonly publisher: RuntimeEventPublisher;
   private readonly clock: RuntimeClock;
@@ -1441,6 +2233,14 @@ export class RuntimeExecutionEngine {
       () => this.clock.nowNs(),
     );
     this.telemetry = new RuntimeTelemetryCollector(this.config.runtimeId);
+    this.commandExecutionEngine = new RuntimeCommandExecutionEngine(
+      this.handlers,
+      this.config,
+      this.clock,
+      (eventType, payload, correlationId, frameNumber) =>
+        this.emit(eventType, payload, correlationId, frameNumber),
+      this.telemetry,
+    );
     this.registerBuiltIns();
   }
   /** Public UBOS runtime execution-engine API. */
@@ -1530,12 +2330,13 @@ export class RuntimeExecutionEngine {
   }
   /** Public UBOS runtime execution-engine API. */
   async stop() {
-    if (this.#state === 'STOPPED') return;
+    if ((this.#state as RuntimeLifecycleState) === 'STOPPED') return;
     if (this.#tickInProgress)
       throw new RuntimeEngineError('RuntimeTickInProgress', 'Cannot stop while tick is executing');
     this.transition('STOPPING');
     await this.emit('RuntimeStopping', {});
     this.#abort.abort();
+    this.commandExecutionEngine.cancelAll('runtime stopped');
     this.masterFrameClock.stop();
     await this.emit('FrameClockStopped', {});
     await this.processors.shutdownAll(this.context());
@@ -1549,6 +2350,7 @@ export class RuntimeExecutionEngine {
   /** Public UBOS runtime execution-engine API. */
   async fail(error: unknown) {
     if (this.#state === 'FAILED') return;
+    this.commandExecutionEngine.cancelAll('runtime failed');
     this.telemetry.commit({
       lastError: error instanceof Error ? error.message : String(error),
       healthStatus: 'failed',
@@ -1626,7 +2428,8 @@ export class RuntimeExecutionEngine {
         this.#frameNumber,
       );
       const due = collected.commands.slice(0, this.config.maximumCommandsPerTick);
-      for (const c of due) await this.executeCommand(c);
+      for (const c of due) await this.executeCommand(c, tick);
+      if ((this.#state as RuntimeLifecycleState) === 'STOPPED') return;
       for (const p of this.processors.ordered()) {
         const ps = this.clock.nowMs();
         await this.emit('ProcessorStarted', { processorId: p.id }, undefined, this.#frameNumber);
@@ -1731,43 +2534,83 @@ export class RuntimeExecutionEngine {
       this.#tickInProgress = false;
     }
   }
-  private async executeCommand(c: RuntimeCommand) {
+  private async executeCommand(c: RuntimeCommand, tick: FrameTick) {
     await this.emit(
       'CommandExecuting',
       { commandType: c.type, commandId: c.id },
       c.correlationId,
       this.#frameNumber,
     );
-    await this.emit(
-      'CommandStarted',
-      { commandType: c.type, commandId: c.id },
-      c.correlationId,
-      this.#frameNumber,
-    );
-    try {
-      await this.handlers.resolve(c.type)(c, this.context());
+    const execution = await this.commandExecutionEngine.execute(c, {
+      runtimeContext: this.context(),
+      frameTick: tick,
+    });
+    if (execution.outcome === 'SUCCEEDED') {
       this.scheduler.markCompleted(c.id);
       this.telemetry.commit({ commandsExecuted: this.telemetry.current().commandsExecuted + 1 });
       await this.emit(
         'CommandCompleted',
-        { commandType: c.type, commandId: c.id },
+        {
+          commandType: c.type,
+          commandId: c.id,
+          executionId: execution.executionId,
+          outcome: execution.outcome,
+        },
         c.correlationId,
         this.#frameNumber,
       );
-    } catch (e) {
-      this.scheduler.markFailed(c.id);
-      this.telemetry.commit({
-        commandsFailed: this.telemetry.current().commandsFailed + 1,
-        lastError: e instanceof Error ? e.message : String(e),
-      });
-      await this.emit(
-        'CommandFailed',
-        { commandType: c.type, commandId: c.id, error: String(e) },
-        c.correlationId,
-        this.#frameNumber,
-      );
-      if (this.config.failOnCommandError) await this.fail(new CommandExecutionFailedError(c.id, e));
+      if (c.type === 'RUNTIME_BARRIER') {
+        await this.emit(
+          'CommandBarrierReached',
+          { commandId: c.id, executionId: execution.executionId },
+          c.correlationId,
+          this.#frameNumber,
+        );
+        await this.emit(
+          'CommandBarrierReleased',
+          { commandId: c.id, executionId: execution.executionId },
+          c.correlationId,
+          this.#frameNumber,
+        );
+      }
+      return;
     }
+    this.scheduler.markFailed(c.id);
+    this.telemetry.commit({
+      commandsFailed: this.telemetry.current().commandsFailed + 1,
+      lastError: execution.errorMessage ?? execution.cancellationReason ?? execution.outcome,
+    });
+    await this.emit(
+      'CommandFailed',
+      {
+        commandType: c.type,
+        commandId: c.id,
+        executionId: execution.executionId,
+        outcome: execution.outcome,
+        errorCode: execution.errorCode,
+        errorMessage: execution.errorMessage,
+      },
+      c.correlationId,
+      this.#frameNumber,
+    );
+    if (
+      (execution.outcome === 'TIMED_OUT' && this.config.failOnCommandTimeout) ||
+      (execution.outcome === 'FAILED' && this.config.failOnCommandError)
+    )
+      await this.fail(
+        new CommandExecutionFailedError(c.id, execution.errorMessage ?? execution.outcome),
+      );
+  }
+  private async stopFromCommand() {
+    if ((this.#state as RuntimeLifecycleState) === 'STOPPED') return;
+    this.transition('STOPPING');
+    await this.emit('RuntimeStopping', {});
+    this.#abort.abort();
+    this.commandExecutionEngine.cancelAll('runtime stopped');
+    this.masterFrameClock.stop();
+    await this.emit('FrameClockStopped', {});
+    this.transition('STOPPED');
+    await this.emit('RuntimeStopped', {});
   }
   private transition(next: RuntimeLifecycleState) {
     if (this.#state === next) return;
@@ -1809,7 +2652,7 @@ export class RuntimeExecutionEngine {
     this.handlers.register('RUNTIME_BARRIER', () => {});
     this.handlers.register('ENGINE_PAUSE', () => this.pause());
     this.handlers.register('ENGINE_RESUME', () => this.resume());
-    this.handlers.register('ENGINE_STOP', () => this.stop());
+    this.handlers.register('ENGINE_STOP', () => this.stopFromCommand());
     this.handlers.register('WORKER_START', (c) =>
       this.emit('WorkerHealthChanged', { commandId: c.id, status: 'started' }, c.correlationId),
     );
