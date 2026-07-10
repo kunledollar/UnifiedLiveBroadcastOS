@@ -1831,3 +1831,5 @@ export type {
   DeviceProfile,
   RecoveryPolicy,
 } from './device-platform.js';
+
+export * from './monitoring-runtime.js';
