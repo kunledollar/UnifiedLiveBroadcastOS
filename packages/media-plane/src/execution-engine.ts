@@ -678,6 +678,246 @@ export class RuntimeTelemetryCollector {
 }
 
 /** Public UBOS runtime execution-engine API. */
+export type RuntimeWatchdogState = 'CREATED' | 'RUNNING' | 'STOPPED';
+export type RuntimeWatchdogIncidentStatus = 'ACTIVE' | 'ACKNOWLEDGED' | 'RESOLVED';
+export type RuntimeWatchdogSeverity = 'info' | 'warning' | 'critical';
+export interface RuntimeWatchdogIncident {
+  readonly id: string;
+  readonly key: string;
+  readonly severity: RuntimeWatchdogSeverity;
+  readonly status: RuntimeWatchdogIncidentStatus;
+  readonly openedAtNs: string;
+  readonly updatedAtNs: string;
+  readonly resolvedAtNs?: string;
+  readonly message: string;
+}
+export interface RuntimeWatchdogSnapshot {
+  readonly runtimeId: string;
+  readonly state: RuntimeWatchdogState;
+  readonly evaluatedAtNs: string;
+  readonly frameNumber: string;
+  readonly healthStatus: RuntimeHealthStatus;
+  readonly activeIncidentCount: number;
+  readonly incidents: readonly RuntimeWatchdogIncident[];
+  readonly diagnostics: readonly Readonly<Record<string, unknown>>[];
+  readonly recoveryHistory: readonly Readonly<Record<string, unknown>>[];
+  readonly telemetryStalenessNs: string;
+  readonly evaluating: boolean;
+}
+export interface RuntimeWatchdogOptions {
+  readonly incidentHistoryCapacity?: number;
+  readonly diagnosticHistoryCapacity?: number;
+  readonly recoveryHistoryCapacity?: number;
+  readonly telemetryStaleAfterNs?: bigint;
+  readonly recoveryCooldownNs?: bigint;
+  readonly recoveryBudget?: number;
+}
+const WATCHDOG_SECRET_KEYS =
+  /secret|token|credential|authorization|cookie|streamKey|password|payload|state/i;
+const watchdogBound = <T>(values: readonly T[], capacity: number) =>
+  Object.freeze(values.slice(Math.max(0, values.length - capacity)));
+const redactWatchdogValue = (value: unknown): unknown => {
+  if (Array.isArray(value)) return Object.freeze(value.map(redactWatchdogValue));
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, inner] of Object.entries(value as Record<string, unknown>))
+      out[key] = WATCHDOG_SECRET_KEYS.test(key) ? '[REDACTED]' : redactWatchdogValue(inner);
+    return Object.freeze(out);
+  }
+  return value;
+};
+/** Public UBOS runtime execution-engine API. */
+export class RuntimeWatchdog {
+  readonly options: Required<RuntimeWatchdogOptions>;
+  #state: RuntimeWatchdogState = 'CREATED';
+  #incidents: RuntimeWatchdogIncident[] = [];
+  #diagnostics: Readonly<Record<string, unknown>>[] = [];
+  #recoveryHistory: Readonly<Record<string, unknown>>[] = [];
+  #evaluating = false;
+  #lastEvaluationNs = 0n;
+  constructor(
+    private readonly runtime: {
+      readonly telemetry: RuntimeTelemetryCollector;
+      readonly lifecycleState: RuntimeLifecycleState;
+      readonly currentFrameNumber: bigint;
+    },
+    private readonly clock: RuntimeClock = systemRuntimeClock,
+    options: RuntimeWatchdogOptions = {},
+  ) {
+    this.options = Object.freeze({
+      incidentHistoryCapacity: options.incidentHistoryCapacity ?? 128,
+      diagnosticHistoryCapacity: options.diagnosticHistoryCapacity ?? 128,
+      recoveryHistoryCapacity: options.recoveryHistoryCapacity ?? 64,
+      telemetryStaleAfterNs: options.telemetryStaleAfterNs ?? 5_000_000_000n,
+      recoveryCooldownNs: options.recoveryCooldownNs ?? 1_000_000_000n,
+      recoveryBudget: options.recoveryBudget ?? 3,
+    });
+  }
+  start() {
+    if (this.#state !== 'RUNNING') this.#state = 'RUNNING';
+  }
+  stop() {
+    this.#state = 'STOPPED';
+    this.#evaluating = false;
+  }
+  acknowledgeIncident(id: string) {
+    this.#updateIncident(id, 'ACKNOWLEDGED');
+  }
+  resolveIncident(id: string) {
+    this.#updateIncident(id, 'RESOLVED');
+  }
+  evaluate(): RuntimeWatchdogSnapshot {
+    if (this.#state !== 'RUNNING') return this.snapshot();
+    if (this.#evaluating) return this.snapshot();
+    this.#evaluating = true;
+    try {
+      const now = this.clock.nowNs();
+      const telemetry = this.runtime.telemetry.current();
+      const lastHeartbeat = BigInt(telemetry.lastLoopHeartbeatNs || '0');
+      const staleness = lastHeartbeat > 0n ? (now > lastHeartbeat ? now - lastHeartbeat : 0n) : 0n;
+      this.#lastEvaluationNs = now;
+      if (this.runtime.lifecycleState === 'FAILED' || telemetry.healthStatus === 'failed')
+        this.#open('runtime-failed', 'critical', 'Runtime is failed', now);
+      else this.#resolveKey('runtime-failed', now);
+      if (staleness > this.options.telemetryStaleAfterNs)
+        this.#open('telemetry-stale', 'warning', 'Runtime telemetry heartbeat is stale', now);
+      else this.#resolveKey('telemetry-stale', now);
+      if (telemetry.currentOverloadState === 'CRITICAL')
+        this.#open(
+          'runtime-overload-critical',
+          'critical',
+          'Runtime overload state is critical',
+          now,
+        );
+      else this.#resolveKey('runtime-overload-critical', now);
+      const diagnostic = Object.freeze(
+        redactWatchdogValue({
+          evaluatedAtNs: now.toString(),
+          runtimeId: telemetry.runtimeId,
+          frameNumber: telemetry.currentFrameNumber,
+          lifecycleState: this.runtime.lifecycleState,
+          healthStatus: telemetry.healthStatus,
+          currentOverloadState: telemetry.currentOverloadState,
+          activeCommandExecutions: telemetry.activeCommandExecutions,
+          activeTick: telemetry.activeTick,
+          lastError: telemetry.lastError,
+        }) as Record<string, unknown>,
+      );
+      this.#diagnostics = [
+        ...watchdogBound(
+          [...this.#diagnostics, diagnostic],
+          this.options.diagnosticHistoryCapacity,
+        ),
+      ];
+      return this.snapshot();
+    } finally {
+      this.#evaluating = false;
+    }
+  }
+  snapshot(): RuntimeWatchdogSnapshot {
+    const telemetry = this.runtime.telemetry.current();
+    const now = this.clock.nowNs();
+    const lastHeartbeat = BigInt(telemetry.lastLoopHeartbeatNs || '0');
+    const staleness = lastHeartbeat > 0n ? (now > lastHeartbeat ? now - lastHeartbeat : 0n) : 0n;
+    const active = this.#incidents.filter((i) => i.status !== 'RESOLVED');
+    const healthStatus: RuntimeHealthStatus = active.some((i) => i.severity === 'critical')
+      ? 'failed'
+      : active.length
+        ? 'degraded'
+        : telemetry.healthStatus;
+    return Object.freeze({
+      runtimeId: telemetry.runtimeId,
+      state: this.#state,
+      evaluatedAtNs: this.#lastEvaluationNs.toString(),
+      frameNumber: telemetry.currentFrameNumber || this.runtime.currentFrameNumber.toString(),
+      healthStatus,
+      activeIncidentCount: active.length,
+      incidents: watchdogBound(
+        this.#incidents.map((i) => Object.freeze({ ...i })),
+        this.options.incidentHistoryCapacity,
+      ),
+      diagnostics: watchdogBound(this.#diagnostics, this.options.diagnosticHistoryCapacity),
+      recoveryHistory: watchdogBound(this.#recoveryHistory, this.options.recoveryHistoryCapacity),
+      telemetryStalenessNs: staleness.toString(),
+      evaluating: this.#evaluating,
+    });
+  }
+  recordRecovery(action: string, outcome: string) {
+    const now = this.clock.nowNs();
+    const recent = this.#recoveryHistory.filter(
+      (r) => BigInt(String(r.atNs)) + this.options.recoveryCooldownNs > now,
+    );
+    if (recent.length >= this.options.recoveryBudget)
+      this.#open(
+        'recovery-budget-exhausted',
+        'critical',
+        'Watchdog recovery budget exhausted',
+        now,
+      );
+    this.#recoveryHistory = [
+      ...watchdogBound(
+        [...this.#recoveryHistory, Object.freeze({ atNs: now.toString(), action, outcome })],
+        this.options.recoveryHistoryCapacity,
+      ),
+    ];
+  }
+  #open(key: string, severity: RuntimeWatchdogSeverity, message: string, now: bigint) {
+    const existing = this.#incidents.find((i) => i.key === key && i.status !== 'RESOLVED');
+    if (existing) {
+      this.#incidents = this.#incidents.map((i) =>
+        i === existing
+          ? Object.freeze({ ...i, severity, updatedAtNs: now.toString(), message })
+          : i,
+      );
+      return;
+    }
+    const incident = Object.freeze({
+      id: `incident:${key}:${now.toString()}`,
+      key,
+      severity,
+      status: 'ACTIVE' as const,
+      openedAtNs: now.toString(),
+      updatedAtNs: now.toString(),
+      message,
+    });
+    this.#incidents = [
+      ...watchdogBound([...this.#incidents, incident], this.options.incidentHistoryCapacity),
+    ];
+  }
+  #resolveKey(key: string, now: bigint) {
+    this.#incidents = this.#incidents.map((i) =>
+      i.key === key && i.status !== 'RESOLVED'
+        ? Object.freeze({
+            ...i,
+            status: 'RESOLVED' as const,
+            updatedAtNs: now.toString(),
+            resolvedAtNs: now.toString(),
+          })
+        : i,
+    );
+  }
+  #updateIncident(id: string, status: RuntimeWatchdogIncidentStatus) {
+    const now = this.clock.nowNs().toString();
+    this.#incidents = this.#incidents.map((i) =>
+      i.id === id
+        ? Object.freeze({
+            ...i,
+            status,
+            updatedAtNs: now,
+            ...(status === 'RESOLVED' ? { resolvedAtNs: now } : {}),
+          })
+        : i,
+    );
+  }
+}
+/** Public UBOS runtime execution-engine API. */
+export const createRuntimeWatchdog = (
+  runtime: ConstructorParameters<typeof RuntimeWatchdog>[0],
+  clock?: RuntimeClock,
+  options?: RuntimeWatchdogOptions,
+) => new RuntimeWatchdog(runtime, clock, options);
+
+/** Public UBOS runtime execution-engine API. */
 export type FrameClockState = 'CREATED' | 'RUNNING' | 'PAUSED' | 'STOPPED';
 /** Public UBOS runtime execution-engine API. */
 export interface MonotonicTimeSource {
