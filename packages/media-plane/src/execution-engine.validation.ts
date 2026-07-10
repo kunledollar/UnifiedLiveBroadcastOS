@@ -1390,3 +1390,66 @@ console.log('runtime loop validation passed');
     /ProcessorDependencyMissing/,
   );
 }
+
+// UBOS v5.1.7 telemetry/watchdog and public export validation.
+{
+  const fakeTime = new FakeMonotonicTimeSource(0n);
+  const clock = {
+    nowMs: () => Number(fakeTime.nowNs() / 1_000_000n),
+    nowNs: () => fakeTime.nowNs(),
+  };
+  const engine = createRuntimeExecutionEngine(
+    { runtimeId: 'v517-watchdog', tickHealthWindowCapacity: 4 },
+    new InMemoryRuntimeEventPublisher(),
+    clock,
+  );
+  await engine.initialize();
+  await engine.start();
+  const watchdog = new (await import('./execution-engine.js')).RuntimeWatchdog(engine, clock, {
+    incidentHistoryCapacity: 3,
+    diagnosticHistoryCapacity: 3,
+    recoveryHistoryCapacity: 2,
+    telemetryStaleAfterNs: 10n,
+    recoveryBudget: 1,
+    recoveryCooldownNs: 1_000n,
+  });
+  watchdog.start();
+  fakeTime.advanceNs(frameDurationNs({ numerator: 30, denominator: 1 }));
+  await engine.executeSingleTick();
+  const healthy = watchdog.evaluate();
+  assertEqual(healthy.frameNumber, engine.telemetry.current().currentFrameNumber);
+  assertEqual(healthy.telemetryStalenessNs, '0');
+  fakeTime.advanceNs(100n);
+  const stale = watchdog.evaluate();
+  assertOk(stale.activeIncidentCount >= 1);
+  assertOk(stale.diagnostics.length <= 3);
+  assertOk(!JSON.stringify(stale).includes('super-secret'));
+  watchdog.recordRecovery('restart', 'failed');
+  watchdog.recordRecovery('restart', 'budget-exhausted');
+  assertOk(watchdog.snapshot().recoveryHistory.length <= 2);
+  const incident = watchdog.snapshot().incidents.find((i) => i.status !== 'RESOLVED');
+  if (incident) {
+    watchdog.acknowledgeIncident(incident.id);
+    watchdog.resolveIncident(incident.id);
+  }
+  watchdog.stop();
+  const stopped = watchdog.snapshot();
+  assertEqual(stopped.state, 'STOPPED');
+  assertEqual(stopped.evaluating, false);
+  await engine.stop();
+}
+{
+  const publicApi = await import('./index.js');
+  for (const symbol of [
+    'RuntimeExecutionEngine',
+    'createRuntimeExecutionEngine',
+    'createMasterFrameClock',
+    'DeterministicCommandScheduler',
+    'RuntimeCommandExecutionEngine',
+    'TickProcessorRegistry',
+    'RuntimeWatchdog',
+    'createRuntimeWatchdog',
+  ])
+    assertOk(symbol in publicApi);
+}
+console.log('watchdog and public export validation passed');

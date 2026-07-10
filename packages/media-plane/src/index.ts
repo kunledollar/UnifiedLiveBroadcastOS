@@ -1698,9 +1698,61 @@ export type {
   ClockSample,
   SynchronizationReport,
 } from './production-engine/index.js';
+export {
+  RuntimeExecutionEngine,
+  createRuntimeExecutionEngine,
+  createMasterFrameClock,
+  DeterministicCommandScheduler,
+  RuntimeCommandExecutionEngine,
+  TickProcessorRegistry,
+  RuntimeWatchdog,
+  createRuntimeWatchdog,
+  defaultRuntimeEngineConfig,
+  InMemoryRuntimeEventPublisher,
+  FakeMonotonicTimeSource,
+  ImmediateFrameWaitStrategy,
+  frameDurationNs,
+  frameNumberToTimestampNs,
+  timestampNsToFrameNumber,
+  frameRateLabel,
+  validateRationalFrameRate,
+} from './execution-engine.js';
+export type {
+  RuntimeEngineConfig,
+  RationalFrameRate,
+  RuntimeFrameRate,
+  RuntimeClock,
+  RuntimeContext,
+  RuntimeEventPublisher,
+  FrameTick,
+  MasterFrameClock,
+  RuntimeTelemetrySnapshot,
+  RuntimeWatchdogSnapshot,
+  RuntimeWatchdogOptions,
+  RuntimeWatchdogIncident,
+  TickProcessor,
+  TickProcessorDescriptor,
+  ProcessorExecutionRecord,
+} from './execution-engine.js';
 export * from './media-runtime/index.js';
 export * from './output-pipeline.js';
 export * from './media-runtime/ffmpeg/index.js';
 
-export { FallbackRenderer, WebGPURenderer, calculateAspectFit, createRenderer as createVideoRenderer, createRenderSurface as createVideoRenderSurface, createRendererStatusEvent } from './rendering/index.js';
-export type { Renderer, RenderPipeline as VideoRenderPipeline, RenderSurface as VideoRenderSurface, RenderFrame as VideoRenderFrame, RendererSnapshot as VideoRendererSnapshot, RendererStatusEvent as VideoRendererStatusEvent, RendererState as VideoRendererState, RendererBackend as VideoRendererBackend } from './rendering/index.js';
+export {
+  FallbackRenderer,
+  WebGPURenderer,
+  calculateAspectFit,
+  createRenderer as createVideoRenderer,
+  createRenderSurface as createVideoRenderSurface,
+  createRendererStatusEvent,
+} from './rendering/index.js';
+export type {
+  Renderer,
+  RenderPipeline as VideoRenderPipeline,
+  RenderSurface as VideoRenderSurface,
+  RenderFrame as VideoRenderFrame,
+  RendererSnapshot as VideoRendererSnapshot,
+  RendererStatusEvent as VideoRendererStatusEvent,
+  RendererState as VideoRendererState,
+  RendererBackend as VideoRendererBackend,
+} from './rendering/index.js';
