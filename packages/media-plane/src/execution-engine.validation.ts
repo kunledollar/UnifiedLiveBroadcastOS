@@ -502,4 +502,95 @@ async function readyEngine(
   await engine.stop();
 }
 
+// UBOS v5.1.3 deterministic runtime scheduler validation.
+{
+  const scheduler = new DeterministicCommandScheduler(
+    10,
+    () => 120n,
+    () => 120_000n,
+  );
+  scheduler.schedule(
+    cmd('CUT_CAMERA_2', {
+      targetFrame: 120n,
+      priority: 90,
+      sequence: 2n,
+      dependencies: ['GRAPHIC_OUT'],
+    }),
+  );
+  scheduler.schedule(cmd('LOWER_THIRD_TAKE', { targetFrame: 120n, priority: 80, sequence: 4n }));
+  scheduler.schedule(cmd('AUDIO_FADE', { targetFrame: 120n, priority: 80, sequence: 3n }));
+  scheduler.schedule(cmd('GRAPHIC_OUT', { targetFrame: 120n, priority: 100, sequence: 1n }));
+  const collected = scheduler.collectDue(120n, 120_000n);
+  assertDeepEqual(
+    collected.commands.map((c) => c.id),
+    ['GRAPHIC_OUT', 'CUT_CAMERA_2', 'AUDIO_FADE', 'LOWER_THIRD_TAKE'],
+  );
+  assertDeepEqual(collected.readyIds, [
+    'GRAPHIC_OUT',
+    'CUT_CAMERA_2',
+    'AUDIO_FADE',
+    'LOWER_THIRD_TAKE',
+  ]);
+  assertEqual(scheduler.snapshot().maximumQueueDepth, 4);
+}
+{
+  const run = (order: readonly string[]) => {
+    const scheduler = new DeterministicCommandScheduler(
+      10,
+      () => 120n,
+      () => 120_000n,
+    );
+    const commands: Record<string, RuntimeCommand> = {
+      g: cmd('GRAPHIC_OUT', { targetFrame: 120n, priority: 100, sequence: 1n }),
+      c: cmd('CUT_CAMERA_2', {
+        targetFrame: 120n,
+        priority: 90,
+        sequence: 2n,
+        dependencies: ['GRAPHIC_OUT'],
+      }),
+      a: cmd('AUDIO_FADE', { targetFrame: 120n, priority: 80, sequence: 3n }),
+      l: cmd('LOWER_THIRD_TAKE', { targetFrame: 120n, priority: 80, sequence: 4n }),
+    };
+    for (const key of order) scheduler.schedule(commands[key]!);
+    return scheduler
+      .collectDue(120n, 120_000n)
+      .commands.map((c) => c.id)
+      .join('|');
+  };
+  const expected = run(['g', 'c', 'a', 'l']);
+  for (let i = 0; i < 1000; i++) assertEqual(run(['l', 'a', 'c', 'g']), expected);
+}
+{
+  const scheduler = new DeterministicCommandScheduler(
+    10,
+    () => 10n,
+    () => 1_000n,
+  );
+  scheduler.schedule(cmd('missing', { dependencies: ['never'], targetFrame: 1n }));
+  assertDeepEqual(scheduler.collectDue(10n, 1_000n).failedDependencyIds, ['missing']);
+  scheduler.schedule(cmd('root', { groupId: 'SCENE_SWITCH', sequence: 11n, targetFrame: 20n }));
+  scheduler.schedule(
+    cmd('child', {
+      groupId: 'SCENE_SWITCH',
+      sequence: 12n,
+      targetFrame: 20n,
+      dependencies: ['root'],
+    }),
+  );
+  assertEqual(scheduler.lookupByGroup('SCENE_SWITCH').length, 2);
+  assertEqual(scheduler.lookupByDependency('root')[0]?.id, 'child');
+  assertEqual(scheduler.cancelSubtree('root').length, 2);
+  assertEqual(scheduler.snapshot().cancelledCommands, 2);
+}
+{
+  const scheduler = new DeterministicCommandScheduler(
+    10,
+    () => 10n,
+    () => 1_000n,
+  );
+  scheduler.schedule(cmd('late-drop', { targetFrame: 1n, policy: 'DROP_IF_LATE' }));
+  assertDeepEqual(scheduler.collectDue(10n, 1_000n).expiredIds, ['late-drop']);
+  assertEqual(scheduler.snapshot().expiredCommands, 1);
+}
+
 console.log('execution-engine validation passed');
