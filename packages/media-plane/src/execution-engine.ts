@@ -364,6 +364,19 @@ export type RuntimeEventType =
   | 'SchedulerIdle'
   | 'SchedulerBusy'
   | 'ProcessorRegistered'
+  | 'ProcessorUnregistered'
+  | 'ProcessorEnabled'
+  | 'ProcessorDisabled'
+  | 'ProcessorInitializing'
+  | 'ProcessorInitialized'
+  | 'ProcessorInitializationFailed'
+  | 'ProcessorReady'
+  | 'ProcessorExecutionRequested'
+  | 'ProcessorDegraded'
+  | 'ProcessorDependencyUnavailable'
+  | 'ProcessorStopping'
+  | 'ProcessorStopped'
+  | 'ProcessorShutdownFailed'
   | 'ProcessorStarted'
   | 'ProcessorCompleted'
   | 'ProcessorFailed'
@@ -521,7 +534,6 @@ export type RuntimeOverloadState = 'NORMAL' | 'PRESSURED' | 'OVERLOADED' | 'CRIT
 export type RuntimeTickTimingClass =
   'ON_TIME' | 'LATE_START' | 'SOFT_OVERRUN' | 'HARD_OVERRUN' | 'SEVERE_OVERRUN' | 'DISCONTINUITY';
 export type ProcessorWorkloadClass = 'CRITICAL' | 'REALTIME' | 'BEST_EFFORT' | 'BACKGROUND';
-export type ProcessorFailurePolicy = 'CONTINUE' | 'DEGRADE_RUNTIME' | 'FAIL_RUNTIME';
 export interface RuntimeTickHealthEntry {
   readonly frameNumber: string;
   readonly tickDurationNs: string;
@@ -2343,21 +2355,262 @@ export class RuntimeTelemetryCommitFailedError extends RuntimeEngineError {
 }
 
 /** Public UBOS runtime execution-engine API. */
-export interface TickProcessor {
-  id: string;
-  order: number;
-  workloadClass?: ProcessorWorkloadClass;
-  estimatedBudgetNs?: bigint;
-  maySkipUnderLoad?: boolean;
-  failurePolicy?: ProcessorFailurePolicy;
-  timeoutNs?: bigint;
-  /** Public UBOS runtime execution-engine API. */
-  initialize(context: RuntimeContext): Promise<void> | void;
-  processTick(tick: FrameTick, context: RuntimeContext): Promise<void> | void;
-  /** Public UBOS runtime execution-engine API. */
-  shutdown(context: RuntimeContext): Promise<void> | void;
+export type ProcessorCriticality =
+  'SYSTEM_CRITICAL' | 'MEDIA_CRITICAL' | 'OPERATIONAL' | 'OPTIONAL';
+export type ProcessorLifecycleState =
+  | 'REGISTERED'
+  | 'INITIALIZING'
+  | 'READY'
+  | 'RUNNING'
+  | 'DEGRADED'
+  | 'DISABLED'
+  | 'STOPPING'
+  | 'STOPPED'
+  | 'FAILED';
+export type ProcessorHealthState =
+  'HEALTHY' | 'DEGRADED' | 'UNHEALTHY' | 'DISABLED' | 'FAILED' | 'UNKNOWN';
+export type ProcessorPhase =
+  | 'PRE_TICK'
+  | 'SOURCE'
+  | 'VIDEO'
+  | 'AUDIO'
+  | 'SCENE'
+  | 'GRAPHICS'
+  | 'OUTPUT'
+  | 'POST_TICK'
+  | 'MONITORING';
+export type ProcessorStatePersistencePolicy =
+  'EPHEMERAL' | 'RETAIN_UNTIL_SHUTDOWN' | 'RESET_ON_DISABLE' | 'PERSIST_EXTERNALLY';
+export type ProcessorFailurePolicy =
+  | 'CONTINUE'
+  | 'DEGRADE_PROCESSOR'
+  | 'DISABLE_PROCESSOR'
+  | 'DEGRADE_RUNTIME'
+  | 'PAUSE_RUNTIME'
+  | 'STOP_RUNTIME'
+  | 'FAIL_RUNTIME';
+export type OutputOwnership =
+  'BORROWED' | 'OWNED_BY_PROCESSOR' | 'OWNED_BY_RUNTIME' | 'EXTERNAL_HANDLE';
+export interface ProcessorError {
+  readonly code: string;
+  readonly message: string;
+  readonly details?: Readonly<Record<string, unknown>>;
 }
-/** Public UBOS runtime execution-engine API. */
+export interface ProcessorWarning {
+  readonly code: string;
+  readonly message: string;
+  readonly details?: Readonly<Record<string, unknown>>;
+}
+export interface TickProcessorDescriptor {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly order: number;
+  readonly phase: ProcessorPhase | undefined;
+  readonly workloadClass: ProcessorWorkloadClass;
+  readonly enabledByDefault: boolean;
+  readonly dependencies: readonly string[];
+  readonly optionalCapabilities: readonly string[];
+  readonly estimatedBudgetNs: bigint;
+  readonly maximumBudgetNs: bigint;
+  readonly timeoutNs: bigint | undefined;
+  readonly maySkipUnderLoad: boolean;
+  readonly failurePolicy: ProcessorFailurePolicy;
+  readonly criticality: ProcessorCriticality;
+  readonly supportsHotDisable: boolean;
+  readonly supportsHotEnable: boolean;
+  readonly supportsHotReplacement: boolean;
+  readonly statePersistencePolicy: ProcessorStatePersistencePolicy;
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+export type ProcessorInitializationResult<TState = unknown> =
+  | {
+      readonly status: 'READY';
+      readonly state?: TState;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'DEGRADED';
+      readonly state?: TState;
+      readonly warning: ProcessorWarning;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'FAILED';
+      readonly error: ProcessorError | Error | string;
+      readonly retryable?: boolean;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    };
+export type ProcessorTickResult<TResult = unknown> =
+  | {
+      readonly status: 'SUCCEEDED';
+      readonly value?: TResult;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'SKIPPED';
+      readonly reason: string;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'DEGRADED';
+      readonly warning: ProcessorWarning;
+      readonly value?: TResult;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'FAILED';
+      readonly error: ProcessorError | Error | string;
+      readonly retryable?: boolean;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'CANCELLED';
+      readonly reason?: string;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    }
+  | {
+      readonly status: 'TIMED_OUT';
+      readonly error: ProcessorError | Error | string;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    };
+export type ProcessorShutdownResult =
+  | { readonly status: 'STOPPED'; readonly metadata?: Readonly<Record<string, unknown>> }
+  | {
+      readonly status: 'FAILED';
+      readonly error: ProcessorError | Error | string;
+      readonly metadata?: Readonly<Record<string, unknown>>;
+    };
+export interface ProcessorOutputRegistry {
+  publish<T>(processorId: string, key: string, value: T, ownership: OutputOwnership): void;
+  read<T>(processorId: string, key: string): Readonly<T> | undefined;
+  readDependencyOutput<T>(dependencyProcessorId: string, key: string): Readonly<T> | undefined;
+  clearTick(): void;
+  entryCount(): number;
+}
+export interface ProcessorInitializationContext extends Omit<RuntimeContext, 'telemetry'> {
+  readonly processorId: string;
+  readonly descriptor: Readonly<TickProcessorDescriptor>;
+  readonly cancellationSignal: AbortSignal;
+  readonly initializationAttempt: number;
+  readonly frameworkMetadata: Readonly<Record<string, unknown>>;
+}
+export interface ProcessorRuntimeContext<TState = unknown> extends Omit<
+  RuntimeContext,
+  'telemetry'
+> {
+  readonly processorId: string;
+  readonly descriptor: Readonly<TickProcessorDescriptor>;
+  readonly authoritativeTick: FrameTick;
+  readonly currentFrameNumber: bigint;
+  readonly tickBudgetNs: bigint;
+  readonly processorBudgetNs: bigint;
+  readonly remainingTickBudgetNs: bigint;
+  readonly overloadState: RuntimeOverloadState;
+  readonly cancellationSignal: AbortSignal;
+  readonly processorState: TState | undefined;
+  readonly outputs: ProcessorOutputRegistry;
+  readonly executionAttempt: number;
+  readonly priorHealth: Readonly<ProcessorHealthSnapshot>;
+}
+export interface ProcessorShutdownContext<TState = unknown> extends Omit<
+  RuntimeContext,
+  'telemetry'
+> {
+  readonly processorId: string;
+  readonly descriptor: Readonly<TickProcessorDescriptor>;
+  readonly cancellationSignal: AbortSignal;
+  readonly processorState: TState | undefined;
+}
+export interface TickProcessor<TState = unknown, TResult = unknown> {
+  readonly id?: string;
+  readonly order?: number;
+  readonly descriptor?: TickProcessorDescriptor;
+  readonly workloadClass?: ProcessorWorkloadClass;
+  readonly estimatedBudgetNs?: bigint;
+  readonly maximumBudgetNs?: bigint;
+  readonly maySkipUnderLoad?: boolean;
+  readonly failurePolicy?: ProcessorFailurePolicy;
+  readonly timeoutNs?: bigint;
+  initialize(
+    context: RuntimeContext | ProcessorInitializationContext,
+  ):
+    | Promise<void | ProcessorInitializationResult<TState>>
+    | void
+    | ProcessorInitializationResult<TState>;
+  processTick(
+    tick: FrameTick,
+    context: RuntimeContext | ProcessorRuntimeContext<TState>,
+  ): Promise<void | ProcessorTickResult<TResult>> | void | ProcessorTickResult<TResult>;
+  shutdown(
+    context: RuntimeContext | ProcessorShutdownContext<TState>,
+  ): Promise<void | ProcessorShutdownResult> | void | ProcessorShutdownResult;
+  recover?(
+    context: ProcessorRuntimeContext<TState>,
+  ): Promise<ProcessorInitializationResult<TState>> | ProcessorInitializationResult<TState>;
+}
+export interface ProcessorExecutionRecord {
+  readonly executionId: string;
+  readonly processorId: string;
+  readonly processorName: string;
+  readonly runtimeId: string;
+  readonly frameNumber: string;
+  readonly workloadClass: ProcessorWorkloadClass;
+  readonly criticality: ProcessorCriticality;
+  readonly startedAtNs: string;
+  readonly completedAtNs: string;
+  readonly durationNs: string;
+  readonly budgetNs: string;
+  readonly overrunNs: string;
+  readonly status: ProcessorTickResult['status'];
+  readonly skipped: boolean;
+  readonly timeout: boolean;
+  readonly cancellationReason: string | undefined;
+  readonly errorCode: string | undefined;
+  readonly errorMessage: string | undefined;
+  readonly retryable: boolean;
+  readonly degraded: boolean;
+  readonly overloadState: RuntimeOverloadState;
+  readonly dependencyHealth: Readonly<Record<string, ProcessorHealthState>>;
+  readonly metadata: Readonly<Record<string, unknown>>;
+}
+export interface ProcessorHealthSnapshot {
+  readonly processorId: string;
+  readonly lifecycleState: ProcessorLifecycleState;
+  readonly healthState: ProcessorHealthState;
+  readonly enabled: boolean;
+  readonly initialized: boolean;
+  readonly lastExecutionFrame: string | undefined;
+  readonly lastSuccessFrame: string | undefined;
+  readonly lastFailureFrame: string | undefined;
+  readonly consecutiveFailures: number;
+  readonly failuresInWindow: number;
+  readonly averageDurationNs: string;
+  readonly maximumDurationNs: string;
+  readonly budgetOverruns: number;
+  readonly timeouts: number;
+  readonly skippedExecutions: number;
+  readonly dependencyHealth: Readonly<Record<string, ProcessorHealthState>>;
+  readonly lastError: ProcessorError | undefined;
+  readonly lastWarning: ProcessorWarning | undefined;
+  readonly updatedAtNs: string;
+}
+export interface ProcessorFrameworkSnapshot {
+  readonly runtimeId: string;
+  readonly frameworkState: 'CREATED' | 'INITIALIZED' | 'RUNNING' | 'STOPPED' | 'FAILED';
+  readonly processorCount: number;
+  readonly orderedProcessorIds: readonly string[];
+  readonly lifecycleCounts: Readonly<Record<string, number>>;
+  readonly healthCounts: Readonly<Record<string, number>>;
+  readonly dependencyGraphSummary: Readonly<Record<string, readonly string[]>>;
+  readonly activeProcessorId: string | undefined;
+  readonly initializationOrder: readonly string[];
+  readonly shutdownOrder: readonly string[];
+  readonly lastExecutionFrame: string | undefined;
+  readonly outputRegistryEntryCount: number;
+  readonly invariantStatus: 'PASS' | 'FAIL';
+  readonly generatedAtNs: string;
+}
 export interface ProcessorMetric {
   id: string;
   initialized: boolean;
@@ -2365,70 +2618,829 @@ export interface ProcessorMetric {
   failures: number;
   lastDurationMs: number;
   maximumDurationMs: number;
-  lastError?: string;
+  lastError: string | undefined;
 }
-/** Public UBOS runtime execution-engine API. */
-export class TickProcessorRegistry {
-  private processors = new Map<string, TickProcessor>();
-  private metrics = new Map<string, ProcessorMetric>();
-  private locked = false;
-  /** Public UBOS runtime execution-engine API. */
-  register(p: TickProcessor) {
-    if (this.locked)
-      throw new RuntimeEngineError(
-        'ProcessorRegistryLocked',
-        'Cannot register processor while tick is executing',
-      );
-    if (this.processors.has(p.id)) throw new DuplicateProcessorError(p.id);
-    this.processors.set(p.id, Object.freeze({ ...p }));
-    this.metrics.set(p.id, {
-      id: p.id,
-      initialized: false,
-      executions: 0,
-      failures: 0,
-      lastDurationMs: 0,
-      maximumDurationMs: 0,
-    });
+export class ProcessorFrameworkError extends RuntimeEngineError {}
+export class ProcessorNotFoundError extends ProcessorFrameworkError {
+  constructor(id: string) {
+    super('ProcessorNotFound', `Processor ${id} was not found`, { id });
   }
-  /** Public UBOS runtime execution-engine API. */
-  ordered() {
-    return [...this.processors.values()].sort(
-      (a, b) => a.order - b.order || a.id.localeCompare(b.id),
+}
+export class InvalidProcessorDescriptorError extends ProcessorFrameworkError {
+  constructor(message: string) {
+    super('InvalidProcessorDescriptor', message);
+  }
+}
+export class InvalidProcessorLifecycleTransitionError extends ProcessorFrameworkError {
+  constructor(id: string, from: ProcessorLifecycleState, to: ProcessorLifecycleState) {
+    super(
+      'InvalidProcessorLifecycleTransition',
+      `Invalid processor lifecycle transition for ${id}: ${from} -> ${to}`,
+      { id, from, to },
     );
   }
-  /** Public UBOS runtime execution-engine API. */
+}
+export class ProcessorDependencyMissingError extends ProcessorFrameworkError {
+  constructor(id: string, dependencyId: string) {
+    super('ProcessorDependencyMissing', `Processor ${id} has missing dependency ${dependencyId}`, {
+      id,
+      dependencyId,
+    });
+  }
+}
+export class ProcessorDependencyCycleError extends ProcessorFrameworkError {
+  constructor(ids: readonly string[]) {
+    super('ProcessorDependencyCycle', 'Processor dependency cycle detected', { ids });
+  }
+}
+export class ProcessorRegistrationLockedError extends ProcessorFrameworkError {
+  constructor() {
+    super('ProcessorRegistrationLocked', 'Cannot register processor while framework is active');
+  }
+}
+export class ProcessorExecutionOverlapError extends ProcessorFrameworkError {
+  constructor(id: string) {
+    super('ProcessorExecutionOverlap', `Processor ${id} already has an active execution`, { id });
+  }
+}
+export class ProcessorReplacementNotSupportedError extends ProcessorFrameworkError {
+  constructor(id: string) {
+    super('ProcessorReplacementNotSupported', `Processor ${id} does not support hot replacement`, {
+      id,
+    });
+  }
+}
+export class ProcessorOutputConflictError extends ProcessorFrameworkError {
+  constructor(processorId: string, key: string) {
+    super('ProcessorOutputConflict', `Processor output already exists for ${processorId}:${key}`, {
+      processorId,
+      key,
+    });
+  }
+}
+export class ProcessorInvariantViolationError extends ProcessorFrameworkError {
+  constructor(message: string) {
+    super('ProcessorInvariantViolation', message);
+  }
+}
+export class InvalidProcessorBudgetError extends ProcessorFrameworkError {
+  constructor(message: string) {
+    super('InvalidProcessorBudget', message);
+  }
+}
+
+const processorPhases: readonly ProcessorPhase[] = [
+  'PRE_TICK',
+  'SOURCE',
+  'VIDEO',
+  'AUDIO',
+  'SCENE',
+  'GRAPHICS',
+  'OUTPUT',
+  'POST_TICK',
+  'MONITORING',
+];
+const processorLifecycleTransitions: Record<
+  ProcessorLifecycleState,
+  readonly ProcessorLifecycleState[]
+> = {
+  REGISTERED: ['INITIALIZING', 'DISABLED', 'STOPPING', 'FAILED'],
+  INITIALIZING: ['READY', 'DEGRADED', 'FAILED'],
+  READY: ['RUNNING', 'DISABLED', 'STOPPING', 'FAILED'],
+  RUNNING: ['READY', 'DEGRADED', 'DISABLED', 'FAILED'],
+  DEGRADED: ['RUNNING', 'READY', 'DISABLED', 'STOPPING', 'FAILED'],
+  DISABLED: ['READY', 'INITIALIZING', 'STOPPING', 'STOPPED', 'FAILED'],
+  STOPPING: ['STOPPED', 'FAILED'],
+  STOPPED: [],
+  FAILED: ['STOPPING', 'DISABLED'],
+};
+class PerTickProcessorOutputRegistry implements ProcessorOutputRegistry {
+  private outputs = new Map<string, { value: unknown; ownership: OutputOwnership }>();
+  private key(p: string, k: string) {
+    return `${p}\u0000${k}`;
+  }
+  publish<T>(processorId: string, key: string, value: T, ownership: OutputOwnership) {
+    const id = this.key(processorId, key);
+    if (this.outputs.has(id)) throw new ProcessorOutputConflictError(processorId, key);
+    this.outputs.set(id, { value: deepFreeze(value), ownership });
+  }
+  read<T>(processorId: string, key: string) {
+    return this.outputs.get(this.key(processorId, key))?.value as Readonly<T> | undefined;
+  }
+  readDependencyOutput<T>(dependencyProcessorId: string, key: string) {
+    return this.read<T>(dependencyProcessorId, key);
+  }
+  clearTick() {
+    this.outputs.clear();
+  }
+  entryCount() {
+    return this.outputs.size;
+  }
+}
+const normalizeProcessorError = (error: unknown): ProcessorError => {
+  if (error && typeof error === 'object' && 'code' in error && 'message' in error) {
+    const record = error as { code: unknown; message: unknown };
+    return Object.freeze({ code: String(record.code), message: String(record.message) });
+  }
+  return Object.freeze({
+    code: error instanceof Error ? error.name || 'ProcessorError' : 'ProcessorError',
+    message: error instanceof Error ? error.message : String(error),
+  });
+};
+const descriptorOf = (p: TickProcessor): TickProcessorDescriptor => {
+  const d = p.descriptor;
+  const id = d?.id ?? p.id;
+  if (!id || !id.trim()) throw new InvalidProcessorDescriptorError('processor id is required');
+  const order = d?.order ?? p.order ?? 0;
+  const estimated = d?.estimatedBudgetNs ?? p.estimatedBudgetNs ?? 0n;
+  const maximum = d?.maximumBudgetNs ?? p.maximumBudgetNs ?? estimated;
+  if (!Number.isFinite(order))
+    throw new InvalidProcessorDescriptorError('processor order must be finite');
+  if (estimated < 0n || maximum < 0n || (maximum && estimated > maximum))
+    throw new InvalidProcessorBudgetError('processor budgets are invalid');
+  return deepFreeze({
+    id,
+    name: d?.name ?? id,
+    version: d?.version ?? '1.0.0',
+    order,
+    phase: d?.phase,
+    workloadClass: d?.workloadClass ?? p.workloadClass ?? 'REALTIME',
+    enabledByDefault: d?.enabledByDefault ?? true,
+    dependencies: Object.freeze([...(d?.dependencies ?? [])].sort()),
+    optionalCapabilities: Object.freeze([...(d?.optionalCapabilities ?? [])].sort()),
+    estimatedBudgetNs: estimated,
+    maximumBudgetNs: maximum,
+    timeoutNs: d?.timeoutNs ?? p.timeoutNs,
+    maySkipUnderLoad: d?.maySkipUnderLoad ?? p.maySkipUnderLoad ?? false,
+    failurePolicy: d?.failurePolicy ?? p.failurePolicy ?? 'CONTINUE',
+    criticality: d?.criticality ?? 'OPERATIONAL',
+    supportsHotDisable: d?.supportsHotDisable ?? false,
+    supportsHotEnable: d?.supportsHotEnable ?? false,
+    supportsHotReplacement: d?.supportsHotReplacement ?? false,
+    statePersistencePolicy: d?.statePersistencePolicy ?? 'RETAIN_UNTIL_SHUTDOWN',
+    metadata: deepFreeze({ ...(d?.metadata ?? {}) }),
+  });
+};
+interface ProcessorEntry {
+  processor: TickProcessor;
+  descriptor: TickProcessorDescriptor;
+  lifecycle: ProcessorLifecycleState;
+  enabled: boolean;
+  state?: unknown;
+  health: ProcessorHealthSnapshot;
+  initAttempt: number;
+  execAttempt: number;
+  active: boolean;
+}
+export class TickProcessorRegistry {
+  private processors = new Map<string, ProcessorEntry>();
+  private locked = false;
+  private initialized = false;
+  private activeProcessorId: string | undefined;
+  private initOrder: string[] = [];
+  private lastFrame: string | undefined;
+  private outputs = new PerTickProcessorOutputRegistry();
+  private records: ProcessorExecutionRecord[] = [];
+  private historyCapacity = 1024;
+  constructor(
+    private runtimeId = 'ubos-runtime',
+    private clock: RuntimeClock = systemRuntimeClock,
+    private emitEvent?: (
+      type: RuntimeEventType,
+      payload: Record<string, unknown>,
+      correlationId?: string,
+      frame?: bigint,
+    ) => Promise<void>,
+  ) {}
+  configure(
+    runtimeId: string,
+    clock: RuntimeClock,
+    emitEvent: (
+      type: RuntimeEventType,
+      payload: Record<string, unknown>,
+      correlationId?: string,
+      frame?: bigint,
+    ) => Promise<void>,
+  ) {
+    this.runtimeId = runtimeId;
+    this.clock = clock;
+    this.emitEvent = emitEvent;
+  }
+  register(p: TickProcessor) {
+    if (this.locked) throw new ProcessorRegistrationLockedError();
+    const descriptor = descriptorOf(p);
+    if (this.processors.has(descriptor.id)) throw new DuplicateProcessorError(descriptor.id);
+    const now = this.clock.nowNs().toString();
+    const health = Object.freeze({
+      processorId: descriptor.id,
+      lifecycleState: descriptor.enabledByDefault ? 'REGISTERED' : 'DISABLED',
+      healthState: descriptor.enabledByDefault ? 'UNKNOWN' : 'DISABLED',
+      enabled: descriptor.enabledByDefault,
+      initialized: false,
+      consecutiveFailures: 0,
+      failuresInWindow: 0,
+      averageDurationNs: '0',
+      maximumDurationNs: '0',
+      budgetOverruns: 0,
+      timeouts: 0,
+      skippedExecutions: 0,
+      dependencyHealth: {},
+      lastExecutionFrame: undefined,
+      lastSuccessFrame: undefined,
+      lastFailureFrame: undefined,
+      lastError: undefined,
+      lastWarning: undefined,
+      updatedAtNs: now,
+    }) satisfies ProcessorHealthSnapshot;
+    this.processors.set(descriptor.id, {
+      processor: Object.freeze({ ...p, descriptor }),
+      descriptor,
+      lifecycle: health.lifecycleState,
+      enabled: descriptor.enabledByDefault,
+      health,
+      initAttempt: 0,
+      execAttempt: 0,
+      active: false,
+    });
+    this.validateGraph();
+    void this.emitEvent?.('ProcessorRegistered', {
+      processorId: descriptor.id,
+      descriptor: {
+        ...descriptor,
+        estimatedBudgetNs: descriptor.estimatedBudgetNs.toString(),
+        maximumBudgetNs: descriptor.maximumBudgetNs.toString(),
+        timeoutNs: descriptor.timeoutNs?.toString(),
+      },
+    });
+  }
+  unregister(id: string) {
+    if (this.locked) throw new ProcessorRegistrationLockedError();
+    if (!this.processors.delete(id)) throw new ProcessorNotFoundError(id);
+    void this.emitEvent?.('ProcessorUnregistered', { processorId: id });
+  }
+  enable(id: string) {
+    const e = this.entry(id);
+    if (this.initialized && !e.descriptor.supportsHotEnable)
+      throw new ProcessorFrameworkError(
+        'ProcessorHotEnableUnsupported',
+        `Processor ${id} does not support hot enable`,
+      );
+    e.enabled = true;
+    this.transition(e, e.lifecycle === 'DISABLED' ? 'READY' : e.lifecycle);
+    this.updateHealth(e, { healthState: 'HEALTHY', enabled: true });
+    void this.emitEvent?.('ProcessorEnabled', { processorId: id });
+  }
+  disable(id: string) {
+    const e = this.entry(id);
+    const dependents = [...this.processors.values()].filter(
+      (x) => x.enabled && x.descriptor.dependencies.includes(id),
+    );
+    if (dependents.length)
+      throw new ProcessorFrameworkError(
+        'ProcessorDependencyUnavailable',
+        `Processor ${id} has enabled dependents`,
+      );
+    if (this.initialized && !e.descriptor.supportsHotDisable)
+      throw new ProcessorFrameworkError(
+        'ProcessorHotDisableUnsupported',
+        `Processor ${id} does not support hot disable`,
+      );
+    e.enabled = false;
+    this.transition(e, 'DISABLED');
+    if (e.descriptor.statePersistencePolicy === 'RESET_ON_DISABLE') e.state = undefined;
+    this.updateHealth(e, { healthState: 'DISABLED', enabled: false });
+    void this.emitEvent?.('ProcessorDisabled', { processorId: id });
+  }
+  ordered() {
+    return this.orderedEntries()
+      .filter((e) => e.enabled)
+      .map((e) => e.processor);
+  }
+  getProcessor(id: string) {
+    return this.processors.get(id)?.descriptor;
+  }
+  listProcessors() {
+    return this.orderedEntries().map((e) => e.descriptor);
+  }
+  getHealth(id: string) {
+    return this.processors.get(id)?.health;
+  }
   markLocked(v: boolean) {
     this.locked = v;
   }
-  /** Public UBOS runtime execution-engine API. */
-  metric(id: string) {
-    return this.metrics.get(id);
+  metric(id: string): ProcessorMetric | undefined {
+    const e = this.processors.get(id);
+    return (
+      e && {
+        id,
+        initialized: e.health.initialized,
+        executions: Number(e.health.lastExecutionFrame ? e.execAttempt : 0),
+        failures: e.health.failuresInWindow,
+        lastDurationMs: Number(BigInt(e.health.averageDurationNs) / 1_000_000n),
+        maximumDurationMs: Number(BigInt(e.health.maximumDurationNs) / 1_000_000n),
+        lastError: e.health.lastError?.message,
+      }
+    );
   }
-  /** Public UBOS runtime execution-engine API. */
   allMetrics() {
-    return [...this.metrics.values()].map((m) => Object.freeze({ ...m }));
+    return [...this.processors.keys()].sort().map((id) => Object.freeze(this.metric(id)!));
   }
-  /** Public UBOS runtime execution-engine API. */
   async initializeAll(ctx: RuntimeContext) {
-    for (const p of this.ordered()) {
-      await p.initialize(ctx);
-      this.metrics.get(p.id)!.initialized = true;
+    this.validateGraph();
+    this.initialized = true;
+    for (const e of this.orderedEntries().filter((x) => x.enabled)) {
+      e.initAttempt++;
+      this.transition(e, 'INITIALIZING');
+      await this.emitEvent?.('ProcessorInitializing', { processorId: e.descriptor.id });
+      try {
+        const r = await e.processor.initialize(this.initContext(ctx, e));
+        if (r && typeof r === 'object' && 'status' in r && r.status === 'FAILED')
+          throw normalizeProcessorError(r.error);
+        e.state = r && typeof r === 'object' && 'state' in r ? r.state : undefined;
+        this.transition(
+          e,
+          r && typeof r === 'object' && 'status' in r && r.status === 'DEGRADED'
+            ? 'DEGRADED'
+            : 'READY',
+        );
+        this.updateHealth(e, {
+          initialized: true,
+          healthState: e.lifecycle === 'DEGRADED' ? 'DEGRADED' : 'HEALTHY',
+          lastWarning: r && typeof r === 'object' && 'warning' in r ? r.warning : undefined,
+        });
+        this.initOrder.push(e.descriptor.id);
+        await this.emitEvent?.('ProcessorInitialized', {
+          processorId: e.descriptor.id,
+          status: e.lifecycle,
+        });
+        await this.emitEvent?.('ProcessorReady', { processorId: e.descriptor.id });
+      } catch (error) {
+        const pe = normalizeProcessorError(error);
+        this.transition(e, 'FAILED');
+        this.updateHealth(e, { healthState: 'FAILED', lastError: pe, initialized: false });
+        await this.emitEvent?.('ProcessorInitializationFailed', {
+          processorId: e.descriptor.id,
+          errorCode: pe.code,
+          errorMessage: pe.message,
+        });
+        if (
+          e.descriptor.criticality === 'SYSTEM_CRITICAL' ||
+          e.descriptor.failurePolicy === 'FAIL_RUNTIME'
+        )
+          throw new ProcessorExecutionFailedError(e.descriptor.id, pe.message);
+      }
     }
   }
-  /** Public UBOS runtime execution-engine API. */
+  async executeTick(
+    tick: FrameTick,
+    context: RuntimeContext,
+    tickBudgetNs: bigint = tick.frameDurationNs,
+    processorBudgetNs: bigint = tick.frameDurationNs,
+    overloadState: RuntimeOverloadState = 'NORMAL',
+  ) {
+    this.locked = true;
+    const records: ProcessorExecutionRecord[] = [];
+    let elapsed = 0n;
+    try {
+      for (const e of this.orderedEntries()) {
+        const remaining = tickBudgetNs > elapsed ? tickBudgetNs - elapsed : 0n;
+        const dependencyHealth = Object.fromEntries(
+          e.descriptor.dependencies.map((d) => [
+            d,
+            this.processors.get(d)?.health.healthState ?? 'UNKNOWN',
+          ]),
+        );
+        const unavailable = e.descriptor.dependencies.some((d) => {
+          const dep = this.processors.get(d);
+          return (
+            !dep ||
+            !dep.enabled ||
+            dep.health.healthState === 'FAILED' ||
+            dep.health.healthState === 'DISABLED'
+          );
+        });
+        const skipUnderLoad =
+          e.enabled &&
+          (overloadState === 'OVERLOADED' || overloadState === 'CRITICAL') &&
+          (e.descriptor.workloadClass === 'BEST_EFFORT' ||
+            e.descriptor.workloadClass === 'BACKGROUND' ||
+            e.descriptor.maySkipUnderLoad);
+        if (!e.enabled || e.lifecycle === 'DISABLED' || unavailable || skipUnderLoad) {
+          const reason =
+            !e.enabled || e.lifecycle === 'DISABLED'
+              ? 'DISABLED'
+              : unavailable
+                ? 'DEPENDENCY_UNAVAILABLE'
+                : 'LOAD_SHEDDING';
+          records.push(
+            this.recordExecution(
+              e,
+              tick,
+              'SKIPPED',
+              0n,
+              processorBudgetNs,
+              overloadState,
+              dependencyHealth,
+              { reason },
+            ),
+          );
+          this.updateHealth(e, {
+            skippedExecutions: e.health.skippedExecutions + 1,
+            dependencyHealth,
+          });
+          await this.emitEvent?.(
+            unavailable ? 'ProcessorDependencyUnavailable' : 'ProcessorSkipped',
+            { processorId: e.descriptor.id, reason },
+            undefined,
+            tick.frameNumber,
+          );
+          continue;
+        }
+        if (e.lifecycle !== 'READY' && e.lifecycle !== 'DEGRADED') continue;
+        if (e.active) throw new ProcessorExecutionOverlapError(e.descriptor.id);
+        e.active = true;
+        e.execAttempt++;
+        this.activeProcessorId = e.descriptor.id;
+        this.transition(e, 'RUNNING');
+        await this.emitEvent?.(
+          'ProcessorExecutionRequested',
+          { processorId: e.descriptor.id },
+          undefined,
+          tick.frameNumber,
+        );
+        await this.emitEvent?.(
+          'ProcessorStarted',
+          { processorId: e.descriptor.id },
+          undefined,
+          tick.frameNumber,
+        );
+        const started = this.clock.nowNs();
+        try {
+          const r = await e.processor.processTick(
+            tick,
+            this.runContext(
+              context,
+              e,
+              tick,
+              tickBudgetNs,
+              processorBudgetNs,
+              remaining,
+              overloadState,
+            ),
+          );
+          const duration = this.clock.nowNs() - started;
+          elapsed += duration;
+          const status = r && typeof r === 'object' && 'status' in r ? r.status : 'SUCCEEDED';
+          const rec = this.recordExecution(
+            e,
+            tick,
+            status,
+            duration,
+            processorBudgetNs,
+            overloadState,
+            dependencyHealth,
+            r && typeof r === 'object' ? r.metadata : undefined,
+          );
+          records.push(rec);
+          if (status === 'FAILED') throw normalizeProcessorError((r as { error?: unknown }).error);
+          if (status === 'DEGRADED') {
+            this.transition(e, 'DEGRADED');
+            this.updateHealth(e, {
+              healthState: 'DEGRADED',
+              lastWarning: (r as { warning?: ProcessorWarning }).warning,
+              dependencyHealth,
+            });
+            await this.emitEvent?.(
+              'ProcessorDegraded',
+              { processorId: e.descriptor.id },
+              undefined,
+              tick.frameNumber,
+            );
+          } else {
+            this.transition(e, 'READY');
+            this.updateHealth(e, {
+              healthState: 'HEALTHY',
+              lastExecutionFrame: tick.frameNumber.toString(),
+              lastSuccessFrame: tick.frameNumber.toString(),
+              consecutiveFailures: 0,
+              averageDurationNs: this.avg(e, duration),
+              maximumDurationNs: (duration > BigInt(e.health.maximumDurationNs)
+                ? duration
+                : BigInt(e.health.maximumDurationNs)
+              ).toString(),
+              budgetOverruns: e.health.budgetOverruns + (duration > processorBudgetNs ? 1 : 0),
+              dependencyHealth,
+            });
+          }
+          await this.emitEvent?.(
+            status === 'SKIPPED' ? 'ProcessorSkipped' : 'ProcessorCompleted',
+            { processorId: e.descriptor.id, status, durationNs: duration.toString() },
+            undefined,
+            tick.frameNumber,
+          );
+        } catch (error) {
+          const pe = normalizeProcessorError(error);
+          const duration = this.clock.nowNs() - started;
+          elapsed += duration;
+          const timeout = duration > (e.descriptor.timeoutNs ?? 10_000_000n);
+          const rec = this.recordExecution(
+            e,
+            tick,
+            timeout ? 'TIMED_OUT' : 'FAILED',
+            duration,
+            processorBudgetNs,
+            overloadState,
+            dependencyHealth,
+            undefined,
+            pe,
+          );
+          records.push(rec);
+          this.transition(
+            e,
+            e.descriptor.failurePolicy === 'DISABLE_PROCESSOR' ? 'DISABLED' : 'FAILED',
+          );
+          this.updateHealth(e, {
+            healthState:
+              (e.lifecycle as ProcessorLifecycleState) === 'DISABLED' ? 'DISABLED' : 'FAILED',
+            lastExecutionFrame: tick.frameNumber.toString(),
+            lastFailureFrame: tick.frameNumber.toString(),
+            consecutiveFailures: e.health.consecutiveFailures + 1,
+            failuresInWindow: e.health.failuresInWindow + 1,
+            lastError: pe,
+            timeouts: e.health.timeouts + (timeout ? 1 : 0),
+            dependencyHealth,
+          });
+          await this.emitEvent?.(
+            timeout ? 'ProcessorTimedOut' : 'ProcessorFailed',
+            { processorId: e.descriptor.id, errorCode: pe.code, errorMessage: pe.message },
+            undefined,
+            tick.frameNumber,
+          );
+        } finally {
+          e.active = false;
+          this.activeProcessorId = undefined;
+        }
+      }
+      this.lastFrame = tick.frameNumber.toString();
+      return Object.freeze(records);
+    } finally {
+      this.outputs.clearTick();
+      this.locked = false;
+    }
+  }
   async shutdownAll(ctx: RuntimeContext) {
-    for (const p of this.ordered().reverse()) await p.shutdown(ctx);
-  }
-  /** Public UBOS runtime execution-engine API. */
-  record(id: string, durationMs: number, error?: unknown) {
-    const m = this.metrics.get(id)!;
-    m.executions++;
-    m.lastDurationMs = durationMs;
-    m.maximumDurationMs = Math.max(m.maximumDurationMs, durationMs);
-    if (error) {
-      m.failures++;
-      m.lastError = error instanceof Error ? error.message : String(error);
+    for (const e of this.orderedEntries().reverse()) {
+      if (e.lifecycle === 'STOPPED') continue;
+      try {
+        if (e.lifecycle !== 'DISABLED') this.transition(e, 'STOPPING');
+        await this.emitEvent?.('ProcessorStopping', { processorId: e.descriptor.id });
+        const r = await e.processor.shutdown(this.shutdownContext(ctx, e));
+        if (r && typeof r === 'object' && 'status' in r && r.status === 'FAILED')
+          throw normalizeProcessorError(r.error);
+        this.transition(e, 'STOPPED');
+        this.updateHealth(e, { initialized: false, healthState: 'UNKNOWN' });
+        await this.emitEvent?.('ProcessorStopped', { processorId: e.descriptor.id });
+      } catch (error) {
+        const pe = normalizeProcessorError(error);
+        this.transition(e, 'FAILED');
+        this.updateHealth(e, { healthState: 'FAILED', lastError: pe });
+        await this.emitEvent?.('ProcessorShutdownFailed', {
+          processorId: e.descriptor.id,
+          errorCode: pe.code,
+          errorMessage: pe.message,
+        });
+      }
     }
+    this.outputs.clearTick();
+  }
+  replace() {
+    throw new ProcessorReplacementNotSupportedError('replacement');
+  }
+  getSnapshot(): ProcessorFrameworkSnapshot {
+    const entries = [...this.processors.values()];
+    const count = (field: 'lifecycle' | 'health') =>
+      Object.freeze(
+        Object.fromEntries(
+          entries.reduce((m, e) => {
+            const k = field === 'lifecycle' ? e.lifecycle : e.health.healthState;
+            m.set(k, (m.get(k) ?? 0) + 1);
+            return m;
+          }, new Map<string, number>()),
+        ),
+      );
+    return deepFreeze({
+      runtimeId: this.runtimeId,
+      frameworkState: this.initialized ? 'INITIALIZED' : 'CREATED',
+      processorCount: entries.length,
+      orderedProcessorIds: this.orderedEntries().map((e) => e.descriptor.id),
+      lifecycleCounts: count('lifecycle'),
+      healthCounts: count('health'),
+      dependencyGraphSummary: Object.fromEntries(
+        entries.map((e) => [e.descriptor.id, e.descriptor.dependencies]),
+      ),
+      activeProcessorId: this.activeProcessorId,
+      initializationOrder: this.initOrder,
+      shutdownOrder: this.orderedEntries()
+        .reverse()
+        .map((e) => e.descriptor.id),
+      lastExecutionFrame: this.lastFrame,
+      outputRegistryEntryCount: this.outputs.entryCount(),
+      invariantStatus: 'PASS',
+      generatedAtNs: this.clock.nowNs().toString(),
+    });
+  }
+  assertInvariants() {
+    const ids = new Set<string>();
+    for (const e of this.processors.values()) {
+      if (ids.has(e.descriptor.id))
+        throw new ProcessorInvariantViolationError('duplicate processor id');
+      ids.add(e.descriptor.id);
+      if (!Object.isFrozen(e.descriptor))
+        throw new ProcessorInvariantViolationError('descriptor is mutable');
+      if (e.active && this.activeProcessorId !== e.descriptor.id)
+        throw new ProcessorInvariantViolationError('active processor mismatch');
+    }
+    this.validateGraph();
+    return Object.freeze({
+      processors: this.processors.size,
+      orderedProcessorIds: this.orderedEntries().map((e) => e.descriptor.id),
+    });
+  }
+  private entry(id: string) {
+    const e = this.processors.get(id);
+    if (!e) throw new ProcessorNotFoundError(id);
+    return e;
+  }
+  private orderedEntries() {
+    const entries = [...this.processors.values()];
+    const phaseIndex = (e: ProcessorEntry) =>
+      e.descriptor.phase ? processorPhases.indexOf(e.descriptor.phase) : 0;
+    const indeg = new Map(entries.map((e) => [e.descriptor.id, 0]));
+    const out = new Map(entries.map((e) => [e.descriptor.id, [] as string[]]));
+    for (const e of entries)
+      for (const d of e.descriptor.dependencies) {
+        if (this.processors.has(d)) {
+          indeg.set(e.descriptor.id, (indeg.get(e.descriptor.id) ?? 0) + 1);
+          out.get(d)!.push(e.descriptor.id);
+        }
+      }
+    const ready = entries
+      .filter((e) => (indeg.get(e.descriptor.id) ?? 0) === 0)
+      .sort(
+        (a, b) =>
+          phaseIndex(a) - phaseIndex(b) ||
+          a.descriptor.order - b.descriptor.order ||
+          a.descriptor.id.localeCompare(b.descriptor.id),
+      );
+    const ordered: ProcessorEntry[] = [];
+    while (ready.length) {
+      const n = ready.shift()!;
+      ordered.push(n);
+      for (const m of out.get(n.descriptor.id) ?? []) {
+        indeg.set(m, (indeg.get(m) ?? 0) - 1);
+        if (indeg.get(m) === 0) ready.push(this.processors.get(m)!);
+      }
+      ready.sort(
+        (a, b) =>
+          phaseIndex(a) - phaseIndex(b) ||
+          a.descriptor.order - b.descriptor.order ||
+          a.descriptor.id.localeCompare(b.descriptor.id),
+      );
+    }
+    if (ordered.length !== entries.length)
+      throw new ProcessorDependencyCycleError(entries.map((e) => e.descriptor.id));
+    return ordered;
+  }
+  private validateGraph() {
+    for (const e of this.processors.values()) {
+      if (e.descriptor.dependencies.includes(e.descriptor.id))
+        throw new ProcessorDependencyCycleError([e.descriptor.id, e.descriptor.id]);
+      for (const d of e.descriptor.dependencies)
+        if (!this.processors.has(d)) throw new ProcessorDependencyMissingError(e.descriptor.id, d);
+      if (e.descriptor.phase)
+        for (const d of e.descriptor.dependencies) {
+          const dep = this.processors.get(d);
+          if (
+            dep?.descriptor.phase &&
+            processorPhases.indexOf(dep.descriptor.phase) >
+              processorPhases.indexOf(e.descriptor.phase)
+          )
+            throw new InvalidProcessorDescriptorError(
+              'processor dependency cannot point to a later phase',
+            );
+        }
+    }
+    this.orderedEntries();
+  }
+  private transition(e: ProcessorEntry, next: ProcessorLifecycleState) {
+    if (e.lifecycle === next) return;
+    if (!processorLifecycleTransitions[e.lifecycle].includes(next))
+      throw new InvalidProcessorLifecycleTransitionError(e.descriptor.id, e.lifecycle, next);
+    e.lifecycle = next;
+  }
+  private updateHealth(e: ProcessorEntry, patch: Partial<ProcessorHealthSnapshot>) {
+    e.health = Object.freeze({
+      ...e.health,
+      ...patch,
+      lifecycleState: e.lifecycle,
+      enabled: e.enabled,
+      updatedAtNs: this.clock.nowNs().toString(),
+    }) as ProcessorHealthSnapshot;
+  }
+  private initContext(ctx: RuntimeContext, e: ProcessorEntry): ProcessorInitializationContext {
+    const { telemetry, ...base } = ctx;
+    return Object.freeze({
+      ...base,
+      processorId: e.descriptor.id,
+      descriptor: e.descriptor,
+      cancellationSignal: ctx.shutdownSignal,
+      initializationAttempt: e.initAttempt,
+      frameworkMetadata: Object.freeze({ version: '5.1.6' }),
+    });
+  }
+  private runContext(
+    ctx: RuntimeContext,
+    e: ProcessorEntry,
+    tick: FrameTick,
+    tickBudgetNs: bigint,
+    processorBudgetNs: bigint,
+    remaining: bigint,
+    overloadState: RuntimeOverloadState,
+  ): ProcessorRuntimeContext {
+    const { telemetry, ...base } = ctx;
+    return Object.freeze({
+      ...base,
+      processorId: e.descriptor.id,
+      descriptor: e.descriptor,
+      authoritativeTick: tick,
+      currentFrameNumber: tick.frameNumber,
+      tickBudgetNs,
+      processorBudgetNs,
+      remainingTickBudgetNs: remaining,
+      overloadState,
+      cancellationSignal: ctx.shutdownSignal,
+      processorState: e.state,
+      outputs: this.outputs,
+      executionAttempt: e.execAttempt,
+      priorHealth: e.health,
+    });
+  }
+  private shutdownContext(ctx: RuntimeContext, e: ProcessorEntry): ProcessorShutdownContext {
+    const { telemetry, ...base } = ctx;
+    return Object.freeze({
+      ...base,
+      processorId: e.descriptor.id,
+      descriptor: e.descriptor,
+      cancellationSignal: ctx.shutdownSignal,
+      processorState: e.state,
+    });
+  }
+  private avg(e: ProcessorEntry, duration: bigint) {
+    const prev = BigInt(e.health.averageDurationNs);
+    return (
+      (prev * BigInt(Math.max(0, e.execAttempt - 1)) + duration) /
+      BigInt(Math.max(1, e.execAttempt))
+    ).toString();
+  }
+  private recordExecution(
+    e: ProcessorEntry,
+    tick: FrameTick,
+    status: ProcessorTickResult['status'],
+    duration: bigint,
+    budget: bigint,
+    overloadState: RuntimeOverloadState,
+    dependencyHealth: Record<string, ProcessorHealthState>,
+    metadata?: Readonly<Record<string, unknown>>,
+    error?: ProcessorError,
+  ) {
+    const rec = deepFreeze({
+      executionId: `${this.runtimeId}:${tick.frameNumber}:${e.descriptor.id}:${e.execAttempt}`,
+      processorId: e.descriptor.id,
+      processorName: e.descriptor.name,
+      runtimeId: this.runtimeId,
+      frameNumber: tick.frameNumber.toString(),
+      workloadClass: e.descriptor.workloadClass,
+      criticality: e.descriptor.criticality,
+      startedAtNs: (this.clock.nowNs() - duration).toString(),
+      completedAtNs: this.clock.nowNs().toString(),
+      durationNs: duration.toString(),
+      budgetNs: budget.toString(),
+      overrunNs: (duration > budget ? duration - budget : 0n).toString(),
+      status,
+      skipped: status === 'SKIPPED',
+      timeout: status === 'TIMED_OUT',
+      cancellationReason: status === 'CANCELLED' ? 'cancelled' : undefined,
+      errorCode: error?.code,
+      errorMessage: error?.message,
+      retryable: false,
+      degraded: status === 'DEGRADED',
+      overloadState,
+      dependencyHealth: Object.freeze({ ...dependencyHealth }),
+      metadata: deepFreeze({ ...(metadata ?? {}) }),
+    }) satisfies ProcessorExecutionRecord;
+    this.records.push(rec);
+    this.records = this.records.slice(-this.historyCapacity);
+    return rec;
   }
 }
 const validTransitions: Record<RuntimeLifecycleState, RuntimeLifecycleState[]> = {
@@ -2775,61 +3787,32 @@ export class RuntimeExecutionEngine {
       }
       this.updateHeartbeat('EXECUTING_PROCESSORS', tick.frameNumber);
       const processorStart = this.clock.nowNs();
-      for (const p of this.processors.ordered()) {
-        const cls = p.workloadClass ?? 'REALTIME';
-        const elapsed = this.clock.nowNs() - processorStart;
-        const skippable =
-          (cls === 'BEST_EFFORT' || cls === 'BACKGROUND' || p.maySkipUnderLoad) &&
-          elapsed >= processorBudgetNs;
-        if (skippable) {
+      const processorRecords = await this.processors.executeTick(
+        tick,
+        this.context(),
+        budgetNs,
+        processorBudgetNs,
+        this.telemetry.current().currentOverloadState,
+      );
+      for (const record of processorRecords) {
+        if (record.status === 'SUCCEEDED' || record.status === 'DEGRADED') successfulProcessors++;
+        else if (record.status === 'SKIPPED') {
           skippedProcessors++;
           droppedWorkCount++;
-          this.processors.record(p.id, 0);
-          await this.emit(
-            'ProcessorSkipped',
-            { processorId: p.id, workloadClass: cls },
-            undefined,
-            this.#frameNumber,
-          );
-          await this.emit(
-            'RuntimeWorkSkipped',
-            { processorId: p.id },
-            undefined,
-            this.#frameNumber,
-          );
-          continue;
-        }
-        const psNs = this.clock.nowNs();
-        const psMs = this.clock.nowMs();
-        await this.emit('ProcessorStarted', { processorId: p.id }, undefined, this.#frameNumber);
-        try {
-          await this.runProcessorWithTimeout(p, tick);
-          const d = this.clock.nowMs() - psMs;
-          this.processors.record(p.id, d);
-          successfulProcessors++;
-          await this.emit(
-            'ProcessorCompleted',
-            {
-              processorId: p.id,
-              durationMs: d,
-              durationNs: (this.clock.nowNs() - psNs).toString(),
-            },
-            undefined,
-            this.#frameNumber,
-          );
-        } catch (e) {
+        } else {
           failedProcessors++;
-          errorSummary = String(e instanceof Error ? e.message : e);
-          this.processors.record(p.id, this.clock.nowMs() - psMs, e);
-          await this.emit(
-            e instanceof ProcessorExecutionTimeoutError ? 'ProcessorTimedOut' : 'ProcessorFailed',
-            { processorId: p.id, error: errorSummary },
-            undefined,
-            this.#frameNumber,
-          );
-          if (this.config.failOnProcessorError || p.failurePolicy === 'FAIL_RUNTIME')
-            await this.fail(new ProcessorExecutionFailedError(p.id, e));
+          errorSummary = record.errorMessage ?? record.status;
         }
+        if (
+          (record.status === 'FAILED' || record.status === 'TIMED_OUT') &&
+          (this.config.failOnProcessorError || record.criticality === 'SYSTEM_CRITICAL')
+        )
+          await this.fail(
+            new ProcessorExecutionFailedError(
+              record.processorId,
+              record.errorMessage ?? record.status,
+            ),
+          );
       }
       if (this.clock.nowNs() - processorStart > processorBudgetNs)
         this.telemetry.commit({
@@ -2967,12 +3950,14 @@ export class RuntimeExecutionEngine {
       );
   }
   private async runProcessorWithTimeout(p: TickProcessor, tick: FrameTick) {
-    const timeoutNs = p.timeoutNs ?? this.config.defaultProcessorTimeoutNs;
+    const id = p.descriptor?.id ?? p.id ?? 'processor';
+    const timeoutNs =
+      p.timeoutNs ?? p.descriptor?.timeoutNs ?? this.config.defaultProcessorTimeoutNs;
     if (timeoutNs > this.config.maximumProcessorTimeoutNs)
-      throw new ProcessorExecutionTimeoutError(p.id);
+      throw new ProcessorExecutionTimeoutError(id);
     const started = this.clock.nowNs();
     await p.processTick(tick, this.context());
-    if (this.clock.nowNs() - started > timeoutNs) throw new ProcessorExecutionTimeoutError(p.id);
+    if (this.clock.nowNs() - started > timeoutNs) throw new ProcessorExecutionTimeoutError(id);
   }
   private updateOverload(
     timing: RuntimeTickTimingClass,

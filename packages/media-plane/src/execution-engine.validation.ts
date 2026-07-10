@@ -1292,3 +1292,101 @@ console.log('execution-engine validation passed');
   await engine.stop();
 }
 console.log('runtime loop validation passed');
+
+// UBOS v5.1.6 tick processor framework validation.
+{
+  const publisher = new InMemoryRuntimeEventPublisher();
+  const engine = createRuntimeExecutionEngine(
+    { runtimeId: 'v516-framework' },
+    publisher,
+    new FakeClock(),
+  );
+  const order: string[] = [];
+  const make = (
+    id: string,
+    deps: readonly string[] = [],
+    phase: 'SOURCE' | 'VIDEO' = 'SOURCE',
+  ): TickProcessor => ({
+    descriptor: {
+      id,
+      name: id,
+      version: '1.0.0',
+      order: 1,
+      phase,
+      workloadClass: 'REALTIME',
+      enabledByDefault: true,
+      dependencies: deps,
+      optionalCapabilities: [],
+      estimatedBudgetNs: 1n,
+      maximumBudgetNs: 10n,
+      timeoutNs: 10_000_000_000n,
+      maySkipUnderLoad: false,
+      failurePolicy: 'CONTINUE',
+      criticality: 'OPERATIONAL',
+      supportsHotDisable: true,
+      supportsHotEnable: true,
+      supportsHotReplacement: false,
+      statePersistencePolicy: 'RESET_ON_DISABLE',
+      metadata: {},
+    },
+    initialize: () => ({ status: 'READY', state: { private: id } }),
+    processTick: (_tick, context) => {
+      order.push(id);
+      if ('outputs' in context) context.outputs.publish(id, 'handle', { id }, 'EXTERNAL_HANDLE');
+      return { status: 'SUCCEEDED', metadata: { id } };
+    },
+    shutdown: () => ({ status: 'STOPPED' }),
+  });
+  engine.processors.register(make('source', [], 'SOURCE'));
+  engine.processors.register(make('video', ['source'], 'VIDEO'));
+  assertDeepEqual(engine.processors.getSnapshot().orderedProcessorIds, ['source', 'video']);
+  await engine.initialize();
+  await engine.start();
+  const result = await engine.executeSingleTick();
+  assertOk(result.processorCount >= 0);
+  assertEqual(engine.processors.getSnapshot().outputRegistryEntryCount, 0);
+  assertOk(engine.processors.getHealth('source'));
+  assertDoesNotThrow(() => engine.processors.assertInvariants());
+  engine.processors.disable('video');
+  await engine.executeSingleTick();
+  assertEqual(engine.processors.getHealth('video')?.healthState, 'DISABLED');
+  await engine.stop();
+}
+{
+  const engine = createRuntimeExecutionEngine(
+    { runtimeId: 'v516-deps' },
+    new InMemoryRuntimeEventPublisher(),
+    new FakeClock(),
+  );
+  assertThrows(
+    () =>
+      engine.processors.register({
+        descriptor: {
+          id: 'missing',
+          name: 'missing',
+          version: '1',
+          order: 1,
+          workloadClass: 'REALTIME',
+          enabledByDefault: true,
+          dependencies: ['none'],
+          optionalCapabilities: [],
+          estimatedBudgetNs: 0n,
+          maximumBudgetNs: 0n,
+          timeoutNs: undefined,
+          maySkipUnderLoad: false,
+          failurePolicy: 'CONTINUE',
+          criticality: 'OPTIONAL',
+          supportsHotDisable: false,
+          supportsHotEnable: false,
+          supportsHotReplacement: false,
+          statePersistencePolicy: 'EPHEMERAL',
+          metadata: {},
+          phase: undefined,
+        },
+        initialize: () => {},
+        processTick: () => {},
+        shutdown: () => {},
+      }),
+    /ProcessorDependencyMissing/,
+  );
+}
