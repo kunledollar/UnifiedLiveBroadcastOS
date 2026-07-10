@@ -39,7 +39,7 @@ import { cn } from '@ubos/ui';
 import { workspaceZoneDefinitions, type WorkspacePresetId, type WorkspaceZoneId } from '@ubos/shared';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from '../menu';
 import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../shell/types';
-import type { MonitorStatusInfo } from '../broadcast-command-center/CenterProgramPreviewDeck';
+import type { MonitorStatusInfo } from './monitor-status';
 import type { OperationsDockSection } from '../broadcast-command-center/RightOperationsDock';
 import { broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
 import { DockResizeHandle } from './DockResizeHandle';
