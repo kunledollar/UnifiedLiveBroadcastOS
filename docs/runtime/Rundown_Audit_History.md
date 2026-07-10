@@ -1,5 +1,5 @@
 # Rundown Audit History
 
-Every deterministic command appends immutable metadata history with id, timestamp, sessionId, rundownId, optional itemId, actor, command, result, previous state, next state, error metadata, correlationId, and commandId.
+History entries are immutable metadata records for creation, edits, validation, cue changes, operator commands, starts, completions, skips, holds, failures, recoveries, jumps, and completion.
 
-Audited actions include item creation, edits, validation results, cue changes, operator commands, execution start/completion, skips, holds, failures, recoveries, jumps, and rundown completion.
+Each entry includes id, timestamp, sessionId, rundownId, optional itemId, actor, command, result, previous state, next state, error metadata, and correlationId.

@@ -1,31 +1,29 @@
 # Rundown Runtime Architecture
 
-UBOS v4.7 adds a metadata-only show-control runtime. `RundownRuntimeController` is the sole owner of rundown lifecycle and item execution orchestration inside the active session; `SessionRuntimeController` remains the owner of the production session.
-
 ```mermaid
 flowchart LR
-  Session[Session Runtime Controller] --> RRC[RundownRuntimeController]
-  RRC --> Registry[RundownRegistry]
-  RRC --> Lifecycle[RundownLifecycleManager]
-  RRC --> Items[RundownItemRegistry]
-  RRC --> Validate[RundownValidationManager]
-  RRC --> Cue[RundownCueManager]
-  RRC --> Execute[RundownExecutionManager]
-  RRC --> Snap[RundownSnapshotManager]
-  RRC --> Recover[RundownRecoveryManager]
-  RRC --> Health[RundownHealthManager]
-  RRC --> Metrics[RundownMetricsCollector]
-  RRC --> Events[RundownEventAdapter]
-  RRC --> PG[ProductionGraph metadata adapter]
+  SRC[SessionRuntimeController] --> RRC[RundownRuntimeController]
+  RRC --> REG[RundownRegistry]
+  RRC --> LCM[RundownLifecycleManager]
+  RRC --> IR[RundownItemRegistry]
+  RRC --> VM[RundownValidationManager]
+  RRC --> CM[RundownCueManager]
+  RRC --> EM[RundownExecutionManager]
+  RRC --> SM[RundownSnapshotManager]
+  RRC --> RM[RundownRecoveryManager]
+  RRC --> HM[RundownHealthManager]
+  RRC --> MC[RundownMetricsCollector]
+  RRC --> EA[RundownEventAdapter]
+  EA --> BUS[RuntimeEventBus]
+  HM --> HEALTH[HealthManager]
+  RRC --> PGA[ProductionGraph Metadata Adapter]
 ```
+
+SessionRuntimeController remains the production-session owner. RundownRuntimeController owns only rundown lifecycle, metadata validation, cueing, execution state, audit history, snapshots, recovery metadata, health, and metrics inside an active session.
 
 ## Ownership boundaries
 
-- Rundown Runtime owns rundown state, ordered items, cue/next/current pointers, validation state, audit history, snapshots, recovery metadata, health, and metrics.
-- ProductionGraph remains authoritative for Program/Preview switching and CUT/TAKE/AUTO commands.
-- Device, ingest, output, session, media, audio, graphics, replay, recording, streaming, and automation engines are not rewritten or bypassed.
-- No runtime media handles are accepted in items, events, graph metadata, or snapshots.
-
-## Deferred UI work
-
-No rundown UI, teleprompter UI, scheduling UI, collaborative editing, or timeline redesign is implemented in this phase.
+- No Program switching is performed by rundown APIs.
+- CUT, TAKE, AUTO, ProductionGraph switching, media planes, engines, and device runtimes remain owned by existing systems.
+- Rundown integration is metadata-only through events and `attachRundownMetadataToGraph`.
+- Deferred UI work: no new rundown UI, teleprompter UI, or timeline redesign is implemented.

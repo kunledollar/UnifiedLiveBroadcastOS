@@ -300,6 +300,8 @@ import {
   attachOutputMetadataToGraph,
   SessionRuntimeController,
   attachSessionMetadataToGraph,
+  RundownRuntimeController,
+  attachRundownMetadataToGraph,
 } from './index.js';
 
 const command = (
@@ -6099,3 +6101,59 @@ sessionRuntime.closeSession('session-v46-main');
 sessionRuntime.archiveSession('session-v46-main');
 sessionRuntime.disposeSession('session-v46-main');
 assert.equal(sessionRuntime.listSessions()[0]?.runtimeState, 'Disposed', 'session API closes, archives, and disposes sessions deterministically');
+
+
+// UBOS Version 4.7 Rundown & Show Control Runtime validation
+const rundownRuntime = new RundownRuntimeController(v43Runtime.bus, v43Runtime.healthManager);
+v43Runtime.register(rundownRuntime);
+const rundown = rundownRuntime.createRundown({ rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Evening Show Rundown' });
+assert.equal(rundown.containsMediaHandles, false, 'rundown runtime objects are metadata-only');
+let duplicateRundownRejected = false;
+try { rundownRuntime.createRundown({ rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Duplicate' }); } catch { duplicateRundownRejected = true; }
+assert.equal(duplicateRundownRejected, true, 'rundown registry rejects duplicate rundowns');
+rundownRuntime.addItem('rundown-v47-main', { itemId: 'item-open', rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Open', itemType: 'scene', order: 1, sceneReference: Object.keys(session.graph.scenes)[0], sourceReferences: [], requiredDevices: ['camera-1'], requiredInputs: ['pipeline-camera-1'], requiredOutputs: ['output-program-rtmp'], executionMode: 'operator-confirmed' });
+rundownRuntime.addItem('rundown-v47-main', { itemId: 'item-lower-third', rundownId: 'rundown-v47-main', sessionId: 'session-v46-main', title: 'Name Strap', itemType: 'lower third', order: 2, graphicsReference: 'gfx-l3', executionMode: 'manual' });
+assert.equal(rundownRuntime.listRundowns()[0]?.items[0]?.itemId, 'item-open', 'rundown item registry preserves deterministic item ordering');
+let illegalRundownTransitionRejected = false;
+try { rundownRuntime.startRundown('rundown-v47-main'); } catch { illegalRundownTransitionRejected = true; }
+assert.equal(illegalRundownTransitionRejected, true, 'rundown lifecycle rejects illegal state transitions');
+rundownRuntime.loadRundown('rundown-v47-main');
+const validationFailure = rundownRuntime.validateRundown('rundown-v47-main', { session: recoveredSession, graph: session.graph, devices: [], inputs: [], outputs: [], graphicsAssets: [], replayClips: [] });
+assert.equal(validationFailure.validationErrors.some((e) => e.code === 'DEVICE_MISSING'), true, 'rundown validation returns explicit missing dependency errors');
+const validationSuccess = rundownRuntime.validateRundown('rundown-v47-main', { session: recoveredSession, graph: session.graph, devices: ['camera-1'], inputs: ['pipeline-camera-1'], outputs: ['output-program-rtmp'], graphicsAssets: ['gfx-l3'], replayClips: [] });
+assert.equal(validationSuccess.state, 'ready', 'rundown validation promotes valid rundowns to ready');
+rundownRuntime.startRundown('rundown-v47-main');
+const cued = rundownRuntime.cueItem('rundown-v47-main', 'item-open');
+assert.equal(cued.cuedItemId, 'item-open', 'rundown cue behavior records the cued item');
+const executing = rundownRuntime.takeNext('rundown-v47-main', 'cmd-take-open');
+assert.equal(executing.currentItemId, 'item-open', 'rundown take next deterministically sets current item');
+const duplicateTake = rundownRuntime.takeNext('rundown-v47-main', 'cmd-take-open');
+assert.equal(duplicateTake.currentItemId, 'item-open', 'rundown duplicate execution prevention is command-id idempotent');
+rundownRuntime.completeItem('rundown-v47-main', 'item-open');
+const held = rundownRuntime.holdItem('rundown-v47-main', 'item-lower-third');
+assert.equal(held.heldItemId, 'item-lower-third', 'rundown hold behavior records held item');
+rundownRuntime.resumeItem('rundown-v47-main', 'item-lower-third');
+const jumped = rundownRuntime.jumpToItem('rundown-v47-main', 'item-lower-third');
+assert.equal(jumped.cuedItemId, 'item-lower-third', 'rundown jump behavior cues the requested item');
+rundownRuntime.skipItem('rundown-v47-main', 'item-lower-third');
+assert.equal(rundownRuntime.getHistory('rundown-v47-main').some((entry) => entry.command === 'skip item'), true, 'rundown audit history records operator commands');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'RundownItemCued'), true, 'RuntimeEventBus propagates metadata-only rundown item events');
+const graphWithRundown = attachRundownMetadataToGraph(session.graph, rundownRuntime.listRundowns()[0]!);
+assert.equal(graphWithRundown.session.metadata.activeRundown, 'rundown-v47-main', 'ProductionGraph exposes active rundown metadata');
+assert.equal(graphWithRundown.session.metadata.containsMediaHandles, false, 'ProductionGraph rundown metadata excludes media handles');
+assert.equal(rundownRuntime.getHealth('rundown-v47-main').failedItemCount, 0, 'rundown health manager propagates failed item count');
+assert.equal(rundownRuntime.getMetrics('rundown-v47-main').totalItems, 2, 'rundown metrics collector reports total items');
+const rundownSnapshot = rundownRuntime.createSnapshot('rundown-v47-main');
+assert.equal(rundownSnapshot.containsMediaHandles, false, 'rundown snapshots are metadata-only');
+let staleSnapshotRejected = false;
+rundownRuntime.updateRundownMetadata('rundown-v47-main', { title: 'Evening Show Rundown Updated' });
+try { rundownRuntime.restoreSnapshot(rundownSnapshot.snapshotId); } catch { staleSnapshotRejected = true; }
+assert.equal(staleSnapshotRejected, true, 'rundown recovery rejects stale snapshots');
+let noMediaHandleRejected = false;
+try { rundownRuntime.updateItem('rundown-v47-main', 'item-lower-third', { transitionMetadata: { runtimeHandle: 'forbidden' } }); } catch { noMediaHandleRejected = true; }
+assert.equal(noMediaHandleRejected, true, 'rundown safety rejects runtime media handles');
+rundownRuntime.stopRundown('rundown-v47-main');
+rundownRuntime.archiveRundown('rundown-v47-main');
+rundownRuntime.dispose();
+assert.equal(rundownRuntime.listRundowns()[0]?.state, 'disposed', 'rundown disposal cleanup marks rundowns disposed');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'rundown-runtime-controller'), true, 'RuntimeController owns RundownRuntimeController lifecycle');

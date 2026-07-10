@@ -1,17 +1,5 @@
 # Rundown Validation
 
-Before items become ready, validation checks:
+Before readiness, validation checks scene, source, device, input, output, graphics asset, replay clip, transition metadata, durations, active session ownership, dependencies, and production-state eligibility. Errors are explicit and never silently repaired.
 
-- Referenced scene exists in ProductionGraph.
-- Referenced source exists in ProductionGraph.
-- Required device exists as metadata in graph plugins.
-- Required input exists as source or guest metadata.
-- Required output exists as destination metadata.
-- Required graphics asset exists as overlay metadata.
-- Required replay clip exists as replay metadata.
-- Transition metadata duration is valid.
-- Duration estimate is non-negative.
-- Rundown session matches active session.
-- Production state permits execution and session is not closed.
-
-Validation returns explicit errors with codes and item ids. The runtime does not silently repair invalid items.
+The validator accepts metadata fixtures for session, graph, devices, inputs, outputs, graphics assets, and replay clips. Missing dependencies emit stable codes such as `SCENE_MISSING`, `SOURCE_MISSING`, `DEVICE_MISSING`, `INPUT_MISSING`, `OUTPUT_MISSING`, `GRAPHICS_MISSING`, `REPLAY_MISSING`, `TRANSITION_INVALID`, and `INVALID_DURATION`.

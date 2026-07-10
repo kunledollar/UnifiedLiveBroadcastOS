@@ -1,55 +1,56 @@
 # Rundown State Machine
 
-## Rundown transitions
+## Lifecycle diagram
 
-| State | Allowed next states |
-|---|---|
-| created | loading, archived, disposed |
-| loading | validated, failed, stopped |
-| validated | ready, failed, stopped |
-| ready | running, archived, stopped, failed |
-| running | paused, completed, stopped, failed, recovering |
-| paused | running, stopped, failed, recovering |
-| recovering | paused, running, failed, stopped, disposed |
-| completed | archived, disposed |
-| stopped | ready, archived, disposed |
-| archived | disposed |
-| failed | recovering, stopped, archived, disposed |
-| disposed | none |
+```mermaid
+stateDiagram-v2
+  created --> loading
+  created --> archived
+  created --> disposed
+  loading --> validated
+  loading --> failed
+  loading --> stopped
+  validated --> ready
+  validated --> failed
+  ready --> running
+  ready --> archived
+  ready --> stopped
+  running --> paused
+  running --> completed
+  running --> failed
+  running --> stopped
+  running --> recovering
+  paused --> running
+  paused --> stopped
+  paused --> recovering
+  recovering --> ready
+  recovering --> running
+  recovering --> failed
+  recovering --> stopped
+  completed --> archived
+  completed --> disposed
+  stopped --> loading
+  stopped --> archived
+  stopped --> disposed
+  archived --> disposed
+```
 
-Illegal transitions throw errors and are audited as rejected/failed command attempts by API callers.
+Illegal transitions are rejected by `RundownLifecycleManager`.
 
-## Item transitions
+## Item state table
 
 | State | Allowed next states |
 |---|---|
 | pending | validating, ready, cancelled |
 | validating | ready, invalid |
 | invalid | validating, cancelled |
-| ready | cued, next, executing, skipped, held, cancelled |
-| cued | next, executing, ready, skipped, held, cancelled |
+| ready | cued, next, held, skipped, executing, cancelled |
+| cued | next, ready, held, skipped, executing, cancelled |
 | next | executing, cued, skipped, held, cancelled |
-| executing | completed, failed, held |
+| executing | completed, failed, held, cancelled |
 | completed | recovered |
-| skipped | ready, recovered |
-| held | ready, executing, skipped, cancelled |
-| failed | validating, recovered, cancelled |
+| skipped | recovered |
+| held | ready, cued, executing, skipped, cancelled |
+| failed | recovered, cancelled |
 | recovered | ready, completed |
 | cancelled | none |
-
-```mermaid
-stateDiagram-v2
-  created --> loading
-  loading --> validated
-  validated --> ready
-  ready --> running
-  running --> paused
-  paused --> running
-  running --> completed
-  running --> recovering
-  recovering --> running
-  running --> failed
-  failed --> recovering
-  completed --> archived
-  archived --> disposed
-```
