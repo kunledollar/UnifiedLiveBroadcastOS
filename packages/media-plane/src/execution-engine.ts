@@ -968,19 +968,17 @@ export class DeterministicCommandScheduler {
     this.records.set(base.id, rec);
     this.sequences.add(seqKey);
     this.depthMax = Math.max(this.depthMax, this.records.size);
-    this.detectCycles();
+    this.detectCyclesFrom(base.id);
     return cloneCommand(base);
   }
   scheduleForNextFrame(command: RuntimeCommand) {
     return this.schedule({ ...command, targetFrame: this.currentFrame() + 1n });
   }
-  private detectCycles() {
-    const visiting = new Set<string>(),
-      visited = new Set<string>();
+  private detectCyclesFrom(rootId: string) {
+    const visiting = new Set<string>();
     const path: string[] = [];
     const visit = (id: string) => {
       if (visiting.has(id)) throw new DependencyCycleError([...path.slice(path.indexOf(id)), id]);
-      if (visited.has(id)) return;
       const r = this.records.get(id);
       if (!r) return;
       visiting.add(id);
@@ -988,9 +986,8 @@ export class DeterministicCommandScheduler {
       for (const d of r.dependencies) if (this.records.has(d)) visit(d);
       path.pop();
       visiting.delete(id);
-      visited.add(id);
     };
-    for (const id of this.records.keys()) visit(id);
+    visit(rootId);
   }
   private isExpired(r: ScheduledCommandRecord, frame: bigint, nowNs: bigint) {
     return (
@@ -1053,7 +1050,14 @@ export class DeterministicCommandScheduler {
           .map((r) => [r.command.id, r]),
       );
       for (const r of [...candidates.values()].sort(compareRecords)) {
-        const missing = r.dependencies.find((d) => !this.completed.has(d) && !candidates.has(d));
+        const missing = r.dependencies.find(
+          (d) =>
+            !this.completed.has(d) &&
+            !this.failed.has(d) &&
+            !this.cancelled.has(d) &&
+            !this.expired.has(d) &&
+            !this.records.has(d),
+        );
         if (missing) {
           this.records.delete(r.command.id);
           this.sequences.delete(r.sequence.toString());
@@ -1062,26 +1066,9 @@ export class DeterministicCommandScheduler {
           failedDependencyIds.push(r.command.id);
         }
       }
-      const due: ScheduledCommandRecord[] = [];
-      const satisfied = new Set(this.completed);
-      while (candidates.size) {
-        const readyNow = [...candidates.values()]
-          .filter((r) => r.dependencies.every((d) => satisfied.has(d)))
-          .sort(compareRecords);
-        if (!readyNow.length) {
-          for (const r of [...candidates.values()].sort(compareRecords)) {
-            this.records.delete(r.command.id);
-            this.sequences.delete(r.sequence.toString());
-            this.failed.add(r.command.id);
-            failedDependencyIds.push(r.command.id);
-          }
-          break;
-        }
-        const r = readyNow[0]!;
-        candidates.delete(r.command.id);
-        satisfied.add(r.command.id);
-        due.push(r);
-      }
+      const due = [...candidates.values()]
+        .filter((r) => r.dependencies.every((d) => this.completed.has(d)))
+        .sort(compareRecords);
       for (const r of due) {
         this.transition(r, 'READY');
         this.records.delete(r.command.id);
@@ -1105,9 +1092,19 @@ export class DeterministicCommandScheduler {
     }
   }
   markCompleted(id: string) {
+    const r = this.records.get(id);
+    if (r) {
+      this.records.delete(id);
+      this.sequences.delete(r.sequence.toString());
+    }
     this.completed.add(id);
   }
   markFailed(id: string) {
+    const r = this.records.get(id);
+    if (r) {
+      this.records.delete(id);
+      this.sequences.delete(r.sequence.toString());
+    }
     this.failed.add(id);
   }
   cancel(commandId: string) {
@@ -1199,6 +1196,60 @@ export class DeterministicCommandScheduler {
       .filter((r) => r.dependencies.includes(dependencyId))
       .sort(compareRecords)
       .map((r) => cloneCommand(r.command));
+  }
+
+  /** Public UBOS runtime execution-engine API. */
+  assertInvariants() {
+    const activeIds = new Set<string>();
+    for (const r of this.records.values()) {
+      if (activeIds.has(r.command.id))
+        throw new RuntimeEngineError(
+          'SchedulerInvariantViolation',
+          `Duplicate active command ${r.command.id}`,
+        );
+      activeIds.add(r.command.id);
+      if (terminalStates.has(r.state))
+        throw new RuntimeEngineError(
+          'SchedulerInvariantViolation',
+          `Terminal command ${r.command.id} remains active`,
+        );
+      if (r.state === 'READY' && !this.ready(r))
+        throw new RuntimeEngineError(
+          'SchedulerInvariantViolation',
+          `Ready command ${r.command.id} has unsatisfied dependencies`,
+        );
+      if (this.cancelled.has(r.command.id))
+        throw new RuntimeEngineError(
+          'SchedulerInvariantViolation',
+          `Cancelled command ${r.command.id} remains active`,
+        );
+      if (this.failed.has(r.command.id))
+        throw new RuntimeEngineError(
+          'SchedulerInvariantViolation',
+          `Failed command ${r.command.id} remains active`,
+        );
+      if (this.expired.has(r.command.id))
+        throw new RuntimeEngineError(
+          'SchedulerInvariantViolation',
+          `Expired command ${r.command.id} remains active`,
+        );
+      if (!this.sequences.has(r.sequence.toString()))
+        throw new RuntimeEngineError(
+          'SchedulerInvariantViolation',
+          `Missing sequence index for ${r.command.id}`,
+        );
+    }
+    if (this.sequences.size !== this.records.size)
+      throw new RuntimeEngineError(
+        'SchedulerInvariantViolation',
+        'Sequence index count differs from active record count',
+      );
+    return Object.freeze({
+      activeCommands: activeIds.size,
+      sequenceIndexes: this.sequences.size,
+      terminalCommands:
+        this.completed.size + this.failed.size + this.cancelled.size + this.expired.size,
+    });
   }
   snapshot(): SchedulerSnapshot {
     const vals = [...this.records.values()];

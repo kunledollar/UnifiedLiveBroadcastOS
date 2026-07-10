@@ -113,3 +113,23 @@ Insertion and lookup are map-backed. Cancellation uses deterministic sorted ID s
 ## Future automation support
 
 The scheduler is designed to orchestrate future automation and macro commands without introducing subsystem-owned clocks or media behavior. UBOS v5.1.4 can build command execution retries, transactional behavior, and runtime isolation on top of these deterministic scheduling guarantees.
+
+## Final scheduler audit policy update
+
+The v5.1.3 scheduler audit hardens dependency and lifecycle behavior with the following deterministic policies:
+
+- Dependency readiness is based only on dependencies that have reached the scheduler's completed terminal set. Commands that are merely due in the same scheduler drain do not satisfy dependents until they are actually marked completed by the runtime command lifecycle.
+- Missing, failed, cancelled, or expired dependencies are resolved deterministically during due collection; dependents transition to the failed dependency path instead of remaining indefinitely waiting.
+- Commands marked completed or failed through scheduler lifecycle APIs are removed from active indexes before their terminal state is recorded, preserving exactly-once execution and preventing terminal commands from returning to executable queues.
+- Cycle detection is performed from the newly scheduled command's dependency path, preserving deterministic rejection while avoiding full-queue cycle scans on normal insertion.
+- `assertInvariants()` is available for validation and development checks to verify active command uniqueness, sequence-index consistency, terminal-state isolation, ready dependency satisfaction, and terminal/active index separation.
+
+Hot-path complexity after the audit:
+
+- Schedule by ID: O(d) cycle check over the new command's reachable dependency path, plus O(1) map/set insertion.
+- Lookup by ID and cancellation by ID: O(1).
+- Due collection and deterministic ordering: O(n log n) for active queue sort plus O(n * d) dependency-state checks for due candidates.
+- Snapshot creation: O(n).
+- Group and dependency lookup: O(n) administrative scans.
+
+Restart policy remains conservative for v5.1.x compatibility: runtime stop is terminal for an engine instance; clean restart uses a new initialized engine instance. Terminal scheduler sets prevent completed, failed, cancelled, and expired commands from being scheduled again with the same command ID in the same scheduler lifecycle.
