@@ -298,6 +298,8 @@ import {
   attachPipelineMetadataToGraph,
   OutputRuntimeController,
   attachOutputMetadataToGraph,
+  SessionRuntimeController,
+  attachSessionMetadataToGraph,
 } from './index.js';
 
 const command = (
@@ -6050,3 +6052,50 @@ const graphWithOutput = attachOutputMetadataToGraph(session.graph, outputRuntime
 assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.containsMediaHandles, false, 'ProductionGraph output node contains metadata only');
 assert.equal(graphWithOutput.destinations['destination-program-rtmp']?.metadata.state, 'Recovering', 'ProductionGraph output node exposes output state metadata');
 assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'output-runtime-controller'), true, 'RuntimeController owns OutputRuntimeController lifecycle');
+
+
+// UBOS Version 4.6 Broadcast Session & Show Runtime validation
+const sessionRuntime = new SessionRuntimeController(v43Runtime.bus);
+v43Runtime.register(sessionRuntime);
+const v46Session = sessionRuntime.createSession({
+  sessionId: 'session-v46-main',
+  name: 'Evening Show',
+  operator: 'director-1',
+  productionType: 'Live',
+  workspacePreset: 'studio-a',
+  activeRundown: 'rundown-a',
+  deviceSet: ['camera-1'],
+  inputSet: ['pipeline-camera-1'],
+  outputSet: ['output-program-rtmp'],
+  recordingTargets: ['rec-main'],
+  streamingTargets: ['stream-main'],
+});
+assert.equal(v46Session.containsMediaHandles, false, 'session runtime objects are metadata-only');
+let duplicateSessionRejected = false;
+try { sessionRuntime.createSession({ sessionId: 'session-v46-main', name: 'Duplicate', operator: 'director-1' }); } catch { duplicateSessionRejected = true; }
+assert.equal(duplicateSessionRejected, true, 'session registry rejects duplicate sessions');
+sessionRuntime.loadSession('session-v46-main');
+sessionRuntime.startSession();
+assert.equal(sessionRuntime.currentSession()?.runtimeState, 'Running', 'session lifecycle starts current session');
+sessionRuntime.pauseSession();
+let illegalSessionTransitionRejected = false;
+try { sessionRuntime.archiveSession('session-v46-main'); } catch { illegalSessionTransitionRejected = true; }
+assert.equal(illegalSessionTransitionRejected, true, 'session lifecycle rejects illegal transitions');
+const sessionSnapshot = sessionRuntime.saveSnapshot('session-v46-main', { panelLayout: { left: 'rundown', right: 'program' }, productionGraphMetadata: { graphId: session.graph.id, revision: session.graph.metadata.revision } });
+assert.equal(sessionSnapshot.containsMediaSerialization, false, 'session snapshots never serialize media');
+const recoveredSession = sessionRuntime.restoreSnapshot(sessionSnapshot.snapshotId);
+assert.equal(recoveredSession.runtimeState, 'Recovering', 'session recovery restores metadata into recovering state');
+assert.equal(recoveredSession.deviceSet[0], 'camera-1', 'session recovery restores device registry metadata');
+assert.equal(sessionRuntime.metrics.collect(recoveredSession).activeOutputs, 1, 'session metrics collector reports active outputs');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'SessionCreated'), true, 'RuntimeEventBus propagates session creation events');
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'SnapshotRestored'), true, 'RuntimeEventBus propagates snapshot restore events');
+const graphWithSession = attachSessionMetadataToGraph(session.graph, recoveredSession);
+assert.equal(graphWithSession.session.metadata.activeSession, 'session-v46-main', 'ProductionGraph exposes active session metadata');
+assert.equal(graphWithSession.session.metadata.containsMediaHandles, false, 'ProductionGraph session metadata excludes media handles');
+assert.equal(graphWithSession.workspace.selectedPreset, 'studio-a', 'ProductionGraph exposes session workspace metadata');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'session-runtime-controller'), true, 'RuntimeController owns SessionRuntimeController lifecycle');
+sessionRuntime.startSession('session-v46-main');
+sessionRuntime.closeSession('session-v46-main');
+sessionRuntime.archiveSession('session-v46-main');
+sessionRuntime.disposeSession('session-v46-main');
+assert.equal(sessionRuntime.listSessions()[0]?.runtimeState, 'Disposed', 'session API closes, archives, and disposes sessions deterministically');
