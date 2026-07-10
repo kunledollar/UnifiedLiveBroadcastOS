@@ -40,6 +40,16 @@ import {
   assertFramePlanHasFrameIdentity,
   createBroadcastRuntimeCore,
   RuntimeIntegrationAdapter,
+  DeviceRegistry as RuntimeDeviceRegistry,
+  DeviceDiscoveryManager,
+  StaticDiscoveryProvider,
+  DeviceConnectionManager,
+  DeviceCapabilityResolver,
+  DeviceProfileManager,
+  DeviceHealthMonitor,
+  assertMetadataSafe,
+  mapDeviceToProductionGraphMetadata,
+  calculateRecoveryDelay,
   assertFrameTimestampFromClock,
   assertMonotonicFrameId,
   assertNoIndependentSubsystemClock,
@@ -5884,3 +5894,63 @@ try {
   rejectedInvalidDependency = true;
 }
 assert.equal(rejectedInvalidDependency, true, 'runtime controller rejects invalid dependency graphs');
+
+
+// UBOS Version 4.3 Device & Hardware Integration validation
+const deviceFixture = {
+  deviceId: 'camera-1',
+  persistentId: 'browser-media:videoinput:camera-1',
+  displayName: 'Studio Camera 1',
+  manufacturer: 'Unknown',
+  model: 'Browser Camera',
+  deviceType: 'video-camera' as const,
+  connectionType: 'browser-media' as const,
+  capabilities: { video: [{ kind: 'video' as const, width: 1920, height: 1080, frameRate: 30, scan: 'progressive' as const }], canRouteToProgram: true, canRouteToPreview: true },
+  supportedFormats: [{ kind: 'video' as const, width: 1920, height: 1080, frameRate: 30, scan: 'progressive' as const }],
+  sampleRates: [],
+  channelCounts: [],
+  frameRates: [30],
+  resolutions: [{ width: 1920, height: 1080 }],
+  colorFormats: ['unknown'],
+  latencyEstimateMs: 'unknown' as const,
+  health: { state: 'unknown' as const, availability: 'unknown' as const, connectionState: 'discovered' as const, providerAvailability: 'available' as const },
+  connectionState: 'discovered' as const,
+  lastSeenAt: '2026-07-10T00:00:00.000Z',
+  runtimeAdapterId: 'browser-media-adapter',
+  productionGraphNodeId: 'pg-device-camera-1',
+};
+const deviceRegistry = new RuntimeDeviceRegistry();
+const registeredDevice = deviceRegistry.register(deviceFixture);
+assert.equal(registeredDevice.deviceId, 'camera-1', 'device registry registers serializable metadata');
+assert.equal(deviceRegistry.register({ ...deviceFixture, displayName: 'Studio Camera 1 Duplicate' }).deviceId, 'camera-1', 'device registry suppresses deterministic duplicates');
+const provider = new StaticDiscoveryProvider('fixture-provider', [deviceFixture]);
+const discovery = new DeviceDiscoveryManager([provider], deviceRegistry);
+assert.equal(discovery.initialize()[0]?.state, 'initialized', 'discovery provider lifecycle initializes');
+assert.equal(discovery.refresh().length, 0, 'discovery refresh suppresses already registered duplicates');
+assert.equal(discovery.stop()[0]?.state, 'stopped', 'discovery provider lifecycle stops');
+const connectionManager = new DeviceConnectionManager(deviceRegistry);
+connectionManager.transition('camera-1', 'connecting');
+connectionManager.transition('camera-1', 'connected');
+connectionManager.transition('camera-1', 'ready');
+let rejectedIllegalDeviceTransition = false;
+try { connectionManager.transition('camera-1', 'permission-required'); } catch { rejectedIllegalDeviceTransition = true; }
+assert.equal(rejectedIllegalDeviceTransition, true, 'device connection manager rejects illegal transitions');
+const capabilityResolver = new DeviceCapabilityResolver();
+assert.equal(capabilityResolver.select(deviceFixture, { kind: 'video', width: 3840, height: 2160, frameRate: 60 }).fallbackReason, 'requested-format-unsupported', 'capability resolver reports unsupported format fallback');
+assert.equal(capabilityResolver.select(deviceFixture, { kind: 'video', width: 1920, height: 1080, frameRate: 30 }).selectedFormat?.width, 1920, 'capability resolver selects supported explicit format');
+const profileManager = new DeviceProfileManager();
+assert.equal(profileManager.load({ version: 1, deviceId: 'camera-1', preferredDisplayName: 'Main Camera' }).ok, true, 'profile manager accepts current version profiles');
+assert.equal(profileManager.load({ version: 99, deviceId: 'camera-1' }).ok, false, 'profile manager rejects malformed or outdated profiles safely');
+const healthMonitor = new DeviceHealthMonitor();
+assert.equal(healthMonitor.update('camera-1', { state: 'healthy', availability: 'available', connectionState: 'ready', providerAvailability: 'available' }).state, 'healthy', 'device health monitor stores health metadata');
+assert.equal(assertMetadataSafe(mapDeviceToProductionGraphMetadata(deviceFixture, 'DeviceDiscovered')), true, 'ProductionGraph device mapping is metadata safe');
+assert.equal(mapDeviceToProductionGraphMetadata(deviceFixture).containsRuntimeHandles, false, 'ProductionGraph device mapping excludes runtime handles');
+assert.equal(calculateRecoveryDelay({ kind: 'exponential-backoff', maximumAttempts: 3, retryDelayMs: 100, cooldownMs: 1000, operatorAcknowledgementRequired: true }, 3), 400, 'reconnect policy calculates exponential backoff');
+const unavailableProvider = new StaticDiscoveryProvider('native-placeholder', [], false, 'provider-unavailable');
+assert.equal(unavailableProvider.initialize().available, false, 'provider unavailable state is represented without claiming hardware support');
+assert.equal(discovery.dispose()[0]?.state, 'disposed', 'discovery disposal releases provider lifecycle state');
+const v43Runtime = createBroadcastRuntimeCore('runtime-core:v4.3-validation');
+v43Runtime.initialize();
+v43Runtime.start();
+assert.equal(v43Runtime.bus.replay().some((event) => event.type === 'DeviceDiscovered'), true, 'DeviceManager publishes metadata-only hot-plug discovery events through RuntimeEventBus');
+assert.equal(v43Runtime.snapshot().subsystems.some((subsystem) => subsystem.id === 'device-manager' && subsystem.metadata.hardwarePlatform === 'v4.3'), true, 'RuntimeController owns the v4.3 DeviceManager lifecycle adapter');
