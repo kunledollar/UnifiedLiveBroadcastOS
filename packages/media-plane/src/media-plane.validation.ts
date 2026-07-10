@@ -38,6 +38,7 @@ import {
   isMediaSyncEnabled,
   assignIntentToFrame,
   assertFramePlanHasFrameIdentity,
+  createBroadcastRuntimeCore,
   assertFrameTimestampFromClock,
   assertMonotonicFrameId,
   assertNoIndependentSubsystemClock,
@@ -5810,3 +5811,24 @@ assert.equal(
 );
 const diagnosticsDemo = createDiagnosticsDemo();
 assert.equal(diagnosticsDemo.snapshot.alerts.length, 1, 'diagnostics demo produces alert metadata');
+
+
+// UBOS Version 4.1 Broadcast Runtime Core validation
+const broadcastRuntime = createBroadcastRuntimeCore('runtime-core:validation');
+assert.equal(broadcastRuntime.initialize().state, 'initialized', 'runtime core initializes centrally');
+assert.equal(broadcastRuntime.start().state, 'running', 'runtime core starts all lifecycle managers');
+assert.equal(broadcastRuntime.pause().state, 'paused', 'runtime core pauses all lifecycle managers');
+assert.equal(broadcastRuntime.resume().state, 'running', 'runtime core resumes all lifecycle managers');
+const runtimeSnapshot = broadcastRuntime.stop();
+assert.equal(runtimeSnapshot.state, 'stopped', 'runtime core stops deterministically');
+assert.equal(
+  runtimeSnapshot.subsystems.every((subsystem) => subsystem.state === 'stopped'),
+  true,
+  'runtime core applies lifecycle commands to every subsystem',
+);
+assert.equal(
+  broadcastRuntime.bus.replay().every((event, index) => event.sequence === index + 1),
+  true,
+  'runtime event bus assigns deterministic event ordering',
+);
+assert.equal(runtimeSnapshot.containsRuntimeHandles, false, 'runtime snapshots remain metadata-only');
