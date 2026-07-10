@@ -76,20 +76,6 @@ import {
   type GpuSession,
 } from './gpu-runtime/index.js';
 
-export { RuntimeIntegrationAdapter, createBroadcastRuntimeCore } from './broadcast-runtime-core.js';
-export type { RuntimeSubsystem as BroadcastRuntimeSubsystem } from './broadcast-runtime-core.js';
-export {
-  DeviceRegistry,
-  DeviceDiscoveryManager,
-  StaticDiscoveryProvider,
-  DeviceConnectionManager,
-  DeviceCapabilityResolver,
-  DeviceProfileManager,
-  DeviceHealthMonitor,
-  assertMetadataSafe,
-  mapDeviceToProductionGraphMetadata,
-  calculateRecoveryDelay,
-} from './device-platform.js';
 export { createDiagnosticsManager, createDiagnosticsDemo } from './diagnostics/index.js';
 export {
   MonitoringRuntimeController,
@@ -1874,8 +1860,8 @@ export * from './monitoring-runtime.js';
 export * from './execution-engine.js';
 
 export {
-  RuntimeWatchdog,
-  createRuntimeWatchdog,
+  RuntimeWatchdog as RuntimeHealthWatchdog,
+  createRuntimeWatchdog as createRuntimeHealthWatchdog,
   createDefaultWatchdogRules,
   defaultRuntimeWatchdogConfig,
   redactWatchdogValue,
