@@ -257,61 +257,9 @@ import {
   createFFmpegVideoDecoder,
   buildFFprobeFrameMetadataArgs,
   createFFmpegDecodeCommandPreview,
-  createVideoCaptureSource,
-  FFmpegDeviceCaptureBackend,
-  createVideoCaptureDevice,
-  createAudioCaptureSource,
-  FFmpegAudioCaptureBackend,
-  createAudioCaptureDevice,
-  createAudioDecodeSource,
-  RingAudioBuffer,
-  createFFmpegAudioDecoder,
-  buildFFprobeAudioFrameMetadataArgs,
-  createFFmpegAudioDecodeCommandPreview,
-  createAudioMixer,
-  createSyntheticAudioFrame,
-  createLimiterProcessor,
-  createCompressorProcessor,
-  createEqualizerProcessor,
-  createHighPassFilterProcessor,
-  createLowPassFilterProcessor,
-  createAudioMixerDemo,
-  createPreviewOutput,
-  createProgramOutput,
-  OutputPipelineManager,
-  createPreviewProgramOutputDemo,
-  createProductionSwitcher,
-  createProductionSwitcherDemo,
-  createGraphicsEngine,
-  createGraphicsObject,
-  createOverlay,
-  defaultGraphicsTransform,
-  createGraphicsOverlayDemo,
-  createHardwareManager,
-  MetadataHardwareAdapter,
-  createHardwareIntegrationDevice,
-  createDeviceCapabilities,
-  supportedHardwareIntegrationVendors,
-  supportedHardwareCategories,
-  createHardwareIntegrationDemo,
-  createRemoteProductionManager,
-  createGuestSession,
-  createGreenRoom,
-  createTallyState,
-  createIFBState,
-  createDemoGuestWorkflow,
-  createTransportManager,
-  createDemoTransportWorkflow,
-  transportProtocols,
-  IngestRuntimeController,
-  PipelineFactory,
-  attachPipelineMetadataToGraph,
-  OutputRuntimeController,
-  attachOutputMetadataToGraph,
-  SessionRuntimeController,
-  attachSessionMetadataToGraph,
-  RundownRuntimeController,
-  attachRundownMetadataToGraph,
+  createVideoRenderer,
+  createVideoRenderSurface,
+  calculateAspectFit,
 } from './index.js';
 
 const command = (
@@ -4019,6 +3967,39 @@ assert.equal(
   true,
   'decoder snapshot declares media payload exclusion',
 );
+
+
+// UBOS 2.0 Phase 2.5 GPU rendering foundation validation
+const renderClock = createClock({ frameRate: 30 });
+renderClock.start();
+const videoRenderer = createVideoRenderer({ id: 'renderer:phase-2-5', preferredBackend: 'webgpu', webgpuSupported: false, clock: renderClock });
+const renderEvents: string[] = [];
+videoRenderer.onStatus((event) => renderEvents.push(event.type));
+const renderSurface = createVideoRenderSurface({ id: 'surface:preview', kind: 'canvas', width: 1280, height: 720, devicePixelRatio: 1 });
+const initializedRenderer = await videoRenderer.initialize(renderSurface);
+assert.equal(initializedRenderer.state, 'ready', 'renderer initializes into ready state');
+assert.equal(initializedRenderer.backend, 'fallback', 'unsupported WebGPU selects fallback renderer abstraction');
+const renderSnapshot = await videoRenderer.renderDecodedFrame(firstDecodedFrame!);
+assert.equal(renderSnapshot.state, 'rendering', 'renderer presents decoded video frame');
+assert.equal(renderSnapshot.presentedFrames, 1, 'renderer tracks presented frame count');
+assert.equal(renderSnapshot.latestFrame?.videoFrame.frameIndex, 0, 'render frame accepts decoded VideoFrame metadata');
+assert.equal(renderSnapshot.latestFrame?.layerIndex, 0, 'renderer only emits single video layer in Phase 2.5');
+assert.equal(renderSnapshot.latestFrame?.destinationRect.width, 1280, 'renderer aspect-fits landscape video to viewport width');
+assert.equal(renderSnapshot.latestFrame?.destinationRect.height, 720, 'renderer maintains aspect ratio in viewport');
+const resizedRenderer = videoRenderer.resize(720, 720);
+assert.equal(resizedRenderer.surface?.width, 720, 'renderer supports viewport resizing');
+assert.equal(resizedRenderer.latestFrame?.destinationRect.width, 720, 'renderer recalculates aspect fit after resize');
+assert.equal(resizedRenderer.latestFrame?.destinationRect.height, 405, 'renderer letterboxes resized viewport while preserving aspect ratio');
+videoRenderer.pause();
+assert.equal(videoRenderer.getSnapshot().state, 'paused', 'renderer pauses lifecycle');
+videoRenderer.resume();
+assert.equal(videoRenderer.getSnapshot().state, 'rendering', 'renderer resumes lifecycle');
+assert.equal(renderEvents.includes('frame_presented'), true, 'renderer emits status events');
+assert.equal(videoRenderer.getSnapshot().containsRuntimeHandles, false, 'renderer snapshot keeps backend handles isolated from UI');
+assert.equal(videoRenderer.getSnapshot().containsMediaPayloads, false, 'renderer preserves metadata-first payload exclusion');
+assert.equal(calculateAspectFit(1920, 1080, 1000, 1000).height, 563, 'aspect-fit helper maintains video ratio');
+await videoRenderer.stop();
+assert.equal(videoRenderer.getSnapshot().state, 'stopped', 'renderer stops lifecycle');
 
 // UBOS 2.0 Phase 2.2 real FFmpeg process pipeline validation
 const dryRunRuntime = createFFmpegRuntime(createFFmpegEnvironment({}), {
