@@ -1,5 +1,12 @@
 # Changelog
 
+## UBOS v4.12.0 — Platform Architecture Baseline
+
+- Added the UBOS v4.12 platform freeze, baseline manifest, release notes, and final certification report.
+- Preserved the existing package versioning convention (`1.0.0-rc.1`) and documented the platform release identity as UBOS v4.12.0.
+- Classified remaining repository and build limitations as operator-environment checks before final branch/tag creation.
+
+
 ## UBOS v3.15 Phase 2 — Engineering Completion and Legacy Cleanup
 
 - Completed legacy layout cleanup by removing the inactive split Program/Preview deck and its legacy zone resize helper after verifying no active imports, lazy imports, dynamic imports, runtime references, or tests depend on them.
