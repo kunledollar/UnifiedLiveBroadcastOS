@@ -77,6 +77,7 @@ import {
 } from './gpu-runtime/index.js';
 export * from './ingest-runtime.js';
 export * from './output-runtime.js';
+export * from './session-runtime.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
