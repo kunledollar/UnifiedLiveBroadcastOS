@@ -78,6 +78,7 @@ import {
 export * from './ingest-runtime.js';
 export * from './output-runtime.js';
 export * from './session-runtime.js';
+export * from './rundown-runtime.js';
 
 export type MediaExecutionIntentType =
   | 'SWITCH_PROGRAM_SCENE'
