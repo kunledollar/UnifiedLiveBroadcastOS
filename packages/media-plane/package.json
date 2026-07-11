@@ -9,7 +9,7 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node dist/media-plane/src/media-plane.validation.js && node dist/media-plane/src/transport/validation.js && node dist/media-plane/src/execution-engine.validation.js && node dist/media-plane/src/source-acquisition.validation.js && node dist/media-plane/src/device-discovery.validation.js && node dist/media-plane/src/source-graph.validation.js"
+    "test": "pnpm build && node dist/media-plane/src/media-plane.validation.js && node dist/media-plane/src/transport/validation.js && node dist/media-plane/src/execution-engine.validation.js && node dist/media-plane/src/source-acquisition.validation.js && node dist/media-plane/src/device-discovery.validation.js && node dist/media-plane/src/source-graph.validation.js && node dist/media-plane/src/camera-source.validation.js"
   },
   "dependencies": {
     "@ubos/shared": "workspace:*"
