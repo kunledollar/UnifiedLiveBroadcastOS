@@ -32,6 +32,7 @@ export type VideoFrameFormat =
   | 'RGBA8'
   | 'BGRA8'
   | 'RGB24'
+  | 'BGR24'
   | 'RGBA16F'
   | 'RGBA32F'
   | 'YUY2'
@@ -505,6 +506,7 @@ const fmtMap: Record<
   RGBA8: { planes: ['PACKED'], bpp: [4], sx: [1], sy: [1], bits: 8 },
   BGRA8: { planes: ['PACKED'], bpp: [4], sx: [1], sy: [1], bits: 8 },
   RGB24: { planes: ['PACKED'], bpp: [3], sx: [1], sy: [1], bits: 8 },
+  BGR24: { planes: ['PACKED'], bpp: [3], sx: [1], sy: [1], bits: 8 },
   RGBA16F: { planes: ['PACKED'], bpp: [8], sx: [1], sy: [1], bits: 16 },
   RGBA32F: { planes: ['PACKED'], bpp: [16], sx: [1], sy: [1], bits: 32 },
   YUY2: { planes: ['PACKED'], bpp: [2], sx: [1], sy: [1], bits: 8 },
