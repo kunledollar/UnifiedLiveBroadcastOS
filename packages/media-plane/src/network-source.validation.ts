@@ -1,0 +1,48 @@
+function assert(value: unknown, message = 'assert') { if (!value) throw new Error(message); }
+assert.equal = (a: unknown, b: unknown, m = 'assert equal') => { if (a !== b) throw new Error(`${m}: ${String(a)} !== ${String(b)}`); };
+assert.deepEqual = (a: unknown, b: unknown, m = 'assert deepEqual') => { if (JSON.stringify(a) !== JSON.stringify(b)) throw new Error(m); };
+assert.throws = (fn: () => unknown, pattern: RegExp) => { try { fn(); } catch (e) { if (pattern.test(String(e))) return; throw e; } throw new Error(`expected throw ${pattern}`); };
+import { createNetworkDescriptor, SyntheticNetworkSourceProvider, createNetworkSourceRegistry, NetworkPacketQueue, createSyntheticNetworkPacket, NetworkJitterBuffer, DEFAULT_NETWORK_PACKET_BUFFER_CONFIG, validateNetworkEndpointReference, evaluateNetworkAddressPolicy, NetworkPacketHandleTracker, redactNetworkValue } from './network-source.js';
+
+const nowNs = () => 1n;
+const registry = createNetworkSourceRegistry();
+const provider = new SyntheticNetworkSourceProvider();
+registry.registerProvider(provider);
+assert.throws(() => registry.registerProvider(provider), /DuplicateNetworkSource/);
+const descriptor = createNetworkDescriptor('net-1');
+assert(Object.isFrozen(descriptor));
+validateNetworkEndpointReference(descriptor.endpoint);
+assert.throws(() => validateNetworkEndpointReference({ endpointReferenceId:'bad', kind:'HOST_PORT', scheme:'ftp', safeSummary:'ftp://x' }), /NetworkEndpointInvalid/);
+assert.throws(() => validateNetworkEndpointReference({ endpointReferenceId:'bad', kind:'HOST_PORT', scheme:'srt', host:'user@host', safeSummary:'srt://user:pass@host' }), /NetworkEndpointInvalid/);
+assert.throws(() => evaluateNetworkAddressPolicy({ endpointReferenceId:'e', kind:'HOST_PORT', scheme:'tcp', host:'127.0.0.1', port:1, safeSummary:'localhost' }), /NetworkAddressPolicyDenied/);
+assert.throws(() => evaluateNetworkAddressPolicy({ endpointReferenceId:'e', kind:'HOST_PORT', scheme:'tcp', host:'169.254.169.254', port:80, safeSummary:'metadata' }), /NetworkAddressPolicyDenied/);
+const source = await registry.registerSource(descriptor);
+assert.equal(source.snapshot().connection, 'REGISTERED');
+await source.connectNetwork({ endpoint:descriptor.endpoint, connectionMode:'CALLER', timeoutNs:1n, handshakeTimeoutNs:1n, authenticationTimeoutNs:1n }, { nowNs });
+try { await source.connectNetwork({ endpoint:descriptor.endpoint, connectionMode:'CALLER', timeoutNs:1n, handshakeTimeoutNs:1n, authenticationTimeoutNs:1n }, { nowNs }); throw new Error('expected NetworkAlreadyConnected'); } catch (e) { if (!String(e).includes('NetworkAlreadyConnected')) throw e; }
+await source.startReceiving({ nowNs });
+assert.equal(source.snapshot().health.connected, true);
+await source.stopReceiving({ nowNs });
+await source.disconnectNetwork({ nowNs });
+assert.equal(source.snapshot().connection, 'DISCONNECTED');
+const q = new NetworkPacketQueue({ ...DEFAULT_NETWORK_PACKET_BUFFER_CONFIG, maximumPackets:2, maximumBytes:2048, overflowPolicy:'DROP_OLDEST' });
+assert.equal(q.enqueue(createSyntheticNetworkPacket({ sequenceNumber:1, packetSize:1024 })), true);
+assert.equal(q.enqueue(createSyntheticNetworkPacket({ sequenceNumber:2, packetSize:1024 })), true);
+assert.equal(q.enqueue(createSyntheticNetworkPacket({ sequenceNumber:3, packetSize:1024 })), true);
+assert.equal(q.snapshot().depth, 2);
+const newest = new NetworkPacketQueue({ ...DEFAULT_NETWORK_PACKET_BUFFER_CONFIG, maximumPackets:1, overflowPolicy:'DROP_NEWEST' });
+newest.enqueue(createSyntheticNetworkPacket({ sequenceNumber:1 })); newest.enqueue(createSyntheticNetworkPacket({ sequenceNumber:2 }));
+assert.equal(newest.snapshot().depth, 1);
+const reject = new NetworkPacketQueue({ ...DEFAULT_NETWORK_PACKET_BUFFER_CONFIG, maximumPackets:1, overflowPolicy:'REJECT' });
+reject.enqueue(createSyntheticNetworkPacket({ sequenceNumber:1 })); assert.equal(reject.enqueue(createSyntheticNetworkPacket({ sequenceNumber:2 })), false);
+const jitter = new NetworkJitterBuffer();
+assert.deepEqual(jitter.push(createSyntheticNetworkPacket({ sequenceNumber:2 })).map(p=>p.sequenceNumber), [2]);
+assert.equal(jitter.push(createSyntheticNetworkPacket({ sequenceNumber:2 })).length, 0);
+assert.equal(jitter.snapshot().duplicates, 1);
+const tracker = new NetworkPacketHandleTracker();
+tracker.track('h1','OWNED_BY_BACKEND'); tracker.transfer('h1','OWNED_BY_SOURCE'); tracker.release('h1'); assert.throws(()=>tracker.release('h1'), /NetworkOwnershipViolation/);
+assert.equal(String(redactNetworkValue('rtmp://user:secret@example/live?token=abc')).includes('abc'), false);
+for (let i=0;i<10_000;i++) q.enqueue(createSyntheticNetworkPacket({ sequenceNumber:i, packetSize:64 }));
+for (let i=0;i<100_000;i++) registry.snapshot();
+registry.assertInvariants();
+console.log('network-source validation passed');
