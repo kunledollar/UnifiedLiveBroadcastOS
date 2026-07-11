@@ -192,6 +192,101 @@ async function main() {
   assert.equal(JSON.stringify(mapped).includes('secret'), false);
   for (let i = 0; i < 10_000; i++) backend.emitFrame(nowNs());
   camera.assertInvariants();
+
+
+  // Production-safety regression audit: discarded frames must release their backend handle exactly once.
+  for (const policy of ['DROP_OLDEST', 'DROP_NEWEST', 'KEEP_LATEST_VIDEO'] as const) {
+    const auditBackend = new SyntheticCameraBackend({ format: fmt, backendId: `audit:${policy}` });
+    const auditCamera = new DefaultCameraSource(devices[0]!, auditBackend, {
+      ...defaultCameraBufferConfiguration,
+      maximumFrames: 1,
+      highWaterMark: 1,
+      overflowPolicy: policy,
+      maximumFrameAgeNs: 1_000_000_000n,
+    });
+    await auditCamera.open({ format: fmt }, { nowNs });
+    await auditCamera.startCapture({ nowNs });
+    auditBackend.emitFrame(nowNs());
+    auditBackend.emitFrame(nowNs());
+    await auditCamera.stopCapture({ nowNs });
+    assert.equal(auditBackend.releasedHandleCount, auditBackend.emittedFrameCount, `${policy} releases discarded handles`);
+    assert.equal(auditBackend.hasActiveCallback, false, `${policy} clears callback on stop`);
+    auditCamera.assertInvariants();
+  }
+
+  const staleBackend = new SyntheticCameraBackend({ format: fmt, backendId: 'audit:stale' });
+  const staleCamera = new DefaultCameraSource(devices[0]!, staleBackend, {
+    ...defaultCameraBufferConfiguration,
+    maximumFrames: 4,
+    maximumFrameAgeNs: 1n,
+  });
+  await staleCamera.open({ format: fmt }, { nowNs });
+  await staleCamera.startCapture({ nowNs });
+  staleBackend.emitFrame(nowNs());
+  await staleCamera.pull({ frameNumber: 3n, scheduledTimeNs: 3_000_000_000n }, { nowNs, frameTick: tick(90n) });
+  assert.equal(staleBackend.releasedHandleCount, staleBackend.emittedFrameCount, 'stale removal releases handles');
+  await staleCamera.close({ nowNs });
+  assert.equal(staleBackend.getHealth().open, false, 'close leaves no open backend');
+  assert.equal(staleBackend.hasActiveCallback, false, 'close leaves no active callback');
+  staleCamera.assertInvariants();
+
+  const lateBackend = new SyntheticCameraBackend({ format: fmt, backendId: 'audit:late' });
+  const lateCamera = new DefaultCameraSource(devices[0]!, lateBackend, defaultCameraBufferConfiguration);
+  await lateCamera.open({ format: fmt }, { nowNs });
+  await lateCamera.startCapture({ nowNs });
+  lateBackend.emitFrame(nowNs());
+  await lateCamera.stopCapture({ nowNs });
+  lateBackend.emitFrame(nowNs());
+  assert.equal(lateCamera.getCameraSnapshot().queue.depth, 0, 'late callback after stop cannot enqueue');
+  assert.equal(lateBackend.hasActiveCallback, false, 'late callback stop clears backend callback');
+
+  const failureBackend = new SyntheticCameraBackend({ format: fmt, backendId: 'audit:failure' });
+  const failureCamera = new DefaultCameraSource(devices[0]!, failureBackend, defaultCameraBufferConfiguration);
+  await failureCamera.open({ format: fmt }, { nowNs });
+  await failureCamera.startCapture({ nowNs });
+  failureBackend.emitFrame(nowNs());
+  await failureCamera.shutdown({ nowNs });
+  assert.equal(failureBackend.getHealth().open, false, 'shutdown leaves no open backend');
+  assert.equal(failureBackend.hasActiveCallback, false, 'shutdown leaves no callback');
+  assert.equal(failureCamera.getCameraSnapshot().queue.depth, 0, 'shutdown leaves no queued frame');
+  assert.equal(failureBackend.releasedHandleCount, failureBackend.emittedFrameCount, 'shutdown releases retained handles');
+  failureCamera.assertInvariants();
+
+  const tickBackend = new SyntheticCameraBackend({ format: fmt, backendId: 'audit:tick' });
+  const tickCamera = new DefaultCameraSource(devices[0]!, tickBackend, {
+    ...defaultCameraBufferConfiguration,
+    maximumFrames: 8,
+  });
+  await tickCamera.open({ format: fmt }, { nowNs });
+  await tickCamera.startCapture({ nowNs });
+  tickBackend.emitFrame(nowNs());
+  tickBackend.emitFrame(nowNs());
+  const once = await tickCamera.pull({ frameNumber: 4n, scheduledTimeNs: 4_000_000_000n }, { nowNs, frameTick: tick(120n) });
+  assert.ok(once.videoFrames.length <= 1, 'at most one frame per camera per tick');
+  const twice = await tickCamera.pull({ frameNumber: 4n, scheduledTimeNs: 4_000_000_000n }, { nowNs, frameTick: tick(120n) });
+  assert.equal(twice.videoFrames.some((f) => once.videoFrames.some((g) => g.sequenceNumber === f.sequenceNumber)), false, 'same frame not published twice for same tick');
+  await tickCamera.shutdown({ nowNs });
+
+  const stressBackends = [0, 1, 2].map((i) => new SyntheticCameraBackend({ format: fmt, backendId: `audit:stress:${i}` }));
+  const stressCameras = stressBackends.map((b) => new DefaultCameraSource(devices[0]!, b, {
+    ...defaultCameraBufferConfiguration,
+    maximumFrames: 3,
+    overflowPolicy: 'KEEP_LATEST_VIDEO',
+  }));
+  for (const c of stressCameras) {
+    await c.open({ format: fmt }, { nowNs });
+    await c.startCapture({ nowNs });
+  }
+  for (let i = 0; i < 100_000; i++) {
+    for (const b of stressBackends) b.emitFrame(nowNs());
+    for (const c of stressCameras) await c.pull({ frameNumber: BigInt(i + 10), scheduledTimeNs: BigInt(i + 10) * 33_333_333n }, { nowNs, frameTick: tick(BigInt(i + 10)) });
+  }
+  for (let i = 0; i < stressCameras.length; i++) {
+    await stressCameras[i]!.shutdown({ nowNs });
+    assert.equal(stressBackends[i]!.releasedHandleCount, stressBackends[i]!.emittedFrameCount, '100k synthetic ticks retain zero handles');
+    stressCameras[i]!.assertInvariants();
+  }
+
   await manager.shutdown();
   console.log('camera-source validation passed');
 }
