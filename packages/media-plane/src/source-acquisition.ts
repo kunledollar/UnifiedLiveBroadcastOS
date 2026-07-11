@@ -464,6 +464,7 @@ export interface SourceAcquisitionSnapshot {
   readonly providerCount: number;
   readonly sourceCount: number;
   readonly activeSourceIds: readonly string[];
+  readonly sources: readonly SourceSnapshot[];
   readonly orderedSourceIds: readonly string[];
   readonly lifecycleCounts: Readonly<Record<string, number>>;
   readonly healthCounts: Readonly<Record<string, number>>;
@@ -758,6 +759,7 @@ export class DefaultSourceAcquisitionManager {
     },
   ) {}
   registerProvider(p: SourceProvider) {
+    this.ensureRunning();
     const id = p.descriptor.id;
     if (this.providers.has(id)) throw new DuplicateSourceProviderError(id);
     this.providers.set(id, p);
@@ -768,6 +770,7 @@ export class DefaultSourceAcquisitionManager {
     this.lastEvent = 'SourceProviderUnregistered';
   }
   async discover(request: SourceDiscoveryRequest = {}): Promise<SourceDiscoveryResult> {
+    this.ensureRunning();
     const start = this.nowNs();
     const providers = [...this.providers.values()]
       .filter((p) => !request.providerId || p.descriptor.id === request.providerId)
@@ -803,6 +806,7 @@ export class DefaultSourceAcquisitionManager {
     });
   }
   registerSource(source: MediaSource) {
+    this.ensureRunning();
     const id = source.descriptor.id;
     if (this.sources.has(id)) throw new DuplicateSourceError(id);
     if (
@@ -901,7 +905,7 @@ export class DefaultSourceAcquisitionManager {
   getHealth(id: string) {
     return this.sources.get(id)?.health;
   }
-  getSnapshot() {
+  getSnapshot(): SourceAcquisitionSnapshot {
     const snaps = this.ordered.map((id) => this.snapshotEntry(this.must(id)));
     const lc: Record<string, number> = {},
       hc: Record<string, number> = {};
@@ -916,6 +920,7 @@ export class DefaultSourceAcquisitionManager {
       activeSourceIds: snaps
         .filter((s) => s.lifecycleState === 'ACTIVE')
         .map((s) => s.descriptor.id),
+      sources: snaps,
       orderedSourceIds: [...this.ordered],
       lifecycleCounts: lc,
       healthCounts: hc,
@@ -960,6 +965,7 @@ export class DefaultSourceAcquisitionManager {
     }
   }
   async acquireForTick(tick: FrameTick) {
+    this.ensureRunning();
     const start = this.nowNs();
     const batches: SourceSampleBatch[] = [];
     for (const id of this.ordered) {
@@ -983,6 +989,10 @@ export class DefaultSourceAcquisitionManager {
       audioBuffers: batches.flatMap((b) => b.audioBuffers),
       metadataSamples: batches.flatMap((b) => b.metadataSamples),
     });
+  }
+  private ensureRunning() {
+    if (this.managerState !== 'RUNNING')
+      throw sourceError('SourceManagerStopped', 'Source acquisition manager is stopped');
   }
   private must(id: string) {
     const e = this.sources.get(id);
@@ -1121,7 +1131,10 @@ export class DefaultSourceAcquisitionManager {
       activeSourceIds: this.ordered.filter((id) => this.sources.get(id)?.state === 'ACTIVE'),
       ...(this.lastEvent ? { lastSourceEvent: this.lastEvent } : {}),
       sourceHealthSummary: es.reduce(
-        (r, e) => ({ ...r, [e.health.healthState]: (r[e.health.healthState] ?? 0) + 1 }),
+        (r, e) => {
+          r[e.health.healthState] = (r[e.health.healthState] ?? 0) + 1;
+          return r;
+        },
         {} as Record<string, number>,
       ),
     };
@@ -1286,6 +1299,7 @@ export interface SyntheticSourceConfig {
   readonly dropEvery?: number;
   readonly discontinuityEvery?: number;
   readonly connectionFailures?: number;
+  readonly sourceType?: SourceType;
 }
 export class SyntheticMediaSource implements MediaSource {
   readonly descriptor: SourceDescriptor;
@@ -1304,7 +1318,7 @@ export class SyntheticMediaSource implements MediaSource {
     this.descriptor = deepFreeze({
       id: config.id,
       providerId: config.providerId ?? 'synthetic-source-provider',
-      type: 'SYNTHETIC',
+      type: config.sourceType ?? 'SYNTHETIC',
       displayName: config.displayName ?? config.id,
       description: 'Deterministic synthetic source for UBOS v5.2.1 validation',
       mediaKinds: config.mediaKinds,
@@ -1447,7 +1461,20 @@ export class SyntheticSourceProvider implements SourceProvider {
       id,
       displayName: 'Synthetic Source Provider',
       version: '5.2.1',
-      sourceTypes: ['SYNTHETIC', 'TEST'],
+      sourceTypes: [
+        'SYNTHETIC',
+        'TEST',
+        'CAMERA',
+        'FILE',
+        'SCREEN',
+        'BROWSER',
+        'AUDIO_DEVICE',
+        'DESKTOP_AUDIO',
+        'NDI',
+        'SRT',
+        'RTMP',
+        'WEBRTC',
+      ],
       acquisitionModes: ['PULL', 'PUSH', 'HYBRID'],
     });
   }
@@ -1478,6 +1505,7 @@ export class SyntheticSourceProvider implements SourceProvider {
       displayName: descriptor.displayName,
       mediaKinds: descriptor.mediaKinds,
       acquisitionMode: descriptor.acquisitionMode,
+      sourceType: descriptor.type,
     });
   }
   async shutdown() {}
