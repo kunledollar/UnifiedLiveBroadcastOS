@@ -833,16 +833,14 @@ export class DefaultCameraSource implements CameraSource {
   private lastEvent?: string;
   private lastError?: string;
   private controls?: CameraControlCapabilities;
+  private readonly retainedReleases = new Map<string, () => void>();
   constructor(
     readonly cameraDescriptor: CameraSourceDescriptor,
     private readonly backend: CameraCaptureBackend,
     buffer: CameraBufferConfiguration = defaultCameraBufferConfiguration,
   ) {
     this.descriptor = cameraDescriptorToSourceDescriptor(cameraDescriptor);
-    this.queue = new CameraFrameQueue(buffer, (f) => {
-      const rel = (f.payload as { release?: string }).release;
-      void rel;
-    });
+    this.queue = new CameraFrameQueue(buffer, (f) => this.releaseEnvelope(f));
   }
   async initialize(context: SourceRuntimeContext) {
     this.state = 'READY';
@@ -898,15 +896,17 @@ export class DefaultCameraSource implements CameraSource {
         sourceId: this.cameraDescriptor.sourceId,
         formatId: selected?.id,
       });
+    const opGeneration = ++this.generation;
     try {
       this.state = 'CONNECTING';
       const r = await this.backend.open(
         { descriptor: this.cameraDescriptor, format: selected, metadata: safe(request.metadata) },
         { nowNs: context.nowNs, signal: context.signal },
       );
+      if (context.signal?.aborted || opGeneration !== this.generation)
+        throw new CameraError('CameraOpenAborted', 'Camera open was aborted');
       this.selected = r.selectedFormat;
       this.opened = true;
-      this.generation++;
       this.normalizer.reset('SOURCE_EPOCH');
       this.state = 'CONNECTED';
       this.lastEvent = 'CameraOpened';
@@ -936,11 +936,18 @@ export class DefaultCameraSource implements CameraSource {
       await this.backend.start(
         (f) => this.acceptBackendFrame(f, gen, context.nowNs),
         (e) => {
+          if (gen !== this.generation || !this.capturing) return;
           this.stats.backendErrors++;
           this.lastError = e.message;
+          this.capturing = false;
+          this.generation++;
+          this.queue.clear();
+          this.state = 'FAILED';
         },
         { nowNs: context.nowNs, signal: context.signal },
       );
+      if (context.signal?.aborted || gen !== this.generation)
+        return this.fail('CameraStartAborted', 'Camera start was aborted', context);
       this.capturing = true;
       this.state = 'ACTIVE';
       this.lastEvent = 'CameraCaptureStarted';
@@ -957,8 +964,10 @@ export class DefaultCameraSource implements CameraSource {
     this.state = 'DEACTIVATING';
     this.capturing = false;
     this.generation++;
+    const stopGeneration = this.generation;
     await this.backend.stop({ nowNs: context.nowNs, signal: context.signal });
     this.queue.clear();
+    if (context.signal?.aborted || stopGeneration !== this.generation) return this.ok(context);
     this.state = this.opened ? 'CONNECTED' : 'DISCONNECTED';
     this.lastEvent = 'CameraCaptureStopped';
     return this.ok(context);
@@ -968,9 +977,11 @@ export class DefaultCameraSource implements CameraSource {
     if (!this.opened) return this.ok(context);
     this.state = 'DISCONNECTING';
     this.generation++;
+    const closeGeneration = this.generation;
     await this.backend.close({ nowNs: context.nowNs, signal: context.signal });
-    this.opened = false;
     this.queue.clear();
+    if (context.signal?.aborted || closeGeneration !== this.generation) return this.ok(context);
+    this.opened = false;
     this.state = 'DISCONNECTED';
     this.lastEvent = 'CameraClosed';
     return this.ok(context);
@@ -985,6 +996,7 @@ export class DefaultCameraSource implements CameraSource {
       context.nowNs(),
     );
     if (!selected) return freeze({ videoFrames: [], audioBuffers: [], metadataSamples: [] });
+    this.releaseEnvelope(selected);
     this.stats.published++;
     this.lastEvent = 'CameraFramePublished';
     return freeze({
@@ -1034,6 +1046,8 @@ export class DefaultCameraSource implements CameraSource {
       throw new CameraError('CameraInvariantViolation', 'Camera queue exceeds capacity');
     if (this.capturing && !this.opened)
       throw new CameraError('CameraInvariantViolation', 'Capturing camera is not open');
+    if (s.queue.depth === 0 && this.retainedReleases.size !== 0)
+      throw new CameraError('CameraInvariantViolation', 'Camera retained handle leak');
     if (
       this.selected &&
       !this.cameraDescriptor.supportedFormats.some((f) => f.id === this.selected!.id)
@@ -1063,6 +1077,8 @@ export class DefaultCameraSource implements CameraSource {
     this.lastSeq = frame.sequenceNumber;
     if (frame.corrupted) this.stats.corrupt++;
     const format = this.selected ?? this.cameraDescriptor.defaultFormat;
+    const sanitizedHandleId = id(frame.payload.handleId);
+    this.retainedReleases.set(sanitizedHandleId, frame.payload.release ?? (() => {}));
     const env: CameraFrameEnvelope = freeze({
       sourceId: this.cameraDescriptor.sourceId,
       streamId: this.cameraDescriptor.streamId,
@@ -1078,7 +1094,7 @@ export class DefaultCameraSource implements CameraSource {
       droppedBefore: 0,
       memoryDomain: format.memoryDomain,
       payload: {
-        handleId: id(frame.payload.handleId),
+        handleId: sanitizedHandleId,
         kind: 'OPAQUE_TEST_HANDLE',
         release: 'SOURCE',
       },
@@ -1091,6 +1107,13 @@ export class DefaultCameraSource implements CameraSource {
     });
     this.stats.received++;
     this.queue.enqueue(env, nowNs());
+  }
+  private releaseEnvelope(frame: CameraFrameEnvelope) {
+    const handleId = String((frame.payload as { handleId?: unknown }).handleId ?? '');
+    const release = this.retainedReleases.get(handleId);
+    if (!release) return;
+    this.retainedReleases.delete(handleId);
+    release();
   }
   private health(nowNs: bigint): CameraHealthSnapshot {
     const q = this.queue.snapshot(nowNs);
@@ -1309,7 +1332,14 @@ export class SyntheticCameraBackend implements CameraCaptureBackend {
   get releasedHandleCount() {
     return this.released.size;
   }
+  get emittedFrameCount() {
+    return Number(this.seq);
+  }
+  get hasActiveCallback() {
+    return this.onFrame !== undefined;
+  }
 }
+
 
 export class SyntheticCameraProvider implements CameraSourceProvider {
   readonly descriptor: SourceProviderDescriptor;
