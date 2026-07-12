@@ -214,6 +214,29 @@ export {
   type MaskingValidationReport,
 } from './masking-engine.js';
 
+export {
+  BlurSharpenEngine,
+  SyntheticBlurSharpenBackend,
+  BlurSharpenPipelineStage,
+  BlurSharpenError,
+  createBlurSharpenEngine,
+  createBlurSharpenPipelineStage,
+  createBlurSharpenCommandHandlers,
+  createBlurSharpenSourceGraphMetadata,
+  defaultBlurSharpenParameters,
+  validateBlurSharpenParameters,
+  BLUR_SHARPEN_COMMAND_TYPES,
+  BLUR_SHARPEN_OUTPUT_KEYS,
+  BLUR_SHARPEN_WATCHDOG_INCIDENTS,
+  type BlurSharpenMode,
+  type BlurSharpenParameters,
+  type BlurSharpenRequest,
+  type BlurSharpenResult,
+  type BlurSharpenPlan,
+  type BlurSharpenBackend,
+  type BlurSharpenMaskReference,
+} from './blur-sharpen-engine.js';
+
 export { createDiagnosticsManager, createDiagnosticsDemo } from './diagnostics/index.js';
 export {
   MonitoringRuntimeController,
