@@ -1,0 +1,14 @@
+import { createMaskStack, createMaskingEngine, SyntheticMaskingBackend, validateMaskStack, MASKING_COMMAND_TYPES, type MaskingPlanRequest } from './masking-engine.js';
+import type { VideoPipelineFrameReference } from './video-frame-pipeline.js';
+const assert=(c:unknown,m:string)=>{ if(!c) throw new Error(m); };
+const frame: VideoPipelineFrameReference = { frameId:'f1', storageId:'s1', frameGeneration:1n, storageGeneration:1n, leaseId:'l1', ownerId:'test', sourceId:'camera', streamId:'program', sequenceNumber:1n, runtimeFrameNumber:1n, format:{ width:1920, height:1080, pixelFormat:'RGBA8' }, memoryDomain:'OPAQUE', state:'READY', sourceTimestampNs:10n, normalizedTimestampNs:10n, discontinuity:false, metadata:{} };
+const stack=createMaskStack('stack-a',[{ entryId:'rect', type:'RECTANGLE', coordinateSpace:'SOURCE_PIXELS', combineMode:'REPLACE', order:0, shape:{x:0,y:0,width:100,height:100} }]);
+validateMaskStack(stack, new SyntheticMaskingBackend().capabilities);
+const engine=createMaskingEngine();
+const req: MaskingPlanRequest={ requestId:'r1', stack, inputFrame:frame, outputMode:'MASKED_FRAME', width:1920, height:1080, format:'RGBA8' };
+const p1=engine.plan(req); const p2=engine.plan(req); assert(p1.planId===p2.planId,'plan deterministic'); assert(engine.getTelemetry().cacheHits===1,'cache hit');
+const pass=await engine.execute({ ...req, requestId:'r2', stack:createMaskStack('empty',[]), outputMode:'PASS_THROUGH' }); assert(pass.outputFrame===frame,'pass-through identity');
+const out=await engine.execute(req); assert(out.outputFrame?.frameId!==frame.frameId,'masked identity distinct'); assert(out.outputFrame?.sourceTimestampNs===frame.sourceTimestampNs,'timestamp preserved');
+let rejected=false; try { createMaskStack('bad',[{entryId:'custom',type:'CUSTOM',coordinateSpace:'CUSTOM',combineMode:'CUSTOM',order:0}]); engine.plan({...req, stack:createMaskStack('bad2',[{entryId:'custom',type:'CUSTOM',coordinateSpace:'CUSTOM',combineMode:'CUSTOM',order:0}])}); } catch { rejected=true; } assert(rejected,'custom rejected');
+for(let i=0;i<10000;i++) engine.plan({...req, requestId:`plan-${i}`, width:1+(i%37)}); engine.assertInvariants(); for(let i=0;i<100000;i++) engine.assertInvariants();
+assert(MASKING_COMMAND_TYPES.PLAN==='MASKING_PLAN','commands exported'); await engine.shutdown(); console.log('UBOS v5.4.2 masking validation passed');
