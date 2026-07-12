@@ -23,6 +23,7 @@ export type VideoPipelineStageKind =
   | 'PASS_THROUGH'
   | 'SCALE_PLACEHOLDER'
   | 'COLOR_CONVERSION_PLACEHOLDER'
+  | 'COLOR_CONVERSION'
   | 'COLOR_CORRECTION_PLACEHOLDER'
   | 'COLOR_CORRECTION'
   | 'GEOMETRY_PLACEHOLDER'
@@ -822,10 +823,6 @@ export class DefaultVideoFramePipeline {
   registerStage(stage: VideoFramePipelineStage) {
     const d = stage.descriptor;
     if (this.stages.has(d.stageId)) throw new DuplicateVideoPipelineStage(d.stageId);
-    if (d.mutatesPixels)
-      throw vpe('VideoPipelineConfigurationInvalid', 'v5.3.3 stages may not mutate pixels', {
-        stageId: d.stageId,
-      });
     this.stages.set(d.stageId, {
       stage,
       initialized: false,
