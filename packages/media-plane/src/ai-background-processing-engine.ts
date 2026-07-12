@@ -1084,6 +1084,7 @@ export class AiBackgroundProcessingEngine {
         req.inputFrame.storageGeneration !== req.expectedStorageGeneration
       ) {
         this.telemetry.staleGeneration++;
+        this.resetTemporalState(req.sourceId, req.streamId);
         throw err('AiBackgroundGenerationMismatch', 'generation mismatch');
       }
       const plan = this.createPlan(req);
@@ -1134,9 +1135,19 @@ export class AiBackgroundProcessingEngine {
       };
       try {
         const tk = `${req.sourceId}/${req.streamId}`;
+        const previousTemporalState = this.temporal.get(tk);
+        const temporalState =
+          previousTemporalState &&
+          !req.inputFrame.discontinuity &&
+          previousTemporalState.modelId === plan.selectedModelId &&
+          previousTemporalState.modelVersion === plan.selectedModelVersion
+            ? previousTemporalState
+            : undefined;
+        if (previousTemporalState && !temporalState)
+          this.resetTemporalState(req.sourceId, req.streamId);
         const br = await this.backends
           .get(plan.selectedBackendId)!
-          .execute(plan, req.inputFrame, out, this.temporal.get(tk), {
+          .execute(plan, req.inputFrame, out, temporalState, {
             models: [...this.models.values()],
             nowNs: ctx.nowNs ?? this.clock,
             ...(req.cancellationSignal ? { cancellationSignal: req.cancellationSignal } : {}),
