@@ -24,6 +24,7 @@ export type VideoPipelineStageKind =
   | 'SCALE_PLACEHOLDER'
   | 'COLOR_CONVERSION_PLACEHOLDER'
   | 'COLOR_CORRECTION_PLACEHOLDER'
+  | 'COLOR_CORRECTION'
   | 'GEOMETRY_PLACEHOLDER'
   | 'LAYER_COMPOSITOR_PLACEHOLDER'
   | 'SCENE_COMPOSITOR_PLACEHOLDER'
@@ -164,7 +165,7 @@ export interface VideoPipelineStageDescriptor {
   readonly outputMemoryDomains: readonly VideoPipelineMemoryDomain[];
   readonly canPassThrough: boolean;
   readonly requiresGpu: boolean;
-  readonly mutatesPixels: false;
+  readonly mutatesPixels: boolean;
   readonly producesNewFrame: boolean;
   readonly preservesTimestamp: boolean;
   readonly preservesSourceIdentity: boolean;
