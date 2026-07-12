@@ -1,34 +1,101 @@
 # UBOS v5.4.2 Production-Safe Masking Engine
 
-The masking engine is a backend-neutral, production-safe video transform that models masks as immutable metadata contracts and orchestrates output allocation through Frame Memory. The included synthetic backend is deterministic and intentionally does **not** perform real pixel masking; it validates, plans, allocates references, and emits safe metadata for pipeline certification.
+## Purpose
+
+The Masking Engine adds reusable geometric and matte-based mask generation after keying and before geometry and final layer composition. It is backend-neutral and production-safe: it validates mask contracts, builds deterministic plans, allocates output through Frame Memory, and exposes only metadata-safe observability. The initial backend is deterministic and synthetic; it simulates orchestration, allocation, mask combination, and metadata semantics without claiming real pixel masking.
 
 ```mermaid
-flowchart LR
-  Keying[Keying] --> Masking[MaskingPipelineStage]
-  Masking --> Geometry[Geometry]
-  Geometry --> Layers[Layer Compositor]
-  Masking --> FrameMemory[Frame Memory]
-  Masking --> Backend[MaskingBackend]
+flowchart TD
+  A[Source Acquisition] --> B[Frame Memory]
+  B --> C[Video Frame Pipeline]
+  C --> D[Scaling]
+  D --> E[Color Conversion]
+  E --> F[Color Correction]
+  F --> G[Keying]
+  G --> H[Masking]
+  H --> I[Geometry]
+  I --> J[Layer Compositor]
+  J --> K[Scene Compositor]
 ```
 
-## Contracts
+## Architectural Position and Reuse
 
-Mask types are explicit: rectangles, rounded rectangles, ellipses, circles, polygons, source alpha, key mattes, external mattes, path references, full-frame, empty, and custom. Coordinate spaces cover source, frame, and canvas pixels/normalized domains. Shapes use bounded immutable contracts. Polygon masks must be closed, have at least three points, declare a fill rule, and are rejected on self-intersection unless a policy explicitly allows it.
+Masking owns mask generation, matte reference validation, mask stack resolution, deterministic backend planning, pass-through detection, and mask/masked-frame output metadata. It does not blend foreground/background, place sources, acquire frames, generate keys, mutate input frames, or allocate GPU resources directly. It reuses Video Frame Pipeline stage contracts, Frame Memory leases/allocation, runtime command handlers, output registry keys, source graph metadata conventions, telemetry snapshots, watchdog incident names, and explicit public exports.
 
-Parameters reject invalid values rather than silently clamping. Opacity, feather, and morphology ranges are validated. Expansion and contraction are mutually exclusive. Transforms apply translation, scale, rotation, anchors, pivots, and flips in deterministic order; zero scale and negative implicit-flip scale are rejected.
+## Mask Types and Coordinate Spaces
 
-## Planning and execution
+Supported mask types are `RECTANGLE`, `ROUNDED_RECTANGLE`, `ELLIPSE`, `CIRCLE`, `POLYGON`, `SOURCE_ALPHA`, `KEY_MATTE`, `EXTERNAL_MATTE`, `PATH_REFERENCE`, `FULL_FRAME`, `EMPTY`, and `CUSTOM`. Unsupported or backend-private types are typed failures, and `PATH_REFERENCE` remains metadata-only unless a backend advertises support.
 
-Plans use stable signatures and deterministic backend candidate ordering. The engine maintains a bounded plan cache and invariant checks reject unbounded caches or cached plans that reference stale backends. Pass-through requests preserve the input frame reference and allocate no output. Masked and mask-only outputs allocate through Frame Memory when a manager is supplied; owned leases are released on failure or cancellation.
+Coordinate spaces are explicit: `SOURCE_PIXELS`, `SOURCE_NORMALIZED`, `FRAME_PIXELS`, `FRAME_NORMALIZED`, `CANVAS_PIXELS`, `CANVAS_NORMALIZED`, and `CUSTOM`. Normalized spaces are documented as bounded 0..1 coordinates by convention; conversion is never implicit and must be provided by a backend or rejected.
+
+## Shape Models and Polygon Rules
+
+Shapes are immutable contracts: rectangles use `x/y/width/height`, rounded rectangles wrap a rectangle and radii, ellipses and circles use center/radii, and polygons use ordered points, `NON_ZERO` or `EVEN_ODD` fill rules, a closed flag, coordinate space, and explicit self-intersection policy. Validation rejects NaN, Infinity, non-positive dimensions or radii, empty polygons, unclosed polygons, unbounded point counts, and rejected self-intersection.
+
+## Parameters, Transform, Combine Modes, and Stacks
+
+`MaskingParameters` contains enabled state, type, shape, inversion, opacity, feathering, morphology, edge hardness, transform, combine mode, matte references, output mode, diagnostics flag, and safe metadata. The default policy is `REJECT_OUT_OF_RANGE`; clamping policies are represented but no silent clamping occurs.
+
+Transforms follow geometry-style deterministic matrix components: translation, scale, rotation, anchor, pivot, and explicit horizontal/vertical flips. Zero scale and negative scale are rejected so flips cannot be hidden in scale signs.
+
+Combine modes are explicit: `REPLACE`, `ADD`, `INTERSECT`, `SUBTRACT`, `XOR`, `MULTIPLY`, `MIN`, `MAX`, `INVERT`, and `CUSTOM`. `MaskStack` preserves entry order, requires unique entry IDs, enforces maximum depth, forbids recursive/cyclic stack references by contract, and includes all generations in cache keys.
+
+## Feathering and Morphology
+
+Feather modes are `NONE`, `INNER`, `OUTER`, `BOTH`, and `BACKEND_DEFAULT`. The synthetic backend records feather metadata only and does not implement blur. Expansion/contraction are mutually exclusive, bounded, and reported as an effective signed morphology value; future UBOS v5.4.3 Blur and Sharpen work can attach a validated blur backend without changing mask contracts.
+
+## Output Modes and Pass-Through
+
+Output modes are `MASKED_FRAME`, `MASK_ONLY`, `ALPHA_ONLY`, `PREMULTIPLIED_FRAME`, `STRAIGHT_ALPHA_FRAME`, `PASSTHROUGH`, and `DIAGNOSTIC_MASK_VIEW`. Mask-only outputs carry descriptor metadata and do not expose pixels in telemetry or snapshots.
+
+Pass-through is valid only when masking is disabled, the stack is empty, the requested output mode permits original frames, or a full-frame opacity-1 non-inverted non-feathered mask is requested. It preserves frame/storage identity, lease identity, timestamps, and source identity, and performs no output allocation.
+
+## Deterministic Planning and Cache
+
+```mermaid
+sequenceDiagram
+  participant R as MaskingRequest
+  participant E as MaskingEngine
+  participant C as PlanCache
+  participant B as Backend
+  R->>E: validate request, parameters, stack
+  E->>C: lookup stable cache key
+  alt hit
+    C-->>E: immutable plan
+  else miss
+    E->>B: backend candidates
+    B-->>E: capability-scored candidates
+    E->>E: stable tie-break by score/backendId/planId
+    E->>C: bounded insert with deterministic eviction
+  end
+```
+
+The cache key includes input format, alpha mode, effective stack, output mode, quality, backend preference, pipeline configuration generation, and matte generations. Eviction is bounded and deterministic; backend removal invalidates matching plans.
+
+## Backend Abstraction and Synthetic Backend
+
+Backends provide descriptors, capabilities, planning, execution, and shutdown. Backend classes include GPU compute/fragment, CPU SIMD/reference, platform native, and synthetic. The deterministic synthetic backend supports all required mask contracts as metadata simulation, output and temporary allocation orchestration, configurable failure/timeout/GPU-loss behavior, cancellation, stale-completion rejection, and operation signatures without allocating large pixel buffers or using native graphics dependencies.
 
 ## Integrations
 
-The pipeline stage declares masking as a transform after keying and before geometry/layer compositing. It preserves timestamps and source identity and does not mutate input frame references. Output registry keys, command constants, watchdog incident constants, source-graph metadata, health snapshots, and telemetry snapshots are public API.
+Keying integration accepts key matte/keyed alpha references and validates generation/source relationship without regenerating matte or duplicating spill suppression. Frame Memory integration allocates `PROCESSING_OUTPUT` masked frames and `TICK_TRANSIENT` mask-only/temporary outputs and releases masking-owned leases on failure. GPU integration is mediated through Frame Memory/GPU Resource Manager contracts only. Pipeline integration is a `MASKING` transform stage that runs after keying and before geometry/layer compositing. Layer Compositor compatibility is metadata-only: masked frame reference, mask-only reference, alpha state, premultiplication state, stack ID, and status are exposed; final blending remains in Layer Compositor.
 
-## Security and safety
+## Commands, Output Registry, Source Graph
 
-Metadata redaction removes path, URL, handle, GPU/native, secret, token, credential, password, endpoint, and device details from safe snapshots. Unsupported custom masks, duplicate stack entries, non-finite numbers, invalid matte references, unsupported backend capabilities, stale cached backends, allocation failures, synthetic failure hooks, timeouts, cancellation, and GPU-loss hooks are modeled as explicit production incidents.
+Typed commands cover backend registration, planning, execution, cancellation, parameter/stack/output changes, feather/morphology updates, cache clearing, backend/quality defaults, validation, and shutdown with idempotent handlers. Output registry keys publish requests, plans, results, masked frames, mask-only frames, pass-through references, failures, health, and telemetry. Source Graph metadata includes enabled state, stack ID/count/types, output mode, feather/morphology flags, status, health, last runtime frame, active backend class, and pass-through state; no pixels, paths, handles, or mutable leases are exposed.
 
-## Validation and v5.4.3 guidance
+## Health, Telemetry, Events, and Watchdog
 
-Validation covers lifecycle, duplicate backend rejection, plan determinism/cache hits, pass-through identity, distinct masked output identity, timestamp preservation, invalid parameter/polygon/transform rejection, stack ordering/depth, cancellation, invariant churn, 10,000 plans, and 100,000 no-sleep invariant ticks. v5.4.3 Blur/Sharpen should reuse the same backend descriptor, plan/result, Frame Memory, pipeline-stage, redaction, health, telemetry, and watchdog patterns rather than creating parallel orchestration primitives.
+Health snapshots include engine state, backend counts, cache size, active/completed/pass-through/failed/cancelled/rejected/timeout counts, validation failures, GPU loss, allocation failure, stale-generation rejection, temporary bytes, peak temporary bytes, last success/failure, and update time. Telemetry tracks plan/cache activity, requests/completions, per-mask counts, feather/morphology operations, combinations, failures, fallback, GPU loss, stale generation, average/maximum planning/execution durations, current request IDs, last event, and health summary. Watchdog incidents include masking stalls, backend failure, timeout, invalid parameters/type/polygon/external matte/key matte, stack exceeded, memory pressure, GPU resource loss, allocation failure, stale generation, invalid cache, graph mismatch, and invariant failure.
+
+## Security and Production Safety
+
+Observability redacts frame handles, GPU resources, mapped memory, private metadata, external matte paths, path references, URLs, endpoints, device identifiers, native objects, and backend error details. Production invariants enforce no silent parameter assumptions, no NaN/Infinity, no unbounded polygon/stack/cache, no input mutation, no hidden composition, no false pass-through, no stale/duplicate output, no output after failure/cancellation/timeout, no leaked output/mask/temp leases, no direct GPU allocation, and no stale key matte usage.
+
+## Long-Run Validation and Performance
+
+The validation suite covers lifecycle, duplicate backend rejection, plan determinism, cache churn, pass-through, all geometric/matte mask types, invalid parameters, polygon rules, transforms, stack ordering/depth, mask-only and masked-frame output, cancellation, invariants, 10,000 plans, 10,000 synthetic operations, and 100,000 no-sleep validation ticks. Expected complexity is O(1) backend lookup, O(1) plan-cache lookup, O(p) polygon validation for bounded points, O(m) stack resolution for bounded masks, O(c log c) candidate selection over bounded backends, and O(active + bounded incidents) watchdog evaluation.
+
+## Limitations
+
+The first backend is synthetic and does not perform real pixel masking, blur, high-quality morphology, AI segmentation, background removal, transitions, graphics authoring, audio, recording, streaming, replay, or UI. Real pixel masking requires a future validated backend. v5.4.3 should add Blur and Sharpen integration as a separate effect engine rather than hiding blur inside feather metadata.
