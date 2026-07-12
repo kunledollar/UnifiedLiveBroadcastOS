@@ -533,6 +533,34 @@ export const MOTION_PROPERTY_SCHEMAS: readonly MotionPropertySchema[] = Object.f
     'layerOpacity',
     'sceneParameterValue',
     'outputRoleParameterOverride',
+    'destinationPositionX',
+    'destinationPositionY',
+    'destinationSizeWidth',
+    'destinationSizeHeight',
+    'scale',
+    'rotation',
+    'anchor',
+    'pivot',
+    'crop',
+    'maskTransformX',
+    'maskTransformY',
+    'maskTransformScaleX',
+    'maskTransformScaleY',
+    'maskTransformRotation',
+    'maskFeatherAmount',
+    'radius',
+    'sigma',
+    'strength',
+    'blendAmount',
+    'shadowBlur',
+    'shadowAngle',
+    'glowOpacity',
+    'pixelateIntensity',
+    'mosaicIntensity',
+    'overlayStrength',
+    'supportedLayerParameter',
+    'sceneInstanceParameterOverride',
+    'outputRoleAnimatedMetadata',
   ]
     .map((path) =>
       Object.freeze({
@@ -556,7 +584,7 @@ export const MOTION_PROPERTY_SCHEMAS: readonly MotionPropertySchema[] = Object.f
       }),
     )
     .concat(
-      ['flipHorizontal', 'flipVertical', 'layerVisibility', 'zOrder'].map((path) =>
+      ['flipHorizontal', 'flipVertical', 'layerVisibility', 'visibility', 'zOrder'].map((path) =>
         Object.freeze({
           path,
           valueType: path === 'zOrder' ? 'INTEGER' : ('BOOLEAN' as any),
@@ -981,6 +1009,38 @@ export class MotionEffectsEngine {
             contributors: sorted.map((r) => r.sourceInstanceId),
           }),
         );
+      else if (policy === 'MULTIPLY' && sorted.every((r) => typeof r.value === 'number'))
+        resolved.push(
+          freeze({
+            ...sorted[0],
+            value: sorted.reduce((s, r) => s * (r.value as number), 1),
+            contributors: sorted.map((r) => r.sourceInstanceId),
+          }),
+        );
+      else if (policy === 'AVERAGE' && sorted.every((r) => typeof r.value === 'number'))
+        resolved.push(
+          freeze({
+            ...sorted[0],
+            value: sorted.reduce((s, r) => s + (r.value as number), 0) / sorted.length,
+            contributors: sorted.map((r) => r.sourceInstanceId),
+          }),
+        );
+      else if (policy === 'MIN' && sorted.every((r) => typeof r.value === 'number'))
+        resolved.push(
+          freeze({
+            ...sorted[0],
+            value: Math.min(...sorted.map((r) => r.value as number)),
+            contributors: sorted.map((r) => r.sourceInstanceId),
+          }),
+        );
+      else if (policy === 'MAX' && sorted.every((r) => typeof r.value === 'number'))
+        resolved.push(
+          freeze({
+            ...sorted[0],
+            value: Math.max(...sorted.map((r) => r.value as number)),
+            contributors: sorted.map((r) => r.sourceInstanceId),
+          }),
+        );
       else if (policy === 'REJECT_CONFLICT')
         throw new MotionEngineError('MotionConflictUnresolved', 'Unresolved motion conflict', {
           key: k,
@@ -1315,3 +1375,268 @@ export const createMotionCommandHandlers = (engine = createMotionEffectsEngine()
       ]),
     ),
   );
+
+export type MotionAdapterDomain =
+  | 'GEOMETRY'
+  | 'MASKING'
+  | 'BLUR_SHARPEN'
+  | 'COLOR_EFFECTS_LUT'
+  | 'AI_BACKGROUND'
+  | 'IMAGE_EFFECTS'
+  | 'LAYER_COMPOSITOR'
+  | 'SCENE_COMPOSITOR';
+export interface MotionAdapterApplication<
+  T extends Record<string, MotionValue> = Record<string, MotionValue>,
+> {
+  readonly domain: MotionAdapterDomain;
+  readonly target: MotionTarget;
+  readonly runtimeFrameNumber: string;
+  readonly snapshotGeneration: string;
+  readonly properties: Readonly<T>;
+  readonly sourceProperties: readonly MotionResolvedProperty[];
+}
+export interface MotionDownstreamAdapter<
+  T extends Record<string, MotionValue> = Record<string, MotionValue>,
+> {
+  readonly domain: MotionAdapterDomain;
+  readonly targetType: MotionTargetType;
+  readonly allowedProperties: readonly string[];
+  applyResolvedSnapshot(
+    snapshot: {
+      readonly runtimeFrameNumber: string;
+      readonly generation: string;
+      readonly resolvedProperties: readonly MotionResolvedProperty[];
+    },
+    target: MotionTarget,
+  ): MotionAdapterApplication<T>;
+}
+const adapterVocabulary = Object.freeze({
+  GEOMETRY: [
+    'positionX',
+    'positionY',
+    'destinationX',
+    'destinationY',
+    'destinationWidth',
+    'destinationHeight',
+    'destinationPositionX',
+    'destinationPositionY',
+    'destinationSizeWidth',
+    'destinationSizeHeight',
+    'scaleX',
+    'scaleY',
+    'uniformScale',
+    'scale',
+    'rotation',
+    'rotationDegrees',
+    'anchor',
+    'anchorX',
+    'anchorY',
+    'pivot',
+    'pivotX',
+    'pivotY',
+    'crop',
+    'cropTop',
+    'cropRight',
+    'cropBottom',
+    'cropLeft',
+  ],
+  MASKING: [
+    'maskTransformX',
+    'maskTransformY',
+    'maskTransformScaleX',
+    'maskTransformScaleY',
+    'maskTransformRotation',
+    'maskOpacity',
+    'maskFeather',
+    'maskFeatherAmount',
+    'maskExpansion',
+    'maskContraction',
+  ],
+  BLUR_SHARPEN: [
+    'blurRadius',
+    'blurStrength',
+    'sharpenStrength',
+    'radius',
+    'sigma',
+    'strength',
+    'blendAmount',
+    'effectBlendAmount',
+  ],
+  COLOR_EFFECTS_LUT: [
+    'lutStrength',
+    'exposure',
+    'contrast',
+    'saturation',
+    'vibrance',
+    'hue',
+    'tint',
+    'temperature',
+    'lift',
+    'gamma',
+    'gain',
+    'offset',
+  ],
+  AI_BACKGROUND: [
+    'confidenceThreshold',
+    'edgeSoftness',
+    'edgeFeather',
+    'backgroundBlurStrength',
+    'replacementBlendAmount',
+  ],
+  IMAGE_EFFECTS: [
+    'opacity',
+    'borderThickness',
+    'cornerRadius',
+    'shadowOpacity',
+    'shadowOffsetX',
+    'shadowOffsetY',
+    'shadowSoftness',
+    'shadowBlur',
+    'shadowAngle',
+    'glowStrength',
+    'glowRadius',
+    'glowOpacity',
+    'vignetteAmount',
+    'pixelateIntensity',
+    'mosaicIntensity',
+    'overlayStrength',
+    'effectIntensity',
+  ],
+  LAYER_COMPOSITOR: [
+    'layerOpacity',
+    'layerVisibility',
+    'visibility',
+    'supportedLayerParameter',
+    'zOrder',
+  ],
+  SCENE_COMPOSITOR: [
+    'sceneParameterValue',
+    'sceneInstanceParameterOverride',
+    'outputRoleParameterOverride',
+    'outputRoleAnimatedMetadata',
+  ],
+} as const);
+const adapterTargetTypes: Record<MotionAdapterDomain, MotionTargetType> = {
+  GEOMETRY: 'GEOMETRY',
+  MASKING: 'MASK',
+  BLUR_SHARPEN: 'PIPELINE_FRAME',
+  COLOR_EFFECTS_LUT: 'COLOR_EFFECT',
+  AI_BACKGROUND: 'AI_BACKGROUND_EFFECT',
+  IMAGE_EFFECTS: 'IMAGE_EFFECT',
+  LAYER_COMPOSITOR: 'LAYER',
+  SCENE_COMPOSITOR: 'SCENE_INSTANCE',
+};
+export class TypedMotionDownstreamAdapter<
+  T extends Record<string, MotionValue> = Record<string, MotionValue>,
+> implements MotionDownstreamAdapter<T> {
+  readonly targetType: MotionTargetType;
+  readonly allowedProperties: readonly string[];
+  constructor(readonly domain: MotionAdapterDomain) {
+    this.targetType = adapterTargetTypes[domain];
+    this.allowedProperties = adapterVocabulary[domain];
+  }
+  applyResolvedSnapshot(
+    snapshot: {
+      readonly runtimeFrameNumber: string;
+      readonly generation: string;
+      readonly resolvedProperties: readonly MotionResolvedProperty[];
+    },
+    target: MotionTarget,
+  ): MotionAdapterApplication<T> {
+    if (snapshot.generation !== snapshot.runtimeFrameNumber)
+      throw new MotionEngineError(
+        'MotionAdapterStaleSnapshot',
+        'Snapshot generation must match runtime frame',
+      );
+    if (target.destroyed || target.type !== this.targetType)
+      throw new MotionEngineError(
+        'MotionAdapterTargetIncompatible',
+        'Target is stale or incompatible',
+      );
+    const allowed = new Set(this.allowedProperties);
+    const out: Record<string, MotionValue> = {};
+    const used: MotionResolvedProperty[] = [];
+    for (const r of snapshot.resolvedProperties) {
+      if (r.runtimeFrame !== snapshot.runtimeFrameNumber)
+        throw new MotionEngineError(
+          'MotionAdapterStaleValue',
+          'Resolved property is not from current FrameTick',
+        );
+      if (r.target.type !== target.type || r.target.targetId !== target.targetId) continue;
+      if (r.target.generation !== target.generation)
+        throw new MotionEngineError(
+          'MotionAdapterStaleTargetGeneration',
+          'Resolved property target generation is stale',
+        );
+      if (!allowed.has(r.property) || !schemaMap.has(r.property))
+        throw new MotionEngineError(
+          'MotionAdapterPropertyUnsupported',
+          'Resolved property is not approved for adapter',
+        );
+      const schema = schemaMap.get(r.property)!;
+      if (
+        schema.discrete
+          ? !['boolean', 'number'].includes(typeof r.value)
+          : typeof r.value !== 'number'
+      )
+        throw new MotionEngineError(
+          'MotionAdapterValueIncompatible',
+          'Resolved property value rejected by downstream validation',
+        );
+      if (typeof r.value === 'number' && !finite(r.value))
+        throw new MotionEngineError(
+          'MotionAdapterValueIncompatible',
+          'Resolved property value is not finite',
+        );
+      if (Object.prototype.hasOwnProperty.call(out, r.property))
+        throw new MotionEngineError(
+          'MotionAdapterPartialApplicationRejected',
+          'Duplicate property would cause partial application',
+        );
+      out[r.property] = r.value;
+      used.push(r);
+    }
+    return freeze({
+      domain: this.domain,
+      target: cloneFreeze(target),
+      runtimeFrameNumber: snapshot.runtimeFrameNumber,
+      snapshotGeneration: snapshot.generation,
+      properties: out,
+      sourceProperties: used,
+    }) as MotionAdapterApplication<T>;
+  }
+}
+export const createMotionDownstreamAdapters = () =>
+  freeze(
+    Object.fromEntries(
+      (Object.keys(adapterVocabulary) as MotionAdapterDomain[]).map((d) => [
+        d,
+        new TypedMotionDownstreamAdapter(d),
+      ]),
+    ),
+  );
+export const MOTION_BUILT_IN_PRESETS: readonly MotionPresetKind[] = freeze([
+  'FADE_IN',
+  'FADE_OUT',
+  'SLIDE_IN_LEFT',
+  'SLIDE_IN_RIGHT',
+  'SLIDE_IN_TOP',
+  'SLIDE_IN_BOTTOM',
+  'SLIDE_OUT_LEFT',
+  'SLIDE_OUT_RIGHT',
+  'ZOOM_IN',
+  'ZOOM_OUT',
+  'POP_IN',
+  'BOUNCE_IN',
+  'BOUNCE_OUT',
+  'SPIN_IN',
+  'SPIN_OUT',
+  'LOWER_THIRD_ENTER',
+  'LOWER_THIRD_EXIT',
+  'PICTURE_IN_PICTURE_ENTER',
+  'PICTURE_IN_PICTURE_EXIT',
+  'PULSE',
+  'FLOAT',
+  'SHAKE',
+  'SOCIAL_CARD_ENTER',
+]);
