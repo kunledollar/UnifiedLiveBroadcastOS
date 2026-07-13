@@ -1,3 +1,5 @@
+export * from './webrtc-output-foundation.js';
+
 export {
   AUDIO_DETECTOR_CHANNEL_MODES,
   AUDIO_DETECTOR_MODES,
