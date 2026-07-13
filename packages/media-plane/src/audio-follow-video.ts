@@ -1363,3 +1363,5 @@ export const createAudioFollowCommandHandlers = (
       return { status: 'SUCCEEDED', value: { accepted: true }, metadata: { audioFollow: true } };
     },
   }));
+
+export const AUDIO_FOLLOW_VIDEO_OUTPUT_KEYS = AUDIO_FOLLOW_OUTPUT_KEYS;
