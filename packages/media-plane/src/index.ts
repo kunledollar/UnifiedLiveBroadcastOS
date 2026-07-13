@@ -1,3 +1,4 @@
+export * from './ndi-output-foundation.js';
 export * from './webrtc-output-foundation.js';
 
 export {
