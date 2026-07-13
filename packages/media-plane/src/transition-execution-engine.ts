@@ -1085,7 +1085,7 @@ export class TransitionExecutionEngine {
 }
 export class TransitionExecutionProcessor implements TickProcessor {
   readonly id = 'transition-execution-processor';
-  readonly order = 550;
+  readonly order = 500;
   constructor(readonly engine: TransitionExecutionEngine) {}
   initialize() {}
   shutdown() {

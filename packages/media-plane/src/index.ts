@@ -3205,3 +3205,53 @@ export {
   type SceneSwitchingTelemetrySnapshot,
   type SceneSwitchingValidationReport,
 } from './scene-switching.js';
+
+export { AUDIO_FOLLOW_VIDEO_OUTPUT_KEYS, AudioFollowVideoProcessor } from './audio-follow-video.js';
+export type {
+  AudioFollowVideoRouteSnapshot,
+  AudioFollowVideoSnapshot,
+} from './audio-follow-video.js';
+export {
+  BUS_CATEGORIES,
+  OUTPUT_ROLES,
+  PROGRAM_PREVIEW_BUS_COMMAND_TYPES,
+  PROGRAM_PREVIEW_BUS_ERRORS,
+  PROGRAM_PREVIEW_BUS_EVENTS,
+  PROGRAM_PREVIEW_BUS_OUTPUT_KEYS,
+  PROGRAM_PREVIEW_BUS_PROCESSOR_ORDER,
+  PROGRAM_PREVIEW_BUS_WATCHDOG_INCIDENTS,
+  ProgramPreviewBusError,
+  ProgramPreviewBusOrchestrator,
+  ProgramPreviewBusOrchestrationProcessor,
+  createProgramPreviewBusCommandHandlers,
+  createProgramPreviewBusOrchestrator,
+} from './program-preview-bus-orchestration.js';
+export type {
+  AudioBindingPolicy,
+  AuxOutputSnapshot,
+  BroadcastBusDefinitionSnapshot,
+  BroadcastBusRole,
+  BroadcastBusStateSnapshot,
+  CleanFeedSnapshot,
+  ConfidenceMonitorSnapshot,
+  MultiviewSnapshot,
+  OutputOrientation,
+  OutputProfileCoordinationSnapshot,
+  OutputPublicationRequestSnapshot,
+  OutputPublicationTransactionSnapshot,
+  OutputReadinessSnapshot,
+  OutputReadinessState,
+  OutputRole,
+  OutputRoleBindingSnapshot,
+  OutputRolePublicationPlanSnapshot,
+  OutputRolePublicationResultSnapshot,
+  ProgramAudioVideoCorrelationSnapshot,
+  ProgramPreviewBusEngineSnapshot,
+  ProgramPreviewBusHealthSnapshot,
+  ProgramPreviewBusTelemetrySnapshot,
+  ProgramPreviewBusValidationReport,
+  PublicationAtomicityPolicy,
+  PublicationTransactionState,
+  RolePublicationStatus,
+  SceneSelectionPolicy,
+} from './program-preview-bus-orchestration.js';
