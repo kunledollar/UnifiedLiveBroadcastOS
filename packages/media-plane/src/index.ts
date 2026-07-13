@@ -1,4 +1,48 @@
 export {
+  LIVE_CONTROL_COMMAND_MODES,
+  LIVE_CONTROL_COMMAND_TYPES,
+  LIVE_CONTROL_EVENTS,
+  LIVE_CONTROL_WATCHDOG_INCIDENTS,
+  LIVE_PRODUCTION_TALLY_OUTPUT_KEYS,
+  LIVE_PRODUCTION_TALLY_PROCESSOR_ORDER,
+  TALLY_ENTITY_TYPES,
+  TALLY_PRIORITY,
+  TALLY_REASON_CODES,
+  TALLY_STATES,
+  LiveProductionControlTallyError,
+  LiveProductionTallyCoordinator,
+  LiveProductionTallyProcessor,
+  SyntheticTallyPublicationAdapter,
+  createLiveProductionControlCommandHandlers,
+  createLiveProductionTallyCoordinator,
+  createSyntheticTallyPublicationAdapter,
+  type AudioTallySnapshot,
+  type BusTallySnapshot,
+  type CameraTallySnapshot,
+  type LiveControlCommandRequestSnapshot,
+  type LiveControlCommandResultSnapshot,
+  type LiveProductionControlEngineSnapshot,
+  type LiveProductionControlHealthSnapshot,
+  type LiveProductionControlStateSnapshot,
+  type LiveProductionControlTelemetrySnapshot,
+  type LiveProductionControlValidationReport,
+  type LiveProductionTallySnapshot,
+  type OutputRoleTallySnapshot,
+  type PipSlotTallySnapshot,
+  type RemoteGuestTallySnapshot,
+  type SceneTallySnapshot,
+  type SourceTallySnapshot,
+  type TallyAdapterHealthSnapshot,
+  type TallyAssignmentSnapshot,
+  type TallyEntityReferenceSnapshot,
+  type TallyEntityType,
+  type TallyOverrideSnapshot,
+  type TallyPublicationAdapter,
+  type TallyReasonCode,
+  type TallyState,
+} from './live-production-control-tally.js';
+
+export {
   AUDIO_BUS_TYPES,
   AUDIO_COMMON_SOURCE_POLICIES,
   AUDIO_EASINGS,
@@ -3206,11 +3250,6 @@ export {
   type SceneSwitchingValidationReport,
 } from './scene-switching.js';
 
-export { AUDIO_FOLLOW_VIDEO_OUTPUT_KEYS, AudioFollowVideoProcessor } from './audio-follow-video.js';
-export type {
-  AudioFollowVideoRouteSnapshot,
-  AudioFollowVideoSnapshot,
-} from './audio-follow-video.js';
 export {
   BUS_CATEGORIES,
   OUTPUT_ROLES,
