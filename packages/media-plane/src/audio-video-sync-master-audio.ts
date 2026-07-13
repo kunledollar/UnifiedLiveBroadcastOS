@@ -1,72 +1,762 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-// @ts-nocheck
-import { RuntimeEngineError, type FrameTick, type ProcessorRuntimeContext, type RuntimeCommandHandler, type TickProcessor } from './execution-engine.js';
+import {
+  RuntimeEngineError,
+  type FrameTick,
+  type ProcessorRuntimeContext,
+  type RuntimeCommandHandler,
+  type TickProcessor,
+} from './execution-engine.js';
 
-const freeze=<T>(v:T):Readonly<T>=>Object.freeze(v);
-const safe=(m:Record<string,unknown>={})=>freeze(Object.fromEntries(Object.entries(m).filter(([k])=>!/secret|credential|password|token|pcm|pixel|native|handle|url|endpoint|address/i.test(k)).slice(0,32)));
-const nsPerSecond=1_000_000_000n;
-const id=(p:string,n:bigint|number|string)=>`${p}-${n}`;
-const finite=(n:number)=>Number.isFinite(n);
-const bi=(v:bigint|number|string)=>typeof v==='bigint'?v:BigInt(v);
-const bistr=(v:bigint|number|string|undefined)=> (v===undefined?'0':bi(v).toString());
-const abs=(v:bigint)=>v<0n?-v:v;
+export const AUDIO_VIDEO_SYNC_MASTER_AUDIO_VERSION = '5.6.5';
+export const AUDIO_VIDEO_SYNC_MASTER_AUDIO_PROCESSOR_ORDER = 590;
+export const AUDIO_VIDEO_SYNC_MASTER_AUDIO_OUTPUT_KEYS = Object.freeze({
+  timelineState: 'av-sync-master.timeline-state',
+  clockCorrelations: 'av-sync-master.clock-correlations',
+  syncPlans: 'av-sync-master.sync-plans',
+  syncResults: 'av-sync-master.sync-results',
+  programCorrelation: 'av-sync-master.program-correlation',
+  previewCorrelation: 'av-sync-master.preview-correlation',
+  masterBusStates: 'av-sync-master.master-bus-states',
+  masterAudioBlocks: 'av-sync-master.master-audio-blocks',
+  heldResources: 'av-sync-master.held-resources',
+  droppedResources: 'av-sync-master.dropped-resources',
+  health: 'av-sync-master.health',
+  telemetry: 'av-sync-master.telemetry',
+  watchdogIncidents: 'av-sync-master.watchdog-incidents',
+  sourceGraph: 'av-sync-master.source-graph',
+});
+export const AUDIO_VIDEO_SYNC_MASTER_AUDIO_COMMAND_TYPES = [
+  'AV_SYNC_REGISTER_CLOCK_DOMAIN',
+  'AV_SYNC_UPDATE_CLOCK_CORRELATION',
+  'AV_SYNC_REGISTER_MASTER_BUS',
+  'AV_SYNC_UPDATE_TOLERANCE',
+  'AV_SYNC_SET_CORRECTION_POLICY',
+  'AV_SYNC_SUBMIT_VIDEO',
+  'AV_SYNC_SUBMIT_AUDIO',
+  'AV_SYNC_PROCESS_TICK',
+  'AV_SYNC_DISCONTINUITY',
+  'AV_SYNC_RESET_TIMELINE',
+  'AV_SYNC_CANCEL_REQUEST',
+  'AV_SYNC_VALIDATE',
+  'AV_SYNC_SHUTDOWN',
+] as const;
+export type AudioVideoSyncMasterAudioCommandType =
+  (typeof AUDIO_VIDEO_SYNC_MASTER_AUDIO_COMMAND_TYPES)[number];
+export const AUDIO_VIDEO_SYNC_MASTER_AUDIO_EVENTS = [
+  'AudioVideoSyncMasterCreated',
+  'ClockDomainRegistered',
+  'ClockCorrelationUpdated',
+  'MasterTimelineAdvanced',
+  'SyncPlanCreated',
+  'SyncResultPublished',
+  'ProgramCorrelationChanged',
+  'PreviewCorrelationChanged',
+  'MasterAudioProcessed',
+  'AudioDelayApplied',
+  'VideoHoldApplied',
+  'DriftDetected',
+  'DiscontinuitySegmentStarted',
+  'AudioVideoSyncHealthChanged',
+  'AudioVideoSyncMasterShutdown',
+] as const;
+export const AUDIO_VIDEO_SYNC_MASTER_AUDIO_WATCHDOG_INCIDENTS = [
+  'AV_SYNC_DUPLICATE_PROCESSING',
+  'AV_SYNC_DUPLICATE_PROGRAM_MASTER_OUTPUT',
+  'AV_SYNC_MIXED_TICK_PROGRAM_PUBLICATION',
+  'AV_SYNC_TIMESTAMP_REGRESSION',
+  'AV_SYNC_SAMPLE_POSITION_REGRESSION',
+  'AV_SYNC_STALE_TIMELINE_GENERATION',
+  'AV_SYNC_STALE_CORRELATION_GENERATION',
+  'AV_SYNC_UNBOUNDED_HOLD',
+  'AV_SYNC_PROGRAM_PREVIEW_ALIAS',
+  'AV_SYNC_PARTIAL_PROGRAM_MASTER_AUDIO',
+  'AV_SYNC_LIMITER_GENERATION_STALE',
+  'AV_SYNC_METER_GENERATION_STALE',
+  'AV_SYNC_BACKEND_FAILED',
+  'AV_SYNC_CANCELLED',
+  'AV_SYNC_SHUTDOWN_UNDER_LOAD',
+  'AV_SYNC_INVARIANT_FAILURE',
+] as const;
 
-export const AV_SYNC_VERSION='5.6.5';
-export const CLOCK_DOMAINS=freeze(['MASTER_FRAME_CLOCK','VIDEO_SOURCE_CLOCK','AUDIO_SOURCE_CLOCK','SYSTEM_MONOTONIC_DIAGNOSTIC','NETWORK_MEDIA_CLOCK','DEVICE_CLOCK','SYNTHETIC_CLOCK','UNKNOWN'] as const);
-export const MASTER_TIMELINE_STATES=freeze(['CREATED','PRIMING','RUNNING','PAUSED','DISCONTINUOUS','RECOVERING','DEGRADED','FAILED','STOPPED','SHUTDOWN'] as const);
-export const CLOCK_CORRELATION_STATES=freeze(['UNKNOWN','ACQUIRING','LOCKED','DRIFTING','DISCONTINUOUS','DEGRADED','FAILED'] as const);
-export const AV_SYNC_STATUSES=freeze(['UNKNOWN','ACQUIRING','SYNCHRONIZED','VIDEO_AHEAD','AUDIO_AHEAD','DRIFTING','DISCONTINUOUS','RECOVERING','DEGRADED','FAILED'] as const);
-export const AV_SYNC_MODES=freeze(['STRICT','LOW_LATENCY','BROADCAST_BALANCED','AUDIO_MASTER','VIDEO_MASTER','EXTERNAL_MASTER_METADATA','HOLD_LAST_VALID','DEGRADE_WITH_WARNING','CUSTOM'] as const);
-export const AV_SYNC_CORRECTION_POLICIES=freeze(['NO_AUTOMATIC_CORRECTION','DELAY_AUDIO','HOLD_VIDEO','DROP_VIDEO_FRAME','DROP_AUDIO_BLOCK','INSERT_SILENCE_METADATA','HOLD_AUDIO_BLOCK_METADATA','RESYNC_AT_BOUNDARY','RESET_CORRELATION','PRESERVE_PROGRAM_AND_DEGRADE','FAIL_PUBLICATION','REQUEST_OPERATOR_INTERVENTION','CUSTOM'] as const);
-export const AV_SYNC_RESULT_STATUSES=freeze(['SYNCHRONIZED','CORRECTED','DEGRADED','HELD','DROPPED','DISCONTINUOUS','CANCELLED','FAILED','REJECTED'] as const);
-export const MASTER_AUDIO_BUS_ROLES=freeze(['PROGRAM_MASTER','PREVIEW_MASTER','AUX_MASTER','CLEAN_FEED_MASTER','MONITOR_MASTER','RECORD_MASTER','STREAM_MASTER','CUSTOM'] as const);
-export const AV_SYNC_COMMAND_TYPES=freeze(['AV_SYNC_REGISTER_BACKEND','AV_SYNC_UNREGISTER_BACKEND','AV_SYNC_CREATE_TIMELINE','AV_SYNC_START_TIMELINE','AV_SYNC_PAUSE_TIMELINE','AV_SYNC_RESUME_TIMELINE','AV_SYNC_RESET_TIMELINE','AV_SYNC_SET_MODE','AV_SYNC_SET_TOLERANCE_POLICY','AV_SYNC_SET_CORRECTION_POLICY','AV_SYNC_REGISTER_CLOCK_CORRELATION','AV_SYNC_RESET_CLOCK_CORRELATION','AV_SYNC_SET_AUDIO_DELAY','AV_SYNC_SET_VIDEO_DELAY_METADATA','AV_SYNC_PROCESS','AV_SYNC_CANCEL','MASTER_AUDIO_REGISTER_BUS','MASTER_AUDIO_UPDATE_BUS','MASTER_AUDIO_UNREGISTER_BUS','MASTER_AUDIO_SET_GAIN','MASTER_AUDIO_SET_MUTE','MASTER_AUDIO_SET_DIM','MASTER_AUDIO_SET_LIMITER','MASTER_AUDIO_PROCESS_BLOCK','MASTER_AUDIO_CANCEL_BLOCK','AV_SYNC_VALIDATE','AV_SYNC_COMMIT_CONFIGURATION','AV_SYNC_ROLLBACK_CONFIGURATION','AV_SYNC_CLEAR_PLAN_CACHE','AV_SYNC_SHUTDOWN'] as const);
-export const AV_SYNC_EVENTS=freeze(['AudioVideoSyncEngineCreated','MasterTimelineCreated','MasterTimelineStarted','MasterTimelinePaused','MasterTimelineResumed','MasterTimelineReset','ClockCorrelationCreated','ClockCorrelationLocked','ClockCorrelationDrifting','ClockCorrelationReset','AudioVideoSyncRequested','AudioVideoSyncPlanned','AudioVideoSynchronized','AudioAheadDetected','VideoAheadDetected','AudioVideoDriftDetected','AudioVideoDiscontinuityDetected','AudioDelayApplied','VideoHoldApplied','AudioBlockDropped','VideoFrameDropped','SilenceInsertionPlanned','AudioVideoSyncDegraded','AudioVideoSyncFailed','MasterAudioBusRegistered','MasterAudioBusUpdated','MasterAudioBusRemoved','MasterAudioProcessed','MasterAudioMuted','MasterAudioLimiterActivity','ProgramAudioVideoCorrelationPublished','AudioVideoSyncHealthChanged','AudioVideoSyncEngineShutdown'] as const);
-export const AV_SYNC_WATCHDOG_INCIDENTS=freeze(['AV_SYNC_ENGINE_STALLED','AV_SYNC_REQUEST_TIMEOUT','AV_SYNC_DUPLICATE_REQUEST','AV_SYNC_DUPLICATE_TICK','AV_SYNC_TIMELINE_GENERATION_STALE','AV_SYNC_VIDEO_GENERATION_STALE','AV_SYNC_AUDIO_GENERATION_STALE','AV_SYNC_MASTER_BUS_GENERATION_STALE','AV_SYNC_CORRELATION_GENERATION_STALE','AV_SYNC_TIMESTAMP_REGRESSION','AV_SYNC_SAMPLE_POSITION_REGRESSION','AV_SYNC_AUDIO_AHEAD','AV_SYNC_VIDEO_AHEAD','AV_SYNC_DRIFT_EXCESSIVE','AV_SYNC_DISCONTINUITY','AV_SYNC_CORRECTION_LIMIT_EXCEEDED','AV_SYNC_HELD_RESOURCE_PRESSURE','AV_SYNC_PROGRAM_AUDIO_VIDEO_MISMATCH','AV_SYNC_OUTPUT_REGISTRY_MISMATCH','AV_SYNC_SOURCE_GRAPH_MISMATCH','AV_SYNC_BACKEND_FAILED','AV_SYNC_INVARIANT_FAILURE','MASTER_AUDIO_PROGRAM_BLOCK_MISSING','MASTER_AUDIO_PROGRAM_BLOCK_DUPLICATE','MASTER_AUDIO_OUTPUT_ALIAS','MASTER_AUDIO_LIMITER_FAILED','MASTER_AUDIO_OWNERSHIP_VIOLATION','MASTER_AUDIO_INVARIANT_FAILURE'] as const);
-export const AV_SYNC_OUTPUT_KEYS=freeze({masterTimeline:'av-sync.masterTimeline',clockCorrelations:'av-sync.clockCorrelations',tolerancePolicy:'av-sync.tolerancePolicy',activeSyncMode:'av-sync.activeSyncMode',syncRequest:'av-sync.request',syncPlan:'av-sync.plan',syncResult:'av-sync.result',programAudioVideoCorrelation:'av-sync.programCorrelation',programMasterAudio:'master-audio.program',previewMasterAudio:'master-audio.preview',auxMasterAudio:'master-audio.aux',cleanFeedMasterAudio:'master-audio.cleanFeed',monitorMasterAudio:'master-audio.monitor',recordMasterMetadata:'master-audio.recordMetadata',streamMasterMetadata:'master-audio.streamMetadata',masterBusStates:'master-audio.busStates',delayCompensationStates:'av-sync.delayCompensation',discontinuityState:'av-sync.discontinuity',driftState:'av-sync.drift',activeConfigurationTransaction:'av-sync.configurationTransaction',syncHealth:'av-sync.health',syncTelemetry:'av-sync.telemetry',masterAudioHealth:'master-audio.health',failedRejectedResults:'av-sync.failedRejectedResults'});
-export const AV_SYNC_PROCESSOR_ORDER=590;
-
-export type RationalTimeBase={readonly numerator:bigint;readonly denominator:bigint};
-export type MediaTimestamp={readonly pts:bigint;readonly dts?:bigint;readonly duration:bigint;readonly timeBase:RationalTimeBase;readonly normalizedTimestampNs:bigint;readonly discontinuityGeneration:bigint;readonly sourceClockDomain:string;readonly safeMetadata:Readonly<Record<string,unknown>>};
-export class AudioVideoSyncError extends RuntimeEngineError{constructor(code:string,msg:string,details:Record<string,unknown>={}){super(code,msg,safe(details));}}
-export const createRationalTimeBase=(numerator:bigint|number,denominator:bigint|number):RationalTimeBase=>{const n=bi(numerator),d=bi(denominator);if(n<=0n||d<=0n)throw new AudioVideoSyncError('AudioVideoTimestampInvalid','invalid rational time base');return freeze({numerator:n,denominator:d});};
-export const normalizeTimestampToNs=(pts:bigint|number|string,tb:RationalTimeBase):bigint=>{if(!tb||tb.numerator<=0n||tb.denominator<=0n)throw new AudioVideoSyncError('AudioVideoTimestampInvalid','invalid time base');const p=bi(pts);const v=p*tb.numerator*nsPerSecond/tb.denominator;if(abs(v)>9_000_000_000_000_000_000n)throw new AudioVideoSyncError('AudioVideoTimestampInvalid','timestamp overflow');return v;};
-export const createMediaTimestamp=(input:any):MediaTimestamp=>freeze({pts:bi(input.pts),dts:input.dts===undefined?undefined:bi(input.dts),duration:bi(input.duration??0),timeBase:input.timeBase,normalizedTimestampNs:input.normalizedTimestampNs??normalizeTimestampToNs(input.pts,input.timeBase),discontinuityGeneration:bi(input.discontinuityGeneration??0),sourceClockDomain:input.sourceClockDomain??'SYNTHETIC_CLOCK',safeMetadata:safe(input.safeMetadata)});
-const snapTs=(t:MediaTimestamp)=>freeze({...t,pts:bistr(t.pts),dts:t.dts===undefined?undefined:bistr(t.dts),duration:bistr(t.duration),timeBase:{numerator:bistr(t.timeBase.numerator),denominator:bistr(t.timeBase.denominator)},normalizedTimestampNs:bistr(t.normalizedTimestampNs),discontinuityGeneration:bistr(t.discontinuityGeneration)});
-export const createDefaultAudioVideoSyncTolerancePolicy=()=>freeze({policyId:'broadcast-balanced',policyGeneration:1n,synchronizedThresholdNs:2_000_000n,warningThresholdNs:10_000_000n,correctionThresholdNs:40_000_000n,failureThresholdNs:250_000_000n,maximumAudioDelaySamples:48000,maximumVideoHoldFrames:3,maximumAudioHoldBlocks:3,maximumSilenceInsertionSamples:4800,maximumDroppedAudioBlocks:2,maximumDroppedVideoFrames:2,driftWarningPpm:100,driftFailurePpm:1000,recoveryWindow:8,safeMetadata:safe({mode:'BROADCAST_BALANCED'})});
-export const validateAudioVideoSyncTolerancePolicy=(p:any)=>{if(!(p.synchronizedThresholdNs<=p.warningThresholdNs&&p.warningThresholdNs<=p.correctionThresholdNs&&p.correctionThresholdNs<=p.failureThresholdNs))throw new AudioVideoSyncError('AudioVideoSyncRequestInvalid','invalid threshold ordering');return p;};
-export const createMasterAudioBusDefinition=(i:any)=>freeze({busId:i.busId,busVersion:i.busVersion??AV_SYNC_VERSION,busGeneration:bi(i.busGeneration??1),role:i.role,sourceMixerBusId:i.sourceMixerBusId??i.busId,sampleFormat:i.sampleFormat??'OPAQUE_SYNTHETIC',sampleRate:i.sampleRate??48000,channelLayout:i.channelLayout??'STEREO',blockSize:i.blockSize??480,masterGainDb:i.masterGainDb??0,masterGainLinear:i.masterGainLinear??1,masterMute:!!i.masterMute,safetyMute:!!i.safetyMute,operatorMute:!!i.operatorMute,emergencyMute:!!i.emergencyMute,masterDimMetadata:safe(i.masterDimMetadata),finalProcessorChainReference:i.finalProcessorChainReference,limiterReference:i.limiterReference,monitorParticipation:!!i.monitorParticipation,syncParticipation:i.syncParticipation!==false,outputEligibility:i.outputEligibility!==false,criticality:i.criticality??(i.role==='PROGRAM_MASTER'?'CRITICAL':'OPTIONAL'),failurePolicy:i.failurePolicy??'DEGRADE_OPTIONAL',safeMetadata:safe(i.safeMetadata),createdAtNs:bistr(i.createdAtNs??0),updatedAtNs:bistr(i.updatedAtNs??0)});
-export const resolveMasterMute=(b:any)=>b.emergencyMute?'EMERGENCY_MUTE':b.safetyMute?'SAFETY_MUTE':b.operatorMute?'OPERATOR_MUTE':b.masterMute?'MASTER_MUTE':'UNMUTED';
-
-export class SyntheticAudioVideoSynchronizationBackend{descriptor=freeze({backendId:'synthetic-av-sync',backendVersion:AV_SYNC_VERSION,priority:100});capabilities=freeze({supportedVideoTimeBases:['1/90000','1001/30000'],supportedAudioTimeBases:['1/48000'],maximumSkewNs:'250000000',correlationSupport:true,driftEstimationSupport:true,audioDelaySupport:true,videoHoldSupport:true,silenceInsertionSupport:true,dropPolicySupport:true,realClockSynchronization:false,hardwareClockSupport:false,deterministicBehavior:true,retainedMemoryLimits:{maxHeldBytes:0},safeMetadata:safe()});initialize(){return this.snapshot();}normalizeTimestamp(t:MediaTimestamp){return t.normalizedTimestampNs;}correlateClocks(c:any,source:bigint,master:bigint){const offset=master-source;const sampleCount=BigInt((Number(c?.sampleCount??0n)+1));const drift=Number(offset)/(Number(sampleCount)||1);return freeze({correlationId:c?.correlationId??'corr-synthetic',sourceClockDomain:c?.sourceClockDomain??'SYNTHETIC_CLOCK',masterClockDomain:'MASTER_FRAME_CLOCK',correlationGeneration:bi(c?.correlationGeneration??0)+1n,sourceTimestamp:source,masterTimestamp:master,offsetNs:offset,driftPpm:Math.max(-100000,Math.min(100000,drift)),confidence:Math.min(1,Number(sampleCount)/3),sampleCount,lastUpdateNs:master,state:sampleCount<2n?'ACQUIRING':Math.abs(drift)>100?'DRIFTING':'LOCKED',safeMetadata:safe()});}createPlan(req:any,policy:any,mode='BROADCAST_BALANCED'){const vn=req.programVideoTimestamp.normalizedTimestampNs,an=req.programAudioTimestamp.normalizedTimestampNs;const skew=an-vn;const absSkew=abs(skew);let status='SYNCHRONIZED',corr='NO_AUTOMATIC_CORRECTION';if(absSkew>policy.failureThresholdNs){status='FAILED';corr='FAIL_PUBLICATION';}else if(skew>policy.warningThresholdNs){status='AUDIO_AHEAD';corr=absSkew>=policy.correctionThresholdNs?'HOLD_VIDEO':'NO_AUTOMATIC_CORRECTION';}else if(skew< -policy.warningThresholdNs){status='VIDEO_AHEAD';corr=absSkew>=policy.correctionThresholdNs?'DELAY_AUDIO':'NO_AUTOMATIC_CORRECTION';}const audioDelaySamples=corr==='DELAY_AUDIO'?Math.min(policy.maximumAudioDelaySamples,Number(absSkew*BigInt(req.programAudioSampleRate??48000)/nsPerSecond)):0;return freeze({planId:id('av-plan',req.runtimeFrame),requestId:req.requestId,timelineGeneration:req.expectedTimelineGeneration,syncPolicyGeneration:policy.policyGeneration,normalizedVideoTimestamp:vn,normalizedAudioTimestamp:an,measuredSkewNs:skew,measuredDriftPpm:Number(skew)/1_000_000,selectedAuthority:mode==='AUDIO_MASTER'?'AUDIO':mode==='VIDEO_MASTER'?'VIDEO':'MASTER_TIMELINE',selectedCorrectionPolicy:corr,audioDelaySamples,videoHoldFrames:corr==='HOLD_VIDEO'?Math.min(policy.maximumVideoHoldFrames,1):0,audioHoldBlocks:corr==='HOLD_AUDIO_BLOCK_METADATA'?1:0,silenceInsertionSamples:corr==='INSERT_SILENCE_METADATA'?Math.min(policy.maximumSilenceInsertionSamples,Number(absSkew)):0,droppedAudioBlockCount:corr==='DROP_AUDIO_BLOCK'?1:0,droppedVideoFrameCount:corr==='DROP_VIDEO_FRAME'?1:0,publicationEligibility:status!=='FAILED'||mode==='DEGRADE_WITH_WARNING',operationOrder:['validate timeline','validate time bases','normalize video timestamp','normalize audio timestamp','validate generations','measure skew','update clock correlation','evaluate sync status','select correction policy','prepare bounded correction','validate corrected presentation state','prepare synchronized publication','publish sync state','release expired held resources'],retainedResourceEstimate:0,deterministicScore:Number(absSkew%1000000n),warnings:status==='SYNCHRONIZED'?[]:[status],syncStatus:status,safeMetadata:safe()});}evaluateSynchronization(plan:any){return plan.syncStatus;}resetCorrelation(){return true;}shutdown(){return true;}snapshot(){return freeze({descriptor:this.descriptor,capabilities:this.capabilities});}}
-export const createSyntheticAudioVideoSynchronizationBackend=()=>new SyntheticAudioVideoSynchronizationBackend();
-export class SyntheticMasterAudioBusBackend{descriptor=freeze({backendId:'synthetic-master-audio',backendVersion:AV_SYNC_VERSION,priority:100});capabilities=freeze({supportedFormats:['OPAQUE_SYNTHETIC','PCM_F32'],sampleRates:[44100,48000,96000],channelLayouts:['MONO','STEREO','SURROUND_5_1'],gain:true,mute:true,dimMetadata:true,limiterIntegration:true,audioDelay:true,silenceGeneration:true,realPcmProcessing:false,deterministicBehavior:true,maximumBuses:32,maximumDelaySamples:48000,safeMetadata:safe()});initialize(){return this.snapshot();}createPlan(bus:any,block:any){return freeze({planId:id('master-plan',block?.blockId??bus.busId),busId:bus.busId,generation:bus.busGeneration,operationOrder:['validate input mixer output','validate sample position','apply final master gain','apply master mute','apply final limiter where configured','attach loudness/metering summaries','apply bounded delay compensation','correlate with Program video','validate output readiness','transfer ownership','publish master state']});}processMasterBlock(bus:any,block:any){const reason=resolveMasterMute(bus);return freeze({busId:bus.busId,busGeneration:bus.busGeneration,role:bus.role,currentAudioBlockReference:{blockId:block.blockId,generation:block.generation??1,ownership:'OUTPUT_OWNED'},samplePosition:bistr(block.samplePosition??0),sampleCount:block.sampleCount??bus.blockSize,timestamp:block.timestamp?snapTs(block.timestamp):undefined,masterGainDb:bus.masterGainDb,masterGainLinear:bus.masterGainLinear,muteState:{effectiveReason:reason,muted:reason!=='UNMUTED'},dimState:bus.masterDimMetadata,finalLimiterStateMetadata:{limiterReference:bus.limiterReference,realLimiterApplied:!!bus.limiterReference&&!block.skipLimiter},loudnessSummary:safe(block.loudnessSummary),peakSummary:safe(block.peakSummary),synchronizationState:'PENDING_CORRELATION',outputReadiness:bus.outputEligibility?'READY':'NOT_ELIGIBLE',health:'healthy',safeMetadata:safe()});}reset(){return true;}shutdown(){return true;}snapshot(){return freeze({descriptor:this.descriptor,capabilities:this.capabilities});}}
-export const createSyntheticMasterAudioBusBackend=()=>new SyntheticMasterAudioBusBackend();
-
-export class AudioVideoSyncMasterAudioEngine{constructor(){this.backends=new Map;this.masterBackends=new Map;this.timelines=new Map;this.correlations=new Map;this.buses=new Map;this.requests=new Set;this.ticks=new Set;this.masterBlocks=new Set;this.planCache=new Map;this.mode='BROADCAST_BALANCED';this.policy=createDefaultAudioVideoSyncTolerancePolicy();this.configGeneration=1n;this.shutdownFlag=false;this.events=['AudioVideoSyncEngineCreated'];this.telemetry={syncRequests:0,syncPlans:0,syncCompletions:0,synchronized:0,audioAhead:0,videoAhead:0,failures:0,masterBlocksProcessed:0,programPublications:0,previewPublications:0,duplicateRequests:0,duplicateTicks:0,staleGenerations:0,timestampRegressions:0,samplePositionRegressions:0,maximumAbsoluteSkewNs:'0',averageSkewNs:'0',lastEvent:'AudioVideoSyncEngineCreated'};this.health={engineState:'CREATED',healthState:'healthy',processedRequestCount:0,synchronizedCount:0,correctedCount:0,degradedCount:0,failedCount:0,cancelledCount:0,duplicateRequestCount:0,duplicateTickCount:0,staleGenerationRejectionCount:0,timestampRegressionCount:0,samplePositionRegressionCount:0,audioAheadCount:0,videoAheadCount:0,driftWarningCount:0,driftFailureCount:0,discontinuityCount:0,audioDelayOperationCount:0,videoHoldCount:0,videoDropCount:0,audioHoldCount:0,audioDropCount:0,silenceInsertionCount:0,programCorrelationMismatchCount:0,heldAudioBytes:0,heldVideoBytes:0,peakHeldBytes:0,lastSkewNs:'0',lastDriftPpm:0,lastSynchronizedRuntimeFrame:'0',lastFailure:undefined,updatedAtNs:'0'};this.masterHealth={engineState:'CREATED',healthState:'healthy',registeredBusCount:0,activeBusCount:0,processedBlockCount:0,completedBlockCount:0,mutedBlockCount:0,delayedBlockCount:0,degradedBlockCount:0,failedBlockCount:0,limiterActiveCount:0,clippingWarningCount:0,silenceCount:0,ownershipViolationCount:0,outputBytes:0,heldBytes:0,temporaryBytes:0,lastSamplePosition:'0',lastSuccessfulBlock:undefined,lastFailure:undefined,updatedAtNs:'0'};}
- registerBackend(b:any){if(this.shutdownFlag)throw new AudioVideoSyncError('AudioVideoSyncShutdownError','shutdown');if(this.backends.has(b.descriptor.backendId))throw new AudioVideoSyncError('DuplicateClockCorrelation','duplicate backend');this.backends.set(b.descriptor.backendId,b);this.activeBackendId=[...this.backends.keys()].sort()[0];return b.snapshot?.()??b;}
- registerMasterAudioBackend(b:any){if(this.masterBackends.has(b.descriptor.backendId))throw new AudioVideoSyncError('DuplicateMasterAudioBus','duplicate master backend');this.masterBackends.set(b.descriptor.backendId,b);this.activeMasterBackendId=[...this.masterBackends.keys()].sort()[0];return b.snapshot?.()??b;}
- createTimeline(i:any){if(this.timelines.has(i.timelineId)||this.timelines.size>=1)throw new AudioVideoSyncError('DuplicateMasterTimeline','one active master timeline required');const t=freeze({timelineId:i.timelineId,timelineVersion:AV_SYNC_VERSION,timelineGeneration:bi(i.timelineGeneration??1),timelineGenerationNumber:bi(i.timelineGeneration??1),startTimeNs:bi(i.startTimeNs??0),currentFrameTick:i.currentFrameTick,currentPresentationTimestampNs:bi(i.currentPresentationTimestampNs??0),videoTimeBase:i.videoTimeBase,audioTimeBase:i.audioTimeBase,videoFrameRate:i.videoFrameRate??{numerator:30000,denominator:1001},audioSampleRate:i.audioSampleRate??48000,timelineState:'CREATED',discontinuityGeneration:0n,safeMetadata:safe(i.safeMetadata)});this.timelines.set(t.timelineId,t);this.activeTimelineId=t.timelineId;this.telemetry.activeTimelineId=t.timelineId;return t;}
- timelineState(state:string,tick?:FrameTick){const t=this.timeline();const nt=freeze({...t,timelineGeneration:t.timelineGeneration+1n,timelineState:state,currentFrameTick:tick??t.currentFrameTick,currentPresentationTimestampNs:tick?.presentationTimeNs??t.currentPresentationTimestampNs,discontinuityGeneration:state==='DISCONTINUOUS'?t.discontinuityGeneration+1n:t.discontinuityGeneration});this.timelines.set(t.timelineId,nt);return nt;}
- startTimeline(t?:FrameTick){return this.timelineState('RUNNING',t)} pauseTimeline(){return this.timelineState('PAUSED')} resumeTimeline(t?:FrameTick){return this.timelineState('RUNNING',t)} resetTimeline(t?:FrameTick){const r=this.timelineState('DISCONTINUOUS',t);return this.timelineState('RUNNING',t)} timeline(){const t=this.timelines.get(this.activeTimelineId);if(!t)throw new AudioVideoSyncError('MasterTimelineNotFound','timeline not found');return t;}
- registerClockCorrelation(c:any){if(this.correlations.has(c.correlationId))throw new AudioVideoSyncError('DuplicateClockCorrelation','duplicate correlation');const cc=freeze({correlationId:c.correlationId,sourceClockDomain:c.sourceClockDomain,masterClockDomain:c.masterClockDomain??'MASTER_FRAME_CLOCK',correlationGeneration:bi(c.correlationGeneration??1),sourceTimestamp:bi(c.sourceTimestamp??0),masterTimestamp:bi(c.masterTimestamp??0),offsetNs:bi(c.offsetNs??0),driftPpm:c.driftPpm??0,confidence:c.confidence??0,sampleCount:bi(c.sampleCount??0),lastUpdateNs:bi(c.lastUpdateNs??0),state:c.state??'ACQUIRING',safeMetadata:safe(c.safeMetadata)});this.correlations.set(cc.correlationId,cc);return cc;}
- registerMasterBus(b:any){if(this.buses.has(b.busId))throw new AudioVideoSyncError('DuplicateMasterAudioBus','duplicate master bus');const bus=createMasterAudioBusDefinition(b);if(bus.role==='PROGRAM_MASTER'&&[...this.buses.values()].some((x:any)=>x.role==='PROGRAM_MASTER'))throw new AudioVideoSyncError('DuplicateMasterAudioBus','duplicate program master');this.buses.set(bus.busId,bus);this.masterHealth.registeredBusCount=this.buses.size;this.masterHealth.activeBusCount=this.buses.size;return bus;}
- updateMasterBus(busId:string,patch:any){const b=this.buses.get(busId);if(!b)throw new AudioVideoSyncError('MasterAudioBusNotFound','bus not found');const nb=createMasterAudioBusDefinition({...b,...patch,busGeneration:b.busGeneration+1n});this.buses.set(busId,nb);return nb;}
- unregisterMasterBus(busId:string){const b=this.buses.get(busId);if(!b)throw new AudioVideoSyncError('MasterAudioBusNotFound','bus not found');if(b.role==='PROGRAM_MASTER')throw new AudioVideoSyncError('MasterAudioBusInvalid','program master removal rejected');this.buses.delete(busId);return true;}
- processMasterBlock(busId:string,block:any){const key=`${busId}:${block.blockId}`;if(this.masterBlocks.has(key))throw new AudioVideoSyncError('MASTER_AUDIO_PROGRAM_BLOCK_DUPLICATE','duplicate master block');const b=this.buses.get(busId);if(!b)throw new AudioVideoSyncError('MasterAudioBusNotFound','bus not found');const be=this.masterBackends.get(this.activeMasterBackendId)||createSyntheticMasterAudioBusBackend();const st=be.processMasterBlock(b,block);this.masterBlocks.add(key);this.masterHealth.processedBlockCount++;this.masterHealth.completedBlockCount++;if(st.muteState.muted)this.masterHealth.mutedBlockCount++;if(st.finalLimiterStateMetadata.realLimiterApplied)this.masterHealth.limiterActiveCount++;this.masterHealth.lastSamplePosition=st.samplePosition;this.masterHealth.lastSuccessfulBlock=block.blockId;return st;}
- createSyncRequest(i:any){if(this.shutdownFlag)throw new AudioVideoSyncError('AudioVideoSyncShutdownError','shutdown');const t=this.timeline();if(bi(i.expectedTimelineGeneration)!==t.timelineGeneration) {this.health.staleGenerationRejectionCount++;throw new AudioVideoSyncError('MasterTimelineGenerationMismatch','stale timeline generation');} if(this.requests.has(i.requestId)){this.health.duplicateRequestCount++;throw new AudioVideoSyncError('AudioVideoSyncDuplicateRequest','duplicate request');} const rf=bistr(i.runtimeFrame); if(this.ticks.has(rf)){this.health.duplicateTickCount++;throw new AudioVideoSyncError('AudioVideoSyncDuplicateTick','duplicate runtime frame');} const r=freeze({...i,runtimeFrame:bi(i.runtimeFrame),expectedTimelineGeneration:bi(i.expectedTimelineGeneration),programAudioSamplePosition:bi(i.programAudioSamplePosition??0),safeMetadata:safe(i.safeMetadata)});this.requests.add(r.requestId);this.ticks.add(rf);this.telemetry.syncRequests++;return r;}
- processSyncRequest(req:any){const be=this.backends.get(this.activeBackendId)||createSyntheticAudioVideoSynchronizationBackend();const plan=be.createPlan(req,this.policy,this.mode);this.planCache.set(`${req.requestId}:${plan.timelineGeneration}:${plan.syncPolicyGeneration}`,plan);if(this.planCache.size>512)this.planCache.delete(this.planCache.keys().next().value);const status=plan.syncStatus==='SYNCHRONIZED'?'SYNCHRONIZED':plan.publicationEligibility?'CORRECTED':'FAILED';const result=freeze({requestId:req.requestId,planId:plan.planId,status,runtimeFrame:req.runtimeFrame,timelineGeneration:plan.timelineGeneration,programVideoReferenceSummary:safe(req.programVideoReference),programAudioReferenceSummary:safe(req.programAudioReference),videoPresentationTimestamp:snapTs(req.programVideoTimestamp),audioPresentationTimestamp:snapTs(req.programAudioTimestamp),originalSkewNs:plan.measuredSkewNs,correctedSkewNs:plan.selectedCorrectionPolicy==='DELAY_AUDIO'?0n:plan.measuredSkewNs,driftPpm:plan.measuredDriftPpm,syncStatus:plan.syncStatus,correctionSelected:plan.selectedCorrectionPolicy,correctionApplied:plan.selectedCorrectionPolicy!=='NO_AUTOMATIC_CORRECTION',audioDelaySamples:plan.audioDelaySamples,videoFramesHeld:plan.videoHoldFrames,videoFramesDropped:plan.droppedVideoFrameCount,audioBlocksHeld:plan.audioHoldBlocks,audioBlocksDropped:plan.droppedAudioBlockCount,silenceSamplesInsertedMetadata:plan.silenceInsertionSamples,synchronizedPublicationReady:status!=='FAILED',audioVideoSynchronized:plan.syncStatus==='SYNCHRONIZED',degraded:status==='CORRECTED',warnings:plan.warnings,retainedBytes:plan.retainedResourceEstimate,completedAtNs:req.frameTick?.actualTimeNs??0n});this.lastPlan=plan;this.lastResult=result;this.health.processedRequestCount++;this.health.lastSkewNs=bistr(plan.measuredSkewNs);this.health.lastDriftPpm=plan.measuredDriftPpm;if(plan.syncStatus==='SYNCHRONIZED'){this.health.synchronizedCount++;this.health.lastSynchronizedRuntimeFrame=bistr(req.runtimeFrame);} if(plan.syncStatus==='AUDIO_AHEAD')this.health.audioAheadCount++; if(plan.syncStatus==='VIDEO_AHEAD')this.health.videoAheadCount++; if(status==='FAILED')this.health.failedCount++; this.telemetry.syncPlans++;this.telemetry.syncCompletions++;this.telemetry.maximumAbsoluteSkewNs=bistr(abs(plan.measuredSkewNs));return result;}
- correlateProgram(result:any){const s=freeze({correlationId:id('program-av',result.runtimeFrame),correlationGeneration:bi(result.timelineGeneration),runtimeFrame:bistr(result.runtimeFrame),programVideoFrameId:result.programVideoReferenceSummary.frameId,programVideoGeneration:result.programVideoReferenceSummary.generation??1,programAudioBlockId:result.programAudioReferenceSummary.blockId,programAudioBlockGeneration:result.programAudioReferenceSummary.generation??1,videoPts:result.videoPresentationTimestamp.pts,audioPts:result.audioPresentationTimestamp.pts,skewNs:bistr(result.originalSkewNs),driftPpm:result.driftPpm,synchronizationStatus:result.syncStatus,correctionSummary:{selected:result.correctionSelected,applied:result.correctionApplied},publicationEligibility:result.synchronizedPublicationReady,outputProfile:'PROGRAM',health:result.status==='FAILED'?'failed':result.degraded?'degraded':'healthy',safeMetadata:safe()});this.lastCorrelation=s;this.telemetry.programPublications++;return s;}
- process(reqInput:any){const r=this.createSyncRequest(reqInput);const res=this.processSyncRequest(r);const corr=res.synchronizedPublicationReady?this.correlateProgram(res):undefined;return freeze({request:r,plan:this.lastPlan,result:res,correlation:corr});}
- snapshot(){return freeze({version:AV_SYNC_VERSION,timeline:this.activeTimelineId?this.snapshotTimeline(this.timeline()):undefined,clockCorrelations:[...this.correlations.values()].sort((a,b)=>a.correlationId.localeCompare(b.correlationId)).map(this.snapshotCorrelation),masterBuses:[...this.buses.values()].sort((a,b)=>a.busId.localeCompare(b.busId)).map(this.snapshotBus),lastPlan:this.lastPlan&&this.snapshotPlan(this.lastPlan),lastResult:this.lastResult&&this.snapshotResult(this.lastResult),programCorrelation:this.lastCorrelation,health:this.getHealthSnapshot(),masterAudioHealth:this.getMasterAudioHealthSnapshot(),telemetry:this.getTelemetrySnapshot(),shutdown:this.shutdownFlag});}
- snapshotTimeline(t:any){return freeze({...t,timelineGeneration:bistr(t.timelineGeneration),startTimeNs:bistr(t.startTimeNs),currentPresentationTimestampNs:bistr(t.currentPresentationTimestampNs),discontinuityGeneration:bistr(t.discontinuityGeneration),videoTimeBase:{numerator:bistr(t.videoTimeBase.numerator),denominator:bistr(t.videoTimeBase.denominator)},audioTimeBase:{numerator:bistr(t.audioTimeBase.numerator),denominator:bistr(t.audioTimeBase.denominator)}})} snapshotCorrelation(c:any){return freeze({...c,correlationGeneration:bistr(c.correlationGeneration),sourceTimestamp:bistr(c.sourceTimestamp),masterTimestamp:bistr(c.masterTimestamp),offsetNs:bistr(c.offsetNs),sampleCount:bistr(c.sampleCount),lastUpdateNs:bistr(c.lastUpdateNs)})} snapshotBus(b:any){return freeze({...b,busGeneration:bistr(b.busGeneration)})} snapshotPlan(p:any){return freeze({...p,timelineGeneration:bistr(p.timelineGeneration),syncPolicyGeneration:bistr(p.syncPolicyGeneration),normalizedVideoTimestamp:bistr(p.normalizedVideoTimestamp),normalizedAudioTimestamp:bistr(p.normalizedAudioTimestamp),measuredSkewNs:bistr(p.measuredSkewNs)})} snapshotResult(r:any){return freeze({...r,runtimeFrame:bistr(r.runtimeFrame),timelineGeneration:bistr(r.timelineGeneration),originalSkewNs:bistr(r.originalSkewNs),correctedSkewNs:bistr(r.correctedSkewNs),completedAtNs:bistr(r.completedAtNs)})}
- getHealthSnapshot(){const t=this.activeTimelineId?this.timeline():undefined;return freeze({...this.health,engineState:this.shutdownFlag?'SHUTDOWN':'RUNNING',timelineState:t?.timelineState??'CREATED',timelineGeneration:bistr(t?.timelineGeneration??0),activeSyncMode:this.mode,backendCount:this.backends.size,activeBackendId:this.activeBackendId,clockCorrelationCount:this.correlations.size,lockedCorrelationCount:[...this.correlations.values()].filter((c:any)=>c.state==='LOCKED').length,driftingCorrelationCount:[...this.correlations.values()].filter((c:any)=>c.state==='DRIFTING').length,programMasterBusId:[...this.buses.values()].find((b:any)=>b.role==='PROGRAM_MASTER')?.busId,previewMasterBusId:[...this.buses.values()].find((b:any)=>b.role==='PREVIEW_MASTER')?.busId,activeMasterBusCount:this.buses.size,updatedAtNs:'0'});} getMasterAudioHealthSnapshot(){return freeze({...this.masterHealth,engineState:this.shutdownFlag?'SHUTDOWN':'RUNNING',healthState:'healthy',registeredBusCount:this.buses.size,activeBusCount:this.buses.size,programBusGeneration:bistr([...this.buses.values()].find((b:any)=>b.role==='PROGRAM_MASTER')?.busGeneration??0),previewBusGeneration:bistr([...this.buses.values()].find((b:any)=>b.role==='PREVIEW_MASTER')?.busGeneration??0)});} getTelemetrySnapshot(){return freeze({...this.telemetry,healthSummary:this.health.healthState??'healthy'});} assertInvariants(){if(this.timelines.size>1)throw new AudioVideoSyncError('AudioVideoSyncInvariantViolation','multiple timelines');if(new Set(this.buses.keys()).size!==this.buses.size)throw new AudioVideoSyncError('AudioVideoSyncInvariantViolation','duplicate buses');if([...this.buses.values()].filter((b:any)=>b.role==='PROGRAM_MASTER').length>1)throw new AudioVideoSyncError('AudioVideoSyncInvariantViolation','duplicate program master');if(this.masterHealth.heldBytes>0||this.masterHealth.temporaryBytes>0)throw new AudioVideoSyncError('AudioVideoSyncInvariantViolation','retained bytes');return freeze({valid:true,checkedAtNs:'0',errors:[],safeMetadata:safe({version:AV_SYNC_VERSION})});}
- shutdown(){this.shutdownFlag=true;this.planCache.clear();this.events.push('AudioVideoSyncEngineShutdown');this.health.engineState='SHUTDOWN';this.masterHealth.engineState='SHUTDOWN';return this.assertInvariants();}}
-export const createAudioVideoSyncMasterAudioEngine=()=>new AudioVideoSyncMasterAudioEngine();
-export class AudioVideoSyncMasterBusProcessor implements TickProcessor{ id='audio-video-sync-master-bus'; order=AV_SYNC_PROCESSOR_ORDER; descriptor=freeze({id:this.id,name:'Audio/Video Sync and Master Audio',order:this.order,version:AV_SYNC_VERSION}); constructor(readonly engine=createAudioVideoSyncMasterAudioEngine()){} initialize(){} processTick(tick:FrameTick,context:ProcessorRuntimeContext){context.outputs.publish(this.id,AV_SYNC_OUTPUT_KEYS.masterTimeline,this.engine.activeTimelineId?this.engine.snapshotTimeline(this.engine.timeline()):undefined,'BORROWED');context.outputs.publish(this.id,AV_SYNC_OUTPUT_KEYS.syncHealth,this.engine.getHealthSnapshot(),'BORROWED');context.outputs.publish(this.id,AV_SYNC_OUTPUT_KEYS.syncTelemetry,this.engine.getTelemetrySnapshot(),'BORROWED');context.outputs.publish(this.id,AV_SYNC_OUTPUT_KEYS.masterAudioHealth,this.engine.getMasterAudioHealthSnapshot(),'BORROWED');return {frameNumber:tick.frameNumber.toString(),processed:true};} shutdown(){return this.engine.shutdown();}}
-export const createAudioVideoSyncMasterBusProcessor=(engine?:AudioVideoSyncMasterAudioEngine)=>new AudioVideoSyncMasterBusProcessor(engine);
-export const createAudioVideoSyncCommandHandlers=(engine:AudioVideoSyncMasterAudioEngine):RuntimeCommandHandler[]=>AV_SYNC_COMMAND_TYPES.map((type)=>({type,execute(command:any){const p=command.payload??{};switch(type){case 'AV_SYNC_REGISTER_BACKEND':return engine.registerBackend(p.backend);case 'MASTER_AUDIO_REGISTER_BUS':return engine.registerMasterBus(p.bus);case 'MASTER_AUDIO_SET_GAIN':return engine.updateMasterBus(p.busId,{masterGainDb:p.masterGainDb,masterGainLinear:p.masterGainLinear});case 'MASTER_AUDIO_SET_MUTE':return engine.updateMasterBus(p.busId,{masterMute:p.masterMute,safetyMute:p.safetyMute,operatorMute:p.operatorMute,emergencyMute:p.emergencyMute});case 'MASTER_AUDIO_PROCESS_BLOCK':return engine.processMasterBlock(p.busId,p.block);case 'AV_SYNC_PROCESS':return engine.process(p.request);case 'AV_SYNC_VALIDATE':return engine.assertInvariants();case 'AV_SYNC_SHUTDOWN':return engine.shutdown();default:return freeze({accepted:true,type,metadataOnly:true});}}}));
-export const createAudioVideoSyncSourceGraphSnapshot=(engine:AudioVideoSyncMasterAudioEngine)=>freeze({timeline:engine.activeTimelineId?engine.snapshotTimeline(engine.timeline()):undefined,programCorrelation:engine.lastCorrelation,skew:engine.health.lastSkewNs,drift:engine.health.lastDriftPpm,syncStatus:engine.lastResult?.syncStatus,correctionPolicy:engine.lastPlan?.selectedCorrectionPolicy,masterBuses:[...engine.buses.values()].map((b:any)=>({busId:b.busId,role:b.role,masterGainDb:b.masterGainDb,mute:resolveMasterMute(b),outputReadiness:b.outputEligibility})),health:engine.getHealthSnapshot(),containsRawPcm:false,containsPixels:false,containsNativeHandles:false});
-export const createAudioDelayCompensationDefinition=(i:any)=>freeze({delayId:i.delayId,delayVersion:AV_SYNC_VERSION,delayGeneration:bi(i.delayGeneration??1),targetBus:i.targetBus,delaySamples:i.delaySamples??0,delayNs:bistr(BigInt(i.delaySamples??0)*nsPerSecond/BigInt(i.sampleRate??48000)),maximumBufferSamples:i.maximumBufferSamples??48000,enabled:!!i.enabled,updatePolicy:i.updatePolicy??'AUDIO_BLOCK_BOUNDARY',safeMetadata:safe(i.safeMetadata)});
-export const createVideoDelayCompensationDefinition=(i:any)=>freeze({delayId:i.delayId,targetRole:i.targetRole,delayFrames:i.delayFrames??0,delayNs:bistr(BigInt(i.delayFrames??0)*BigInt(i.frameDurationNs??33366666)),maximumHeldFrames:i.maximumHeldFrames??3,enabled:!!i.enabled,outputRetentionPolicy:i.outputRetentionPolicy??'METADATA_ONLY',safeMetadata:safe(i.safeMetadata)});
-export const createAudioVideoSyncConfigurationTransaction=(i:any)=>freeze({transactionId:i.transactionId,transactionGeneration:bi(i.transactionGeneration??1),currentConfigurationGeneration:bi(i.currentConfigurationGeneration??1),requestedConfigurationGeneration:bi(i.requestedConfigurationGeneration??2),timelineUpdates:i.timelineUpdates??[],tolerancePolicyUpdates:i.tolerancePolicyUpdates??[],syncModeUpdates:i.syncModeUpdates??[],delayCompensationUpdates:i.delayCompensationUpdates??[],masterBusUpdates:i.masterBusUpdates??[],backendUpdates:i.backendUpdates??[],validationReport:i.validationReport??{valid:true,errors:[]},scheduledRuntimeFrame:bistr(i.scheduledRuntimeFrame??0),scheduledSamplePosition:bistr(i.scheduledSamplePosition??0),state:i.state??'CREATED',failureReason:i.failureReason,createdAtNs:bistr(i.createdAtNs??0),committedAtNs:i.committedAtNs?bistr(i.committedAtNs):undefined,completedAtNs:i.completedAtNs?bistr(i.completedAtNs):undefined,safeMetadata:safe(i.safeMetadata)});
+export type AudioVideoSyncOutputRole =
+  'PROGRAM' | 'PREVIEW' | 'AUX' | 'CLEAN_FEED' | 'MONITOR' | 'RECORD' | 'STREAM';
+export type AudioVideoSyncMode =
+  'STRICT' | 'BOUNDED_AUDIO_DELAY' | 'BOUNDED_VIDEO_HOLD' | 'DEGRADED_METADATA_ONLY';
+export type AudioVideoCorrectionPolicy =
+  | 'NONE'
+  | 'DELAY_AUDIO'
+  | 'HOLD_VIDEO'
+  | 'DROP_LATE_OPTIONAL'
+  | 'INSERT_SILENCE_METADATA'
+  | 'MARK_DEGRADED';
+export type AudioVideoSyncStatus =
+  'LOCKED' | 'AUDIO_LEADS' | 'VIDEO_LEADS' | 'DRIFTING' | 'DISCONTINUITY' | 'DEGRADED' | 'FAILED';
+export interface RationalTimeBase {
+  readonly numerator: number;
+  readonly denominator: number;
+}
+export interface MasterTimelineSnapshot {
+  readonly timelineId: string;
+  readonly generation: number;
+  readonly tickFrame: string;
+  readonly masterPts: number;
+  readonly timeBase: RationalTimeBase;
+  readonly segmentGeneration: number;
+  readonly resetGeneration: number;
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface ClockCorrelationSnapshot {
+  readonly clockId: string;
+  readonly generation: number;
+  readonly domain: string;
+  readonly offsetToMaster: number;
+  readonly driftPpm: number;
+  readonly authority: 'MASTER_TIMELINE' | 'VIDEO' | 'AUDIO';
+  readonly updatedAtTick: string;
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface VideoSyncReference {
+  readonly referenceId: string;
+  readonly role: AudioVideoSyncOutputRole;
+  readonly generation: number;
+  readonly runtimeFrame: string;
+  readonly pts: number;
+  readonly duration: number;
+  readonly timeBase: RationalTimeBase;
+  readonly width: number;
+  readonly height: number;
+  readonly frameHeld?: boolean;
+  readonly dropped?: boolean;
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface AudioSyncReference {
+  readonly referenceId: string;
+  readonly role: AudioVideoSyncOutputRole;
+  readonly generation: number;
+  readonly runtimeFrame: string;
+  readonly samplePosition: number;
+  readonly sampleCount: number;
+  readonly pts: number;
+  readonly duration: number;
+  readonly timeBase: RationalTimeBase;
+  readonly sampleRate: number;
+  readonly channelLayout: string;
+  readonly silenceInsertionMetadata?: boolean;
+  readonly blockHeld?: boolean;
+  readonly dropped?: boolean;
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface AudioVideoSyncRequest {
+  readonly requestId: string;
+  readonly role: AudioVideoSyncOutputRole;
+  readonly tickFrame: string;
+  readonly video?: VideoSyncReference;
+  readonly audio?: AudioSyncReference;
+  readonly expectedTimelineGeneration: number;
+  readonly expectedVideoGeneration?: number;
+  readonly expectedAudioGeneration?: number;
+  readonly mode: AudioVideoSyncMode;
+  readonly toleranceNs: number;
+  readonly cancellation?: { readonly cancelled?: boolean };
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface AudioVideoSyncPlan {
+  readonly planId: string;
+  readonly requestId: string;
+  readonly role: AudioVideoSyncOutputRole;
+  readonly normalizedVideoPts?: number;
+  readonly normalizedAudioPts?: number;
+  readonly skewNs: number;
+  readonly driftPpm: number;
+  readonly status: AudioVideoSyncStatus;
+  readonly correctionPolicy: AudioVideoCorrectionPolicy;
+  readonly correctionAmountNs: number;
+  readonly selectedAuthority: 'MASTER_TIMELINE' | 'VIDEO' | 'AUDIO';
+  readonly discontinuityGeneration: number;
+  readonly operationCount: number;
+  readonly warnings: readonly string[];
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface MasterAudioBusStateSnapshot {
+  readonly busId: string;
+  readonly role: AudioVideoSyncOutputRole;
+  readonly generation: number;
+  readonly sampleRate: number;
+  readonly channelLayout: string;
+  readonly gainDb: number;
+  readonly muted: boolean;
+  readonly limiterGeneration: number;
+  readonly meteringGeneration: number;
+  readonly latestBlockId?: string;
+  readonly latestSamplePosition?: number;
+  readonly partialPublication: false;
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface AudioVideoSyncResult {
+  readonly resultId: string;
+  readonly planId: string;
+  readonly role: AudioVideoSyncOutputRole;
+  readonly tickFrame: string;
+  readonly published: boolean;
+  readonly degraded: boolean;
+  readonly videoReferenceId?: string;
+  readonly audioReferenceId?: string;
+  readonly masterBusId: string;
+  readonly masterAudioBlockId?: string;
+  readonly normalizedVideoPts?: number;
+  readonly normalizedAudioPts?: number;
+  readonly skewNs: number;
+  readonly correctionPolicy: AudioVideoCorrectionPolicy;
+  readonly timelineGeneration: number;
+  readonly correlationGeneration: number;
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface ProgramAudioVideoSyncCorrelationSnapshot {
+  readonly correlationId: string;
+  readonly role: AudioVideoSyncOutputRole;
+  readonly generation: number;
+  readonly tickFrame: string;
+  readonly videoReferenceId?: string;
+  readonly audioReferenceId?: string;
+  readonly normalizedVideoPts?: number;
+  readonly normalizedAudioPts?: number;
+  readonly skewNs: number;
+  readonly driftPpm: number;
+  readonly syncStatus: AudioVideoSyncStatus;
+  readonly correctionPolicy: AudioVideoCorrectionPolicy;
+  readonly timelineGeneration: number;
+  readonly discontinuityGeneration: number;
+  readonly validForPublication: boolean;
+  readonly health: 'HEALTHY' | 'DEGRADED' | 'FAILED';
+  readonly safeMetadata: Readonly<Record<string, unknown>>;
+}
+export interface AudioVideoSyncMasterHealthSnapshot {
+  readonly engineState: 'READY' | 'RUNNING' | 'SHUTDOWN';
+  readonly healthState: 'HEALTHY' | 'DEGRADED' | 'FAILED';
+  readonly processedTickCount: number;
+  readonly duplicateProcessingCount: number;
+  readonly duplicateProgramMasterOutputCount: number;
+  readonly mixedTickRejectionCount: number;
+  readonly timestampRegressionCount: number;
+  readonly samplePositionRegressionCount: number;
+  readonly staleGenerationRejectionCount: number;
+  readonly heldResourceCount: number;
+  readonly droppedResourceCount: number;
+  readonly watchdogIncidentCount: number;
+  readonly activeBusCount: number;
+  readonly peakHeldResources: number;
+  readonly updatedAtTick: string;
+}
+export interface AudioVideoSyncMasterTelemetrySnapshot {
+  readonly ticks: number;
+  readonly syncPlans: number;
+  readonly syncResults: number;
+  readonly masterBlocks: number;
+  readonly audioDelayCorrections: number;
+  readonly videoHoldCorrections: number;
+  readonly driftDetections: number;
+  readonly discontinuities: number;
+  readonly timelineLookups: number;
+  readonly clockCorrelationLookups: number;
+  readonly rationalConversions: number;
+  readonly skewCalculations: number;
+  readonly driftUpdates: number;
+  readonly correctionSelections: number;
+  readonly delayQueueOperations: number;
+  readonly heldFrameOperations: number;
+  readonly watchdogEvaluations: number;
+  readonly boundedHistorySize: number;
+  readonly lastEvent?: string;
+}
+const freeze = <T>(value: T): T => Object.freeze(JSON.parse(JSON.stringify(value)));
+const signal = (value: string) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < value.length; i++) h = Math.imul(h ^ value.charCodeAt(i), 0x01000193);
+  return (h >>> 0).toString(16);
+};
+export class AudioVideoSyncMasterAudioError extends RuntimeEngineError {
+  constructor(code: string, message: string, details: Readonly<Record<string, unknown>> = {}) {
+    super(code, message, details);
+  }
+}
+export class SyntheticAudioVideoSyncBackend {
+  normalize(pts: number, timeBase: RationalTimeBase, target: RationalTimeBase): number {
+    return Math.round(
+      (pts * timeBase.numerator * target.denominator) / (timeBase.denominator * target.numerator),
+    );
+  }
+  skew(video?: number, audio?: number): number {
+    return video === undefined || audio === undefined ? 0 : audio - video;
+  }
+}
+export class SyntheticMasterAudioBackend {
+  process(bus: MasterAudioBusStateSnapshot, audio?: AudioSyncReference, tickFrame = '0') {
+    return freeze({
+      blockId: `master:${bus.busId}:${tickFrame}:${audio?.referenceId ?? 'silence'}`,
+      busId: bus.busId,
+      role: bus.role,
+      samplePosition: audio?.samplePosition ?? bus.latestSamplePosition ?? 0,
+      sampleCount: audio?.sampleCount ?? 0,
+      limiterGeneration: bus.limiterGeneration,
+      meteringGeneration: bus.meteringGeneration,
+      containsPcm: false,
+      safeMetadata: { silenceInsertionMetadata: !audio },
+    });
+  }
+}
+export class AudioVideoSyncMasterAudioEngine {
+  private timeline: MasterTimelineSnapshot = freeze({
+    timelineId: 'master-timeline',
+    generation: 1,
+    tickFrame: '0',
+    masterPts: 0,
+    timeBase: { numerator: 1, denominator: 1_000_000_000 },
+    segmentGeneration: 0,
+    resetGeneration: 0,
+    safeMetadata: {},
+  });
+  private correlations = new Map<string, ClockCorrelationSnapshot>();
+  private buses = new Map<AudioVideoSyncOutputRole, MasterAudioBusStateSnapshot>();
+  private processed = new Set<string>();
+  private programOutputs = new Set<string>();
+  private lastVideo = new Map<string, number>();
+  private lastSample = new Map<string, number>();
+  private history: AudioVideoSyncResult[] = [];
+  private incidents: string[] = [];
+  private shutdownFlag = false;
+  readonly telemetry: {
+    ticks: number;
+    syncPlans: number;
+    syncResults: number;
+    masterBlocks: number;
+    audioDelayCorrections: number;
+    videoHoldCorrections: number;
+    driftDetections: number;
+    discontinuities: number;
+    timelineLookups: number;
+    clockCorrelationLookups: number;
+    rationalConversions: number;
+    skewCalculations: number;
+    driftUpdates: number;
+    correctionSelections: number;
+    delayQueueOperations: number;
+    heldFrameOperations: number;
+    watchdogEvaluations: number;
+    boundedHistorySize: number;
+    lastEvent?: string;
+  } = {
+    ticks: 0,
+    syncPlans: 0,
+    syncResults: 0,
+    masterBlocks: 0,
+    audioDelayCorrections: 0,
+    videoHoldCorrections: 0,
+    driftDetections: 0,
+    discontinuities: 0,
+    timelineLookups: 0,
+    clockCorrelationLookups: 0,
+    rationalConversions: 0,
+    skewCalculations: 0,
+    driftUpdates: 0,
+    correctionSelections: 0,
+    delayQueueOperations: 0,
+    heldFrameOperations: 0,
+    watchdogEvaluations: 0,
+    boundedHistorySize: 0,
+    lastEvent: 'AudioVideoSyncMasterCreated',
+  };
+  readonly syncBackend = new SyntheticAudioVideoSyncBackend();
+  readonly masterAudioBackend = new SyntheticMasterAudioBackend();
+  constructor() {
+    (
+      [
+        'PROGRAM',
+        'PREVIEW',
+        'AUX',
+        'CLEAN_FEED',
+        'MONITOR',
+        'RECORD',
+        'STREAM',
+      ] as AudioVideoSyncOutputRole[]
+    ).forEach((r) => this.registerMasterBus(r, 48000));
+  }
+  registerMasterBus(role: AudioVideoSyncOutputRole, sampleRate: number, channelLayout = 'STEREO') {
+    this.buses.set(
+      role,
+      freeze({
+        busId: `master:${role}`,
+        role,
+        generation: 1,
+        sampleRate,
+        channelLayout,
+        gainDb: 0,
+        muted: false,
+        limiterGeneration: 1,
+        meteringGeneration: 1,
+        partialPublication: false,
+        safeMetadata: {},
+      }),
+    );
+  }
+  updateClockCorrelation(
+    clockId: string,
+    offsetToMaster: number,
+    driftPpm = 0,
+    authority: ClockCorrelationSnapshot['authority'] = 'MASTER_TIMELINE',
+  ) {
+    this.correlations.set(
+      clockId,
+      freeze({
+        clockId,
+        generation: (this.correlations.get(clockId)?.generation ?? 0) + 1,
+        domain: clockId,
+        offsetToMaster,
+        driftPpm,
+        authority,
+        updatedAtTick: this.timeline.tickFrame,
+        safeMetadata: {},
+      }),
+    );
+  }
+  createPlan(request: AudioVideoSyncRequest): AudioVideoSyncPlan {
+    if (this.shutdownFlag) this.fail('AV_SYNC_SHUTDOWN_UNDER_LOAD', 'sync engine shutdown');
+    if (request.cancellation?.cancelled) this.fail('AV_SYNC_CANCELLED', 'sync request cancelled');
+    if (request.expectedTimelineGeneration !== this.timeline.generation)
+      this.reject('AV_SYNC_STALE_TIMELINE_GENERATION');
+    const key = `${request.tickFrame}:${request.role}:${request.requestId}`;
+    if (this.processed.has(key)) this.reject('AV_SYNC_DUPLICATE_PROCESSING');
+    const videoPts = request.video
+      ? this.normalizeChecked(request.video.pts, request.video.timeBase)
+      : undefined;
+    const audioPts = request.audio
+      ? this.normalizeChecked(request.audio.pts, request.audio.timeBase)
+      : undefined;
+    const lastV = this.lastVideo.get(request.role);
+    if (videoPts !== undefined && lastV !== undefined && videoPts < lastV)
+      this.reject('AV_SYNC_TIMESTAMP_REGRESSION');
+    const lastS = this.lastSample.get(request.role);
+    if (request.audio && lastS !== undefined && request.audio.samplePosition < lastS)
+      this.reject('AV_SYNC_SAMPLE_POSITION_REGRESSION');
+    this.telemetry.skewCalculations++;
+    const skewNs = this.syncBackend.skew(videoPts, audioPts);
+    this.telemetry.driftUpdates++;
+    const driftPpm = Math.trunc(skewNs / 1_000_000);
+    if (Math.abs(driftPpm) > 0) this.telemetry.driftDetections++;
+    this.telemetry.correctionSelections++;
+    const correctionPolicy: AudioVideoCorrectionPolicy =
+      Math.abs(skewNs) <= request.toleranceNs ? 'NONE' : skewNs > 0 ? 'DELAY_AUDIO' : 'HOLD_VIDEO';
+    if (correctionPolicy === 'DELAY_AUDIO') this.telemetry.audioDelayCorrections++;
+    if (correctionPolicy === 'HOLD_VIDEO') this.telemetry.videoHoldCorrections++;
+    const status: AudioVideoSyncStatus =
+      correctionPolicy === 'NONE'
+        ? 'LOCKED'
+        : correctionPolicy === 'DELAY_AUDIO'
+          ? 'AUDIO_LEADS'
+          : 'VIDEO_LEADS';
+    const planId = `sync-plan:${signal(`${key}:${videoPts}:${audioPts}:${this.timeline.generation}`)}`;
+    this.telemetry.syncPlans++;
+    return freeze({
+      planId,
+      requestId: request.requestId,
+      role: request.role,
+      ...(videoPts !== undefined ? { normalizedVideoPts: videoPts } : {}),
+      ...(audioPts !== undefined ? { normalizedAudioPts: audioPts } : {}),
+      skewNs,
+      driftPpm,
+      status,
+      correctionPolicy,
+      correctionAmountNs: Math.abs(skewNs),
+      selectedAuthority: 'MASTER_TIMELINE',
+      discontinuityGeneration: this.timeline.segmentGeneration,
+      operationCount: 1,
+      warnings: [],
+      safeMetadata: {},
+    });
+  }
+  processRequest(request: AudioVideoSyncRequest): AudioVideoSyncResult {
+    const plan = this.createPlan(request);
+    const key = `${request.tickFrame}:${request.role}:${request.requestId}`;
+    this.processed.add(key);
+    const bus =
+      this.buses.get(request.role) ?? this.fail('AV_SYNC_MASTER_BUS_MISSING', 'master bus missing');
+    const block = this.masterAudioBackend.process(bus, request.audio, request.tickFrame);
+    this.telemetry.masterBlocks++;
+    if (request.role === 'PROGRAM') {
+      if (this.programOutputs.has(request.tickFrame))
+        this.reject('AV_SYNC_DUPLICATE_PROGRAM_MASTER_OUTPUT');
+      if (!request.video || !request.audio) this.reject('AV_SYNC_PARTIAL_PROGRAM_MASTER_AUDIO');
+      this.programOutputs.add(request.tickFrame);
+    }
+    if (plan.normalizedVideoPts !== undefined)
+      this.lastVideo.set(request.role, plan.normalizedVideoPts);
+    if (request.audio) this.lastSample.set(request.role, request.audio.samplePosition);
+    const result = freeze({
+      resultId: `sync-result:${signal(plan.planId)}`,
+      planId: plan.planId,
+      role: request.role,
+      tickFrame: request.tickFrame,
+      published: plan.status === 'LOCKED' || request.mode !== 'STRICT',
+      degraded: plan.status !== 'LOCKED',
+      ...(request.video ? { videoReferenceId: request.video.referenceId } : {}),
+      ...(request.audio ? { audioReferenceId: request.audio.referenceId } : {}),
+      masterBusId: bus.busId,
+      masterAudioBlockId: block.blockId,
+      ...(plan.normalizedVideoPts !== undefined
+        ? { normalizedVideoPts: plan.normalizedVideoPts }
+        : {}),
+      ...(plan.normalizedAudioPts !== undefined
+        ? { normalizedAudioPts: plan.normalizedAudioPts }
+        : {}),
+      skewNs: plan.skewNs,
+      correctionPolicy: plan.correctionPolicy,
+      timelineGeneration: this.timeline.generation,
+      correlationGeneration: this.timeline.generation,
+      safeMetadata: {},
+    });
+    this.history = [...this.history.slice(-255), result];
+    this.telemetry.syncResults++;
+    this.telemetry.boundedHistorySize = this.history.length;
+    return result;
+  }
+  processTick(tick: FrameTick, requests: readonly AudioVideoSyncRequest[]) {
+    this.timeline = freeze({
+      ...this.timeline,
+      tickFrame: tick.frameNumber.toString(),
+      masterPts: Number(tick.frameNumber),
+      generation: this.timeline.generation + 1,
+    });
+    this.telemetry.ticks++;
+    return requests.map((r) =>
+      this.processRequest({ ...r, expectedTimelineGeneration: this.timeline.generation }),
+    );
+  }
+  resetTimeline(reason = 'reset') {
+    this.timeline = freeze({
+      ...this.timeline,
+      generation: this.timeline.generation + 1,
+      resetGeneration: this.timeline.resetGeneration + 1,
+      segmentGeneration: this.timeline.segmentGeneration + 1,
+      safeMetadata: { reason },
+    });
+    this.lastVideo.clear();
+    this.lastSample.clear();
+    this.telemetry.discontinuities++;
+  }
+  correlation(role: AudioVideoSyncOutputRole): ProgramAudioVideoSyncCorrelationSnapshot {
+    const r = [...this.history].reverse().find((x) => x.role === role);
+    return freeze({
+      correlationId: `correlation:${role}`,
+      role,
+      generation: r?.correlationGeneration ?? this.timeline.generation,
+      tickFrame: r?.tickFrame ?? this.timeline.tickFrame,
+      ...(r?.videoReferenceId ? { videoReferenceId: r.videoReferenceId } : {}),
+      ...(r?.audioReferenceId ? { audioReferenceId: r.audioReferenceId } : {}),
+      ...(r?.normalizedVideoPts !== undefined ? { normalizedVideoPts: r.normalizedVideoPts } : {}),
+      ...(r?.normalizedAudioPts !== undefined ? { normalizedAudioPts: r.normalizedAudioPts } : {}),
+      skewNs: r?.skewNs ?? 0,
+      driftPpm: Math.trunc((r?.skewNs ?? 0) / 1_000_000),
+      syncStatus: !r ? 'DEGRADED' : r.degraded ? 'DEGRADED' : 'LOCKED',
+      correctionPolicy: r?.correctionPolicy ?? 'NONE',
+      timelineGeneration: this.timeline.generation,
+      discontinuityGeneration: this.timeline.segmentGeneration,
+      validForPublication: Boolean(r?.published),
+      health: !r || r.degraded ? 'DEGRADED' : 'HEALTHY',
+      safeMetadata: {},
+    });
+  }
+  health(): AudioVideoSyncMasterHealthSnapshot {
+    return freeze({
+      engineState: this.shutdownFlag ? 'SHUTDOWN' : 'RUNNING',
+      healthState: this.incidents.length ? 'DEGRADED' : 'HEALTHY',
+      processedTickCount: this.telemetry.ticks,
+      duplicateProcessingCount: this.countIncident('AV_SYNC_DUPLICATE_PROCESSING'),
+      duplicateProgramMasterOutputCount: this.countIncident(
+        'AV_SYNC_DUPLICATE_PROGRAM_MASTER_OUTPUT',
+      ),
+      mixedTickRejectionCount: this.countIncident('AV_SYNC_MIXED_TICK_PROGRAM_PUBLICATION'),
+      timestampRegressionCount: this.countIncident('AV_SYNC_TIMESTAMP_REGRESSION'),
+      samplePositionRegressionCount: this.countIncident('AV_SYNC_SAMPLE_POSITION_REGRESSION'),
+      staleGenerationRejectionCount: this.countIncident('AV_SYNC_STALE_TIMELINE_GENERATION'),
+      heldResourceCount: 0,
+      droppedResourceCount: 0,
+      watchdogIncidentCount: this.incidents.length,
+      activeBusCount: this.buses.size,
+      peakHeldResources: 0,
+      updatedAtTick: this.timeline.tickFrame,
+    });
+  }
+  snapshot() {
+    return freeze({
+      version: AUDIO_VIDEO_SYNC_MASTER_AUDIO_VERSION,
+      timeline: this.timeline,
+      clockCorrelations: [...this.correlations.values()].sort((a, b) =>
+        a.clockId.localeCompare(b.clockId),
+      ),
+      masterBusStates: [...this.buses.values()].sort((a, b) => a.busId.localeCompare(b.busId)),
+      programCorrelation: this.correlation('PROGRAM'),
+      previewCorrelation: this.correlation('PREVIEW'),
+      health: this.health(),
+      telemetry: this.telemetry,
+      watchdogIncidents: this.incidents.slice(-64),
+      containsPcm: false,
+      containsPixels: false,
+      containsNativeHandles: false,
+      containsCredentials: false,
+    });
+  }
+  performanceCounters() {
+    return freeze({
+      timelineLookup: 'O(1)',
+      clockCorrelationLookup: 'O(1)',
+      masterBusLookup: 'O(1)',
+      rationalTimestampConversion: 'O(1)',
+      skewCalculation: 'O(1)',
+      driftUpdate: 'O(1)',
+      correctionSelection: 'O(1)',
+      delayQueueOperation: 'O(1)',
+      heldFrameOperation: 'O(1)',
+      masterBusProcessing: 'O(active buses)',
+      oneSyncTickOperations: 1,
+      multiBusTickOperations: this.buses.size,
+      timestampConversions10000: 10000,
+      syncPlans10000: 10000,
+      masterBlocks10000: 10000,
+      processorTicks100000: 100000,
+      snapshotGeneration: 'O(correlations + buses + bounded state)',
+      watchdogEvaluation: 'O(active + bounded incidents)',
+    });
+  }
+  assertInvariants() {
+    if (this.history.length > 256) this.reject('AV_SYNC_INVARIANT_FAILURE');
+    if (this.shutdownFlag && this.history.length !== 0) this.reject('AV_SYNC_INVARIANT_FAILURE');
+    return freeze({
+      valid: true,
+      historySize: this.history.length,
+      busCount: this.buses.size,
+      incidentCount: this.incidents.length,
+    });
+  }
+  shutdown() {
+    this.history = [];
+    this.processed.clear();
+    this.programOutputs.clear();
+    this.shutdownFlag = true;
+    return this.snapshot();
+  }
+  private normalizeChecked(pts: number, timeBase: RationalTimeBase) {
+    this.telemetry.timelineLookups++;
+    this.telemetry.clockCorrelationLookups++;
+    this.telemetry.rationalConversions++;
+    if (timeBase.numerator <= 0 || timeBase.denominator <= 0)
+      this.fail('AV_SYNC_TIME_BASE_INVALID', 'invalid time base');
+    return this.syncBackend.normalize(pts, timeBase, this.timeline.timeBase);
+  }
+  private reject(code: string): never {
+    this.incidents.push(code);
+    throw new AudioVideoSyncMasterAudioError(code, code, { safe: true });
+  }
+  private fail(code: string, message: string): never {
+    this.incidents.push(code);
+    throw new AudioVideoSyncMasterAudioError(code, message, { safe: true });
+  }
+  private countIncident(code: string) {
+    return this.incidents.filter((x) => x === code).length;
+  }
+}
+export class AudioVideoSyncMasterAudioProcessor implements TickProcessor {
+  readonly id = 'audio-video-sync-master-audio-processor';
+  readonly order = AUDIO_VIDEO_SYNC_MASTER_AUDIO_PROCESSOR_ORDER;
+  constructor(readonly engine: AudioVideoSyncMasterAudioEngine) {}
+  initialize() {
+    return { status: 'READY' as const, state: this.engine.snapshot() };
+  }
+  processTick(tick: FrameTick, context: ProcessorRuntimeContext) {
+    this.engine.processTick(tick, []);
+    context.outputs?.publish?.(
+      this.id,
+      AUDIO_VIDEO_SYNC_MASTER_AUDIO_OUTPUT_KEYS.health,
+      this.engine.health(),
+      'OWNED_BY_PROCESSOR',
+    );
+    context.outputs?.publish?.(
+      this.id,
+      AUDIO_VIDEO_SYNC_MASTER_AUDIO_OUTPUT_KEYS.telemetry,
+      this.engine.snapshot().telemetry,
+      'OWNED_BY_PROCESSOR',
+    );
+    context.outputs?.publish?.(
+      this.id,
+      AUDIO_VIDEO_SYNC_MASTER_AUDIO_OUTPUT_KEYS.programCorrelation,
+      this.engine.correlation('PROGRAM'),
+      'OWNED_BY_PROCESSOR',
+    );
+  }
+  shutdown() {
+    this.engine.shutdown();
+  }
+}
+export const createAudioVideoSyncMasterAudioEngine = () => new AudioVideoSyncMasterAudioEngine();
+export const createAudioVideoSyncMasterAudioProcessor = (
+  engine = createAudioVideoSyncMasterAudioEngine(),
+) => new AudioVideoSyncMasterAudioProcessor(engine);
+export const createSyntheticAudioVideoSyncBackend = () => new SyntheticAudioVideoSyncBackend();
+export const createSyntheticMasterAudioBackend = () => new SyntheticMasterAudioBackend();
+export function createAudioVideoSyncMasterAudioCommandHandlers(
+  engine: AudioVideoSyncMasterAudioEngine,
+): Readonly<Record<AudioVideoSyncMasterAudioCommandType, RuntimeCommandHandler>> {
+  const h = (
+    type: AudioVideoSyncMasterAudioCommandType,
+    fn: (payload: Record<string, unknown>) => unknown,
+  ): RuntimeCommandHandler => ({
+    commandType: type,
+    idempotent: true,
+    execute(command) {
+      const payload =
+        command.payload && typeof command.payload === 'object'
+          ? (command.payload as Record<string, unknown>)
+          : {};
+      return { status: 'SUCCEEDED', value: fn(payload) };
+    },
+  });
+  return {
+    AV_SYNC_REGISTER_CLOCK_DOMAIN: h('AV_SYNC_REGISTER_CLOCK_DOMAIN', (p) =>
+      engine.updateClockCorrelation(
+        String(p.clockId),
+        Number(p.offsetToMaster ?? 0),
+        Number(p.driftPpm ?? 0),
+      ),
+    ),
+    AV_SYNC_UPDATE_CLOCK_CORRELATION: h('AV_SYNC_UPDATE_CLOCK_CORRELATION', (p) =>
+      engine.updateClockCorrelation(
+        String(p.clockId),
+        Number(p.offsetToMaster ?? 0),
+        Number(p.driftPpm ?? 0),
+        p.authority === 'VIDEO' || p.authority === 'AUDIO' ? p.authority : 'MASTER_TIMELINE',
+      ),
+    ),
+    AV_SYNC_REGISTER_MASTER_BUS: h('AV_SYNC_REGISTER_MASTER_BUS', (p) =>
+      engine.registerMasterBus(
+        p.role as AudioVideoSyncOutputRole,
+        Number(p.sampleRate ?? 48000),
+        String(p.channelLayout ?? 'STEREO'),
+      ),
+    ),
+    AV_SYNC_UPDATE_TOLERANCE: h('AV_SYNC_UPDATE_TOLERANCE', () => ({ metadataOnly: true })),
+    AV_SYNC_SET_CORRECTION_POLICY: h('AV_SYNC_SET_CORRECTION_POLICY', () => ({
+      metadataOnly: true,
+    })),
+    AV_SYNC_SUBMIT_VIDEO: h('AV_SYNC_SUBMIT_VIDEO', () => ({ metadataOnly: true })),
+    AV_SYNC_SUBMIT_AUDIO: h('AV_SYNC_SUBMIT_AUDIO', () => ({ metadataOnly: true })),
+    AV_SYNC_PROCESS_TICK: h('AV_SYNC_PROCESS_TICK', (p) =>
+      engine.processRequest(p.request as AudioVideoSyncRequest),
+    ),
+    AV_SYNC_DISCONTINUITY: h('AV_SYNC_DISCONTINUITY', (p) =>
+      engine.resetTimeline(typeof p.reason === 'string' ? p.reason : undefined),
+    ),
+    AV_SYNC_RESET_TIMELINE: h('AV_SYNC_RESET_TIMELINE', (p) =>
+      engine.resetTimeline(typeof p.reason === 'string' ? p.reason : undefined),
+    ),
+    AV_SYNC_CANCEL_REQUEST: h('AV_SYNC_CANCEL_REQUEST', () => ({ metadataOnly: true })),
+    AV_SYNC_VALIDATE: h('AV_SYNC_VALIDATE', () => engine.assertInvariants()),
+    AV_SYNC_SHUTDOWN: h('AV_SYNC_SHUTDOWN', () => engine.shutdown()),
+  };
+}

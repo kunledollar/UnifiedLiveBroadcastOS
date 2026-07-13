@@ -1,191 +1,212 @@
 # UBOS v5.6.5 Audio/Video Synchronization and Master Audio
 
-## Purpose and architectural position
-UBOS v5.6.5 adds a metadata-only synchronization and master-audio authority between the certified video path (source acquisition, video frame pipeline, scene switching, transition execution, scene compositor) and the v5.6 audio path (mixer, routing, EQ/dynamics, loudness/metering). It produces synchronized Program A/V correlation snapshots and final master-audio references for future encoders, recorders, and streamers without encoding, muxing, recording, streaming, hardware genlock, native audio output, raw PCM exposure, or pixel exposure.
+## Purpose
+
+UBOS v5.6.5 establishes the authoritative synchronization and master-audio boundary between final video publication and future encoding. It normalizes Program, Preview, AUX, Clean Feed, Monitor, Record, and Stream media references to the existing FrameTick-driven master timeline, measures skew and drift, selects explicit bounded corrections, processes master audio metadata, and publishes immutable correlation snapshots. It does not encode, mux, record, stream, resample, time-stretch, pitch-shift, interpolate video, own pixels, own PCM, create another clock, or run an independent loop.
+
+## Architectural position
+
+v5.6.5 runs after v5.6.1 Audio Mixer, v5.6.2 Channel Strip/Routing, v5.6.3 EQ/Dynamics, and v5.6.4 Loudness/Metering have produced authoritative metadata. It runs before the v5.6.6 Media Encoder Foundation.
 
 ```mermaid
 flowchart TD
-  VS[Video sources]-->VFP[Video Frame Pipeline]-->SS[Scene Switching]-->TE[Transition Execution]-->SC[Scene Compositor]
-  AS[Audio sources]-->AM[Audio Mixer]-->RT[Channel Strip/Routing]-->EQ[EQ/Dynamics]-->MB[Master Audio Bus]
-  SC-->AV[A/V Synchronization Engine]
-  MB-->AV
-  AV-->PB[Program/Preview Bus Orchestration]
-  PB-->F[Future encoder/muxer/recorder/streamer]
+  A[Final Program/Preview video refs] --> B[A/V Sync + Master Audio]
+  C[Master audio bus refs] --> B
+  D[Loudness + metering generations] --> B
+  B --> E[Synchronized Program correlation]
+  B --> F[Preview/AUX/Clean/Monitor correlations]
+  E --> G[v5.6.6 Media Encoder Foundation]
 ```
 
 ## Relationship to v5.6.1-v5.6.4
-The subsystem reuses existing `FrameTick` authority, processor execution, output registry, audio mixer output references, audio ownership concepts, routing roles, EQ/dynamics limiter references, and loudness/metering summaries. It does not duplicate mixing, limiting, metering, frame memory, scene compositing, or runtime loops.
 
-## Time model, rational bases, and timestamps
-Time contracts are explicit: nanoseconds, rational time bases, video frame numbers, audio sample positions, PTS/DTS metadata, clock domains, discontinuity generations, and normalized master timeline timestamps. Rational conversion uses integer arithmetic: `pts * numerator * 1_000_000_000 / denominator`, rejects invalid denominators, and protects overflow. Diagnostic time remains separate from presentation authority.
+The master-audio bus consumes metadata from mixer, channel-strip routing, EQ/dynamics, and loudness/metering foundations. Limiter and metering generations are validated as metadata and surfaced in snapshots so duplicate limiter processing and stale metering state are observable.
+
+## Time model, master timeline, and rational time bases
+
+The engine uses the existing FrameTick as the only runtime driver. All video PTS and audio sample positions are converted through rational time bases to the master timeline time base. Conversion is deterministic and O(1).
 
 ```mermaid
 flowchart LR
-  FT[Authoritative FrameTick]-->TL[MasterPresentationTimeline]
-  VPTS[Video PTS + time base]-->N[V normalized ns]
-  APTS[Audio PTS + sample position]-->N2[A normalized ns]
-  TL-->C[Correlation]
-  N-->C
-  N2-->C
+  FT[FrameTick] --> MT[Master timeline]
+  VTB[Video rational time base] --> N[Normalize PTS]
+  ATB[Audio sample time base] --> N
+  N --> MPTS[Master timeline PTS]
 ```
 
-## Master timeline
-Exactly one active master presentation timeline is allowed. States include CREATED, PRIMING, RUNNING, PAUSED, DISCONTINUOUS, RECOVERING, DEGRADED, FAILED, STOPPED, and SHUTDOWN. Generations are monotonic; reset is explicit and increments discontinuity metadata.
+## Clock domains and clock correlation
 
-## Clock domains and correlation
-Clock domains are explicit: MASTER_FRAME_CLOCK, VIDEO_SOURCE_CLOCK, AUDIO_SOURCE_CLOCK, SYSTEM_MONOTONIC_DIAGNOSTIC, NETWORK_MEDIA_CLOCK, DEVICE_CLOCK, SYNTHETIC_CLOCK, and UNKNOWN. UNKNOWN is not silently substituted. The synthetic correlation model is deterministic, bounded, and metadata-only; it reports offsets, drift ppm, confidence, sample counts, and lifecycle states without hardware-lock claims.
+Clock domains are metadata-only descriptors for video, audio, and master authority. Correlations contain generation, offset, drift ppm, selected authority, and safe metadata.
 
 ```mermaid
 stateDiagram-v2
-  [*] --> UNKNOWN
-  UNKNOWN --> ACQUIRING
-  ACQUIRING --> LOCKED
-  LOCKED --> DRIFTING
-  DRIFTING --> LOCKED
-  LOCKED --> DISCONTINUOUS
-  DISCONTINUOUS --> ACQUIRING
-  ACQUIRING --> DEGRADED
-  DEGRADED --> FAILED
+  [*] --> Registered
+  Registered --> Correlated: offset/drift update
+  Correlated --> Updated: generation++
+  Updated --> Discontinuous: timeline reset
+  Discontinuous --> Correlated: new segment
 ```
 
-## A/V sync state, tolerances, modes, and corrections
-The sync state records Program video/audio references, PTS values, normalized timestamps, skew (`audioNs - videoNs`; positive means audio ahead), sample/frame equivalents, drift, correction, held/dropped counters, silence metadata, discontinuity, confidence, warnings, and health. The default mode is BROADCAST_BALANCED. Tolerance thresholds are ordered: synchronized <= warning <= correction <= failure. Corrections are explicit and bounded: no correction, delay audio, hold/drop video, hold/drop audio metadata, silence insertion metadata, resync at boundary, reset correlation, preserve-and-degrade, fail publication, or request operator intervention.
+## A/V sync state, tolerances, and modes
 
-```mermaid
-flowchart LR
-  A[Audio ahead]-->M[Measure positive skew]
-  M-->P{Within bounds?}
-  P--yes-->H[Hold video metadata]
-  P--no-->F[Fail/degrade by policy]
-```
+Sync state is `LOCKED`, `AUDIO_LEADS`, `VIDEO_LEADS`, `DRIFTING`, `DISCONTINUITY`, `DEGRADED`, or `FAILED`. Tolerances are explicit per request. Modes include strict publication, bounded audio delay, bounded video hold, and degraded metadata-only publication.
 
-```mermaid
-flowchart LR
-  V[Video ahead]-->M[Measure negative skew]
-  M-->P{Delay audio bounded?}
-  P--yes-->D[Delay audio samples]
-  P--no-->F[Fail/degrade by policy]
-```
+## Correction policies
 
-## Audio delay and video delay foundation
-Audio delay compensation is sample-derived, bounded, committed at block boundaries, and snapshot-safe. Video delay is metadata-only and references existing frame ownership contracts; it does not create a frame memory system, interpolate frames, or silently repeat frames.
-
-## Drift detection and discontinuities
-The synthetic estimator tracks instantaneous skew and deterministic drift metadata with bounded state. Discontinuities cover timestamp jumps, sample-position jumps, video frame jumps, clock-domain changes, timeline resets, source restarts, transition restarts, and scene switch generation jumps. Policies include START_NEW_SEGMENT, RESET_CORRELATION, HOLD_PROGRAM, DROP_UNSAFE_OUTPUT, DEGRADE_AND_PUBLISH, and FAIL_PUBLICATION.
+Corrections are explicit and bounded: none, delay audio, hold video, drop late optional input, insert silence metadata, or mark degraded. No hidden correction is allowed.
 
 ```mermaid
 flowchart TD
-  S[Skew samples]-->E[Bounded estimator]
-  E-->W{ppm threshold}
-  W--warning-->DW[Drift warning]
-  W--failure-->DF[Drift failure]
-  DW-->R[Recovery metadata]
+  S[Measure skew] --> T{Within tolerance?}
+  T -- yes --> N[NONE]
+  T -- audio ahead --> A[DELAY_AUDIO]
+  T -- video ahead --> V[HOLD_VIDEO]
 ```
 
 ```mermaid
 sequenceDiagram
-  participant Src as Source
-  participant TL as Timeline
-  participant Corr as Correlation
-  participant Pub as Publication
-  Src->>TL: timestamp jump
-  TL->>Corr: increment discontinuity generation
-  Corr->>Pub: segment boundary metadata
-  Pub->>Pub: hold/drop/degrade/fail by policy
+  participant A as Audio ahead
+  participant E as Sync engine
+  participant M as Master bus
+  A->>E: audio PTS > video PTS
+  E->>E: select DELAY_AUDIO
+  E->>M: publish bounded delayed metadata
+```
+
+```mermaid
+sequenceDiagram
+  participant V as Video ahead
+  participant E as Sync engine
+  participant H as Held-frame metadata
+  V->>E: video PTS > audio PTS
+  E->>E: select HOLD_VIDEO
+  E->>H: record bounded hold metadata
+```
+
+## Drift detection and recovery
+
+Drift is derived deterministically from repeated skew observations. Abrupt discontinuity starts a new segment and clears stale correlation state.
+
+```mermaid
+flowchart LR
+  K[Skew sample] --> D[Drift estimator]
+  D --> C{Bound exceeded?}
+  C -- no --> L[Locked]
+  C -- yes --> R[Recovery plan]
+```
+
+## Discontinuities and timeline resets
+
+Discontinuities increment segment generation and reset last accepted video/audio monotonic tracking so stale held output cannot be mislabeled current.
+
+```mermaid
+flowchart TD
+  O[Old segment] --> X[Discontinuity]
+  X --> G[segmentGeneration++]
+  G --> C[Clear stale holds/correlations]
+  C --> N[New segment]
 ```
 
 ## Requests, plans, and results
-`AudioVideoSyncRequest` is immutable and generation-protected. `AudioVideoSyncPlan` normalizes timestamps, validates generations, measures skew/drift, selects authority and correction, estimates retained resources, and records deterministic operation order. `AudioVideoSyncResult` records synchronized/corrected/degraded/failed publication readiness without mutating input references.
+
+A sync request references video/audio metadata and expected generations. A plan contains normalized timestamps, skew, drift, selected authority, correction policy, and operation count. A result publishes synchronized metadata only when valid or explicitly degraded.
+
+## Master audio bus and processing order
+
+Master buses exist for Program, Preview, AUX, Clean Feed, Monitor, Record, and Stream. Processing order is sync plan, master bus processing, limiter/meter generation validation, correlation publish, telemetry/watchdog update, and expired hold release.
 
 ```mermaid
 flowchart TD
-  R[Request]-->P[Plan]
-  P-->S[Sync state]
-  S-->C[Program correlation snapshot]
-  C-->O[Output registry]
+  I[Master audio input ref] --> G[Master gain/mute]
+  G --> L[Limiter generation metadata]
+  L --> M[Metering generation metadata]
+  M --> B[Master bus block ref]
 ```
-
-## Master audio bus
-Master bus definitions are immutable and unique. Roles: PROGRAM_MASTER, PREVIEW_MASTER, AUX_MASTER, CLEAN_FEED_MASTER, MONITOR_MASTER, RECORD_MASTER, STREAM_MASTER, CUSTOM. The Program master is explicit; Preview is independent; AUX/Clean Feed/Monitor failures are isolated; Record/Stream remain metadata foundations.
 
 ```mermaid
 flowchart LR
-  M[Mixer output ref]-->G[Master gain]
-  G-->MU[Mute priority]
-  MU-->L[Limiter reference metadata]
-  L-->LM[Loudness/metering summaries]
-  LM-->D[Delay compensation]
-  D-->S[Master bus state]
+  P[Master bus] --> L[Limiter metadata]
+  L --> LU[Loudness metadata]
+  LU --> PK[Peak/RMS/phase metadata]
 ```
-
-## Master gain/mute, limiter, and metering
-Gain supports dB/linear metadata. Mute priority is emergency, safety, operator, master, unmuted. The limiter integrates v5.6.3 metadata/references only; no duplicate limiter or true-peak guarantee is implemented. Loudness/metering consume v5.6.4 summaries without recalculation, normalization, or Program mutation.
 
 ```mermaid
 flowchart TD
-  EQ[EQ/Dynamics limiter ref]-->MS[Master state]
-  LM[Loudness/metering summary]-->MS
-  MS-->OBS[Health/telemetry/events]
+  A[Audio Mixer 560] --> S[A/V Sync + Master Audio 590]
+  S --> B[Bus Orchestration 600]
+  B --> C[Scene Compositor 700]
+  C --> O[Output Publication 800]
+  O --> E[Future Encoder 900]
 ```
 
-## Backends and synthetic implementations
-`AudioVideoSynchronizationBackend` and `MasterAudioBusBackend` expose descriptors, capabilities, initialize, plan/process, reset, and shutdown. Synthetic backends are deterministic, metadata-only, and accurately report no real clock synchronization, no hardware support, no native audio, no encoder, no recorder, and no streamer.
+## Program/Preview/AUX/Clean Feed/Monitor/Record/Stream masters
+
+Program is strict and cannot publish partial master audio or mixed-tick A/V. Preview and optional roles may degrade independently without corrupting Program. Record and Stream are synchronized metadata foundations only.
+
+```mermaid
+flowchart TD
+  PV[Program video] --> PC[Program correlation]
+  PA[Program master audio] --> PC
+  PC --> V{valid?}
+  V -- yes --> PUB[Publish synchronized Program]
+  V -- no --> HOLD[Reject/mark degraded explicitly]
+```
+
+## Backend abstractions
+
+The public synthetic sync backend performs deterministic timestamp normalization and skew measurement. The synthetic master-audio backend emits metadata-only master block references with no PCM payload exposure.
 
 ## Configuration transactions
-Configuration changes are represented by immutable transactions with generation checks, validation reports, scheduled runtime frame/sample position, states, and safe timestamps. Commit is atomic at safe boundaries; cancellation changes nothing; failure preserves prior configuration.
+
+Configuration commits are generation-protected and must occur at explicit boundaries; failure preserves the previous valid configuration.
 
 ```mermaid
 sequenceDiagram
-  participant Op as Operator
-  participant Tx as Transaction
-  participant Eng as Engine
-  Op->>Tx: request changes
-  Tx->>Eng: validate generations
-  Eng-->>Tx: validation report
-  Tx->>Eng: commit at boundary
-  Eng-->>Op: committed or preserved prior config
+  participant C as Command
+  participant V as Validator
+  participant E as Engine
+  C->>V: requested update + generations
+  V->>E: valid commit boundary
+  E->>E: generation++
+  E-->>C: committed snapshot
 ```
 
-## Processor order and output registry
-The `AudioVideoSyncMasterBusProcessor` runs at order 590, after loudness/metering and before Program/Preview bus orchestration. Typed output keys cover timeline, correlations, policy, mode, request/plan/result, Program correlation, master audio states, delay/discontinuity/drift states, transactions, health, telemetry, and failed/rejected results.
+## Failure preservation and shutdown
 
-```mermaid
-flowchart LR
-  TE[500 Transition]-->AFV[550 Audio-Follow-Video]-->CS[565 Routing]-->EQ[570 EQ/Dynamics]-->AM[575 Audio Mixer]-->LM[580 Loudness/Metering]-->AV[590 A/V Sync + Master Audio]-->PB[600 Program/Preview Bus]
-```
-
-## Commands, events, health, telemetry, and watchdog
-Commands are typed and metadata-only, compatible with v5.1 command handlers. Events cover lifecycle, timeline, correlation, sync, corrections, master bus updates, processing, publication, health changes, and shutdown. Health and telemetry are bounded and JSON-safe. Watchdog incident codes cover duplicate requests/ticks, stale generations, regressions, lead/lag, drift, discontinuity, resource pressure, mismatches, backend failures, limiter failures, and ownership violations.
-
-## Source Graph and security
-Source Graph exposure is bounded metadata only: timeline, Program correlation, PTS summaries, skew/drift, sync status, correction, delay counters, discontinuity generation, master-bus roles, mute/gain, readiness, health, and routing eligibility. Raw PCM, pixels, payload bytes, native handles, device paths, credentials, URLs, endpoints, private timing metadata, and mutable leases are excluded.
-
-## Production safety and invariants
-The implementation enforces one master timeline, unique IDs, monotonic generations, valid rational bases, no duplicate Program master output, no mixed-tick publication, no hidden correction, bounded caches/held-resource metadata, Program/Preview independence, no duplicate limiter, no media payload exposure, and clean shutdown. `assertInvariants()` validates critical state.
+Invalid input is rejected, Program output is preserved, optional roles may degrade, and shutdown releases held resources and clears bounded histories.
 
 ```mermaid
 flowchart TD
-  Fail[Failure]-->Policy{Policy}
-  Policy-->Preserve[Preserve last valid Program]
-  Policy-->Drop[Drop unsafe optional output]
-  Policy-->Degrade[Mark sync degraded]
-  Policy-->Reject[Reject publication]
+  F[Failure] --> P{Program?}
+  P -- yes --> R[Reject partial publication]
+  P -- no --> D[Mark optional role degraded]
+  R --> H[Health/watchdog]
+  D --> H
 ```
 
 ```mermaid
 sequenceDiagram
-  participant Runtime
-  participant AV as A/V Sync
-  participant Bus as Master Audio
-  Runtime->>AV: shutdown
-  AV->>AV: cancel active request and clear plan cache
-  AV->>Bus: clear delay/held metadata
-  AV->>AV: reset correlations and transactions
-  AV-->>Runtime: invariant-clean SHUTDOWN
+  participant O as Operator
+  participant E as Engine
+  participant H as Held resources
+  O->>E: shutdown
+  E->>H: release all bounded holds
+  E->>E: clear histories/caches
+  E-->>O: immutable shutdown snapshot
 ```
 
-## Long-run validation, determinism replay, and performance
-Validation uses fake FrameTicks, deterministic timestamps/sample positions, synthetic references, synthetic backends, fake diagnostics, and bounded trackers. The long-run test covers 100,000 processor ticks, 10,000 sync plans, 10,000 Program blocks, 10,000 Preview blocks, replay comparison, source graph metadata, health/telemetry consistency, and clean shutdown. Complexity is O(1) for lookups, normalization, skew, correction selection, and bounded estimator updates; master-bus processing is O(active buses); snapshots are O(correlations + buses + bounded state).
+## Output registry, commands, events, health, telemetry, watchdog, and Source Graph
+
+The processor publishes timeline, correlations, master bus states, Program/Preview correlations, health, telemetry, watchdog incidents, and Source Graph-safe metadata. Commands and events are metadata-only and never carry pixels, PCM, credentials, URLs, native handles, or backend resources.
+
+## Security and production safety
+
+All snapshots are JSON-safe, immutable, bounded, and redacted. The foundation guarantees no second master clock, no independent loop, no duplicate Program master output, no timestamp/sample regression acceptance, no hidden correction, no unbounded hold, no Program/Preview alias, no raw media exposure, and no encoding/muxing/recording/streaming claim.
+
+## Invariants, long-run validation, determinism replay, and performance
+
+Validation covers 100,000 simulated ticks, multiple frame rates, multiple sample rates, Program/Preview/AUX/Clean/Monitor/Record/Stream buses, audio/video lead, drift, discontinuities, source restarts, route changes, holds, drops, stale generations, backend failures, cancellation, shutdown under load, deterministic replay, complexity counters, and invariant checks. Expected complexity is O(1) for lookups/conversions/skew/drift/correction and O(active buses) for multi-bus processing.
 
 ## Limitations and v5.6.6 handoff
-This phase does not encode, mux, record, stream, replay, resample asynchronously, time-stretch, pitch-shift, interpolate frames, or claim hardware sync. UBOS v5.6.6 should consume the synchronized Program A/V metadata and master-audio references to build the Production-Safe Media Encoder Foundation.
+
+This foundation does not encode, mux, write files, stream, transmit packets, or integrate hardware clocks/codecs. It hands synchronized metadata and master audio references to UBOS v5.6.6 Production-Safe Media Encoder Foundation.
