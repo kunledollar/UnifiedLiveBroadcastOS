@@ -238,6 +238,11 @@ export const AUDIO_FOLLOW_OUTPUT_KEYS = Object.freeze({
   telemetry: 'audioFollow.telemetry',
   failedOrRejectedResults: 'audioFollow.failedOrRejectedResults',
 });
+export const AUDIO_FOLLOW_VIDEO_OUTPUT_KEYS = Object.freeze({
+  ...AUDIO_FOLLOW_OUTPUT_KEYS,
+  programAudioRoute: AUDIO_FOLLOW_OUTPUT_KEYS.programRoute,
+  previewAudioRoute: AUDIO_FOLLOW_OUTPUT_KEYS.previewRoute,
+});
 
 export class AudioFollowVideoError extends RuntimeEngineError {
   constructor(
