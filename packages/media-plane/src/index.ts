@@ -1,4 +1,27 @@
 export {
+  BROADCAST_GRAPHICS_COMMAND_TYPES,
+  BROADCAST_GRAPHICS_FOUNDATION_VERSION,
+  BROADCAST_GRAPHICS_PROCESSOR_ORDER,
+  BroadcastGraphicsEngine,
+  BroadcastGraphicsError,
+  BroadcastGraphicsProcessor,
+  createBroadcastGraphicsCommandHandlers,
+  createBroadcastGraphicsEngine,
+  createBroadcastGraphicsProcessor,
+  type BroadcastGraphicsCommandType,
+  type BroadcastGraphicsDefinition,
+  type BroadcastGraphicsHealth,
+  type BroadcastGraphicsKind,
+  type BroadcastGraphicsLifecycle,
+  type BroadcastGraphicsRole,
+  type BroadcastGraphicsSnapshot,
+  type BroadcastGraphicsSourceGraph,
+  type BroadcastGraphicsTelemetry,
+  type BroadcastGraphicsTimer,
+  type BroadcastGraphicsWatchdogIncident,
+} from './broadcast-graphics-foundation.js';
+
+export {
   AUDIO_DETECTOR_CHANNEL_MODES,
   AUDIO_DETECTOR_MODES,
   AUDIO_DYNAMICS_PROCESSOR_TYPES,
