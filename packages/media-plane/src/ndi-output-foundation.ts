@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { FrameTick, ProcessorRuntimeContext, RuntimeCommandHandler, TickProcessor, TickProcessorDescriptor } from './execution-engine.js';
 import type { StreamingTransmissionResult } from './streaming-output-foundation.js';
-export const NDI_OUTPUT_VERSION='5.7.6'; export const NDI_OUTPUT_PROCESSOR_ORDER=1064;
+export const NDI_OUTPUT_VERSION='5.7.6'; export const NDI_OUTPUT_PROCESSOR_ORDER=1066;
 export const NDI_COMMANDS=['NDI_REGISTER_PROFILE','NDI_REGISTER_DESTINATION','NDI_CREATE_SESSION','NDI_START','NDI_STOP','NDI_SUBMIT_FRAME','NDI_UPDATE_DISCOVERY','NDI_UPDATE_TALLY','NDI_UPDATE_PTZ','NDI_RESET','NDI_DRAIN','NDI_FLUSH','NDI_VALIDATE','NDI_SHUTDOWN'] as const; export type NdiCommandName=typeof NDI_COMMANDS[number];
 export const NDI_OUTPUT_KEYS=Object.freeze({profiles:'ndi.profiles',sessions:'ndi.sessions',discoveryState:'ndi.discovery.state',advertisements:'ndi.advertisements',tally:'ndi.tally',ptz:'ndi.ptz',metadata:'ndi.metadata',frameTiming:'ndi.frame.timing',bandwidth:'ndi.bandwidth',health:'ndi.health',telemetry:'ndi.telemetry',transmissionResults:'ndi.results'});
 export const NDI_WATCHDOG_INCIDENTS=['NDI_ENGINE_STALLED','NDI_DISCOVERY_FAILED','NDI_DUPLICATE_SESSION','NDI_DUPLICATE_FRAME','NDI_FRAME_SEQUENCE_ERROR','NDI_DISCOVERY_STATE_INVALID','NDI_RECEIVER_INCOMPATIBLE','NDI_TALLY_STATE_INVALID','NDI_PTZ_STATE_INVALID','NDI_BANDWIDTH_INVALID','NDI_BACKEND_FAILED','NDI_OWNERSHIP_VIOLATION','NDI_INVARIANT_FAILURE'] as const;
