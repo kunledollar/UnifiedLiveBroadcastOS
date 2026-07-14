@@ -1,4 +1,23 @@
 export {
+  AUTOMATION_SHOW_CONTROL_COMMAND_TYPES,
+  AUTOMATION_SHOW_CONTROL_PROCESSOR_ORDER,
+  AUTOMATION_SHOW_CONTROL_VERSION,
+  AutomationShowControlEngine,
+  AutomationShowControlError,
+  AutomationShowControlProcessor,
+  createAutomationShowControlCommandHandlers,
+  createAutomationShowControlEngine,
+  createAutomationShowControlProcessor,
+  type AutomationCueDefinition,
+  type AutomationCueKind,
+  type AutomationCueState,
+  type AutomationCueStateSnapshot,
+  type AutomationRundownDefinition,
+  type AutomationShowControlCommandType,
+  type AutomationShowControlSnapshot,
+} from './automation-show-control-foundation.js';
+
+export {
   UBOS_GRAPHICS_PLATFORM_CERTIFICATION_STATUS,
   UBOS_GRAPHICS_PLATFORM_RELEASE_NAME,
   UBOS_GRAPHICS_PLATFORM_RELEASE_READY,

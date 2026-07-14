@@ -98,3 +98,16 @@
 - Recommended release tag: v5.9.0 (not created).
 - Recommended release title: UBOS v5.9 Graphics, Branding, Captions, and Multi-Format Output Platform.
 - Next eligible phase: UBOS v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.
+
+## 2026-07-14 — v5.10.1 Production-Safe Automation, Rundown, and Show-Control Foundation
+
+- Completed phase: v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.
+- Implementation summary: Added a metadata-only automation/show-control engine for deterministic rundown cue registration, safe metadata redaction, stale-generation rejection, cue arming/taking/completion/hold/skip lifecycle, exact-once take semantics, immutable snapshots, health, telemetry, Source Graph metadata, TickProcessor publication, command handlers, public exports, focused validation, package validation wiring, task tracking, and architecture documentation.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.1`
+  - PASS: `git diff --check`
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Commit hash: recorded in current branch history after local commit
+- Blockers: none.
+- Next eligible phase: v5.10.2 — Production-Safe Automation Triggering, Scheduling, and Conditional Logic.
