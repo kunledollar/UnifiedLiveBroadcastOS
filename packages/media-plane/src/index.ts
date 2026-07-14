@@ -1,5 +1,3 @@
-export * from './webrtc-output-foundation.js';
-
 export {
   AUDIO_DETECTOR_CHANNEL_MODES,
   AUDIO_DETECTOR_MODES,
@@ -3842,7 +3840,6 @@ export {
   type DistributionWatchdogIncidentType,
 } from './multi-destination-distribution-fanout.js';
 
-
 export {
   RTMP_COMMANDS,
   RTMP_DELIVERY_MODES,
@@ -3966,3 +3963,63 @@ export {
   type SrtStatistics,
   type SrtTransmissionResult,
 } from './srt-reliable-transport-foundation.js';
+
+export {
+  WEBRTC_COMMANDS,
+  WEBRTC_OUTPUT_KEYS,
+  WEBRTC_OUTPUT_PROCESSOR_ORDER,
+  WEBRTC_OUTPUT_VERSION,
+  WEBRTC_WATCHDOG_INCIDENTS,
+  WebRtcOutputEngine,
+  WebRtcOutputError,
+  WebRtcOutputProcessor,
+  createWebRtcCommandHandlers,
+  createWebRtcOutputEngine,
+  createWebRtcOutputProcessor,
+  createWebRtcSourceGraphSnapshot,
+  type WebRtcBandwidthState,
+  type WebRtcCommandName,
+  type WebRtcCongestionState,
+  type WebRtcConnectionRole,
+  type WebRtcDestination,
+  type WebRtcDtlsState,
+  type WebRtcIceMode,
+  type WebRtcIceState,
+  type WebRtcIceStatus,
+  type WebRtcJitterState,
+  type WebRtcOutputProfile,
+  type WebRtcOutputRole,
+  type WebRtcPeer,
+  type WebRtcRetransmissionState,
+  type WebRtcRtcpState,
+  type WebRtcRtpPacket,
+  type WebRtcSendPlan,
+  type WebRtcSendRequest,
+  type WebRtcSession,
+  type WebRtcSessionDescription,
+  type WebRtcSessionType,
+  type WebRtcSrtpState,
+  type WebRtcTransmissionResult,
+} from './webrtc-output-foundation.js';
+
+export {
+  NDI_COMMANDS,
+  NDI_OUTPUT_KEYS,
+  NDI_OUTPUT_PROCESSOR_ORDER,
+  NDI_OUTPUT_VERSION,
+  NDI_WATCHDOG_INCIDENTS,
+  NdiOutputEngine,
+  NdiOutputError,
+  NdiOutputProcessor,
+  createNdiCommandHandlers,
+  createNdiOutputEngine,
+  createNdiOutputProcessor,
+  createNdiSourceGraphSnapshot,
+  type NdiCommandName,
+  type NdiDestination,
+  type NdiFrame,
+  type NdiOutputProfile,
+  type NdiOutputRole,
+  type NdiResult,
+  type NdiSession,
+} from './ndi-output-foundation.js';
