@@ -150,3 +150,16 @@
 - Commit hash: recorded in current branch history after local commit
 - Blockers: none.
 - Next eligible phase: v5.10.5 — Production-Safe Automation Macro Composition and Operator Override Coordination.
+
+## 2026-07-14 — v5.10.5 Production-Safe Automation Macro Composition and Operator Override Coordination
+
+- Completed phase: v5.10.5 — Production-Safe Automation Macro Composition and Operator Override Coordination.
+- Implementation summary: Added a metadata-only automation macro/operator override engine for deterministic macro registration, queued runs, exact-once step dispatch accounting, hold/bypass/cancel/manual-only operator override coordination, immutable snapshots, health, telemetry, Source Graph metadata, TickProcessor publication, command handlers, public exports, focused validation, package validation wiring, and phase documentation.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.5`
+  - PASS: `git diff --check`
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Commit hash: recorded in current branch history after local commit
+- Blockers: none.
+- Next eligible phase: v5.10.6 — Production-Safe Automation Recovery, Replay, and Audit Coordination.

@@ -1,4 +1,26 @@
 export {
+  AUTOMATION_MACRO_OPERATOR_OVERRIDE_COMMAND_TYPES,
+  AUTOMATION_MACRO_OPERATOR_OVERRIDE_PROCESSOR_ORDER,
+  AUTOMATION_MACRO_OPERATOR_OVERRIDE_VERSION,
+  AutomationMacroOperatorOverrideEngine,
+  AutomationMacroOperatorOverrideError,
+  AutomationMacroOperatorOverrideProcessor,
+  createAutomationMacroOperatorOverrideCommandHandlers,
+  createAutomationMacroOperatorOverrideEngine,
+  createAutomationMacroOperatorOverrideProcessor,
+  type AutomationMacroDefinition,
+  type AutomationMacroOperatorOverrideCommandType,
+  type AutomationMacroOperatorOverrideSnapshot,
+  type AutomationMacroRunRequest,
+  type AutomationMacroRunSnapshot,
+  type AutomationMacroRunState,
+  type AutomationMacroStepDefinition,
+  type AutomationMacroStepKind,
+  type AutomationOperatorOverride,
+  type AutomationOperatorOverrideMode,
+} from './automation-macro-operator-override.js';
+
+export {
   SHOW_CONTROL_ACTION_DISPATCH_COMMAND_TYPES,
   SHOW_CONTROL_ACTION_DISPATCH_PROCESSOR_ORDER,
   SHOW_CONTROL_ACTION_DISPATCH_VERSION,
