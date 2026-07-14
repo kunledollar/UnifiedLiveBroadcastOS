@@ -137,3 +137,16 @@
 - Commit hash: recorded in current branch history after local commit
 - Blockers: none.
 - Next eligible phase: v5.10.4 — Production-Safe Show-Control Action Dispatch and Target Coordination.
+
+## 2026-07-14 — v5.10.4 Production-Safe Show-Control Action Dispatch and Target Coordination
+
+- Completed phase: v5.10.4 — Production-Safe Show-Control Action Dispatch and Target Coordination.
+- Implementation summary: Added a metadata-only show-control action dispatch engine for target registration, action registration, queued requests, deterministic priority dispatch, target capability blocking, exact-once dispatch, acknowledgement/failure/expiry state transitions, immutable snapshots, health, telemetry, Source Graph metadata, TickProcessor publication, command handlers, public exports, focused validation, package validation wiring, and architecture documentation.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.4`
+  - PASS: `git diff --check`
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Commit hash: recorded in current branch history after local commit
+- Blockers: none.
+- Next eligible phase: v5.10.5 — Production-Safe Automation Macro Composition and Operator Override Coordination.
