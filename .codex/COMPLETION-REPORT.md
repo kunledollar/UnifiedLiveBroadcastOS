@@ -52,3 +52,11 @@
 - Added architecture documentation with Mermaid diagrams and explicit production-safety limitations.
 - Validation passed: `pnpm --filter @ubos/media-plane lint`, `pnpm --filter @ubos/media-plane typecheck`, `pnpm --filter @ubos/media-plane build`, `node packages/media-plane/dist/media-plane/src/branding-safe-area-coordination.validation.js`, `pnpm --filter @ubos/media-plane validate:v5.9.6`, and `git diff --check`.
 - Next eligible phase: UBOS v5.9.7 — Production-Safe Multi-Format Graphics Variants and Output-Role Coordination.
+
+## UBOS v5.9.7 — Multi-Format Graphics Output-Role Coordination
+
+- Implemented a metadata-only multi-format graphics coordinator for output format definitions, role-specific graphics variants, region mappings, field/typography/asset/caption/branding/animation policies, multi-output groups, sessions, deterministic coordination plans, publication entries, publication results, health, telemetry, watchdog incidents, Source Graph metadata, command handlers, and a TickProcessor integration.
+- Added deterministic validation coverage for duplicate/stale registrations, horizontal/vertical/square/portrait/cinematic/custom formats, exact and metadata variants, required-role atomicity, optional-role degradation, Program/Preview/Clean Feed/AUX/ISO/vertical/square isolation, redaction, snapshot immutability, deterministic replay, and 10,000 synthetic processor ticks.
+- Added architecture documentation with Mermaid diagrams and explicit production-safety limitations.
+- Validation passed: `pnpm --filter @ubos/media-plane lint`, `pnpm --filter @ubos/media-plane typecheck`, `pnpm --filter @ubos/media-plane validate:v5.9.7`, `pnpm --filter @ubos/media-plane test`, and `git diff --check`.
+- Next eligible phase: UBOS v5.9.8 — Production-Safe Graphics Platform Certification.
