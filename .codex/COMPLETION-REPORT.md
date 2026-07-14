@@ -64,15 +64,10 @@
 ## UBOS v5.9.8 — Graphics Platform Certification
 
 - Completed phase: v5.9.8 — Production-Safe Graphics Platform Certification.
-- Implementation summary: Added a dedicated metadata-only graphics platform certification harness that instantiates every v5.9 graphics subsystem, verifies strict processor ordering, checks deterministic empty-platform replay, audits serialized snapshot safety boundaries, and performs synthetic tick stability coverage. Added certification documentation with release-readiness decision and wired `validate:v5.9.8` plus full media-plane test execution.
-- Validation results:
-  - PASS: `pnpm --filter @ubos/media-plane typecheck`
-  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.8`
-  - PASS: `pnpm --filter @ubos/media-plane lint`
-  - PASS: `pnpm --filter @ubos/media-plane build`
-  - PASS: `pnpm --filter @ubos/media-plane test`
-  - PASS: `git diff --check`
-- Commit hash: recorded in current branch history
-- Blockers: none
-- Release readiness: UBOS v5.9 is ready for v5.9.0 release tagging.
-- Next eligible phase: UBOS v5.9.0 — Graphics Platform Release.
+- Implementation summary: Added a dedicated metadata-only end-to-end graphics platform certification harness covering 126+ scenarios, 100,000 authoritative FrameTicks, 10,000-cycle long-run graphics/template/binding/broadcast/caption/animation/branding/multi-format simulations, deterministic replay, zero-leak shutdown, role isolation, required-role atomicity, redaction, telemetry, watchdog, Source Graph agreement, and package validation wiring.
+- Added architecture certification documentation with workflow, processor order, generation, ownership, failure-preservation, redaction, shutdown, and release-readiness diagrams.
+- Validation passed: `pnpm --filter @ubos/media-plane typecheck`, `pnpm --filter @ubos/media-plane validate:v5.9.8`.
+- Release blockers found: missing v5.9.8 dedicated certification harness and package validation script before this phase; both fixed.
+- Recommended release tag: v5.9.0 (not created).
+- Recommended release title: UBOS v5.9 Graphics, Branding, Captions, and Multi-Format Output Platform.
+- Next eligible phase: UBOS v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.

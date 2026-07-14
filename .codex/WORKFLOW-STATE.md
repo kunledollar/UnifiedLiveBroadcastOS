@@ -5,7 +5,7 @@
 - Branch: work
 - Commit: recorded in current branch history
 - Validation status: passed
-- Certification: v5.9.8 graphics platform certification passed; UBOS v5.9 ready for v5.9.0 release tagging
+- Certification: v5.9.8 graphics platform certification passed; v5.9 is release-ready for tag v5.9.0 (tag not created)
 - Blockers: none
 
 ## Last completed phase
@@ -14,4 +14,4 @@ v5.9.8 — Production-Safe Graphics Platform Certification.
 
 ## Next eligible phase
 
-v5.9.0 — Graphics Platform Release.
+v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.
