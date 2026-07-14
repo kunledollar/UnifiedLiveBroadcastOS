@@ -1,4 +1,25 @@
 export {
+  AUTOMATION_RECOVERY_REPLAY_AUDIT_COMMAND_TYPES,
+  AUTOMATION_RECOVERY_REPLAY_AUDIT_PROCESSOR_ORDER,
+  AUTOMATION_RECOVERY_REPLAY_AUDIT_VERSION,
+  AutomationRecoveryReplayAuditEngine,
+  AutomationRecoveryReplayAuditError,
+  AutomationRecoveryReplayAuditProcessor,
+  createAutomationRecoveryReplayAuditCommandHandlers,
+  createAutomationRecoveryReplayAuditEngine,
+  createAutomationRecoveryReplayAuditProcessor,
+  type AutomationAuditEvent,
+  type AutomationAuditEventKind,
+  type AutomationRecoveryPoint,
+  type AutomationRecoveryPointKind,
+  type AutomationRecoveryReplayAuditCommandType,
+  type AutomationRecoveryReplayAuditSnapshot,
+  type AutomationReplayRequest,
+  type AutomationReplayRequestState,
+  type AutomationReplaySnapshot,
+} from './automation-recovery-replay-audit.js';
+
+export {
   AUTOMATION_MACRO_OPERATOR_OVERRIDE_COMMAND_TYPES,
   AUTOMATION_MACRO_OPERATOR_OVERRIDE_PROCESSOR_ORDER,
   AUTOMATION_MACRO_OPERATOR_OVERRIDE_VERSION,
