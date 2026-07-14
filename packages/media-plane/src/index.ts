@@ -4431,3 +4431,4 @@ export {
   type ShapeElement,
   type TextElement,
 } from './graphics-foundation.js';
+export * from './graphics-template-engine.js';
