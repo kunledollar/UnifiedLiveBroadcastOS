@@ -28,7 +28,9 @@
     "validate:v5.7.9": "pnpm build && node dist/media-plane/src/social-live-distribution-certification.validation.js",
     "validate:v5.8.2": "pnpm build && node dist/media-plane/src/replay-playback-program-insertion-foundation.validation.js",
     "validate:v5.8.3": "pnpm build && node dist/media-plane/src/replay-variable-speed-foundation.validation.js",
-    "validate:v5.8.4": "pnpm build && node dist/media-plane/src/replay-playlist-highlight-clip-assembly-foundation.validation.js"
+    "validate:v5.8.4": "pnpm build && node dist/media-plane/src/replay-playlist-highlight-clip-assembly-foundation.validation.js",
+    "validate:v5.8.5": "pnpm build && node dist/media-plane/src/replay-clip-media-output-foundation.validation.js",
+    "validate:v5.8.6": "pnpm build && node dist/media-plane/src/replay-workflow-certification.validation.js"
   },
   "dependencies": {
     "@ubos/shared": "workspace:*"
