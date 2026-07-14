@@ -1,3 +1,4 @@
+export * from './social-platform-destination-coordination.js';
 export * from './ndi-output-foundation.js';
 export * from './webrtc-output-foundation.js';
 
@@ -4020,9 +4021,5 @@ export {
   createNdiSourceGraphSnapshot,
   type NdiCommandName,
   type NdiDestination,
-  type NdiFrame,
   type NdiOutputProfile,
-  type NdiOutputRole,
-  type NdiResult,
-  type NdiSession,
 } from './ndi-output-foundation.js';
