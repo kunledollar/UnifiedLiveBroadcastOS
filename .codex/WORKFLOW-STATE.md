@@ -1,17 +1,17 @@
 # UBOS Workflow State
 
 - Active platform: v5.9 — Graphics Platform
-- Current phase: v5.9.7 — Production-Safe Multi-Format Graphics Variants and Output-Role Coordination
+- Current phase: v5.9.8 — Production-Safe Graphics Platform Certification
 - Branch: work
 - Commit: recorded in current branch history
 - Validation status: passed
-- Certification: v5.9.7 multi-format graphics and output-role validation passed; v5.9 platform certification not yet complete
+- Certification: v5.9.8 graphics platform certification passed; v5.9 is release-ready for tag v5.9.0 (tag not created)
 - Blockers: none
 
 ## Last completed phase
 
-v5.9.7 — Production-Safe Multi-Format Graphics Variants and Output-Role Coordination.
+v5.9.8 — Production-Safe Graphics Platform Certification.
 
 ## Next eligible phase
 
-v5.9.8 — Production-Safe Graphics Platform Certification.
+v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.
