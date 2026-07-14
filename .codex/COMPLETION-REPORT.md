@@ -44,3 +44,11 @@
 - Added architecture documentation and public exports.
 - Validation status: passed locally for v5.9.4 focused validation.
 - Next eligible task: UBOS v5.9.5 — Production-Safe Graphics Animation, Cueing, and Transition Coordination.
+
+## UBOS v5.9.6 — Branding, Logos, Watermarks, and Safe-Area Coordination
+
+- Implemented a metadata-only branding and safe-area coordinator for brands, profiles, variants, opaque asset references, logos, watermarks, safe areas, exclusion zones, placement policies, sessions, deterministic plans, placement results, health, telemetry, watchdog incidents, Source Graph metadata, command handlers, and a TickProcessor integration.
+- Added v5.9.6 public exports and focused validation coverage for duplicate IDs, stale generations, missing variants, asset redaction, invalid bounds, hard exclusion zones, collision rejection, processor execution, deterministic replay, and synthetic long-run ticks.
+- Added architecture documentation with Mermaid diagrams and explicit production-safety limitations.
+- Validation passed: `pnpm --filter @ubos/media-plane lint`, `pnpm --filter @ubos/media-plane typecheck`, `pnpm --filter @ubos/media-plane build`, `node packages/media-plane/dist/media-plane/src/branding-safe-area-coordination.validation.js`, `pnpm --filter @ubos/media-plane validate:v5.9.6`, and `git diff --check`.
+- Next eligible phase: UBOS v5.9.7 — Production-Safe Multi-Format Graphics Variants and Output-Role Coordination.
