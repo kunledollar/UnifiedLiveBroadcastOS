@@ -1,4 +1,26 @@
 export {
+  SHOW_CONTROL_ACTION_DISPATCH_COMMAND_TYPES,
+  SHOW_CONTROL_ACTION_DISPATCH_PROCESSOR_ORDER,
+  SHOW_CONTROL_ACTION_DISPATCH_VERSION,
+  ShowControlActionDispatchEngine,
+  ShowControlActionDispatchError,
+  ShowControlActionDispatchProcessor,
+  createShowControlActionDispatchCommandHandlers,
+  createShowControlActionDispatchEngine,
+  createShowControlActionDispatchProcessor,
+  type ShowControlActionDefinition,
+  type ShowControlActionDispatchCommandType,
+  type ShowControlActionDispatchSnapshot,
+  type ShowControlActionKind,
+  type ShowControlDispatchResult,
+  type ShowControlDispatchState,
+  type ShowControlQueuedAction,
+  type ShowControlTargetDefinition,
+  type ShowControlTargetKind,
+  type ShowControlTargetState,
+} from './show-control-action-dispatch.js';
+
+export {
   RUNDOWN_TIMELINE_EXECUTION_COMMAND_TYPES,
   RUNDOWN_TIMELINE_EXECUTION_PROCESSOR_ORDER,
   RUNDOWN_TIMELINE_EXECUTION_VERSION,
