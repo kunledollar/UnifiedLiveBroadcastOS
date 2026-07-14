@@ -1,4 +1,25 @@
 export {
+  RUNDOWN_TIMELINE_EXECUTION_COMMAND_TYPES,
+  RUNDOWN_TIMELINE_EXECUTION_PROCESSOR_ORDER,
+  RUNDOWN_TIMELINE_EXECUTION_VERSION,
+  RundownTimelineExecutionEngine,
+  RundownTimelineExecutionError,
+  RundownTimelineExecutionProcessor,
+  createRundownTimelineExecutionCommandHandlers,
+  createRundownTimelineExecutionEngine,
+  createRundownTimelineExecutionProcessor,
+  type RundownCueDependency,
+  type RundownCueDependencyMode,
+  type RundownTimelineCueDefinition,
+  type RundownTimelineCueKind,
+  type RundownTimelineCueSnapshot,
+  type RundownTimelineCueState,
+  type RundownTimelineDefinition,
+  type RundownTimelineExecutionCommandType,
+  type RundownTimelineExecutionSnapshot,
+} from './rundown-timeline-execution.js';
+
+export {
   AUTOMATION_TRIGGER_SCHEDULING_COMMAND_TYPES,
   AUTOMATION_TRIGGER_SCHEDULING_PROCESSOR_ORDER,
   AUTOMATION_TRIGGER_SCHEDULING_VERSION,
