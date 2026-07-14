@@ -1,4 +1,26 @@
 export {
+  AUTOMATION_TRIGGER_SCHEDULING_COMMAND_TYPES,
+  AUTOMATION_TRIGGER_SCHEDULING_PROCESSOR_ORDER,
+  AUTOMATION_TRIGGER_SCHEDULING_VERSION,
+  AutomationTriggerSchedulingEngine,
+  AutomationTriggerSchedulingError,
+  AutomationTriggerSchedulingProcessor,
+  createAutomationTriggerSchedulingCommandHandlers,
+  createAutomationTriggerSchedulingEngine,
+  createAutomationTriggerSchedulingProcessor,
+  type AutomationCondition,
+  type AutomationConditionOperator,
+  type AutomationScheduledRule,
+  type AutomationTriggerDefinition,
+  type AutomationTriggerEvent,
+  type AutomationTriggerKind,
+  type AutomationTriggerResult,
+  type AutomationTriggerSchedulingCommandType,
+  type AutomationTriggerSchedulingSnapshot,
+  type AutomationTriggerState,
+} from './automation-triggering-scheduling.js';
+
+export {
   AUTOMATION_SHOW_CONTROL_COMMAND_TYPES,
   AUTOMATION_SHOW_CONTROL_PROCESSOR_ORDER,
   AUTOMATION_SHOW_CONTROL_VERSION,
