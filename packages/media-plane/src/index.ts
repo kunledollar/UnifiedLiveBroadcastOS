@@ -1,4 +1,28 @@
 export {
+  GRAPHICS_ANIMATION_CUEING_COMMAND_TYPES,
+  GRAPHICS_ANIMATION_CUEING_PROCESSOR_ORDER,
+  GRAPHICS_ANIMATION_CUEING_VERSION,
+  GraphicsAnimationCueingEngine,
+  GraphicsAnimationCueingError,
+  GraphicsAnimationCueingProcessor,
+  createGraphicsAnimationCueingCommandHandlers,
+  createGraphicsAnimationCueingEngine,
+  createGraphicsAnimationCueingProcessor,
+  type GraphicsAnimationCueingCommandType,
+  type GraphicsAnimationDefinition,
+  type GraphicsAnimationHealth,
+  type GraphicsAnimationKind,
+  type GraphicsAnimationLifecycle,
+  type GraphicsAnimationRole,
+  type GraphicsAnimationSnapshot,
+  type GraphicsAnimationSourceGraph,
+  type GraphicsAnimationTelemetry,
+  type GraphicsAnimationWatchdogIncident,
+  type GraphicsCueStack,
+  type GraphicsTransitionCoordination,
+} from './graphics-animation-cueing.js';
+
+export {
   CAPTION_ACCESSIBILITY_COMMAND_TYPES,
   CAPTION_ACCESSIBILITY_GRAPHICS_VERSION,
   CAPTION_ACCESSIBILITY_PROCESSOR_ORDER,
