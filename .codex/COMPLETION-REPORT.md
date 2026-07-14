@@ -163,3 +163,16 @@
 - Commit hash: recorded in current branch history after local commit
 - Blockers: none.
 - Next eligible phase: v5.10.6 — Production-Safe Automation Recovery, Replay, and Audit Coordination.
+
+## 2026-07-14 — v5.10.6 Production-Safe Automation Recovery, Replay, and Audit Coordination
+
+- Completed phase: v5.10.6 — Production-Safe Automation Recovery, Replay, and Audit Coordination.
+- Implementation summary: Added a metadata-only automation recovery/replay/audit engine for redacted audit events, deterministic recovery points, recovery state hashes, replay requests, exact-once replay dispatch accounting, operator acknowledgement/failure handling, immutable snapshots, health, telemetry, Source Graph metadata, TickProcessor publication, command handlers, public exports, focused validation, package validation wiring, and phase documentation.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.6`
+  - PASS: `git diff --check`
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Commit hash: recorded in current branch history after local commit
+- Blockers: none.
+- Next eligible phase: v5.10.7 — Production-Safe Automation Platform Certification.
