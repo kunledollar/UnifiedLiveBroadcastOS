@@ -1,17 +1,17 @@
 # UBOS Workflow State
 
 - Active platform: v5.9 — Graphics Platform
-- Current phase: v5.9.3 — Production-Safe Lower Thirds, Titles, Tickers, and Scorebug Foundation
+- Current phase: v5.9.4 — Production-Safe Captions, Subtitles, and Accessibility Graphics Foundation
 - Branch: work
-- Commit: 0ff9341
+- Commit: recorded in current branch history
 - Validation status: passed
-- Certification: v5.9.3 broadcast graphics foundation validation passed; v5.9 platform certification not yet complete
+- Certification: v5.9.4 caption accessibility graphics validation passed; v5.9 platform certification not yet complete
 - Blockers: none
 
 ## Last completed phase
 
-v5.9.3 — Production-Safe Lower Thirds, Titles, Tickers, and Scorebug Foundation.
+v5.9.4 — Production-Safe Captions, Subtitles, and Accessibility Graphics Foundation.
 
 ## Next eligible phase
 
-v5.9.4 — Production-Safe Captions, Subtitles, and Accessibility Graphics Foundation.
+v5.9.5 — Production-Safe Graphics Animation, Cueing, and Transition Coordination.

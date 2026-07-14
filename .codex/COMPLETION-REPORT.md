@@ -35,3 +35,12 @@
 - Added architecture documentation and public exports.
 - Validation status: passed locally for v5.9.3 focused validation.
 - Next eligible task: UBOS v5.9.4 — Production-Safe Captions, Subtitles, and Accessibility Graphics Foundation.
+
+
+## UBOS v5.9.4 — Caption Accessibility Graphics Foundation
+
+- Implemented `CaptionAccessibilityEngine`, command handlers, processor publication, immutable snapshots, health, telemetry, watchdog, Source Graph metadata, output-role summaries, and accessibility graphic metadata.
+- Added validation coverage for 35 caption/subtitle/accessibility scenarios, including deterministic cue expiry, 100,000-frame stability, metadata honesty, redaction, and processor cleanup.
+- Added architecture documentation and public exports.
+- Validation status: passed locally for v5.9.4 focused validation.
+- Next eligible task: UBOS v5.9.5 — Production-Safe Graphics Animation, Cueing, and Transition Coordination.
