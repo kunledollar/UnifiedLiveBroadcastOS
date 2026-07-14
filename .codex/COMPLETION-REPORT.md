@@ -27,3 +27,11 @@
 - Commit hash: 29895fbe5bab785a3b4ecdab765230265edfd051
 - Blockers: none
 - Next eligible phase: v5.9.3 — Lower Thirds, Titles, Tickers, and Scorebug Foundation
+
+## UBOS v5.9.3 — Broadcast Graphics Foundation
+
+- Implemented `BroadcastGraphicsEngine`, command handlers, processor publication, immutable snapshots, health, telemetry, watchdog, timer tracking, source graph metadata, and output-role summaries.
+- Added validation coverage for the required 35 broadcast graphics foundation scenarios, including 100,000 ticks and deterministic replay.
+- Added architecture documentation and public exports.
+- Validation status: passed locally for v5.9.3 focused validation.
+- Next eligible task: UBOS v5.9.4 — Production-Safe Captions, Subtitles, and Accessibility Graphics Foundation.
