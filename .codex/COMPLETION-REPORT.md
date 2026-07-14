@@ -60,3 +60,19 @@
 - Added architecture documentation with Mermaid diagrams and explicit production-safety limitations.
 - Validation passed: `pnpm --filter @ubos/media-plane lint`, `pnpm --filter @ubos/media-plane typecheck`, `pnpm --filter @ubos/media-plane validate:v5.9.7`, `pnpm --filter @ubos/media-plane test`, and `git diff --check`.
 - Next eligible phase: UBOS v5.9.8 — Production-Safe Graphics Platform Certification.
+
+## UBOS v5.9.8 — Graphics Platform Certification
+
+- Completed phase: v5.9.8 — Production-Safe Graphics Platform Certification.
+- Implementation summary: Added a dedicated metadata-only graphics platform certification harness that instantiates every v5.9 graphics subsystem, verifies strict processor ordering, checks deterministic empty-platform replay, audits serialized snapshot safety boundaries, and performs synthetic tick stability coverage. Added certification documentation with release-readiness decision and wired `validate:v5.9.8` plus full media-plane test execution.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.8`
+  - PASS: `pnpm --filter @ubos/media-plane lint`
+  - PASS: `pnpm --filter @ubos/media-plane build`
+  - PASS: `pnpm --filter @ubos/media-plane test`
+  - PASS: `git diff --check`
+- Commit hash: recorded in current branch history
+- Blockers: none
+- Release readiness: UBOS v5.9 is ready for v5.9.0 release tagging.
+- Next eligible phase: UBOS v5.9.0 — Graphics Platform Release.
