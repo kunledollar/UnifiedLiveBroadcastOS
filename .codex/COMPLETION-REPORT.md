@@ -36,7 +36,6 @@
 - Validation status: passed locally for v5.9.3 focused validation.
 - Next eligible task: UBOS v5.9.4 — Production-Safe Captions, Subtitles, and Accessibility Graphics Foundation.
 
-
 ## UBOS v5.9.4 — Caption Accessibility Graphics Foundation
 
 - Implemented `CaptionAccessibilityEngine`, command handlers, processor publication, immutable snapshots, health, telemetry, watchdog, Source Graph metadata, output-role summaries, and accessibility graphic metadata.
@@ -68,6 +67,34 @@
 - Added architecture certification documentation with workflow, processor order, generation, ownership, failure-preservation, redaction, shutdown, and release-readiness diagrams.
 - Validation passed: `pnpm --filter @ubos/media-plane typecheck`, `pnpm --filter @ubos/media-plane validate:v5.9.8`.
 - Release blockers found: missing v5.9.8 dedicated certification harness and package validation script before this phase; both fixed.
+- Recommended release tag: v5.9.0 (not created).
+- Recommended release title: UBOS v5.9 Graphics, Branding, Captions, and Multi-Format Output Platform.
+- Next eligible phase: UBOS v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.
+
+## 2026-07-14 — v5.9.0 Graphics Platform Release
+
+- Completed phase: v5.9.0 — Graphics Platform Release finalization.
+- Implementation summary: Added explicit UBOS graphics platform release constants, exported them through the media-plane public API, prepared v5.9.0 release notes, updated changelog/release notes/release ledger/workflow state, and created a release checklist documenting local completion and deferred tag publication.
+- Validation results:
+  - PASS: `git diff --check`
+  - PASS: `pnpm --filter @ubos/media-plane lint`
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane build`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.8`
+  - PASS: `pnpm --filter @ubos/media-plane test`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.1`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.2`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.3`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.4`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.5`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.6`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.9.7`
+  - PASS: `pnpm lint`
+  - PASS: `pnpm typecheck`
+  - PASS: `pnpm test`
+  - WARN: `pnpm build` failed in the desktop Cargo build because the workspace could not resolve `index.crates.io`; JavaScript/TypeScript package builds reached execution, and the media-plane build passed separately.
+- Environmental warnings: `git fetch origin --prune --tags` and remote tag verification are unavailable because `origin` is not configured in this workspace. Release tag creation and publication were deferred because explicit authorization was not provided.
+- Release blockers found: missing `.codex/ENGINEERING-STANDARDS.md` requested by workflow bootstrap and unavailable `origin` remote; neither blocks the local release-finalization commit, but remote synchronization/tag publication must be completed in a configured repository before public release publication.
 - Recommended release tag: v5.9.0 (not created).
 - Recommended release title: UBOS v5.9 Graphics, Branding, Captions, and Multi-Format Output Platform.
 - Next eligible phase: UBOS v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.

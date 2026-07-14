@@ -1,0 +1,30 @@
+# UBOS v5.9.0 Release Checklist
+
+- [x] v5.9.1 through v5.9.7 implementations present
+- [x] v5.9.8 certification PASS
+- [x] v5.9.8 release-readiness statement present
+- [x] Working tree clean before release changes
+- [!] origin/main synchronization unavailable: `origin` remote is not configured in this workspace
+- [x] Existing package version convention inspected and preserved
+- [x] Release constants added
+- [x] Changelog updated
+- [x] Release notes created
+- [x] Public exports checked; no wildcard v5.9 export added
+- [x] v5.9 architecture documents present
+- [x] v5.9 validation files present
+- [x] Package validation scripts wired
+- [x] Media-plane lint passed
+- [x] Media-plane typecheck passed
+- [x] Media-plane build passed
+- [x] Media-plane tests passed
+- [x] Focused v5.9.8 certification passed
+- [x] Prior platform validations available through package scripts and test chain
+- [x] No unresolved blocker in local code or documentation changes
+- [x] Local `v5.9.0` tag absent before release preparation
+- [!] Remote `v5.9.0` tag check unavailable: `origin` remote is not configured in this workspace
+- [x] Release commit created
+- [ ] Annotated tag created (deferred; explicit authorization not provided)
+- [ ] Tag verified (deferred; tag not created)
+- [ ] Tag pushed (deferred; tag not created)
+- [ ] Remote tag verified (deferred; tag not created and `origin` unavailable)
+- [x] GitHub release creation instructions documented in task specification; GitHub release not created
