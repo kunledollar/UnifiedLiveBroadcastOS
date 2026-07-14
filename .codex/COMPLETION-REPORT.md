@@ -176,3 +176,16 @@
 - Commit hash: recorded in current branch history after local commit
 - Blockers: none.
 - Next eligible phase: v5.10.7 — Production-Safe Automation Platform Certification.
+
+## 2026-07-14 — v5.10.7 Production-Safe Automation Platform Certification
+
+- Completed phase: v5.10.7 — Production-Safe Automation Platform Certification.
+- Implementation summary: Added a dedicated metadata-only automation platform certification harness covering automation foundation, trigger scheduling, rundown timeline execution, show-control dispatch, macro/operator override coordination, recovery/replay/audit coordination, deterministic replay, 100,000 authoritative FrameTicks, 10,000 synthetic operations per automation area, exact-once handling, stale-generation rejection, redaction, telemetry honesty, bounded queue cleanup, zero active queues after shutdown, package validation wiring, media-plane test orchestration, and architecture certification documentation.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.7`
+  - PASS: `git diff --check`
+- Platform release: no release finalization or tag creation was requested; `.codex/RELEASES.md` unchanged.
+- Commit hash: recorded in current branch history after local commit.
+- Blockers: none.
+- Next eligible phase: v5.10.0 — Automation, Rundown, and Show-Control Platform release finalization, if maintainers authorize local release preparation before any tag publication.
