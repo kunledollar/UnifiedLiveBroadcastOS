@@ -4389,3 +4389,5 @@ export {
   type ReplayPlaylistResumePolicy,
   type ReplayPlaylistType,
 } from './replay-playlist-highlight-clip-assembly-foundation.js';
+
+export * from './replay-clip-media-output-foundation.js';

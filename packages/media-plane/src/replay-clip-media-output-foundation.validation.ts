@@ -25,8 +25,6 @@ import {
   createReplayClipMediaOutputEngine,
   redactReplayMediaOutputIdentifier,
   resolveOutputName,
-  type ReplayClipAssemblyPlan,
-  type ReplayClipAssemblyResult,
   type ReplayRenderProfile,
   type ReplayExportProfile,
   type ReplayDeliveryDestinationReference,
@@ -37,7 +35,11 @@ import {
   type ReplayExportRequest,
   type ReplayMediaDeliveryJobDefinition,
   type ReplayMediaDeliveryRequest,
-} from './index.js';
+} from './replay-clip-media-output-foundation.js';
+import type {
+  ReplayClipAssemblyPlan,
+  ReplayClipAssemblyResult,
+} from './replay-playlist-highlight-clip-assembly.js';
 
 const now = 1000;
 const segment = {
