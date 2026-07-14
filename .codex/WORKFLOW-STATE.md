@@ -1,17 +1,17 @@
 # UBOS Workflow State
 
-- Active platform: v5.9 — Graphics Platform
-- Current phase: v5.9.0 — Graphics Platform Release
+- Active platform: v5.10 — Automation, Rundown, and Show-Control Platform
+- Current phase: v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation
 - Branch: work
-- Commit: recorded in current branch history
-- Validation status: passed locally with environmental warnings for unavailable origin remote and deferred release tag authorization
-- Certification: v5.9.8 graphics platform certification passed; v5.9.0 release documentation and constants prepared; tag creation deferred until explicitly authorized
-- Blockers: none for local release-finalization commit; remote synchronization/tag publication unavailable because `origin` is not configured in this workspace
+- Commit: recorded in current branch history after v5.10.1 commit
+- Validation status: passed locally for focused v5.10.1 automation/show-control validation, media-plane typecheck, and diff whitespace check
+- Certification: v5.10.1 foundation implemented; no platform certification or release tag requested
+- Blockers: none for local v5.10.1 foundation commit
 
 ## Last completed phase
 
-v5.9.0 — Graphics Platform Release finalization.
+v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.
 
 ## Next eligible phase
 
-v5.10.1 — Production-Safe Automation, Rundown, and Show-Control Foundation.
+v5.10.2 — Production-Safe Automation Triggering, Scheduling, and Conditional Logic.

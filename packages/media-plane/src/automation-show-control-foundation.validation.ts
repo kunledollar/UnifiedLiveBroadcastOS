@@ -1,0 +1,17 @@
+const assertEqual=(actual:unknown,expected:unknown)=>{ if(actual!==expected) throw new Error(`Expected ${String(expected)} but received ${String(actual)}`); };
+const assertThrows=(fn:()=>unknown,pattern:RegExp)=>{ try{ fn(); } catch(error){ if(pattern.test(String(error))) return; throw error; } throw new Error('Expected function to throw'); };
+import { AutomationShowControlEngine } from './automation-show-control-foundation.js';
+const engine=new AutomationShowControlEngine();
+engine.registerRundown({rundownId:'rd1',generation:1,title:'Show',metadata:{secretToken:'nope',safe:'ok'},cues:[{cueId:'c2',generation:1,kind:'GRAPHICS',order:2,title:'Bug',targetReference:'gfx:bug',requiresOperatorConfirm:false,metadata:{}},{cueId:'c1',generation:1,kind:'SCENE',order:1,title:'Open',targetReference:'scene:open',requiresOperatorConfirm:true,metadata:{path:'/tmp/nope',role:'program'}}]});
+assertEqual(engine.snapshot().rundowns[0]?.cues[0]?.cueId,'c1');
+assertEqual(engine.snapshot().rundowns[0]?.metadata.secretToken,undefined);
+engine.armCue('c1'); engine.takeCue('c1'); engine.takeCue('c1'); engine.completeCue('c1');
+const snap=engine.processFrame();
+assertEqual(snap.cues.find(c=>c.cueId==='c1')?.exactOnceTakeCount,1);
+assertEqual(snap.health.completedCueCount,1);
+assertEqual(snap.telemetry.metadataOnly,true);
+assertEqual(snap.telemetry.realDeviceControl,false);
+assertThrows(()=>engine.registerRundown({rundownId:'rd1',generation:1,title:'stale',metadata:{},cues:[]}),/stale/);
+for(let i=0;i<10000;i++) engine.processFrame();
+assertEqual(engine.snapshot().telemetry.ticksProcessed,10001);
+console.log('UBOS v5.10.1 automation/show-control foundation validation passed');
