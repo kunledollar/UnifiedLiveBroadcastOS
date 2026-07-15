@@ -13,13 +13,13 @@ release_status: v5.11 RELEASED
 
 ## Active Platform
 
-v5.11
+v5.12
 
 ---
 
 ## Active Phase
 
-v5.11.0
+v5.12.0
 
 ---
 
@@ -59,7 +59,7 @@ v5.11
 
 ## Last Completed Phase
 
-v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform
+v5.11.0 — Production-Safe Developer Experience, Documentation Platform, Simulation Labs, Certification Academy, and Partner Program
 
 ---
 
