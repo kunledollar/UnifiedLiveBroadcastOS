@@ -150,6 +150,7 @@ import { OperationsConsoleContent } from './operations';
 import { LogsPanel } from './operations/LogsPanel';
 import { RoutingPanel } from './operations/RoutingPanel';
 import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
+import { verifyBrowserRecordingArtifact } from './operations/browser-recording-verification';
 import type {
   BrowserStreamingPanelState,
   StreamingPanelAction,
@@ -2713,10 +2714,22 @@ export function SceneWorkspace({
     };
     recorder.onstop = () => {
       const stoppedAt = new Date().toISOString();
-      const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
+      const blob = new Blob(recordedChunksRef.current, { type: recorder.mimeType || 'video/webm' });
       const durationMs = startedAt
         ? Date.parse(stoppedAt) - Date.parse(startedAt)
         : recordingDurationMs;
+      const artifactVerification = verifyBrowserRecordingArtifact({
+        blob,
+        durationMs,
+        playable: true,
+      });
+      if (!artifactVerification.ok) {
+        setRecordingState('failed');
+        setRecordingError(artifactVerification.reason);
+        recorderRef.current = null;
+        recordingStreamRef.current = null;
+        return;
+      }
       setRecordedUrl(URL.createObjectURL(blob));
       setRecordingStoppedAt(stoppedAt);
       setRecordingDurationMs(Math.max(0, durationMs));
