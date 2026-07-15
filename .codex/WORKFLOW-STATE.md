@@ -1,13 +1,13 @@
 # UBOS Workflow State
 
 version: 1
-status: ACTIVE
+status: RELEASED
 platform: v5.11
 current_phase: v5.11.0
-next_phase: v5.11.0
-last_completed_platform: v5.10
-last_completed_phase: v5.11.9
-release_status: v5.10 RELEASED
+next_phase: v5.12.0
+last_completed_platform: v5.11
+last_completed_phase: v5.11.0
+release_status: v5.11 RELEASED
 
 ---
 
@@ -25,7 +25,7 @@ v5.11.0
 
 ## Current Status
 
-VALIDATED
+CERTIFIED
 
 Allowed values:
 
@@ -53,7 +53,7 @@ AUTO
 
 ## Last Completed Platform
 
-v5.10
+v5.11
 
 ---
 
@@ -65,7 +65,7 @@ v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosys
 
 ## Next Ready Phase
 
-v5.11.0 — Native Runtime and Real Media Execution Platform Release
+v5.12.0 — next platform phase pending authoritative task specification
 
 ---
 
@@ -75,8 +75,8 @@ v5.11.0 — Native Runtime and Real Media Execution Platform Release
 |---|---|
 | v5.9 | RELEASED |
 | v5.10 | RELEASED |
-| v5.11 | ACTIVE |
-| v5.12 | PENDING |
+| v5.11 | RELEASED |
+| v5.12 | READY |
 | v6.0 | PENDING |
 
 ---
@@ -94,7 +94,7 @@ v5.11.0 — Native Runtime and Real Media Execution Platform Release
 | v5.11.7 | VALIDATED |
 | v5.11.8 | VALIDATED |
 | v5.11.9 | VALIDATED |
-| v5.11.0 | READY |
+| v5.11.0 | CERTIFIED |
 
 ---
 

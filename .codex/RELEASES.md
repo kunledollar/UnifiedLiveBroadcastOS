@@ -20,8 +20,8 @@ Status: Official Release Registry
 | v5.8 | RELEASED | v5.8.0 | PASS | — | — |
 | v5.9 | RELEASED | v5.9.0 | PASS | 2026-07-14 | — |
 | v5.10 | RELEASED | v5.10.0 | PASS | 2026-07-14 | — |
-| v5.11 | IN_PROGRESS | — | — | — | — |
-| v5.12 | PLANNED | — | — | — | — |
+| v5.11 | RELEASED | v5.11.0 | PASS | 2026-07-15 | AUTO |
+| v5.12 | READY | — | — | — | — |
 | v6.0 | PLANNED | — | — | — | — |
 
 ---
@@ -34,19 +34,19 @@ v5.11
 
 Status:
 
-IN_PROGRESS
+RELEASED
 
 Current Phase:
 
-v5.11.1
+v5.11.0
 
 Last Completed Platform:
 
-v5.10
+v5.11
 
 Last Completed Phase:
 
-v5.10.0 — Automation, Rundown, and Show-Control Platform Release
+v5.11.0 — Production-Safe Developer Experience, Documentation Platform, Simulation Labs, Certification Academy, and Partner Program
 
 ---
 
@@ -81,7 +81,7 @@ v5.11
 
 Current Stage:
 
-Native Runtime and Real Media Execution
+Developer Experience, Documentation, Simulation, Certification, and Partner Ecosystem
 
 Next Planned Platform:
 
