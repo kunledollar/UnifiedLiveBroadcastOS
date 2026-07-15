@@ -365,3 +365,17 @@
 - Platform release: no; `.codex/RELEASES.md` unchanged.
 - Blockers: none for local implementation and validation.
 - Next eligible phase: v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform.
+
+## 2026-07-15 — v5.11.9 Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform
+
+- Completed phase: v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform.
+- Implementation summary: Added a metadata-only marketplace and extension platform engine for developer organizations, signing keys, extension manifests, semantic version and integrity validation, high-risk capability review, certification, published marketplace listings, tenant-scoped service identities, entitlement-gated installation, sandbox limits, command capability checks, crash-loop suspension, safe uninstall blocking, usage metering, security advisories, publisher revocation, immutable snapshots, redacted telemetry, focused validation, package validation wiring, public exports, and architecture documentation.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/core typecheck`
+  - PASS: `pnpm --filter @ubos/core validate:v5.11.9`
+  - PASS: `pnpm --filter @ubos/core lint`
+  - PASS: `git diff --check`
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Commit hash: recorded in current branch history after local commit.
+- Blockers: none.
+- Next eligible phase: v5.11.0 — Native Runtime and Real Media Execution Platform Release.
