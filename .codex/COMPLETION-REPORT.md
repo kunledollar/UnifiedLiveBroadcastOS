@@ -296,3 +296,21 @@
 - Platform release: no; `.codex/RELEASES.md` unchanged.
 - Blockers: none for local implementation and validation.
 - Next eligible phase: v5.11.5 — Production-Safe Change Management, Release Governance, Feature Flags, and Deployment Control.
+
+
+## 2026-07-15 — v5.11.5 Production-Safe Change Management, Release Governance, Feature Flags, and Deployment Control
+
+- Completed phase: v5.11.5 — Production-Safe Change Management, Release Governance, Feature Flags, and Deployment Control.
+- Implementation summary: Added a metadata-only change governance core for formal change requests, impact assessment, approval policies, release manifests, compatibility validation, deployment windows, change freezes, deployment plans, canary rollout execution, observation windows, rollback plans, feature flags, promotions, schema migrations, drift detection, immutable snapshots, safe redaction, public exports, validation coverage, package validation wiring, and architecture documentation.
+- Architecture reviewed: MASTER-PLAN.md, ROADMAP.md, `.codex/ENGINEERING-STANDARDS.md`, `.codex/RELEASES.md`, `.codex/COMPLETION-REPORT.md`, `.codex/WORKFLOW-STATE.md`, repository state, v5.11 core package architecture, and `.codex/tasks/v5.11/v5.11.5.md`.
+- Existing abstractions reused: `@ubos/core` package boundaries, observability redaction, health status, alert severity mapping, TypeScript package validation scripts, immutable snapshot patterns, and metadata-only operational state.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/core typecheck`
+  - PASS: `pnpm --filter @ubos/core validate:v5.11.5`
+  - PASS: `pnpm --filter @ubos/core lint`
+  - PASS: `pnpm --filter @ubos/core test`
+  - PASS: `git diff --check`
+- Environmental warnings: `git fetch origin --prune --tags` failed because `origin` is not configured in this workspace.
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Blockers: none for local implementation and validation.
+- Next eligible phase: v5.11.6 — Production-Safe Security Operations, Threat Detection, Vulnerability Management, and Response.

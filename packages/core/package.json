@@ -9,11 +9,12 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node dist/observability/validation.js && node dist/incident-response/validation.js && node dist/capacity/validation.js && node dist/analytics/validation.js",
+    "test": "pnpm build && node dist/observability/validation.js && node dist/incident-response/validation.js && node dist/capacity/validation.js && node dist/analytics/validation.js && node dist/change-management/validation.js",
     "validate:v5.11.1": "pnpm build && node dist/observability/validation.js",
     "validate:v5.11.2": "pnpm build && node dist/incident-response/validation.js",
     "validate:v5.11.3": "pnpm build && node dist/capacity/validation.js",
-    "validate:v5.11.4": "pnpm build && node dist/analytics/validation.js"
+    "validate:v5.11.4": "pnpm build && node dist/analytics/validation.js",
+    "validate:v5.11.5": "pnpm build && node dist/change-management/validation.js"
   },
   "exports": {
     ".": {
@@ -35,6 +36,10 @@
     "./analytics": {
       "types": "./dist/analytics/index.d.ts",
       "import": "./dist/analytics/index.js"
+    },
+    "./change-management": {
+      "types": "./dist/change-management/index.d.ts",
+      "import": "./dist/change-management/index.js"
     }
   }
 }
