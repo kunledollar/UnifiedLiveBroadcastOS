@@ -3,10 +3,10 @@
 version: 1
 status: ACTIVE
 platform: v5.11
-current_phase: v5.11.4
-next_phase: v5.11.4
+current_phase: v5.11.5
+next_phase: v5.11.5
 last_completed_platform: v5.10
-last_completed_phase: v5.11.3
+last_completed_phase: v5.11.4
 release_status: v5.10 RELEASED
 
 ---
@@ -19,7 +19,7 @@ v5.11
 
 ## Active Phase
 
-v5.11.4
+v5.11.5
 
 ---
 
@@ -59,13 +59,13 @@ v5.10
 
 ## Last Completed Phase
 
-v5.11.3 — Production-Safe Capacity Planning, Performance Baselines, Forecasting, and Resource Optimization
+v5.11.4 — Production-Safe Operational Analytics, Reporting, SLA Compliance, and Executive Dashboards
 
 ---
 
 ## Next Ready Phase
 
-v5.11.4 — Production-Safe Operational Analytics, Reporting, SLA Compliance, and Executive Dashboards
+v5.11.5 — Production-Safe Change Management, Release Governance, Feature Flags, and Deployment Control
 
 ---
 
@@ -88,8 +88,8 @@ v5.11.4 — Production-Safe Operational Analytics, Reporting, SLA Compliance, an
 | v5.11.1 | VALIDATED |
 | v5.11.2 | VALIDATED |
 | v5.11.3 | VALIDATED |
-| v5.11.4 | READY |
-| v5.11.5 | BLOCKED |
+| v5.11.4 | VALIDATED |
+| v5.11.5 | READY |
 | v5.11.6 | BLOCKED |
 | v5.11.7 | BLOCKED |
 | v5.11.0 | BLOCKED |
