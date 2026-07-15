@@ -9,14 +9,15 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node dist/observability/validation.js && node dist/incident-response/validation.js && node dist/capacity/validation.js && node dist/analytics/validation.js && node dist/change-management/validation.js && node dist/security-operations/validation.js && node dist/governance/validation.js",
+    "test": "pnpm build && node dist/observability/validation.js && node dist/incident-response/validation.js && node dist/capacity/validation.js && node dist/analytics/validation.js && node dist/change-management/validation.js && node dist/security-operations/validation.js && node dist/governance/validation.js && node dist/multi-tenant/validation.js",
     "validate:v5.11.1": "pnpm build && node dist/observability/validation.js",
     "validate:v5.11.2": "pnpm build && node dist/incident-response/validation.js",
     "validate:v5.11.3": "pnpm build && node dist/capacity/validation.js",
     "validate:v5.11.4": "pnpm build && node dist/analytics/validation.js",
     "validate:v5.11.5": "pnpm build && node dist/change-management/validation.js",
     "validate:v5.11.6": "pnpm build && node dist/security-operations/validation.js",
-    "validate:v5.11.7": "pnpm build && node dist/governance/validation.js"
+    "validate:v5.11.7": "pnpm build && node dist/governance/validation.js",
+    "validate:v5.11.8": "pnpm build && node dist/multi-tenant/validation.js"
   },
   "exports": {
     ".": {
@@ -50,6 +51,10 @@
     "./governance": {
       "types": "./dist/governance/index.d.ts",
       "import": "./dist/governance/index.js"
+    },
+    "./multi-tenant": {
+      "types": "./dist/multi-tenant/index.d.ts",
+      "import": "./dist/multi-tenant/index.js"
     }
   }
 }

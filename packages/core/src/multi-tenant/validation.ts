@@ -1,0 +1,51 @@
+function equal(actual: unknown, expected: unknown): void { if (actual !== expected) throw new Error(`expected ${String(expected)}, got ${String(actual)}`); }
+function ok(value: unknown): void { if (!value) throw new Error('assertion failed'); }
+function throws(fn: () => unknown): void { try { fn(); } catch { return; } throw new Error('expected throw'); }
+import { HealthStatus } from '../observability/index.js';
+import { CustomerLifecycleStatus, DelegationScope, IsolationLevel, MigrationStatus, MultiTenantOperationsEngine, OrganizationStatus, OrganizationType, QuotaAction, SubscriptionStatus, SupportSessionStatus, TenantStatus } from './index.js';
+
+const at=1_000;
+const engine=new MultiTenantOperationsEngine(1000);
+engine.createOrganization({id:'platform',name:'UBOS Platform',type:OrganizationType.Platform,status:OrganizationStatus.Active,policyIds:[],administratorIds:['platform-admin'],createdAt:at});
+engine.createOrganization({id:'msp',name:'Managed Service Provider',type:OrganizationType.ServiceProvider,parentOrganizationId:'platform',status:OrganizationStatus.Active,policyIds:[],administratorIds:['msp-admin'],createdAt:at});
+engine.provisionTenant({organization:{id:'org-a',name:'Customer A',type:OrganizationType.Broadcaster,parentOrganizationId:'msp',status:OrganizationStatus.Active,policyIds:['pol-a'],administratorIds:['a-admin'],createdAt:at},tenant:{id:'tenant-a',organizationId:'org-a',name:'Tenant A',workspaceIds:[],policyIds:['pol-a'],quotaId:'quota-a',status:TenantStatus.Provisioning},workspace:{id:'news',tenantId:'tenant-a',name:'News',ownerIds:['a-owner'],productionIds:['prod-a'],policyIds:['pol-a']},customer:{id:'cust-a',organizationId:'org-a',tenantIds:['tenant-a'],lifecycleStatus:CustomerLifecycleStatus.Active,serviceProviderOrganizationId:'msp'},quota:{id:'quota-a',tenantId:'tenant-a',limits:{storage:100,streams:3},warnAtPercent:80,emergencyOverrideAllowed:true},policy:{id:'pol-a',organizationId:'org-a',tenantId:'tenant-a',name:'tenant policy',permissions:['production.read','service.subscribe','support.access'],isolationLevel:IsolationLevel.Logical,maxDelegationScope:DelegationScope.Workspace,requireSupportApproval:true,version:1},at});
+engine.activateTenant('tenant-a');
+engine.provisionTenant({organization:{id:'org-b',name:'Customer B',type:OrganizationType.Education,parentOrganizationId:'msp',status:OrganizationStatus.Active,policyIds:['pol-b'],administratorIds:['b-admin'],createdAt:at},tenant:{id:'tenant-b',organizationId:'org-b',name:'Tenant B',workspaceIds:[],policyIds:['pol-b'],status:TenantStatus.Provisioning},workspace:{id:'sports',tenantId:'tenant-b',name:'Sports',ownerIds:['b-owner'],productionIds:['prod-b'],policyIds:['pol-b']},policy:{id:'pol-b',organizationId:'org-b',tenantId:'tenant-b',name:'tenant policy b',permissions:['production.read'],isolationLevel:IsolationLevel.Logical,maxDelegationScope:DelegationScope.Workspace,requireSupportApproval:true,version:1},at});
+engine.activateTenant('tenant-b');
+engine.registerBusinessUnit({id:'bu-a',organizationId:'org-a',name:'News Division',workspaceIds:['news'],policyIds:['pol-a']});
+engine.assignOwnership({resourceId:'rec-a',resourceType:'recording',organizationId:'org-a',tenantId:'tenant-a',workspaceId:'news',createdBy:'a-operator'});
+engine.assignOwnership({resourceId:'rec-b',resourceType:'recording',organizationId:'org-b',tenantId:'tenant-b',workspaceId:'sports',createdBy:'b-operator'});
+engine.registerSharedInfrastructure({id:'cluster-a',tenantId:'tenant-a',region:'us-east',clusterId:'shared-1',isolationLevel:IsolationLevel.SharedInfrastructure,encrypted:true,partitionIds:['pa']});
+throws(()=>engine.registerSharedInfrastructure({id:'bad',tenantId:'tenant-b',region:'us-east',clusterId:'shared-1',isolationLevel:IsolationLevel.SharedInfrastructure,encrypted:false,partitionIds:['pb']}));
+engine.grantDelegation({delegatorId:'a-admin',delegateId:'msp-tech',scope:DelegationScope.Workspace,organizationId:'org-a',tenantId:'tenant-a',workspaceId:'news',permissions:['production.read','support.access'],effectiveFrom:at,expiresAt:at+1000,acceptedAt:at+1});
+engine.registerService({id:'captioning',providerOrganizationId:'msp',name:'Captioning',permissions:['service.subscribe'],tenantTypes:['broadcaster'],active:true,metadata:{token:'secret'}});
+engine.subscribe({tenantId:'tenant-a',serviceId:'captioning',status:SubscriptionStatus.Active,activatedAt:at});
+engine.recordUsage({tenantId:'tenant-a',resourceType:'storage',amount:85,recordedAt:at,billingMetadata:{token:'secret',region:'us-east'}});
+equal(engine.evaluateQuota('tenant-a','storage').action,QuotaAction.Warn);
+engine.extendQuota('quota-a',{storage:200},'finance-approver');
+equal(engine.evaluateQuota('tenant-a','storage').action,QuotaAction.Allow);
+engine.requestSupportSession({id:'support-a',tenantId:'tenant-a',requestedBy:'msp-tech',scope:['diagnostics'],status:SupportSessionStatus.Requested,startsAt:at,expiresAt:at+500,recordingRequired:true});
+let ctx=engine.resolveContext('msp-tech','tenant-a',at+10,'news');
+equal(engine.authorize({context:ctx,permission:'support.access',resourceId:'rec-a',supportSessionId:'support-a'}).allowed,false);
+engine.approveSupportSession('support-a','a-admin',at+20);
+ctx=engine.resolveContext('msp-tech','tenant-a',at+30,'news');
+equal(engine.authorize({context:ctx,permission:'support.access',resourceId:'rec-a',supportSessionId:'support-a'}).allowed,true);
+equal(engine.authorize({context:ctx,permission:'production.read',resourceId:'rec-b'}).allowed,false);
+engine.createFederation({sourceOrganizationId:'org-a',targetOrganizationId:'org-b',permissions:['production.read'],expiresAt:at+1000});
+equal(engine.authorize({context:ctx,permission:'production.read',resourceId:'rec-b'}).allowed,true);
+engine.migrateTenant({id:'mig-a',tenantId:'tenant-a',fromRegion:'us-east',toRegion:'us-west',fromClusterId:'shared-1',toClusterId:'shared-2',requestedBy:'a-admin',integrityHash:'sha256:abc',status:MigrationStatus.Completed,startedAt:at,completedAt:at+100});
+engine.updateBranding('org-a','brand-a');
+equal(engine.tenantAnalytics('tenant-a').length,1);
+equal(engine.tenantAnalytics('tenant-b').length,0);
+ok(engine.tenantAudit('tenant-a').every(entry=>!entry.includes('rec-b')));
+engine.offboardTenant('tenant-a',at+2000);
+const snap=engine.snapshot();
+equal(snap.organizations.length,4);
+equal(snap.tenants.length,2);
+equal(snap.workspaces.length,2);
+equal(snap.telemetry.orphanedResources,0);
+equal(snap.health.status,HealthStatus.Healthy);
+equal(snap.services[0]?.metadata?.token,'[REDACTED]');
+equal(snap.usage[0]?.billingMetadata?.token,'[REDACTED]');
+throws(()=>engine.assignOwnership({resourceId:'orphan',resourceType:'scene',organizationId:'org-a',tenantId:'missing',createdBy:'x'}));
+console.log('v5.11.8 multi-tenant validation passed');
