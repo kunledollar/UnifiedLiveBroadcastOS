@@ -331,3 +331,4 @@ export type {
   UsageRecord,
   Workspace,
 } from './multi-tenant/index.js';
+export * from './marketplace/index.js';

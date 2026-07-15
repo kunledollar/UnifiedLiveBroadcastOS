@@ -366,28 +366,16 @@
 - Blockers: none for local implementation and validation.
 - Next eligible phase: v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform.
 
-
 ## 2026-07-15 — v5.11.9 Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform
 
 - Completed phase: v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform.
-- Implementation summary: Added metadata-only SDK, plugin-runtime, marketplace, and developer-platform packages covering typed manifests, semantic version and signature validation, capability-based authorization, tenant-scoped service identities, sandbox limit metadata, lifecycle state, crash-loop suspension, marketplace listings, certification metadata, entitlement/offline grace handling, reviews, developer verification, signing keys, submissions, certification, publication, redaction, immutable snapshots, validation wiring, and architecture documentation.
-- Architecture reviewed: MASTER-PLAN.md, ROADMAP.md, `.codex/ENGINEERING-STANDARDS.md`, `.codex/RELEASES.md`, `.codex/COMPLETION-REPORT.md`, `.codex/WORKFLOW-STATE.md`, repository state, v5.11 core package patterns, and `.codex/tasks/v5.11/v5.11.9.md`.
-- Existing abstractions reused: v5.11 metadata-only package pattern, explicit package exports, immutable snapshot copies, deterministic in-memory validation harnesses, redaction helpers, tenant-scoped identity concepts, and bounded audit history.
+- Implementation summary: Added a metadata-only marketplace and extension platform engine for developer organizations, signing keys, extension manifests, semantic version and integrity validation, high-risk capability review, certification, published marketplace listings, tenant-scoped service identities, entitlement-gated installation, sandbox limits, command capability checks, crash-loop suspension, safe uninstall blocking, usage metering, security advisories, publisher revocation, immutable snapshots, redacted telemetry, focused validation, package validation wiring, public exports, and architecture documentation.
 - Validation results:
-  - PASS: `pnpm --filter @ubos/sdk typecheck`
-  - PASS: `pnpm --filter @ubos/plugin-runtime typecheck`
-  - PASS: `pnpm --filter @ubos/marketplace typecheck`
-  - PASS: `pnpm --filter @ubos/developer-platform typecheck`
-  - PASS: `pnpm --filter @ubos/sdk validate:v5.11.9`
-  - PASS: `pnpm --filter @ubos/plugin-runtime validate:v5.11.9`
-  - PASS: `pnpm --filter @ubos/marketplace validate:v5.11.9`
-  - PASS: `pnpm --filter @ubos/developer-platform validate:v5.11.9`
-  - PASS: `pnpm --filter @ubos/sdk lint`
-  - PASS: `pnpm --filter @ubos/plugin-runtime lint`
-  - PASS: `pnpm --filter @ubos/marketplace lint`
-  - PASS: `pnpm --filter @ubos/developer-platform lint`
+  - PASS: `pnpm --filter @ubos/core typecheck`
+  - PASS: `pnpm --filter @ubos/core validate:v5.11.9`
+  - PASS: `pnpm --filter @ubos/core lint`
   - PASS: `git diff --check`
-- Environmental warnings: `git fetch origin --prune --tags` failed because `origin` is not configured in this workspace.
 - Platform release: no; `.codex/RELEASES.md` unchanged.
-- Blockers: none for local implementation and validation.
-- Next eligible phase: v5.11.10 — Production-Safe Developer Experience, Documentation Platform, Simulation Labs, Certification Academy, and Partner Program.
+- Commit hash: recorded in current branch history after local commit.
+- Blockers: none.
+- Next eligible phase: v5.11.0 — Native Runtime and Real Media Execution Platform Release.
