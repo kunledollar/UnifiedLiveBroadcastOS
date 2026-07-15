@@ -10,3 +10,6 @@ coverage
 
 # Rust and Tauri build output
 apps/desktop/src-tauri/target/
+
+# Rust and Tauri build artifacts
+apps/desktop/src-tauri/target/
