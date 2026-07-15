@@ -383,7 +383,7 @@
 ## 2026-07-15 — v5.11.0 Production-Safe Developer Experience, Documentation Platform, Simulation Labs, Certification Academy, and Partner Program
 
 - Completed phase: v5.11.0 — Production-Safe Developer Experience, Documentation Platform, Simulation Labs, Certification Academy, and Partner Program.
-- Implementation summary: Added a metadata-only platform ecosystem registry for versioned documentation, API explorer endpoints, tutorials, simulation labs, learning paths, certification tracks, certification attempts, partner program entries, hardware certifications, example projects, synthetic-only lab isolation enforcement, deterministic immutable snapshots, redacted telemetry, focused validation wiring, public exports, and architecture documentation.
+- Implementation summary: Added a metadata-only platform ecosystem registry for versioned documentation, tutorials, simulation labs, certification tracks, partner tracks, examples, security invariants, deterministic immutable snapshots, synthetic-only lab isolation enforcement, focused validation wiring, public exports, and architecture documentation.
 - Architecture reviewed: MASTER-PLAN.md, ROADMAP.md, `.codex/ENGINEERING-STANDARDS.md`, `.codex/RELEASES.md`, `.codex/COMPLETION-REPORT.md`, `.codex/WORKFLOW-STATE.md`, repository state, v5.11 core package architecture, and `.codex/tasks/v5.11/v5.11.0.md`.
 - Existing abstractions reused: `@ubos/core` package boundaries, v5.11 metadata-only immutable snapshot patterns, package-level lint/typecheck/build validation, explicit public exports, and validation script conventions.
 - Validation results:

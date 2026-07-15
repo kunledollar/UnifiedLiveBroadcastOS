@@ -2,8 +2,8 @@
 
 version: 1
 status: RELEASED
-platform: v5.12
-current_phase: v5.12.0
+platform: v5.11
+current_phase: v5.11.0
 next_phase: v5.12.0
 last_completed_platform: v5.11
 last_completed_phase: v5.11.0
@@ -25,7 +25,7 @@ v5.12.0
 
 ## Current Status
 
-READY
+CERTIFIED
 
 Allowed values:
 
@@ -65,7 +65,7 @@ v5.11.0 — Production-Safe Developer Experience, Documentation Platform, Simula
 
 ## Next Ready Phase
 
-v5.12.0 — Pending authoritative task specification
+v5.12.0 — next platform phase pending authoritative task specification
 
 ---
 
@@ -76,7 +76,7 @@ v5.12.0 — Pending authoritative task specification
 | v5.9 | RELEASED |
 | v5.10 | RELEASED |
 | v5.11 | RELEASED |
-| v5.12 | PENDING |
+| v5.12 | READY |
 | v6.0 | PENDING |
 
 ---
@@ -94,7 +94,7 @@ v5.12.0 — Pending authoritative task specification
 | v5.11.7 | VALIDATED |
 | v5.11.8 | VALIDATED |
 | v5.11.9 | VALIDATED |
-| v5.11.0 | VALIDATED |
+| v5.11.0 | CERTIFIED |
 
 ---
 

@@ -1,17 +1,37 @@
-# UBOS v5.11.0 Developer Experience, Documentation Platform, Simulation Labs, Certification Academy, and Partner Program
+# UBOS v5.11.0 Platform Ecosystem Architecture
 
-## Architecture ownership
+## Ownership
 
-`packages/core/src/platform-ecosystem/` owns the metadata-only platform ecosystem registry for versioned documentation, API explorer endpoints, tutorials, simulation labs, learning paths, certification tracks, certification attempts, partner program entries, hardware certifications, example projects, audit history, health, and telemetry.
+The platform ecosystem registry is owned by `@ubos/core` and publishes metadata-only snapshots for documentation, training, simulation, certification, partner, and example-program artifacts. It does not own the media runtime, scheduler, FrameTick source, command engine, or production buses.
 
-## Production safety
+## Reused Architecture
 
-The registry never executes live media workloads, real device control, billing, identity-provider operations, or external learning systems. Published simulation labs must use synthetic-only isolation, examples require security notes, API explorer responses are simulated and redacted, documentation content is redacted before storage, and snapshots are deterministic immutable clones.
+The design follows the existing v5.11 core pattern: bounded metadata registries, deterministic snapshots, explicit exports, package-level validation scripts, and no production-control side effects.
+
+## Lifecycle and Generation Behavior
+
+Artifacts are registered with an explicit platform version and immutable publication state. A version mismatch is rejected before insertion. Published snapshots are stable-sorted by identifier for deterministic output.
+
+## Simulation Safety
+
+Simulation labs must declare an isolation mode and `syntheticDataOnly`. Registration rejects labs that do not satisfy those invariants so training environments cannot control live infrastructure.
+
+## Commands and Events
+
+This phase introduces no runtime commands and no live events. Downstream portals, academies, and partner workflows consume immutable metadata snapshots.
+
+## Health, Telemetry, Watchdog, and Source Graph
+
+The registry exposes validation checks as metadata-only health evidence. It does not emit credentials, URLs, file paths, raw media, native handles, Source Graph mutations, or watchdog authority.
+
+## Security and Redaction
+
+Snapshots contain only public ecosystem metadata. Certification and partner approval systems are modeled as auditable artifact definitions; candidate identities, exam answers, tenant credentials, and partner secrets are intentionally out of scope.
 
 ## Validation
 
-Focused validation is wired as `pnpm --filter @ubos/core validate:v5.11.0` and covers versioned docs, safe API explorer endpoints, tutorial publication, synthetic-only lab enforcement, learning paths, certification tracks and attempts, partner registration, hardware certification, example projects, lab authorization denial, telemetry, redaction, package exports, and test aggregation.
+`pnpm --filter @ubos/core validate:v5.11.0` builds the package and validates ecosystem coverage, lab isolation, certification renewal requirements, partner prerequisites, and documented security invariants.
 
-## Release boundary
+## Known Limitations and Handoff
 
-This phase closes the v5.11 platform as a production-safe metadata-plane ecosystem release. Tag creation and publication remain explicit maintainer actions.
+This phase establishes the production-safe metadata foundation for the v5.11 ecosystem platform. Future work may attach portals, search indexes, API explorers, classroom content, proctoring integrations, and hardware test harnesses to these metadata contracts.

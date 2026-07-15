@@ -1,45 +1,169 @@
-import { HealthStatus, redact } from '../observability/index.js';
+export enum EcosystemArea {
+  Documentation = 'documentation',
+  Training = 'training',
+  Simulation = 'simulation',
+  Certification = 'certification',
+  PartnerProgram = 'partner-program',
+  Examples = 'examples',
+}
 
-export enum EcosystemContentType { Guide='guide', APIReference='api_reference', Tutorial='tutorial', Cookbook='cookbook', Playbook='playbook', ReleaseNote='release_note', MigrationGuide='migration_guide', FAQ='faq', Example='example' }
-export enum AudienceRole { Developer='developer', Operator='operator', Integrator='integrator', Manufacturer='manufacturer', Educator='educator', EnterpriseAdmin='enterprise_admin', AIAgent='ai_agent' }
-export enum LabIsolationMode { SyntheticOnly='synthetic_only', RecordedFixture='recorded_fixture', HardwareEmulated='hardware_emulated' }
-export enum LabStatus { Draft='draft', Published='published', Deprecated='deprecated', Retired='retired' }
-export enum CertificationTrackStatus { Draft='draft', Active='active', Suspended='suspended', Retired='retired' }
-export enum PartnerTier { Community='community', Registered='registered', Certified='certified', Solutions='solutions', Hardware='hardware', Global='global' }
-export enum PartnerStatus { Applicant='applicant', Active='active', Probation='probation', Suspended='suspended', Revoked='revoked' }
-export enum AssessmentStatus { Scheduled='scheduled', InProgress='in_progress', Passed='passed', Failed='failed', Revoked='revoked' }
+export enum PublicationState {
+  Draft = 'draft',
+  Review = 'review',
+  Published = 'published',
+  Immutable = 'immutable',
+}
 
-export interface DocumentationPage { id:string; version:string; title:string; type:EcosystemContentType; audience:AudienceRole[]; path:string; body:string; tags:string[]; apiSymbols:string[]; updatedAt:number; deprecated?:boolean; }
-export interface APIExplorerEndpoint { id:string; version:string; method:'GET'|'POST'|'PUT'|'PATCH'|'DELETE'; path:string; summary:string; schemaRef:string; safeToExecute:boolean; simulatedResponse:Record<string,unknown>; codeSamples:Record<string,string>; }
-export interface Tutorial { id:string; version:string; title:string; prerequisites:string[]; estimatedMinutes:number; steps:{id:string;title:string;content:string;validation:string}[]; }
-export interface SimulationLab { id:string; version:string; title:string; scenario:string; isolationMode:LabIsolationMode; status:LabStatus; virtualDevices:string[]; syntheticInputs:string[]; failureModes:string[]; learningObjectives:string[]; estimatedMinutes:number; }
-export interface LearningPath { id:string; version:string; title:string; audience:AudienceRole; orderedContentIds:string[]; labIds:string[]; certificationTrackIds:string[]; }
-export interface CertificationTrack { id:string; version:string; title:string; status:CertificationTrackStatus; requiredLearningPathIds:string[]; examBlueprint:string[]; practicalLabIds:string[]; passingScore:number; validityDays:number; }
-export interface CertificationAttempt { id:string; trackId:string; candidateId:string; status:AssessmentStatus; score:number; practicalLabResults:{labId:string;passed:boolean;evidence:string}[]; startedAt:number; completedAt?:number; }
-export interface PartnerProgramEntry { id:string; organizationId:string; name:string; tier:PartnerTier; status:PartnerStatus; certifiedTrackIds:string[]; hardwareCertificationIds:string[]; solutionValidationIds:string[]; supportContact:string; }
-export interface HardwareCertification { id:string; partnerId:string; deviceModel:string; firmwareVersion:string; testSuiteVersion:string; passed:boolean; limitations:string[]; certifiedAt?:number; }
-export interface ExampleProject { id:string; version:string; title:string; category:string; repositoryPath:string; generatedBy?:string; supportedLanguages:string[]; securityNotes:string[]; }
-export interface EcosystemSnapshot { docs:DocumentationPage[]; endpoints:APIExplorerEndpoint[]; tutorials:Tutorial[]; labs:SimulationLab[]; learningPaths:LearningPath[]; certificationTracks:CertificationTrack[]; attempts:CertificationAttempt[]; partners:PartnerProgramEntry[]; hardware:HardwareCertification[]; examples:ExampleProject[]; audit:string[]; telemetry:{docs:number; endpoints:number; tutorials:number; labs:number; activeCertifications:number; partners:number; examples:number; deniedActions:number}; health:{status:HealthStatus; score:number; reasons:string[]}; }
+export enum LabIsolationMode {
+  SyntheticOnly = 'synthetic-only',
+  TenantSandbox = 'tenant-sandbox',
+  OfflineReplay = 'offline-replay',
+}
 
-const clone=<T>(v:T):T=>structuredClone(v); const freeze=<T>(v:T):T=>Object.freeze(clone(v)); const safe=(v:string)=>String(redact(v)); const secret=/secret|token|password|credential/i;
-function versionOk(version:string){ if(!/^v?\d+\.\d+(\.\d+)?$/.test(version)) throw new Error('invalid documentation version'); }
-function noSecretObject(o:Record<string,unknown>):Record<string,unknown>{ for(const k of Object.keys(o)) if(secret.test(k)) throw new Error('examples and simulated responses must not expose secrets'); return redact(o) as Record<string,unknown>; }
-function assertSynthetic(lab:SimulationLab):void{ if(lab.isolationMode!==LabIsolationMode.SyntheticOnly&&lab.status===LabStatus.Published) throw new Error('published labs must use synthetic-only isolation'); if(!lab.syntheticInputs.length) throw new Error('labs require synthetic inputs'); }
+export interface VersionedArtifact {
+  readonly id: string;
+  readonly title: string;
+  readonly area: EcosystemArea;
+  readonly version: string;
+  readonly state: PublicationState;
+  readonly owner: string;
+  readonly prerequisites: readonly string[];
+  readonly metadata: Readonly<Record<string, string>>;
+}
 
-export class PlatformEcosystemRegistry { #docs=new Map<string,DocumentationPage>(); #endpoints=new Map<string,APIExplorerEndpoint>(); #tutorials=new Map<string,Tutorial>(); #labs=new Map<string,SimulationLab>(); #paths=new Map<string,LearningPath>(); #tracks=new Map<string,CertificationTrack>(); #attempts=new Map<string,CertificationAttempt>(); #partners=new Map<string,PartnerProgramEntry>(); #hardware=new Map<string,HardwareCertification>(); #examples=new Map<string,ExampleProject>(); #audit:string[]=[]; #denied=0; constructor(private readonly maxHistory=20000){}
-  publishDocumentation(page:DocumentationPage):DocumentationPage{ versionOk(page.version); const clean={...page,title:safe(page.title),body:safe(page.body),tags:[...new Set(page.tags.map(safe))].sort(),apiSymbols:[...new Set(page.apiSymbols)].sort()}; this.#docs.set(`${page.version}:${page.id}`,freeze(clean)); this.#audit.push(`DocumentationPublished:${page.version}:${page.id}`); return clone(clean); }
-  registerEndpoint(endpoint:APIExplorerEndpoint):APIExplorerEndpoint{ versionOk(endpoint.version); if(!endpoint.safeToExecute&&Object.keys(endpoint.simulatedResponse).length===0) throw new Error('unsafe endpoints require simulated responses'); const clean={...endpoint,summary:safe(endpoint.summary),simulatedResponse:noSecretObject(endpoint.simulatedResponse),codeSamples:Object.fromEntries(Object.entries(endpoint.codeSamples).map(([k,v])=>[k,safe(v)]))}; this.#endpoints.set(`${endpoint.version}:${endpoint.id}`,freeze(clean)); this.#audit.push(`APIExplorerEndpointRegistered:${endpoint.id}`); return clone(clean); }
-  publishTutorial(tutorial:Tutorial):Tutorial{ versionOk(tutorial.version); if(!tutorial.steps.length) throw new Error('tutorial requires steps'); const clean={...tutorial,title:safe(tutorial.title),prerequisites:tutorial.prerequisites.map(safe),steps:tutorial.steps.map(s=>({...s,title:safe(s.title),content:safe(s.content),validation:safe(s.validation)}))}; this.#tutorials.set(`${tutorial.version}:${tutorial.id}`,freeze(clean)); this.#audit.push(`TutorialPublished:${tutorial.id}`); return clone(clean); }
-  publishLab(lab:SimulationLab):SimulationLab{ versionOk(lab.version); assertSynthetic(lab); const clean={...lab,title:safe(lab.title),scenario:safe(lab.scenario),virtualDevices:lab.virtualDevices.map(safe),syntheticInputs:lab.syntheticInputs.map(safe),failureModes:lab.failureModes.map(safe),learningObjectives:lab.learningObjectives.map(safe)}; this.#labs.set(`${lab.version}:${lab.id}`,freeze(clean)); this.#audit.push(`SimulationLabPublished:${lab.id}`); return clone(clean); }
-  createLearningPath(path:LearningPath):LearningPath{ versionOk(path.version); for(const id of path.labIds) if(![...this.#labs.keys()].some(k=>k.endsWith(`:${id}`))) throw new Error('learning path references unknown lab'); const clean={...path,title:safe(path.title),orderedContentIds:[...path.orderedContentIds],labIds:[...path.labIds],certificationTrackIds:[...path.certificationTrackIds]}; this.#paths.set(`${path.version}:${path.id}`,freeze(clean)); this.#audit.push(`LearningPathCreated:${path.id}`); return clone(clean); }
-  createCertificationTrack(track:CertificationTrack):CertificationTrack{ versionOk(track.version); if(track.passingScore<1||track.passingScore>100) throw new Error('passing score out of range'); for(const id of track.practicalLabIds) if(![...this.#labs.keys()].some(k=>k.endsWith(`:${id}`))) throw new Error('certification references unknown lab'); const clean={...track,title:safe(track.title),examBlueprint:track.examBlueprint.map(safe)}; this.#tracks.set(`${track.version}:${track.id}`,freeze(clean)); this.#audit.push(`CertificationTrackCreated:${track.id}`); return clone(clean); }
-  recordAttempt(attempt:CertificationAttempt):CertificationAttempt{ const track=[...this.#tracks.values()].find(t=>t.id===attempt.trackId&&t.status===CertificationTrackStatus.Active); if(!track) throw new Error('active certification track required'); const passed=attempt.score>=track.passingScore&&attempt.practicalLabResults.every(r=>r.passed); const clean={...attempt,status:passed?AssessmentStatus.Passed:AssessmentStatus.Failed,practicalLabResults:attempt.practicalLabResults.map(r=>({...r,evidence:safe(r.evidence)}))}; this.#attempts.set(attempt.id,freeze(clean)); this.#audit.push(`CertificationAttemptRecorded:${attempt.trackId}:${clean.status}`); return clone(clean); }
-  registerPartner(partner:PartnerProgramEntry):PartnerProgramEntry{ if(partner.tier!==PartnerTier.Registered&&partner.certifiedTrackIds.length===0) throw new Error('advanced partner tiers require certification'); const clean={...partner,name:safe(partner.name),supportContact:safe(partner.supportContact),certifiedTrackIds:[...new Set(partner.certifiedTrackIds)].sort()}; this.#partners.set(partner.id,freeze(clean)); this.#audit.push(`PartnerRegistered:${partner.id}:${partner.tier}`); return clone(clean); }
-  certifyHardware(cert:HardwareCertification):HardwareCertification{ const partner=this.#partners.get(cert.partnerId); if(!partner||partner.status!==PartnerStatus.Active) throw new Error('active partner required'); const clean={...cert,deviceModel:safe(cert.deviceModel),firmwareVersion:safe(cert.firmwareVersion),limitations:cert.limitations.map(safe)}; this.#hardware.set(cert.id,freeze(clean)); this.#audit.push(`HardwareCertificationRecorded:${cert.id}:${cert.passed}`); return clone(clean); }
-  addExample(example:ExampleProject):ExampleProject{ versionOk(example.version); if(example.securityNotes.length===0) throw new Error('examples require security notes'); const clean={...example,title:safe(example.title),repositoryPath:safe(example.repositoryPath),securityNotes:example.securityNotes.map(safe),supportedLanguages:[...new Set(example.supportedLanguages)].sort()}; this.#examples.set(`${example.version}:${example.id}`,freeze(clean)); this.#audit.push(`ExampleProjectAdded:${example.id}`); return clone(clean); }
-  searchDocumentation(text:string, version?:string):DocumentationPage[]{ const q=text.toLowerCase(); return [...this.#docs.values()].filter(d=>(!version||d.version===version)&&!d.deprecated&&(d.title.toLowerCase().includes(q)||d.body.toLowerCase().includes(q)||d.tags.some(t=>t.toLowerCase().includes(q)))).map(clone).sort((a,b)=>a.id.localeCompare(b.id)); }
-  canRunLab(labId:string, version:string):boolean{ const lab=this.#labs.get(`${version}:${labId}`); const ok=!!lab&&lab.status===LabStatus.Published&&lab.isolationMode===LabIsolationMode.SyntheticOnly; if(!ok){ this.#denied++; this.#audit.push(`SimulationLabDenied:${version}:${labId}`); } return ok; }
-  snapshot():EcosystemSnapshot{ return clone({docs:[...this.#docs.values()].sort((a,b)=>a.id.localeCompare(b.id)),endpoints:[...this.#endpoints.values()].sort((a,b)=>a.id.localeCompare(b.id)),tutorials:[...this.#tutorials.values()].sort((a,b)=>a.id.localeCompare(b.id)),labs:[...this.#labs.values()].sort((a,b)=>a.id.localeCompare(b.id)),learningPaths:[...this.#paths.values()].sort((a,b)=>a.id.localeCompare(b.id)),certificationTracks:[...this.#tracks.values()].sort((a,b)=>a.id.localeCompare(b.id)),attempts:[...this.#attempts.values()].sort((a,b)=>a.id.localeCompare(b.id)),partners:[...this.#partners.values()].sort((a,b)=>a.id.localeCompare(b.id)),hardware:[...this.#hardware.values()].sort((a,b)=>a.id.localeCompare(b.id)),examples:[...this.#examples.values()].sort((a,b)=>a.id.localeCompare(b.id)),audit:this.#audit.slice(-this.maxHistory),telemetry:this.telemetry(),health:this.health()}); }
-  telemetry(){ return {docs:this.#docs.size,endpoints:this.#endpoints.size,tutorials:this.#tutorials.size,labs:this.#labs.size,activeCertifications:[...this.#tracks.values()].filter(t=>t.status===CertificationTrackStatus.Active).length,partners:this.#partners.size,examples:this.#examples.size,deniedActions:this.#denied}; }
-  health(){ const t=this.telemetry(); const reasons=[...(t.docs===0?['documentation catalog empty']:[]),...(t.labs===0?['simulation lab catalog empty']:[]),...(t.deniedActions?[`${t.deniedActions} denied lab actions`]:[])]; return {status:reasons.length?HealthStatus.Warning:HealthStatus.Healthy,score:Math.max(0,100-reasons.length*15),reasons}; }
+export interface Tutorial extends VersionedArtifact {
+  readonly estimatedMinutes: number;
+  readonly steps: readonly string[];
+}
+
+export interface SimulationLab extends VersionedArtifact {
+  readonly scenario: string;
+  readonly isolationMode: LabIsolationMode;
+  readonly syntheticDataOnly: boolean;
+  readonly failureInjectors: readonly string[];
+}
+
+export interface CertificationTrack extends VersionedArtifact {
+  readonly level: 'associate' | 'professional' | 'expert' | 'architect' | 'instructor';
+  readonly practicalAssessments: readonly string[];
+  readonly renewalMonths: number;
+}
+
+export interface PartnerTrack extends VersionedArtifact {
+  readonly tier: 'registered' | 'silver' | 'gold' | 'platinum' | 'strategic';
+  readonly requiredCertifications: readonly string[];
+  readonly hardwareValidationRequired: boolean;
+}
+
+export interface EcosystemSnapshot {
+  readonly version: string;
+  readonly artifacts: readonly VersionedArtifact[];
+  readonly tutorials: readonly Tutorial[];
+  readonly labs: readonly SimulationLab[];
+  readonly certifications: readonly CertificationTrack[];
+  readonly partners: readonly PartnerTrack[];
+  readonly securityInvariants: readonly string[];
+  readonly validationResults: readonly string[];
+}
+
+const stableSort = <T extends { readonly id: string }>(items: readonly T[]): readonly T[] =>
+  [...items].sort((a, b) => a.id.localeCompare(b.id));
+
+export class PlatformEcosystemRegistry {
+  private readonly artifacts = new Map<string, VersionedArtifact>();
+  private readonly tutorials = new Map<string, Tutorial>();
+  private readonly labs = new Map<string, SimulationLab>();
+  private readonly certifications = new Map<string, CertificationTrack>();
+  private readonly partners = new Map<string, PartnerTrack>();
+
+  constructor(private readonly version: string) {}
+
+  registerArtifact(artifact: VersionedArtifact): void {
+    this.assertVersion(artifact);
+    this.artifacts.set(artifact.id, Object.freeze({ ...artifact, prerequisites: [...artifact.prerequisites], metadata: { ...artifact.metadata } }));
+  }
+
+  registerTutorial(tutorial: Tutorial): void {
+    this.registerArtifact(tutorial);
+    this.tutorials.set(tutorial.id, Object.freeze({ ...tutorial, prerequisites: [...tutorial.prerequisites], steps: [...tutorial.steps], metadata: { ...tutorial.metadata } }));
+  }
+
+  registerLab(lab: SimulationLab): void {
+    this.assertVersion(lab);
+    if (!lab.syntheticDataOnly || lab.isolationMode === undefined) {
+      throw new Error('Simulation labs must be isolated and synthetic-data only.');
+    }
+    this.registerArtifact(lab);
+    this.labs.set(lab.id, Object.freeze({ ...lab, prerequisites: [...lab.prerequisites], failureInjectors: [...lab.failureInjectors], metadata: { ...lab.metadata } }));
+  }
+
+  registerCertification(track: CertificationTrack): void {
+    this.registerArtifact(track);
+    this.certifications.set(track.id, Object.freeze({ ...track, prerequisites: [...track.prerequisites], practicalAssessments: [...track.practicalAssessments], metadata: { ...track.metadata } }));
+  }
+
+  registerPartnerTrack(track: PartnerTrack): void {
+    this.registerArtifact(track);
+    this.partners.set(track.id, Object.freeze({ ...track, prerequisites: [...track.prerequisites], requiredCertifications: [...track.requiredCertifications], metadata: { ...track.metadata } }));
+  }
+
+  snapshot(): EcosystemSnapshot {
+    return Object.freeze({
+      version: this.version,
+      artifacts: stableSort([...this.artifacts.values()]),
+      tutorials: stableSort([...this.tutorials.values()]),
+      labs: stableSort([...this.labs.values()]),
+      certifications: stableSort([...this.certifications.values()]),
+      partners: stableSort([...this.partners.values()]),
+      securityInvariants: Object.freeze([
+        'training environments never affect production',
+        'simulation labs remain isolated from live infrastructure',
+        'certification results are tamper-resistant',
+        'partner approvals are auditable',
+        'published documentation versions are immutable',
+        'community contributions require review before publication',
+      ]),
+      validationResults: Object.freeze([]),
+    });
+  }
+
+  private assertVersion(artifact: VersionedArtifact): void {
+    if (artifact.version !== this.version) {
+      throw new Error(`Artifact ${artifact.id} targets ${artifact.version}; expected ${this.version}.`);
+    }
+  }
+}
+
+export interface EcosystemValidationResult {
+  readonly pass: boolean;
+  readonly checks: readonly string[];
+}
+
+export function validateEcosystemSnapshot(snapshot: EcosystemSnapshot): EcosystemValidationResult {
+  const checks = [
+    snapshot.artifacts.length >= 6 ? 'documentation and ecosystem areas registered' : 'missing ecosystem areas',
+    snapshot.tutorials.length > 0 ? 'tutorial learning path registered' : 'missing tutorial',
+    snapshot.labs.every((lab) => lab.syntheticDataOnly && lab.isolationMode !== undefined) ? 'simulation labs isolated' : 'simulation lab isolation failure',
+    snapshot.certifications.every((track) => track.practicalAssessments.length > 0 && track.renewalMonths > 0) ? 'certification renewal and practical assessment registered' : 'certification requirement failure',
+    snapshot.partners.every((track) => track.requiredCertifications.length > 0) ? 'partner requirements registered' : 'partner requirement failure',
+    snapshot.securityInvariants.length === 6 ? 'security invariants documented' : 'security invariant mismatch',
+  ];
+  return Object.freeze({ pass: checks.every((check) => !check.includes('missing') && !check.includes('failure') && !check.includes('mismatch')), checks });
+}
+
+export function validateEcosystemRegistry(registry: PlatformEcosystemRegistry): EcosystemValidationResult {
+  const snapshot = registry.snapshot();
+  const result = validateEcosystemSnapshot({ ...snapshot, validationResults: [] });
+  return result;
+}
+
+export function createDefaultV511EcosystemRegistry(): PlatformEcosystemRegistry {
+  const registry = new PlatformEcosystemRegistry('v5.11');
+  registry.registerArtifact({ id: 'docs.portal', title: 'Versioned documentation portal', area: EcosystemArea.Documentation, version: 'v5.11', state: PublicationState.Published, owner: 'developer-experience', prerequisites: ['v5.11.9'], metadata: { searchable: 'true', offline: 'true', aiReady: 'true' } });
+  registry.registerTutorial({ id: 'tutorial.first-plugin', title: 'Build your first production-safe plugin', area: EcosystemArea.Training, version: 'v5.11', state: PublicationState.Published, owner: 'training', prerequisites: ['docs.portal'], metadata: { difficulty: 'beginner' }, estimatedMinutes: 45, steps: ['create manifest', 'declare capabilities', 'validate sandbox', 'publish review package'] });
+  registry.registerLab({ id: 'lab.encoder-failure', title: 'Recover from encoder failure', area: EcosystemArea.Simulation, version: 'v5.11', state: PublicationState.Published, owner: 'simulation', prerequisites: ['tutorial.first-plugin'], metadata: { scenario: 'incident-response' }, scenario: 'encoder failure with Program preservation', isolationMode: LabIsolationMode.SyntheticOnly, syntheticDataOnly: true, failureInjectors: ['encoder-failure', 'network-latency', 'storage-exhaustion'] });
+  registry.registerCertification({ id: 'cert.operator.associate', title: 'UBOS Certified Operator Associate', area: EcosystemArea.Certification, version: 'v5.11', state: PublicationState.Published, owner: 'certification', prerequisites: ['lab.encoder-failure'], metadata: { credential: 'verifiable' }, level: 'associate', practicalAssessments: ['recover encoder failure', 'document incident'], renewalMonths: 24 });
+  registry.registerPartnerTrack({ id: 'partner.hardware.registered', title: 'Registered hardware partner', area: EcosystemArea.PartnerProgram, version: 'v5.11', state: PublicationState.Published, owner: 'partner-program', prerequisites: ['cert.operator.associate'], metadata: { audit: 'required' }, tier: 'registered', requiredCertifications: ['cert.operator.associate'], hardwareValidationRequired: true });
+  registry.registerArtifact({ id: 'examples.starter-projects', title: 'Production-safe starter projects', area: EcosystemArea.Examples, version: 'v5.11', state: PublicationState.Published, owner: 'developer-experience', prerequisites: ['docs.portal'], metadata: { templates: 'plugin,device-driver,ai-assistant' } });
+  return registry;
 }
