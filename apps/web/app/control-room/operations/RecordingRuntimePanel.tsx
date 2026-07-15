@@ -12,6 +12,24 @@ export type BrowserRecordingHistoryEntry = {
   sourceType: SceneSourceType | 'none';
   fileSizeBytes: number;
 };
+export type NativeRecordingPanelState = {
+  runtimeConnected: boolean;
+  ffmpegAvailable: boolean;
+  ffprobeAvailable: boolean;
+  programMediaAvailable: boolean;
+  outputWritable: boolean;
+  adapterHealthy: boolean;
+  state: 'idle' | 'preparing' | 'recording' | 'finalizing' | 'completed' | 'failed';
+  elapsedMs: number;
+  blockedReason: string | null;
+  artifactPath: string | null;
+  artifactSizeBytes: number;
+  durationSeconds: number;
+  videoCodec: string | null;
+  audioCodec: string | null;
+  failure: string | null;
+};
+
 export type BrowserRecordingPanelState = {
   state: BrowserRecordingState;
   filename: string | null;
@@ -24,6 +42,24 @@ export type BrowserRecordingPanelState = {
   error: string | null;
   history: BrowserRecordingHistoryEntry[];
   supported: boolean;
+};
+
+const emptyNativeState: NativeRecordingPanelState = {
+  runtimeConnected: false,
+  ffmpegAvailable: false,
+  ffprobeAvailable: false,
+  programMediaAvailable: false,
+  outputWritable: false,
+  adapterHealthy: false,
+  state: 'idle',
+  elapsedMs: 0,
+  blockedReason: 'Native runtime status has not loaded.',
+  artifactPath: null,
+  artifactSizeBytes: 0,
+  durationSeconds: 0,
+  videoCodec: null,
+  audioCodec: null,
+  failure: null,
 };
 
 const emptyBrowserState: BrowserRecordingPanelState = {
@@ -64,17 +100,45 @@ function badgeForState(state: BrowserRecordingState) {
 export function RecordingRuntimePanel({
   state = createRecordingRuntimeState(),
   browserState = emptyBrowserState,
+  nativeState = emptyNativeState,
   onStart,
   onStop,
+  onStartNative,
+  onStopNative,
 }: {
   state?: RecordingRuntimeState;
   browserState?: BrowserRecordingPanelState;
+  nativeState?: NativeRecordingPanelState;
   onStart?: () => void;
   onStop?: () => void;
+  onStartNative?: () => void;
+  onStopNative?: () => void;
 }) {
   const busy = browserState.state === 'preparing' || browserState.state === 'recording' || browserState.state === 'stopping';
+  const nativeBusy = nativeState.state === 'preparing' || nativeState.state === 'recording' || nativeState.state === 'finalizing';
+  const nativeReady = !nativeState.blockedReason && nativeState.state === 'idle';
   return (
     <div className="space-y-ubos-2">
+
+      <BroadcastPanel>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="font-semibold">Native FFmpeg Recording</h3>
+          <StatusBadge variant={nativeState.state === 'failed' ? 'error' : nativeState.state === 'completed' ? 'success' : nativeBusy ? 'warning' : nativeReady ? 'success' : 'neutral'}>{nativeState.state}</StatusBadge>
+        </div>
+        <p className="mb-2 text-ubos-caption text-ubos-fg-muted">Server-side FFmpeg recording uses the current Program media as browser-uploaded WebM chunks, transcodes to H.264/AAC MP4, and validates with FFprobe. Browser MediaRecorder remains the labeled fallback below.</p>
+        {nativeState.blockedReason ? <p className="mb-2 rounded-ubos-sm border border-amber-400/40 bg-amber-400/10 p-2 text-ubos-caption text-amber-100">{nativeState.blockedReason}</p> : null}
+        {nativeState.failure ? <p className="mb-2 text-ubos-caption text-ubos-error-text">{nativeState.failure}</p> : null}
+        <div className="grid grid-cols-2 gap-2">
+          <button type="button" className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black uppercase tracking-[0.12em] text-white disabled:cursor-not-allowed disabled:opacity-50" disabled={!nativeReady} title={nativeState.blockedReason ?? 'Start native FFmpeg recording'} onClick={onStartNative}>Start Native</button>
+          <button type="button" className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-black uppercase tracking-[0.12em] text-ubos-fg-primary disabled:cursor-not-allowed disabled:opacity-50" disabled={nativeState.state !== 'recording'} onClick={onStopNative}>Stop Native</button>
+        </div>
+        <dl className="mt-3 grid grid-cols-2 gap-2 text-sm">
+          <dt className="text-ubos-fg-muted">Elapsed</dt><dd>{formatDuration(nativeState.elapsedMs)}</dd>
+          <dt className="text-ubos-fg-muted">FFmpeg / FFprobe</dt><dd>{nativeState.ffmpegAvailable ? 'FFmpeg OK' : 'FFmpeg blocked'} / {nativeState.ffprobeAvailable ? 'FFprobe OK' : 'FFprobe blocked'}</dd>
+          <dt className="text-ubos-fg-muted">Artifact</dt><dd className="break-all">{nativeState.artifactPath ?? '—'}</dd>
+          <dt className="text-ubos-fg-muted">Verified</dt><dd>{nativeState.videoCodec ? `${nativeState.videoCodec}${nativeState.audioCodec ? ` / ${nativeState.audioCodec}` : ''}` : '—'}</dd>
+        </dl>
+      </BroadcastPanel>
       <BroadcastPanel>
         <div className="mb-2 flex items-center justify-between gap-2">
           <h3 className="font-semibold">Program Recording</h3>

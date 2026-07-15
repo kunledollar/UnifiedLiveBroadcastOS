@@ -2250,6 +2250,26 @@ export function SceneWorkspace({
   const [recordingHistory, setRecordingHistory] = useState<BrowserRecordingPanelState['history']>(
     [],
   );
+  const nativeRecorderRef = useRef<MediaRecorder | null>(null);
+  const nativeRecordedChunksRef = useRef<Blob[]>([]);
+  const [nativeRecordingState, setNativeRecordingState] = useState<NativeRecordingPanelState>({
+    runtimeConnected: false,
+    ffmpegAvailable: false,
+    ffprobeAvailable: false,
+    programMediaAvailable: false,
+    outputWritable: false,
+    adapterHealthy: false,
+    state: 'idle',
+    elapsedMs: 0,
+    blockedReason: 'Native runtime status has not loaded.',
+    artifactPath: null,
+    artifactSizeBytes: 0,
+    durationSeconds: 0,
+    videoCodec: null,
+    audioCodec: null,
+    failure: null,
+  });
+  const nativeRecordingStartedAtRef = useRef<string | null>(null);
   const mediaRecorderSupported = typeof window !== 'undefined' && 'MediaRecorder' in window;
   const [streamingState, setStreamingState] = useState<BrowserStreamingPanelState>({
     lifecycle: 'idle',
@@ -2762,6 +2782,149 @@ export function SceneWorkspace({
       recorderRef.current.stop();
     }
   }, []);
+
+  const refreshNativeRuntimeStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/native-runtime/status', { cache: 'no-store' });
+      const status = await response.json();
+      setNativeRecordingState((current) => {
+        const programMediaAvailable = liveProgramVisible;
+        const blocked = !status.connected
+          ? 'Native runtime API host is disconnected.'
+          : status.ffmpeg?.state !== 'AVAILABLE'
+            ? status.ffmpeg?.reason ?? 'FFmpeg is unavailable.'
+            : status.ffprobe?.state !== 'AVAILABLE'
+              ? status.ffprobe?.reason ?? 'FFprobe is unavailable.'
+              : !programMediaAvailable
+                ? 'Program media is not available. Take a camera, screen, or media source to Program first.'
+                : current.state !== 'idle'
+                  ? null
+                  : null;
+        return {
+          ...current,
+          runtimeConnected: Boolean(status.connected),
+          ffmpegAvailable: status.ffmpeg?.state === 'AVAILABLE',
+          ffprobeAvailable: status.ffprobe?.state === 'AVAILABLE',
+          programMediaAvailable,
+          outputWritable: true,
+          adapterHealthy: status.recordingReady || status.ffmpeg?.state === 'AVAILABLE',
+          blockedReason: blocked,
+          artifactPath: status.lastArtifactResult?.artifactPath ?? current.artifactPath,
+          artifactSizeBytes: status.lastArtifactResult?.sizeBytes ?? current.artifactSizeBytes,
+          durationSeconds: status.lastArtifactResult?.durationSeconds ?? current.durationSeconds,
+          videoCodec: status.lastArtifactResult?.videoCodec ?? current.videoCodec,
+          audioCodec: status.lastArtifactResult?.audioCodec ?? current.audioCodec,
+          failure: status.lastFailure ?? current.failure,
+        };
+      });
+    } catch {
+      setNativeRecordingState((current) => ({
+        ...current,
+        runtimeConnected: false,
+        blockedReason: 'Native runtime API host is disconnected.',
+      }));
+    }
+  }, [liveProgramVisible]);
+
+  useEffect(() => {
+    void refreshNativeRuntimeStatus();
+    const interval = window.setInterval(() => void refreshNativeRuntimeStatus(), 5000);
+    return () => window.clearInterval(interval);
+  }, [refreshNativeRuntimeStatus]);
+
+  const blobToBase64 = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const value = String(reader.result ?? '');
+        resolve(value.includes(',') ? value.split(',')[1] ?? '' : value);
+      };
+      reader.onerror = () => reject(reader.error ?? new Error('Failed to read native recording blob.'));
+      reader.readAsDataURL(blob);
+    });
+
+  const startNativeRecording = useCallback(() => {
+    if (nativeRecordingState.blockedReason || nativeRecorderRef.current) return;
+    const source = createProgramRecordingStream();
+    if (!source) {
+      setNativeRecordingState((current) => ({
+        ...current,
+        state: 'failed',
+        failure: 'No capturable Program media is available for native handoff.',
+      }));
+      return;
+    }
+    nativeRecordedChunksRef.current = [];
+    nativeRecordingStartedAtRef.current = new Date().toISOString();
+    const recorder = new MediaRecorder(source.stream, MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? { mimeType: 'video/webm;codecs=vp9,opus' } : undefined);
+    nativeRecorderRef.current = recorder;
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) nativeRecordedChunksRef.current.push(event.data);
+    };
+    recorder.onerror = () => {
+      setNativeRecordingState((current) => ({ ...current, state: 'failed', failure: 'Native handoff recorder failed.' }));
+      nativeRecorderRef.current = null;
+    };
+    recorder.onstop = () => {
+      void (async () => {
+        setNativeRecordingState((current) => ({ ...current, state: 'finalizing' }));
+        try {
+          const blob = new Blob(nativeRecordedChunksRef.current, { type: recorder.mimeType || 'video/webm' });
+          const response = await fetch('/api/native-runtime/recording/finalize', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              base64Webm: await blobToBase64(blob),
+              mimeType: blob.type,
+              expectedAudio: blob.type.includes('opus'),
+            }),
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.message ?? 'Native recording finalization failed.');
+          setNativeRecordingState((current) => ({
+            ...current,
+            state: 'completed',
+            artifactPath: payload.artifact.artifactPath,
+            artifactSizeBytes: payload.artifact.sizeBytes,
+            durationSeconds: payload.artifact.durationSeconds,
+            videoCodec: payload.artifact.videoCodec,
+            audioCodec: payload.artifact.audioCodec,
+            failure: null,
+          }));
+          void refreshNativeRuntimeStatus();
+        } catch (error) {
+          setNativeRecordingState((current) => ({
+            ...current,
+            state: 'failed',
+            failure: error instanceof Error ? error.message : 'Native recording failed.',
+          }));
+        } finally {
+          nativeRecorderRef.current = null;
+        }
+      })();
+    };
+    recorder.start(1000);
+    setNativeRecordingState((current) => ({ ...current, state: 'recording', elapsedMs: 0, failure: null }));
+  }, [createProgramRecordingStream, nativeRecordingState.blockedReason, refreshNativeRuntimeStatus]);
+
+  const stopNativeRecording = useCallback(() => {
+    if (nativeRecorderRef.current?.state === 'recording') {
+      setNativeRecordingState((current) => ({ ...current, state: 'finalizing' }));
+      nativeRecorderRef.current.stop();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (nativeRecordingState.state !== 'recording' || !nativeRecordingStartedAtRef.current) return;
+    const tick = () =>
+      setNativeRecordingState((current) => ({
+        ...current,
+        elapsedMs: Date.now() - Date.parse(nativeRecordingStartedAtRef.current!),
+      }));
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, [nativeRecordingState.state]);
 
   useEffect(() => {
     if (streamingState.lifecycle !== 'streaming' || !streamingState.startedAt) return;
@@ -3564,6 +3727,9 @@ export function SceneWorkspace({
         onStreamingDispatch: dispatchStreaming,
         onStartBrowserRecording: startSmokeRecording,
         onStopBrowserRecording: stopSmokeRecording,
+        nativeRecordingState,
+        onStartNativeRecording: startNativeRecording,
+        onStopNativeRecording: stopNativeRecording,
         pipeline: productionPipeline,
         inspectorSelection: operationsInspectorSelection,
       }),
