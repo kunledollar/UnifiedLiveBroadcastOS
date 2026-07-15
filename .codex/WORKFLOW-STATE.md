@@ -3,10 +3,10 @@
 version: 1
 status: ACTIVE
 platform: v5.11
-current_phase: v5.11.5
-next_phase: v5.11.5
+current_phase: v5.11.6
+next_phase: v5.11.6
 last_completed_platform: v5.10
-last_completed_phase: v5.11.4
+last_completed_phase: v5.11.5
 release_status: v5.10 RELEASED
 
 ---
@@ -19,7 +19,7 @@ v5.11
 
 ## Active Phase
 
-v5.11.5
+v5.11.6
 
 ---
 
@@ -59,13 +59,13 @@ v5.10
 
 ## Last Completed Phase
 
-v5.11.4 — Production-Safe Operational Analytics, Reporting, SLA Compliance, and Executive Dashboards
+v5.11.5 — Production-Safe Change Management, Release Governance, Feature Flags, and Deployment Control
 
 ---
 
 ## Next Ready Phase
 
-v5.11.5 — Production-Safe Change Management, Release Governance, Feature Flags, and Deployment Control
+v5.11.6 — Production-Safe Security Operations, Threat Detection, Vulnerability Management, and Response
 
 ---
 
@@ -89,8 +89,8 @@ v5.11.5 — Production-Safe Change Management, Release Governance, Feature Flags
 | v5.11.2 | VALIDATED |
 | v5.11.3 | VALIDATED |
 | v5.11.4 | VALIDATED |
-| v5.11.5 | READY |
-| v5.11.6 | BLOCKED |
+| v5.11.5 | VALIDATED |
+| v5.11.6 | READY |
 | v5.11.7 | BLOCKED |
 | v5.11.0 | BLOCKED |
 
