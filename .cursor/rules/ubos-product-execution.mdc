@@ -1,0 +1,69 @@
+---
+description: Authoritative UBOS execution rules
+alwaysApply: true
+---
+
+# UBOS Execution Rules
+
+Before changing code, read:
+
+- `docs/handover/README.md`
+- `docs/handover/implementation/01-UBOS-OVERVIEW.md`
+- `docs/handover/implementation/02-UBOS-ARCHITECTURE.md`
+- `docs/handover/implementation/03-UBOS-PRODUCT-TRUTH-AND-EXECUTION-CONTRACT.md`
+- `docs/handover/implementation/04-UBOS-EXECUTION-PLAN.md`
+- `docs/handover/implementation/05-UBOS-SUBSYSTEM-MATRIX.md`
+- `docs/handover/implementation/06-UBOS-RUNTIME-TOPOLOGY.md`
+- `docs/handover/implementation/07-UBOS-UI-BASELINE.md`
+- `docs/handover/implementation/08-UBOS-ACCEPTANCE-TESTS.md`
+- `docs/handover/implementation/09-UBOS-CURSOR-RULES.md`
+- `docs/handover/implementation/10-UBOS-CAPABILITY-MATRIX.md`
+- `docs/handover/implementation/11-UBOS-DEVELOPMENT-STANDARDS.md`
+- `docs/handover/implementation/12-UBOS-FUTURE-ROADMAP.md`
+- `MASTER-PLAN.md`
+- `ROADMAP.md`
+- `.codex/ENGINEERING-STANDARDS.md`
+- `.codex/WORKFLOW-STATE.md`
+
+## Product Priority
+
+The primary product objective is:
+
+Social and remote media input
+→ UBOS production
+→ authoritative Program output
+→ multi-destination output
+→ unified two-way audience chat and moderation.
+
+## Working Method
+
+- Execute one milestone at a time.
+- Reproduce the problem before editing.
+- Reuse existing engines and architecture.
+- Preserve the approved Control Room.
+- Produce real execution evidence.
+- Stop after the active milestone.
+- Do not claim success from compilation, metadata, simulation, or mocks.
+
+## Prohibited Work
+
+Do not:
+
+- add new speculative engines;
+- redesign the Control Room;
+- create duplicate command or runtime systems;
+- expose unsupported controls;
+- advance phases automatically;
+- create release tags;
+- modify unrelated files.
+
+## Completion Standard
+
+A capability is complete only when:
+
+- the operator activates it;
+- the real runtime executes it;
+- the external result is verified;
+- failure handling works;
+- cleanup succeeds;
+- acceptance tests pass.
