@@ -332,3 +332,20 @@
 - Platform release: no; `.codex/RELEASES.md` unchanged.
 - Blockers: none for local implementation and validation.
 - Next eligible phase: v5.11.7 — Production-Safe Compliance, Governance, Risk Management, and Policy Enforcement.
+
+## 2026-07-15 — v5.11.7 Production-Safe Compliance, Governance, Risk Management, and Policy Enforcement
+
+- Completed phase: v5.11.7 — Production-Safe Compliance, Governance, Risk Management, and Policy Enforcement.
+- Implementation summary: Added a metadata-only governance, risk, and compliance core for policy lifecycle/versioning, applicability, enforcement modes, controls, control tests, evidence, attestations, compliance frameworks, framework mappings, risk assessment and appetite, scoped exceptions, corrective actions, obligations, deterministic compliance evaluation, governance gate decisions, health, telemetry, immutable snapshots, public exports, focused validation, package validation wiring, and architecture documentation.
+- Architecture reviewed: MASTER-PLAN.md, ROADMAP.md, `.codex/ENGINEERING-STANDARDS.md`, `.codex/RELEASES.md`, `.codex/COMPLETION-REPORT.md`, `.codex/WORKFLOW-STATE.md`, repository state, v5.11.6 security operations architecture, and `.codex/tasks/v5.11/v5.11.7.md`.
+- Existing abstractions reused: `@ubos/core` package boundaries, v5.11 observability `HealthStatus` and redaction helper, existing package build/lint/typecheck conventions, validation script pattern, immutable snapshot pattern, metadata-only operational state, and bounded audit/history conventions.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/core typecheck`
+  - PASS: `pnpm --filter @ubos/core validate:v5.11.7`
+  - PASS: `pnpm --filter @ubos/core lint`
+  - PASS: `pnpm --filter @ubos/core test`
+  - PASS: `git diff --check`
+- Environmental warnings: `git fetch origin --prune --tags` failed because `origin` is not configured in this workspace.
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Blockers: none for local implementation and validation.
+- Next eligible phase: v5.11.8 — Production-Safe Multi-Tenant Organizations, Customer Isolation, Delegated Administration, and Service Management.
