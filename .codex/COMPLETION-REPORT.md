@@ -231,3 +231,18 @@
 - Blockers: missing required `.codex/ENGINEERING-STANDARDS.md`; missing authoritative v5.11.1 task specification; `origin` remote unavailable for repository reconciliation.
 - Next eligible phase: v5.11.1 remains blocked until the authoritative task specification and required standards document are restored.
 - Status: FAIL — prerequisite verification failed before implementation.
+
+
+## 2026-07-15 — v5.11.1 Production-Safe Monitoring, Telemetry, Metrics, and Operational Observability
+
+- Completed phase: v5.11.1 — Production-Safe Monitoring, Telemetry, Metrics, and Operational Observability.
+- Implementation summary: Added the `@ubos/core` workspace package and a metadata-only observability foundation covering registered metrics, bounded metric storage, deterministic aggregation, structured log redaction, trace collection, health registry rollups, alert rules and lifecycle evaluation, anomaly detection, capacity warnings, SLO evaluation, diagnostics, explicit public exports, validation coverage, and architecture documentation.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/core typecheck`
+  - PASS: `pnpm --filter @ubos/core validate:v5.11.1`
+  - PASS: `pnpm --filter @ubos/core lint`
+  - PASS: `git diff --check`
+- Environmental warnings: `git fetch origin --prune --tags` failed because `origin` is not configured in this workspace.
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Blockers: none for local implementation and validation.
+- Next eligible phase: v5.11.2 — Production-Safe Alerting, Incident Response, Escalation, and Operational Runbooks.

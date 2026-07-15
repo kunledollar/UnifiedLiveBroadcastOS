@@ -1,0 +1,25 @@
+{
+  "name": "@ubos/core",
+  "version": "1.0.0-rc.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node dist/observability/validation.js",
+    "validate:v5.11.1": "pnpm build && node dist/observability/validation.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./observability": {
+      "types": "./dist/observability/index.d.ts",
+      "import": "./dist/observability/index.js"
+    }
+  }
+}
