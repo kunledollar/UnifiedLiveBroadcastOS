@@ -3,10 +3,10 @@
 version: 1
 status: ACTIVE
 platform: v5.11
-current_phase: v5.11.9
-next_phase: v5.11.9
+current_phase: v5.11.10
+next_phase: v5.11.10
 last_completed_platform: v5.10
-last_completed_phase: v5.11.8
+last_completed_phase: v5.11.9
 release_status: v5.10 RELEASED
 
 ---
@@ -19,7 +19,7 @@ v5.11
 
 ## Active Phase
 
-v5.11.9
+v5.11.10
 
 ---
 
@@ -59,13 +59,13 @@ v5.10
 
 ## Last Completed Phase
 
-v5.11.8 — Production-Safe Multi-Tenant Organizations, Customer Isolation, Delegated Administration, and Service Management
+v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform
 
 ---
 
 ## Next Ready Phase
 
-v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform
+v5.11.10 — Production-Safe Developer Experience, Documentation Platform, Simulation Labs, Certification Academy, and Partner Program
 
 ---
 
@@ -93,7 +93,8 @@ v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosys
 | v5.11.6 | VALIDATED |
 | v5.11.7 | VALIDATED |
 | v5.11.8 | VALIDATED |
-| v5.11.9 | READY |
+| v5.11.9 | VALIDATED |
+| v5.11.10 | READY |
 | v5.11.0 | BLOCKED |
 
 ---
