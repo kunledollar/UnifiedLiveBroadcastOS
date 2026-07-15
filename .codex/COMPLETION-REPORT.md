@@ -349,3 +349,19 @@
 - Platform release: no; `.codex/RELEASES.md` unchanged.
 - Blockers: none for local implementation and validation.
 - Next eligible phase: v5.11.8 — Production-Safe Multi-Tenant Organizations, Customer Isolation, Delegated Administration, and Service Management.
+
+## 2026-07-15 — v5.11.8 Production-Safe Multi-Tenant Organizations, Customer Isolation, Delegated Administration, and Service Management
+
+- Completed phase: v5.11.8 — Production-Safe Multi-Tenant Organizations, Customer Isolation, Delegated Administration, and Service Management.
+- Implementation summary: Added a metadata-only multi-tenant operations engine for hierarchical organizations, tenants, workspaces, business units, customer lifecycle, deterministic resource ownership, encrypted shared-infrastructure assignment, tenant context resolution, tenant-aware authorization, delegated administration, service catalog subscriptions, quota evaluation and extension, branding isolation, federation, support sessions, tenant migration, tenant-scoped audit and analytics, billing metadata redaction, immutable snapshots, health, telemetry, public exports, focused validation, package validation wiring, and architecture documentation.
+- Architecture reviewed: MASTER-PLAN.md, ROADMAP.md, `.codex/ENGINEERING-STANDARDS.md`, `.codex/RELEASES.md`, `.codex/COMPLETION-REPORT.md`, `.codex/WORKFLOW-STATE.md`, repository state, v5.11 core package abstractions, v5.11.7 governance architecture, and `.codex/tasks/v5.11/v5.11.8.md`.
+- Existing abstractions reused: `@ubos/core` package boundaries, v5.11 observability `HealthStatus`, shared redaction helper, metadata-only immutable snapshot patterns, package-level lint/typecheck/build validation, and public export conventions.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/core typecheck`
+  - PASS: `pnpm --filter @ubos/core validate:v5.11.8`
+  - PASS: `pnpm --filter @ubos/core lint`
+  - PASS: `git diff --check`
+- Environmental warnings: `git fetch origin --prune --tags` failed because `origin` is not configured in this workspace.
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Blockers: none for local implementation and validation.
+- Next eligible phase: v5.11.9 — Production-Safe Marketplace, Extension Framework, SDK, Plugin Ecosystem, and Third-Party Developer Platform.
