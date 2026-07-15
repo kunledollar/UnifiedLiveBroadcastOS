@@ -88,3 +88,33 @@ export type {
   StatusUpdate,
   ValidationCheck,
 } from './incident-response/index.js';
+
+
+export {
+  CapacityEnforcement,
+  CapacityPlanner,
+  ResourceState,
+  ResourceType,
+  SaturationState,
+  TrendDirection,
+  analyzeTrend,
+  calculateCapacity,
+  detectSaturation,
+} from './capacity/index.js';
+export type {
+  BaselineProfile,
+  CapacityBudget,
+  CapacityForecast,
+  CapacityLimit,
+  CapacityScenario,
+  CapacitySnapshot,
+  CapacityTrend,
+  CapacityValidationResult,
+  ComparisonReport,
+  OptimizationRecommendation,
+  PerformanceBaseline,
+  ResourceCapacity,
+  ResourceInventoryItem,
+  ResourceReservation,
+  UpgradePlan,
+} from './capacity/index.js';

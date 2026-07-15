@@ -262,3 +262,20 @@
 - Platform release: no; `.codex/RELEASES.md` unchanged.
 - Blockers: none for local implementation and validation.
 - Next eligible phase: v5.11.3 — Production-Safe Capacity Planning, Performance Baselines, Forecasting, and Resource Optimization.
+
+## 2026-07-15 — v5.11.3 Production-Safe Capacity Planning, Performance Baselines, Forecasting, and Resource Optimization
+
+- Completed phase: v5.11.3 — Production-Safe Capacity Planning, Performance Baselines, Forecasting, and Resource Optimization.
+- Implementation summary: Added a metadata-only capacity planning core for resource inventory, safe operating capacity calculation, production budgets, reservation conflict prevention, baselines, trend analysis, forecasting, saturation detection, preflight validation, scenario simulation, optimization recommendations, bottleneck analysis, upgrade planning, historical comparison, efficiency scoring, health snapshots, redaction, public exports, validation coverage, package validation wiring, and architecture documentation.
+- Architecture reviewed: MASTER-PLAN.md, ROADMAP.md, `.codex/ENGINEERING-STANDARDS.md`, `.codex/RELEASES.md`, `.codex/COMPLETION-REPORT.md`, `.codex/WORKFLOW-STATE.md`, repository state, v5.11.1 observability architecture, v5.11.2 incident-response implementation, and `.codex/tasks/v5.11/v5.11.3.md`.
+- Existing abstractions reused: `@ubos/core` package boundaries, v5.11.1 observability metric samples, alert severity, health status, shared redaction helper, TypeScript package build/lint/typecheck scripts, and immutable metadata-only snapshot patterns.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/core typecheck`
+  - PASS: `pnpm --filter @ubos/core validate:v5.11.3`
+  - PASS: `pnpm --filter @ubos/core lint`
+  - PASS: `pnpm --filter @ubos/core test`
+  - PASS: `git diff --check`
+- Environmental warnings: `git fetch origin --prune --tags` failed because `origin` is not configured in this workspace.
+- Platform release: no; `.codex/RELEASES.md` unchanged.
+- Blockers: none for local implementation and validation.
+- Next eligible phase: v5.11.4 — Production-Safe Operational Analytics, Reporting, SLA Compliance, and Executive Dashboards.
