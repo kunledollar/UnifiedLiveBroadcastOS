@@ -121,11 +121,19 @@ importers:
         specifier: ^6.1.0
         version: 6.19.3(typescript@5.9.3)
 
+  packages/developer-platform: {}
+
+  packages/marketplace: {}
+
   packages/media-plane:
     dependencies:
       '@ubos/shared':
         specifier: workspace:*
         version: link:../shared
+
+  packages/plugin-runtime: {}
+
+  packages/sdk: {}
 
   packages/shared:
     dependencies:
