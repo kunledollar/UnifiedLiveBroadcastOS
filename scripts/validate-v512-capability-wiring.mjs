@@ -61,13 +61,7 @@ for (const token of ['stageScene', 'switchProgram', 'dispatchProductionGraphComm
   if (!sceneWorkspace.includes(token)) failures.push(`Control Room missing runtime wiring token ${token}`);
 }
 const streamingPanel = read('apps/web/app/control-room/operations/StreamingRuntimePanel.tsx');
-for (const token of [
-  'Output controls are disabled',
-  'missingRuntimeReason',
-  'disabled={!canStart}',
-  'disabled={!canStop}',
-  "fetch('/api/native-runtime/status'",
-]) {
+for (const token of ['Output controls are disabled', 'missingRuntimeReason', 'disabled title={missingRuntimeReason}', 'aria-disabled="true"']) {
   if (!streamingPanel.includes(token)) failures.push(`Streaming output unavailable guard missing ${token}`);
 }
 const recordingPanel = read('apps/web/app/control-room/operations/RecordingRuntimePanel.tsx');

@@ -149,10 +149,7 @@ import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import { LogsPanel } from './operations/LogsPanel';
 import { RoutingPanel } from './operations/RoutingPanel';
-import type {
-  BrowserRecordingPanelState,
-  NativeRecordingPanelState,
-} from './operations/RecordingRuntimePanel';
+import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
 import { verifyBrowserRecordingArtifact } from './operations/browser-recording-verification';
 import type {
   BrowserStreamingPanelState,

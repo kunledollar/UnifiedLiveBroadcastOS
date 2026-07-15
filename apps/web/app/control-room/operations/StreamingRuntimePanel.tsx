@@ -24,48 +24,7 @@ function formatDuration(durationMs: number) { const s = Math.floor(durationMs / 
 function maskStreamKey(key: string) { if (!key) return 'Not set'; return key.length <= 4 ? '••••' : `${'•'.repeat(Math.max(8, key.length - 4))}${key.slice(-4)}`; }
 
 export function StreamingRuntimePanel({ state, dispatch }: { state: BrowserStreamingPanelState; dispatch: (action: StreamingPanelAction) => void }) {
-  const [runtimeReady, setRuntimeReady] = useState(false);
-  const [runtimeReason, setRuntimeReason] = useState('Native runtime status has not loaded.');
-  useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const response = await fetch('/api/native-runtime/status', { cache: 'no-store' });
-        const status = await response.json();
-        const reason = !status.connected
-          ? 'Native runtime API host is disconnected.'
-          : status.ffmpeg?.state !== 'AVAILABLE'
-            ? status.ffmpeg?.reason ?? 'FFmpeg is unavailable.'
-            : status.ffprobe?.state !== 'AVAILABLE'
-              ? status.ffprobe?.reason ?? 'FFprobe is unavailable.'
-              : 'Approved RTMP/RTMPS destination and secret reference are required before streaming can start.';
-        if (!cancelled) {
-          setRuntimeReady(false);
-          setRuntimeReason(reason);
-        }
-      } catch {
-        if (!cancelled) {
-          setRuntimeReady(false);
-          setRuntimeReason('Native runtime API host is disconnected.');
-        }
-      }
-    };
-    void load();
-    const interval = window.setInterval(() => void load(), 5000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
-  const destinationValid = useMemo(() => /^rtmps?:\/\//i.test(state.destination.rtmpUrl), [state.destination.rtmpUrl]);
-  const hasSecretReference = state.destination.streamKey.startsWith('secret://');
-  const canStart = runtimeReady && destinationValid && hasSecretReference && state.destination.enabled && state.lifecycle === 'idle';
-  const canStop = ['connecting', 'streaming', 'reconnecting'].includes(state.lifecycle);
-  const missingRuntimeReason = !destinationValid
-    ? 'Enter a valid Custom RTMP or RTMPS destination URL.'
-    : !hasSecretReference
-      ? 'Provide a secret:// stream key reference; plaintext stream keys are not accepted.'
-      : runtimeReason;
+  const missingRuntimeReason = 'Real output is unavailable until the server-side native media host reports FFmpeg/FFprobe available, Program media present, valid Custom RTMP/RTMPS destination, and a secret reference.';
   return <div className="space-y-ubos-2">
     <BroadcastPanel>
       <div className="mb-2 flex items-center justify-between gap-2"><h3 className="font-semibold">Program Streaming</h3><StatusBadge variant={badgeForState(state.lifecycle)}>{state.lifecycle}</StatusBadge></div>
@@ -82,7 +41,7 @@ export function StreamingRuntimePanel({ state, dispatch }: { state: BrowserStrea
         </div>
         <label className="flex items-center gap-2 text-ubos-caption"><input type="checkbox" checked={state.destination.enabled} onChange={(event) => dispatch({ type: 'updateDestination', patch: { enabled: event.target.checked } })} /> Destination enabled</label>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2"><button className="rounded-ubos-sm bg-emerald-400 px-2 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-950 disabled:cursor-not-allowed disabled:opacity-50" disabled={!canStart} title={canStart ? 'Start Custom RTMP/RTMPS streaming' : missingRuntimeReason} aria-disabled={!canStart} onClick={() => { if (canStart) dispatch({ type: 'start' }); }}>Start Streaming</button><button className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-black uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-50" disabled={!canStop} title={canStop ? 'Stop streaming' : 'No active streaming session'} aria-disabled={!canStop} onClick={() => { if (canStop) dispatch({ type: 'stop' }); }}>Stop Streaming</button></div>{canStart ? null : <p className="mt-2 text-ubos-caption text-ubos-error-text">{missingRuntimeReason}</p>}
+      <div className="mt-3 grid grid-cols-2 gap-2"><button className="rounded-ubos-sm bg-emerald-400 px-2 py-2 text-xs font-black uppercase tracking-[0.12em] text-slate-950 disabled:cursor-not-allowed disabled:opacity-50" disabled title={missingRuntimeReason} aria-disabled="true">Start Streaming</button><button className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-black uppercase tracking-[0.12em] disabled:cursor-not-allowed disabled:opacity-50" disabled title={missingRuntimeReason} aria-disabled="true">Stop Streaming</button></div><p className="mt-2 text-ubos-caption text-ubos-error-text">{missingRuntimeReason}</p>
       {state.error ? <p className="mt-2 text-ubos-caption text-ubos-error-text">{state.error}</p> : null}
       <dl className="mt-3 grid grid-cols-2 gap-2 text-sm"><dt className="text-ubos-fg-muted">Timer</dt><dd>{formatDuration(state.durationMs)}</dd><dt className="text-ubos-fg-muted">Bitrate estimate</dt><dd>{state.bitrateEstimateKbps} kbps</dd><dt className="text-ubos-fg-muted">Dropped frames</dt><dd>{state.droppedFrameEstimate}</dd><dt className="text-ubos-fg-muted">Adapters</dt><dd>{state.adapters.length ? state.adapters.join(', ') : 'none connected'}</dd></dl>
     </BroadcastPanel>
