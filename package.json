@@ -31,7 +31,8 @@
     "ubos:update": "git pull origin main && pnpm install && pnpm db:generate && pnpm db:push",
     "ubos:clean": "node scripts/clean.mjs",
     "ubos:doctor": "pnpm lint && pnpm typecheck && pnpm test",
-    "ubos:browser": "dotenv -- pnpm --filter @ubos/web dev"
+    "ubos:browser": "dotenv -- pnpm --filter @ubos/web dev",
+    "validate:v512-wiring": "node scripts/validate-v512-capability-wiring.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",
