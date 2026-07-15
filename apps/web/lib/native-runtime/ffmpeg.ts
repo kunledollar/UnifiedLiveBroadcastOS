@@ -1,7 +1,7 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
 export type NativeRuntimeStatus = {
@@ -29,15 +29,22 @@ let activeRecordingState: NativeRuntimeStatus['activeRecordingState'] = 'idle';
 let lastArtifactResult: NativeRecordingArtifactResult | null = null;
 let lastFailure: string | null = null;
 
-function resolveOnPath(binary: string) {
+/**
+ * Use where.exe (Windows) or which (macOS/Linux) to report the resolved absolute
+ * path for a binary that is already confirmed available. This is for display only.
+ * CRLF from where.exe is stripped via split(/\r?\n/).
+ */
+function reportResolvedPath(binary: string): string | null {
   try {
-    return execFileSync(process.platform === 'win32' ? 'where.exe' : 'which', [binary], { encoding: 'utf8' }).split(/\r?\n/)[0]?.trim() || null;
+    const locator = process.platform === 'win32' ? 'where.exe' : 'which';
+    const result = execFileSync(locator, [binary], { encoding: 'utf8' });
+    return result.split(/\r?\n/)[0]?.trim() || null;
   } catch {
     return null;
   }
 }
 
-function parseVersion(output: string, binary: string) {
+export function parseVersion(output: string, binary: string) {
   const match = output.match(new RegExp(`${binary} version\\s+([^\\s]+)`, 'i'));
   if (!match) return { version: null, ok: false, reason: `Unable to parse ${binary} version.` };
   return { version: match[1] ?? null, ok: true, reason: null };
@@ -52,29 +59,57 @@ function execText(command: string, args: string[]) {
   });
 }
 
+/**
+ * Resolve an executable and obtain its -version output.
+ *
+ * Priority:
+ *   1. Configured absolute path via env var (FFMPEG_PATH / FFPROBE_PATH).
+ *   2. Bare binary name resolved through OS PATH (direct execFile, shell: false).
+ *
+ * Direct Node.js execFile with shell:false is the authoritative check.
+ * where.exe / which is used only to report the resolved path for display.
+ * Paths containing spaces are handled correctly because no shell is involved.
+ */
+export async function resolveExecutable(binary: string): Promise<{ path: string; versionOutput: string } | null> {
+  const envKey = binary.replace(/[^a-z0-9]/gi, '_').toUpperCase() + '_PATH';
+  const configured = process.env[envKey] ?? null;
+  const candidates = configured ? [configured, binary] : [binary];
+
+  for (const cmd of candidates) {
+    try {
+      const versionOutput = await execText(cmd, ['-version']);
+      const resolvedPath = isAbsolute(cmd) ? cmd : (reportResolvedPath(binary) ?? binary);
+      return { path: resolvedPath, versionOutput };
+    } catch {
+      // Candidate failed; try next.
+    }
+  }
+  return null;
+}
+
 async function inspectFFmpeg() {
-  const path = resolveOnPath('ffmpeg');
-  if (!path) return { state: 'MISSING' as const, path: null, version: null, reason: 'ffmpeg did not resolve on PATH.' };
+  const resolved = await resolveExecutable('ffmpeg');
+  if (!resolved) return { state: 'MISSING' as const, path: null, version: null, reason: 'ffmpeg did not resolve on PATH.' };
   try {
-    const parsed = parseVersion(await execText(path, ['-version']), 'ffmpeg');
+    const parsed = parseVersion(resolved.versionOutput, 'ffmpeg');
     return parsed.ok
-      ? { state: 'AVAILABLE' as const, path, version: parsed.version, reason: null }
-      : { state: 'STARTUP_FAILED' as const, path, version: null, reason: parsed.reason };
+      ? { state: 'AVAILABLE' as const, path: resolved.path, version: parsed.version, reason: null }
+      : { state: 'STARTUP_FAILED' as const, path: resolved.path, version: null, reason: parsed.reason };
   } catch (error) {
-    return { state: 'STARTUP_FAILED' as const, path, version: null, reason: error instanceof Error ? error.message : 'ffmpeg startup failed.' };
+    return { state: 'STARTUP_FAILED' as const, path: resolved.path, version: null, reason: error instanceof Error ? error.message : 'ffmpeg startup failed.' };
   }
 }
 
 async function inspectFFprobe() {
-  const path = resolveOnPath('ffprobe');
-  if (!path) return { state: 'PROBE_MISSING' as const, path: null, version: null, reason: 'ffprobe did not resolve on PATH.' };
+  const resolved = await resolveExecutable('ffprobe');
+  if (!resolved) return { state: 'PROBE_MISSING' as const, path: null, version: null, reason: 'ffprobe did not resolve on PATH.' };
   try {
-    const parsed = parseVersion(await execText(path, ['-version']), 'ffprobe');
+    const parsed = parseVersion(resolved.versionOutput, 'ffprobe');
     return parsed.ok
-      ? { state: 'AVAILABLE' as const, path, version: parsed.version, reason: null }
-      : { state: 'STARTUP_FAILED' as const, path, version: null, reason: parsed.reason };
+      ? { state: 'AVAILABLE' as const, path: resolved.path, version: parsed.version, reason: null }
+      : { state: 'STARTUP_FAILED' as const, path: resolved.path, version: null, reason: parsed.reason };
   } catch (error) {
-    return { state: 'STARTUP_FAILED' as const, path, version: null, reason: error instanceof Error ? error.message : 'ffprobe startup failed.' };
+    return { state: 'STARTUP_FAILED' as const, path: resolved.path, version: null, reason: error instanceof Error ? error.message : 'ffprobe startup failed.' };
   }
 }
 

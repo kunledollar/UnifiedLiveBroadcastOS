@@ -2,7 +2,7 @@ import { execFile, execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, statSync } from 'node:fs';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, isAbsolute } from 'node:path';
 import assert from 'node:assert/strict';
 
 const MIN_SUPPORTED_MAJOR = 6;
@@ -22,12 +22,49 @@ function execFileText(command, args, options = {}) {
   });
 }
 
-function resolveOnPath(binary) {
+/**
+ * Use where.exe (Windows) or which (macOS/Linux) to report the resolved absolute
+ * path for a binary that is already confirmed available on PATH.
+ * This is for display/logging only — direct execFile is the authoritative check.
+ */
+function reportResolvedPath(binary) {
   try {
-    return execFileSync('which', [binary], { encoding: 'utf8' }).trim();
+    const locator = process.platform === 'win32' ? 'where.exe' : 'which';
+    const result = execFileSync(locator, [binary], { encoding: 'utf8' });
+    return result.split(/\r?\n/)[0]?.trim() || null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve an executable and obtain its -version output.
+ *
+ * Priority:
+ *   1. Configured absolute path via env var (FFMPEG_PATH / FFPROBE_PATH).
+ *   2. Bare binary name resolved through OS PATH (direct execFile, shell: false).
+ *
+ * Direct Node.js execFile with shell:false is the authoritative check.
+ * where.exe / which is used only to report the resolved path for display.
+ * Paths containing spaces are handled correctly because no shell is involved.
+ * CRLF from where.exe is stripped via split(/\r?\n/).
+ */
+async function resolveExecutable(binary) {
+  const envKey = binary.replace(/[^a-z0-9]/gi, '_').toUpperCase() + '_PATH';
+  const configured = process.env[envKey] ?? null;
+  const candidates = configured ? [configured, binary] : [binary];
+
+  for (const cmd of candidates) {
+    try {
+      // shell: false — execFile resolves the binary through the OS PATH directly.
+      const versionOutput = await execFileText(cmd, ['-version']);
+      const resolvedPath = isAbsolute(cmd) ? cmd : (reportResolvedPath(binary) ?? binary);
+      return { path: resolvedPath, versionOutput };
+    } catch {
+      // Candidate failed; try next.
+    }
+  }
+  return null;
 }
 
 function parseVersion(output, binary) {
@@ -87,26 +124,27 @@ function validateDestinationUrl(url) {
 }
 
 async function main() {
-  const ffmpegPath = resolveOnPath('ffmpeg');
-  const ffprobePath = resolveOnPath('ffprobe');
-  if (!ffmpegPath || !ffprobePath) {
+  const ffmpegResolved = await resolveExecutable('ffmpeg');
+  const ffprobeResolved = await resolveExecutable('ffprobe');
+  if (!ffmpegResolved || !ffprobeResolved) {
     console.error(JSON.stringify({
-      state: !ffmpegPath ? 'MISSING' : 'PROBE_MISSING',
-      ffmpegPath,
-      ffprobePath,
-      reason: !ffmpegPath
+      state: !ffmpegResolved ? 'MISSING' : 'PROBE_MISSING',
+      ffmpegPath: ffmpegResolved?.path ?? null,
+      ffprobePath: ffprobeResolved?.path ?? null,
+      reason: !ffmpegResolved
         ? 'ffmpeg executable did not resolve through PATH in this runtime host.'
         : 'ffprobe executable did not resolve through PATH in this runtime host.',
     }, null, 2));
     process.exit(1);
   }
 
-  const ffmpegVersionOutput = await execFileText(ffmpegPath, ['-version']);
-  const ffprobeVersionOutput = await execFileText(ffprobePath, ['-version']);
-  const ffmpeg = parseVersion(ffmpegVersionOutput, 'ffmpeg');
-  const ffprobe = parseVersion(ffprobeVersionOutput, 'ffprobe');
+  const ffmpeg = parseVersion(ffmpegResolved.versionOutput, 'ffmpeg');
+  const ffprobe = parseVersion(ffprobeResolved.versionOutput, 'ffprobe');
   assert.equal(ffmpeg.state, 'AVAILABLE');
   assert.equal(ffprobe.state, 'AVAILABLE');
+
+  const ffmpegPath = ffmpegResolved.path;
+  const ffprobePath = ffprobeResolved.path;
 
   const workdir = await mkdtemp(join(tmpdir(), 'ubos-v512-native-'));
   const artifactPath = join(workdir, 'ubos-v512-native-recording.mp4');
