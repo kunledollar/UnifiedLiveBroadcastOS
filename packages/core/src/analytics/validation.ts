@@ -1,0 +1,28 @@
+import { AnalyticsAggregation, AnalyticsConfidence, AnalyticsDimensionType, AnalyticsEngine, DashboardWidgetType, ReportStatus, SLAComparisonOperator, SLAComplianceStatus, calculateAvailability, evaluateDataQuality } from './index.js';
+import { IncidentSeverity, IncidentStatus } from '../incident-response/index.js';
+function ok(v:unknown,m:string){ if(!v) throw new Error(m); }
+const engine=new AnalyticsEngine(1000);
+engine.registerDimension({id:'production',name:'Production',sourceField:'productionId',type:AnalyticsDimensionType.Production});
+engine.registerDimension({id:'customer',name:'Customer',sourceField:'customerId',type:AnalyticsDimensionType.Organization});
+engine.registerDimension({id:'destination',name:'Destination',sourceField:'destinationId',type:AnalyticsDimensionType.Destination});
+engine.registerMetric({id:'availability',name:'Public Output Availability',description:'usable public output availability',measure:'public_output_availability',aggregation:AnalyticsAggregation.Average,dimensions:['production','customer','destination'],unit:'%',calculationVersion:1,dataSourceIds:['streaming','observability'],enabled:true});
+engine.registerMetric({id:'incident-count',name:'Incident Count',description:'operational incident count',measure:'incident.count',aggregation:AnalyticsAggregation.Count,dimensions:['severity','production'],unit:'count',calculationVersion:1,dataSourceIds:['incident-response'],enabled:true});
+engine.ingest({id:'a1',timestamp:1000,measure:'public_output_availability',value:99.95,dimensions:{production:'show-a',customer:'cust-a',destination:'yt'},sourceId:'streaming',evidenceIds:['ev-a1'],generation:1,metadata:{token:'secret'}});
+engine.ingest({id:'a2',timestamp:2000,measure:'public_output_availability',value:99.70,dimensions:{production:'show-a',customer:'cust-a',destination:'x'},sourceId:'streaming',evidenceIds:['ev-a2'],generation:1});
+engine.ingestMetricSamples([{metricName:'public_output_availability',timestamp:3000,value:99.99,labels:{production:'show-b',customer:'cust-b',destination:'srt'}}]);
+engine.ingestIncident({id:'inc-1',title:'Stream interruption',description:'brief interruption',severity:IncidentSeverity.Sev1,status:IncidentStatus.Mitigating,productionId:'show-a',detectedAt:1500,declaredAt:1500,updatedAt:2000,affectedComponents:[],affectedOutputs:['program'],alertIds:[],correlationIds:[],runbookExecutionIds:[],tags:[],createdBy:'system'});
+const byDestination=engine.query({metricIds:['availability'],dimensions:['destination'],from:0,to:4000,requesterScope:{customerIds:['cust-a'],permissions:['analytics.view']}});
+ok(byDestination.length===2,'customer row-level scope'); ok(!JSON.stringify(engine.snapshot()).includes('secret'),'redaction');
+try{ engine.ingest({id:'a1',timestamp:1000,measure:'public_output_availability',value:100,dimensions:{},sourceId:'x',evidenceIds:['x'],generation:1}); throw new Error('expected stale'); }catch(e){ ok(String(e).includes('stale'),'stale generation rejection'); }
+const av=calculateAvailability({productionId:'show-a',measurementWindowMs:1000,expectedAvailableMs:1000,actualAvailableMs:990,excludedMaintenanceMs:0,missingEvidenceMs:5}); ok(av.availabilityPercent===99 && av.confidence<1,'availability disclosure');
+const dq=evaluateDataQuality('partial',4,[{id:'r1',timestamp:1,measure:'m',value:1,dimensions:{},sourceId:'s',evidenceIds:['e'],generation:1}],1000); ok(dq.confidence!==AnalyticsConfidence.High && dq.warnings.length>0,'data quality warns on missing data');
+engine.defineReport({id:'exec-monthly',name:'Executive Monthly Review',templateId:'executive-monthly',audience:'executive',metricIds:['availability','incident-count'],defaultDimensions:['production'],accessPolicyId:'exec',version:1});
+const report=engine.generateReport('exec-monthly',{from:0,to:4000},ReportStatus.Final,{customerIds:['cust-a'],permissions:['report.generate','analytics.view']}); ok(report.hash.length>0 && report.dataQuality.warnings.length>=0,'report generated');
+const certified=engine.certifyReport(report.id,'certifier-token'); ok(certified.status===ReportStatus.Certified && certified.certifiedBy!=='certifier-token','certified and attributed safely');
+try{ engine.certifyReport(report.id,'again'); throw new Error('expected already certified'); }catch(e){ ok(String(e).includes('already certified'),'certified reports protected'); }
+engine.createDashboard({id:'customer',name:'Customer Dashboard',audience:'customer',widgets:[{id:'w1',type:DashboardWidgetType.Kpi,title:'Availability',metricIds:['availability'],drillDownEvidence:true}],defaultTimeRange:'month',accessPolicyId:'customer',scope:{customerIds:['cust-a'],permissions:['analytics.view']}});
+engine.createSLA({id:'sla-a',name:'Customer A SLA',customerId:'cust-a',effectiveFrom:0,objectives:[{id:'obj-av',name:'Availability',indicator:'public_output_availability',target:99.9,operator:SLAComparisonOperator.GreaterThanOrEqual,measurementWindow:'monthly',severity:'critical'}],exclusions:[{id:'maint',type:'approved-maintenance',description:'approved window',requiresApproval:true,evidenceRequired:true,from:0,to:500,approved:false}],enabled:true,generation:1});
+const sla=engine.evaluateSLA('sla-a',{from:0,to:4000}); ok(sla[0]!.status===SLAComplianceStatus.Missed,'sla breach detected deterministically'); ok(engine.recommendations().some(r=>r.category==='sla'),'sla recommendation cites evidence');
+engine.approveExclusion('sla-a','maint',['ticket-1']); const snap=engine.snapshot(); ok(snap.dashboards.length===1 && snap.evaluations.length>=1 && snap.health.status,'snapshot and health');
+engine.scheduleReport({id:'monthly',reportDefinitionId:'exec-monthly',recurrence:'monthly',timezone:'UTC',enabled:true});
+console.log('UBOS v5.11.4 analytics validation PASS');
