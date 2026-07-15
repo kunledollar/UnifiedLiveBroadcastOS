@@ -189,3 +189,28 @@
 - Commit hash: recorded in current branch history after local commit.
 - Blockers: none.
 - Next eligible phase: v5.10.0 — Automation, Rundown, and Show-Control Platform release finalization, if maintainers authorize local release preparation before any tag publication.
+
+## 2026-07-14 — v5.10.0 Automation Platform Release
+
+- Completed phase: v5.10.0 — Automation, Rundown, and Show-Control Platform release finalization.
+- Implementation summary: Added explicit UBOS automation platform release constants, exported them through the media-plane public API, prepared v5.10.0 release notes, updated changelog/release notes/release ledger/workflow state, and created a release checklist documenting local completion and deferred tag publication.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/media-plane typecheck`
+  - PASS: `pnpm --filter @ubos/media-plane build`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.1`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.2`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.3`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.4`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.5`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.6`
+  - PASS: `pnpm --filter @ubos/media-plane validate:v5.10.7`
+  - PASS: `pnpm --filter @ubos/media-plane test`
+  - PASS: `pnpm lint`
+  - PASS: `pnpm typecheck`
+  - PASS: `pnpm test`
+  - PASS: `git diff --check`
+- Environmental warnings: `origin` is not configured in this workspace, so remote synchronization and remote tag verification are deferred. Release tag creation and publication were deferred because explicit authorization was not provided.
+- Release blockers found: none for local release finalization; remote publication requires a configured repository and explicit tag authorization.
+- Recommended release tag: v5.10.0 (not created).
+- Recommended release title: UBOS v5.10 Automation, Rundown, and Show-Control Platform.
+- Next eligible phase: v5.11.1 — next production-safe platform foundation phase, pending maintainer task authorization.

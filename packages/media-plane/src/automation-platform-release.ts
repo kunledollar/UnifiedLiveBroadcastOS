@@ -1,0 +1,5 @@
+export const UBOS_AUTOMATION_PLATFORM_VERSION = '5.10.0';
+export const UBOS_AUTOMATION_PLATFORM_RELEASE_NAME =
+  'UBOS v5.10 Automation, Rundown, and Show-Control Platform';
+export const UBOS_AUTOMATION_PLATFORM_CERTIFICATION_STATUS = 'PASS';
+export const UBOS_AUTOMATION_PLATFORM_RELEASE_READY = true;
