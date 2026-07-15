@@ -4737,3 +4737,22 @@ export {
   type TextElement,
 } from './graphics-foundation.js';
 export * from './graphics-template-engine.js';
+export {
+  FFmpegRecordingAdapter,
+  RtmpStreamingAdapter,
+  buildFFmpegRecordingArgs,
+  discoverFFmpegExecutable,
+  validateFFmpegVersion,
+  validatePlayableOutputMetadata,
+  type FFmpegExecutableDiscovery,
+  type FFmpegRecordingAdapterOptions,
+  type NativeAdapterHealth,
+  type NativeAdapterMetrics,
+  type NativeAdapterResult,
+  type NativeAdapterState,
+  type NativeMediaAdapter,
+  type PlayableArtifactValidation,
+  type RtmpAdapterState,
+  type RtmpDestinationConfig,
+  type RtmpReceiptVerifier,
+} from './native-media-adapter.js';

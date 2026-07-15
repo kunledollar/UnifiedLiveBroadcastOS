@@ -44,7 +44,11 @@ import { createMediaRuntimeState } from '@ubos/shared';
 import { EngineWorkspace } from '../engine';
 import { CompositorPanel } from './CompositorPanel';
 import { RuntimeRenderPanel } from './RuntimeRenderPanel';
-import { RecordingRuntimePanel, type BrowserRecordingPanelState } from './RecordingRuntimePanel';
+import {
+  RecordingRuntimePanel,
+  type BrowserRecordingPanelState,
+  type NativeRecordingPanelState,
+} from './RecordingRuntimePanel';
 import {
   StreamingRuntimePanel,
   type BrowserStreamingPanelState,
@@ -109,6 +113,9 @@ export function OperationsConsoleContent({
   onStreamingDispatch,
   onStartBrowserRecording,
   onStopBrowserRecording,
+  nativeRecordingState,
+  onStartNativeRecording,
+  onStopNativeRecording,
   pipeline,
   inspectorSelection,
 }: {
@@ -158,6 +165,9 @@ export function OperationsConsoleContent({
   onStreamingDispatch?: (action: StreamingPanelAction) => void;
   onStartBrowserRecording?: () => void;
   onStopBrowserRecording?: () => void;
+  nativeRecordingState?: NativeRecordingPanelState;
+  onStartNativeRecording?: () => void;
+  onStopNativeRecording?: () => void;
   pipeline?: ProductionPipelineModel;
   inspectorSelection?: OperationsInspectorSelection;
 }) {
@@ -249,12 +259,21 @@ export function OperationsConsoleContent({
         {...(browserRecordingState ? { browserState: browserRecordingState } : {})}
         {...(onStartBrowserRecording ? { onStart: onStartBrowserRecording } : {})}
         {...(onStopBrowserRecording ? { onStop: onStopBrowserRecording } : {})}
+        {...(nativeRecordingState ? { nativeState: nativeRecordingState } : {})}
+        {...(onStartNativeRecording ? { onStartNative: onStartNativeRecording } : {})}
+        {...(onStopNativeRecording ? { onStopNative: onStopNativeRecording } : {})}
+        {...(nativeRecordingState ? { nativeState: nativeRecordingState } : {})}
+        {...(onStartNativeRecording ? { onStartNative: onStartNativeRecording } : {})}
+        {...(onStopNativeRecording ? { onStopNative: onStopNativeRecording } : {})}
       />
     ) : (
       <RecordingRuntimePanel
         {...(browserRecordingState ? { browserState: browserRecordingState } : {})}
         {...(onStartBrowserRecording ? { onStart: onStartBrowserRecording } : {})}
         {...(onStopBrowserRecording ? { onStop: onStopBrowserRecording } : {})}
+        {...(nativeRecordingState ? { nativeState: nativeRecordingState } : {})}
+        {...(onStartNativeRecording ? { onStartNative: onStartNativeRecording } : {})}
+        {...(onStopNativeRecording ? { onStopNative: onStopNativeRecording } : {})}
       />
     ),
     health: (

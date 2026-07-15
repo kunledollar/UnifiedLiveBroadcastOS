@@ -32,7 +32,11 @@
     "ubos:clean": "node scripts/clean.mjs",
     "ubos:doctor": "pnpm lint && pnpm typecheck && pnpm test",
     "ubos:browser": "dotenv -- pnpm --filter @ubos/web dev",
-    "validate:v512-wiring": "node scripts/validate-v512-capability-wiring.mjs"
+    "validate:v512-wiring": "node scripts/validate-v512-capability-wiring.mjs",
+    "validate:v512-step3": "node scripts/validate-v512-step3.mjs",
+    "validate:v512-native-adapters": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-adapters.mjs",
+    "validate:v512-native-runtime": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-runtime.mjs",
+    "validate:v512-step5": "node scripts/validate-v512-step5.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",
