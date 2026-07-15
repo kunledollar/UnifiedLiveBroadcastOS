@@ -3,10 +3,10 @@
 version: 1
 status: ACTIVE
 platform: v5.11
-current_phase: v5.11.7
-next_phase: v5.11.7
+current_phase: v5.11.8
+next_phase: v5.11.8
 last_completed_platform: v5.10
-last_completed_phase: v5.11.6
+last_completed_phase: v5.11.7
 release_status: v5.10 RELEASED
 
 ---
@@ -19,7 +19,7 @@ v5.11
 
 ## Active Phase
 
-v5.11.7
+v5.11.8
 
 ---
 
@@ -59,13 +59,13 @@ v5.10
 
 ## Last Completed Phase
 
-v5.11.6 — Production-Safe Security Operations, Threat Detection, Vulnerability Management, and Response
+v5.11.7 — Production-Safe Compliance, Governance, Risk Management, and Policy Enforcement
 
 ---
 
 ## Next Ready Phase
 
-v5.11.7 — Production-Safe Compliance, Governance, Risk Management, and Policy Enforcement
+v5.11.8 — Production-Safe Multi-Tenant Organizations, Customer Isolation, Delegated Administration, and Service Management
 
 ---
 
@@ -91,7 +91,8 @@ v5.11.7 — Production-Safe Compliance, Governance, Risk Management, and Policy 
 | v5.11.4 | VALIDATED |
 | v5.11.5 | VALIDATED |
 | v5.11.6 | VALIDATED |
-| v5.11.7 | READY |
+| v5.11.7 | VALIDATED |
+| v5.11.8 | READY |
 | v5.11.0 | BLOCKED |
 
 ---
