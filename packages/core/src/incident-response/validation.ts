@@ -1,0 +1,43 @@
+import { AlertSeverity } from '../observability/index.js';
+import { CorrectiveActionStatus, IncidentResponseEngine, IncidentResponseRole, IncidentSeverity, IncidentStatus, RemediationRisk, RunbookStatus, RunbookStepType, assessSeverity } from './index.js';
+
+function assert(condition: unknown, message: string): void { if (!condition) throw new Error(message); }
+
+const engine = new IncidentResponseEngine();
+const severity = assessSeverity({ programImpact: 5, audienceImpact: 5, safetyImpact: 0, securityImpact: 0, redundancyRemaining: 1, durationRisk: 4 });
+assert(severity.calculatedSeverity === IncidentSeverity.Sev0, 'severity calculation should classify emergency output risk as Sev0');
+const alert = engine.ingestAlert({ source: 'metrics', sourceAlertId: 'program-output-lost', title: 'Program output lost', severity: AlertSeverity.Critical, productionId: 'prod-a', componentId: 'output-primary', detectedAt: 1000, lastObservedAt: 1000, correlationKey: 'program-output', deduplicationKey: 'program-output-lost', evidence: [{ type: 'metric', timestamp: 1000, summary: 'output healthy equals zero', metricName: 'output_health', value: 0, threshold: 1 }] });
+const duplicate = engine.ingestAlert({ source: 'metrics', sourceAlertId: 'program-output-lost', title: 'Program output lost password=secret', severity: AlertSeverity.Critical, productionId: 'prod-a', componentId: 'output-primary', detectedAt: 1000, lastObservedAt: 2000, correlationKey: 'program-output', deduplicationKey: 'program-output-lost' });
+assert(duplicate.id === alert.id && duplicate.observedCount === 2, 'deduplication should retain one active alert with recurrence count');
+const correlated = engine.correlate([alert.id]);
+assert(correlated.confidence >= 0.4, 'correlation should produce a bounded operational hypothesis');
+engine.registerRunbook({ id: 'recover-primary-stream', name: 'Recover Primary Stream', description: 'Restore primary program delivery through diagnostics, backup activation, validation, and communication.', applicableAlertTypes: ['program-output-lost'], applicableIncidentTypes: ['streaming'], minimumSeverity: IncidentSeverity.Sev1, version: 1, status: RunbookStatus.Active, createdAt: 1, updatedAt: 1, steps: [ { id: 'diagnose', order: 1, title: 'Run diagnostics', type: RunbookStepType.Diagnose, failureBehavior: 'escalate' }, { id: 'activate-backup', order: 2, title: 'Activate backup output', type: RunbookStepType.AutomatedAction, approvalRequired: true, action: { id: 'backup-output', command: 'output.activateBackup', risk: RemediationRisk.Moderate, idempotencyKey: 'incident-output-backup', requiresApproval: true, authorizedRoles: ['incident_commander'] }, failureBehavior: 'rollback' }, { id: 'validate', order: 3, title: 'Validate stable playback', type: RunbookStepType.Validation, failureBehavior: 'stop' } ] });
+const incident = engine.createIncident({ title: 'Primary program stream offline', severity: IncidentSeverity.Sev1, alertIds: [alert.id], productionId: 'prod-a', now: 2500, createdBy: 'operator-a', affectedComponents: [{ componentType: 'output', componentId: 'output-primary', impact: 'public stream offline' }], affectedOutputs: ['program'], runbookId: 'recover-primary-stream' });
+assert(incident.tags.includes('major-incident'), 'Sev1 incidents should enter major-incident workflow');
+engine.registerEscalationPolicy({ id: 'sev1-policy', name: 'Sev1 escalation', severity: IncidentSeverity.Sev1, enabled: true, steps: [ { order: 1, afterMs: 0, targetIdentityIds: ['streaming-operator'], channels: ['control-room'], condition: 'no_acknowledgement', requireAcknowledgement: true }, { order: 2, afterMs: 30000, targetRoleIds: ['technical-lead'], channels: ['pager'], condition: 'no_owner', requireAcknowledgement: true } ] });
+assert(engine.evaluateEscalations(2500).length === 1, 'unacknowledged Sev1 should escalate immediately');
+const ack = engine.acknowledge(incident.id, 'operator-a', 2600, 'Taking ownership with token=unsafe');
+assert(ack.status === IncidentStatus.Acknowledged && ack.ownerId === 'operator-a', 'acknowledgement should assign ownership');
+engine.assign({ incidentId: incident.id, role: IncidentResponseRole.IncidentCommander, identityId: 'commander-a', assignedAt: 2700, assignedBy: 'operator-a', acceptedAt: 2800 });
+let snap = engine.snapshot();
+const execution = snap.executions[0];
+assert(execution?.currentStepId === 'diagnose', 'runbook should start at the first step');
+engine.completeRunbookStep(execution.id, 'diagnose', 'diagnostics complete', 'operator-a', 3000);
+engine.completeRunbookStep(execution.id, 'activate-backup', 'backup command approved and dispatched once', 'commander-a', 4000);
+engine.completeRunbookStep(execution.id, 'validate', '60 second stability window passed', 'operator-a', 65000);
+engine.publishStatus({ id: 'status-1', incidentId: incident.id, audience: 'internal', message: 'Backup path active; stream key secret hidden', createdAt: 66000, createdBy: 'commander-a', approvedBy: 'commander-a', publishedAt: 66010 });
+engine.stabilize(incident.id, 'commander-a', 66000);
+engine.resolve(incident.id, 'commander-a', 67000, [{ id: 'program-video', description: 'Program video present', passed: true, observedAt: 67000 }, { id: 'program-audio', description: 'Program audio present', passed: true, observedAt: 67000 }]);
+snap = engine.snapshot();
+const review = snap.reviews[0];
+assert(review?.status === 'required', 'severe incidents should require post-incident review');
+engine.completeReview({ ...review, ownerId: 'commander-a', summary: 'Backup output restored service.', rootCause: { classification: 'probable', summary: 'Provider edge failure', evidenceRecordIds: ['status-1'], confidence: 0.7 }, contributingFactors: ['provider outage'], whatWentWell: ['backup path worked'], whatWentPoorly: ['initial detection needed confirmation'], correctiveActions: [{ id: 'ca-1', title: 'Review provider SLA', description: 'Confirm escalation route.', ownerId: 'ops-lead', priority: 'high', status: CorrectiveActionStatus.Approved, verificationCriteria: ['updated contact path'] }] });
+engine.close(incident.id, 'commander-a', 70000);
+snap = engine.snapshot();
+assert(Object.isFrozen(snap) === false && snap.incidents[0]?.status === IncidentStatus.Closed, 'snapshot should be immutable copy of closed incident state');
+assert(JSON.stringify(snap).includes('[REDACTED]'), 'sensitive evidence and communications should be redacted');
+const metrics = engine.metrics(incident.id);
+assert(metrics.timeToAcknowledgeMs === 100 && metrics.runbookStepsCompleted === 3 && metrics.escalationCount === 1, 'incident metrics should report response performance');
+for (let i = 0; i < 1000; i += 1) engine.ingestAlert({ source: 'storm', sourceAlertId: `storm-${i % 10}`, title: 'bounded alert storm', severity: AlertSeverity.Warning, detectedAt: i, lastObservedAt: i, deduplicationKey: `storm-${i % 10}` });
+assert(engine.snapshot().alerts.length <= 11, 'alert storms should deduplicate continuing conditions');
+console.log('UBOS v5.11.2 incident-response validation passed');

@@ -9,8 +9,9 @@
     "build": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "pnpm build && node dist/observability/validation.js",
-    "validate:v5.11.1": "pnpm build && node dist/observability/validation.js"
+    "test": "pnpm build && node dist/observability/validation.js && node dist/incident-response/validation.js",
+    "validate:v5.11.1": "pnpm build && node dist/observability/validation.js",
+    "validate:v5.11.2": "pnpm build && node dist/incident-response/validation.js"
   },
   "exports": {
     ".": {
@@ -20,6 +21,10 @@
     "./observability": {
       "types": "./dist/observability/index.d.ts",
       "import": "./dist/observability/index.js"
+    },
+    "./incident-response": {
+      "types": "./dist/incident-response/index.d.ts",
+      "import": "./dist/incident-response/index.js"
     }
   }
 }
