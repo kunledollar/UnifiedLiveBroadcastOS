@@ -332,3 +332,4 @@ export type {
   Workspace,
 } from './multi-tenant/index.js';
 export * from './marketplace/index.js';
+export * from './platform-ecosystem/index.js';
