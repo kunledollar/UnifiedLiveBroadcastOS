@@ -1,0 +1,173 @@
+---
+description: UBOS Milestone Execution Procedure
+alwaysApply: true
+---
+
+# UBOS Engineering Procedure
+
+This repository is developed using milestone-based execution.
+
+Do not skip milestones.
+
+Do not combine multiple milestones.
+
+Finish one milestone before beginning another.
+
+---
+
+# Required Reading
+
+Before making changes read:
+
+docs/handover/README.md
+
+and all authoritative implementation documents.
+
+---
+
+# Required Workflow
+
+Every engineering task shall follow exactly this sequence.
+
+## Step 1
+
+Understand the milestone objective.
+
+Never assume.
+
+Never redesign unrelated systems.
+
+---
+
+## Step 2
+
+Reproduce the problem.
+
+Evidence first.
+
+No speculative fixes.
+
+---
+
+## Step 3
+
+Identify the exact root cause.
+
+Explain it before changing code.
+
+---
+
+## Step 4
+
+Implement the smallest complete fix.
+
+Prefer improving existing engines over creating new ones.
+
+---
+
+## Step 5
+
+Execute validation.
+
+Examples include:
+
+- unit tests
+- integration tests
+- browser validation
+- runtime validation
+- FFmpeg validation
+- API validation
+
+---
+
+## Step 6
+
+Produce evidence.
+
+Evidence always includes:
+
+- commands executed
+- runtime output
+- artifacts
+- screenshots when appropriate
+- codecs
+- durations
+- paths
+- exit codes
+
+---
+
+## Step 7
+
+Prepare documentation updates.
+
+When a milestone changes reality, prepare updates for:
+
+- Product Truth
+- Capability Matrix
+- Subsystem Matrix
+- Implementation Journal
+- Completion Report
+- Workflow State
+
+Do not silently change documentation.
+
+---
+
+## Step 8
+
+Create one focused commit.
+
+Stop.
+
+Do not continue into the next milestone.
+
+---
+
+# Definition of Done
+
+Compilation is NOT completion.
+
+Metadata is NOT completion.
+
+Simulation is NOT completion.
+
+A milestone is complete only when:
+
+- operator action succeeds
+- runtime succeeds
+- external result succeeds
+- evidence exists
+- acceptance tests pass
+
+---
+
+# Reporting Format
+
+Every milestone report must contain:
+
+- Objective
+- Root Cause
+- Files Changed
+- Commands Executed
+- Test Results
+- Runtime Evidence
+- Artifact Evidence
+- Cleanup Result
+- Remaining Blockers
+- Commit Hash
+- PASS / PARTIAL / FAIL
+
+---
+
+# Engineering Philosophy
+
+Build less.
+
+Wire more.
+
+Verify everything.
+
+Never fake success.
+
+Every feature must leave behind evidence.
