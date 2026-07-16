@@ -30,6 +30,12 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: {},
     collapsedZones: [],
     centerEmphasis: 'balanced',
+    // Director uses balanced dock geometry: standard 270px docks, 280px bottom workspace.
+    zoneSizeDefaults: {
+      'left-dock': 270,
+      'right-dock': 270,
+      'bottom-workspace': 280,
+    },
   },
   'solo-streamer': {
     id: 'solo-streamer',
@@ -42,6 +48,11 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: { [P.sources]: 'bottom-workspace' },
     collapsedZones: ['left-dock'],
     centerEmphasis: 'program',
+    // Solo Streamer: left dock collapsed; right dock slightly narrower to give more center space.
+    zoneSizeDefaults: {
+      'right-dock': 300,
+      'bottom-workspace': 240,
+    },
   },
   'technical-director': {
     id: 'technical-director',
@@ -54,6 +65,12 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: {},
     collapsedZones: [],
     centerEmphasis: 'balanced',
+    // Technical Director: wider right dock for routing/telemetry panels.
+    zoneSizeDefaults: {
+      'left-dock': 270,
+      'right-dock': 320,
+      'bottom-workspace': 320,
+    },
   },
   'audio-engineer': {
     id: 'audio-engineer',
@@ -66,6 +83,11 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: {},
     collapsedZones: ['left-dock'],
     centerEmphasis: 'program',
+    // Audio Engineer: left dock collapsed; bottom workspace expanded for audio mixer + master bus.
+    zoneSizeDefaults: {
+      'right-dock': 300,
+      'bottom-workspace': 360,
+    },
   },
   'graphics-operator': {
     id: 'graphics-operator',
@@ -78,6 +100,12 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: {},
     collapsedZones: [],
     centerEmphasis: 'balanced',
+    // Graphics Operator: left dock narrower (graphics library); right dock narrower; bottom workspace expanded.
+    zoneSizeDefaults: {
+      'left-dock': 240,
+      'right-dock': 260,
+      'bottom-workspace': 340,
+    },
   },
   'replay-operator': {
     id: 'replay-operator',
@@ -90,6 +118,12 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: {},
     collapsedZones: [],
     centerEmphasis: 'program',
+    // Replay Operator: standard docks; bottom workspace tall for timeline.
+    zoneSizeDefaults: {
+      'left-dock': 270,
+      'right-dock': 270,
+      'bottom-workspace': 360,
+    },
   },
   'streaming-operator': {
     id: 'streaming-operator',
@@ -102,6 +136,11 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: {},
     collapsedZones: ['left-dock'],
     centerEmphasis: 'program',
+    // Streaming Operator: left dock collapsed; wider right dock for outputs and telemetry.
+    zoneSizeDefaults: {
+      'right-dock': 340,
+      'bottom-workspace': 300,
+    },
   },
   'monitor-wall': {
     id: 'monitor-wall',
@@ -114,6 +153,10 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: { [P.monitorWall]: 'bottom-workspace' },
     collapsedZones: ['left-dock', 'right-dock'],
     centerEmphasis: 'balanced',
+    // Monitor Wall: both docks collapsed; taller bottom workspace for the monitor grid.
+    zoneSizeDefaults: {
+      'bottom-workspace': 400,
+    },
   },
   compact: {
     id: 'compact',
@@ -126,6 +169,8 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
     zoneOverrides: {},
     collapsedZones: ['left-dock', 'right-dock', 'bottom-workspace'],
     centerEmphasis: 'balanced',
+    // Compact: all docks collapsed — zone size defaults are irrelevant (collapsed zones use collapsedSize).
+    zoneSizeDefaults: {},
   },
 };
 
@@ -188,6 +233,17 @@ export function validateWorkspacePreset(preset: WorkspacePreset): WorkspaceValid
       issue('PRESET_COLLAPSED_ZONE_INVALID', `Unknown collapsed zone "${String(zoneId)}"`);
     } else if (zoneId === 'center-stage' || zoneId === 'top-ribbon' || zoneId === 'left-rail') {
       issue('PRESET_ZONE_NOT_COLLAPSIBLE', `Zone "${zoneId}" may never be collapsed`);
+    }
+  }
+
+  if (preset.zoneSizeDefaults !== undefined) {
+    for (const [zoneId, size] of Object.entries(preset.zoneSizeDefaults)) {
+      if (!zoneIdSet.has(zoneId)) {
+        issue('PRESET_ZONE_SIZE_DEFAULT_UNKNOWN_ZONE', `zoneSizeDefaults references unknown zone "${zoneId}"`);
+      }
+      if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
+        issue('PRESET_ZONE_SIZE_DEFAULT_INVALID', `zoneSizeDefaults["${zoneId}"] must be a non-negative finite number`);
+      }
     }
   }
 

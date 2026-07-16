@@ -246,34 +246,41 @@ export function CommandCenterStage({
     onFullscreenChange(fullscreenMonitor === role ? null : role);
   };
 
-  // Center Stage Layout Contract (3.15D-2):
-  //   Program: min 800×450; flex share = programShare(emphasis)
-  //   Preview: min 480×270; flex share = 1 - programShare(emphasis)
-  //   Stacked (center width <900): min-h for program 450, preview 270
-  //   Side-by-side: min-w for program 800, preview 480
+  // Center Stage Layout Contract (3.15D-2 revised for zone-geometry restoration):
+  //   Program: min 320×180; flex share = programShare(emphasis)
+  //   Preview: min 240×135; flex share = 1 - programShare(emphasis)
+  //   Stacked (center width <900): min-h for program 180, preview 135
+  //   Side-by-side: min-w for program 320, preview 240
+  //
+  // Minimum sizes are intentionally modest so that when both docks are open
+  // at a typical 1536×960 viewport, flex can distribute the center stage width
+  // according to the preset emphasis — making Director (balanced), Audio
+  // Engineer (program-dominant), and Graphics Operator (balanced) visually
+  // distinct. Previously, 800px/480px minimums caused constant overflow in all
+  // presets, rendering the emphasis setting invisible.
   //
   // Using CSS min-* alongside flex so the browser enforces the floor while
   // still allowing the monitors to expand to fill all freed space.
   //
   // Min-height cap (stacked only): when viewportHeight is provided the nominal
-  // min-heights (450 / 270) are capped to each monitor's proportional share of
-  // the available height after reserving STACKED_CHROME_RESERVE_PX for switcher
+  // min-heights are capped to each monitor's proportional share of the
+  // available height after reserving STACKED_CHROME_RESERVE_PX for switcher
   // and monitor chrome.  This prevents the stacked pair from overflowing the
   // zone on very small viewports without altering the flex share or geometry.
-  let programMinH = 450;
-  let previewMinH = 270;
+  let programMinH = 180;
+  let previewMinH = 135;
   if (stacked && viewportHeight) {
     const available = Math.max(STACKED_CHROME_RESERVE_PX, viewportHeight - STACKED_CHROME_RESERVE_PX);
-    programMinH = Math.max(PROGRAM_MIN_HEIGHT_FLOOR_PX, Math.min(450, Math.floor(available * share)));
-    previewMinH = Math.max(PREVIEW_MIN_HEIGHT_FLOOR_PX, Math.min(270, Math.floor(available * (1 - share))));
+    programMinH = Math.max(PROGRAM_MIN_HEIGHT_FLOOR_PX, Math.min(180, Math.floor(available * share)));
+    previewMinH = Math.max(PREVIEW_MIN_HEIGHT_FLOOR_PX, Math.min(135, Math.floor(available * (1 - share))));
   }
 
   const programMinStyle: CSSProperties = stacked
     ? { flex: `${share} 1 0%`, minHeight: programMinH }
-    : { flex: `${share} 1 0%`, minWidth: 800 };
+    : { flex: `${share} 1 0%`, minWidth: 320 };
   const previewMinStyle: CSSProperties = stacked
     ? { flex: `${1 - share} 1 0%`, minHeight: previewMinH }
-    : { flex: `${1 - share} 1 0%`, minWidth: 480 };
+    : { flex: `${1 - share} 1 0%`, minWidth: 240 };
 
   return (
     <section

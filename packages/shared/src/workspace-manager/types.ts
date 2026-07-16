@@ -117,6 +117,17 @@ export interface WorkspacePreset {
   zoneOverrides: Record<string, WorkspaceZoneId>;
   collapsedZones: WorkspaceZoneId[];
   centerEmphasis: WorkspaceCenterEmphasis;
+  /**
+   * Per-preset default zone sizes (px). Applied as a lower-priority fallback
+   * when the operator has no user-dragged override for a zone. Allows presets
+   * to ship with a distinct dock geometry (e.g. Audio Engineer has a taller
+   * bottom workspace; Streaming Operator has a wider right dock) without
+   * hard-coding sizes in the layout engine.
+   *
+   * Only resizable zones are respected; non-resizable zones are ignored.
+   * Values are clamped to each zone's min/max before use.
+   */
+  zoneSizeDefaults?: Partial<Record<WorkspaceZoneId, number>>;
 }
 
 /** Axis-aligned rectangle in viewport pixels. */
