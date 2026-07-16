@@ -5,8 +5,12 @@
     "outDir": "dist-test",
     "rootDir": ".",
     "paths": {
-      "@ubos/shared": ["../../packages/shared/dist/index.js"],
-      "@ubos/shared/*": ["../../packages/shared/dist/*"]
+      "@ubos/shared": [
+        "../../packages/shared/dist/index.js"
+      ],
+      "@ubos/shared/*": [
+        "../../packages/shared/dist/*"
+      ]
     }
   },
   "include": [
@@ -19,6 +23,8 @@
     "lib/native-runtime/ffmpeg.ts",
     "lib/native-runtime/ffmpeg-discovery.test.ts",
     "lib/native-runtime/ffmpeg-recording.test.ts",
-    "lib/program-pipeline/program-ownership.test.ts"
+    "lib/program-pipeline/program-ownership.test.ts",
+    "app/control-room/workspace/scene-routing.ts",
+    "app/control-room/workspace/scene-routing.test.ts"
   ]
 }

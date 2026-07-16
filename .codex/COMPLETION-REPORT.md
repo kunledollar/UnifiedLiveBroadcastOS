@@ -544,3 +544,9 @@ Restore visibly distinct preset geometry and program/preview sizing. The prior m
 ### Status
 
 PARTIAL — Unit tests PASS. Browser visual evidence PENDING (requires browser operator at 1536×960 to confirm distinct layouts).
+
+## 2026-07-16 — Control Room Scene Routing / Native Recording UI Regression
+
+- Status: PARTIAL.
+- Completed: repaired stale live MediaStream fallback in Control Room scene monitor binding; added focused scene routing regression tests; documented Native Recording panel trace and evidence location.
+- Remaining blocker: real Chromium screenshot evidence was not completed, so milestone PASS cannot be claimed.

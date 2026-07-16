@@ -601,3 +601,7 @@ After saving:
 
 
 
+
+## 2026-07-16 Control Room Baseline Addendum
+
+Program and Preview monitors must render pixels from the current scene's resolved sources. Preview-only changes must not alter Program pixels. The production Control Room must keep Native Recording reachable through the existing Recording operations surface and show exact blocked reasons when unavailable.
