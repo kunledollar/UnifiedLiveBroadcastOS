@@ -310,7 +310,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
 
   const applyPreset = useCallback(
     (presetId: WorkspacePresetId): WorkspacePreset | null => {
-      if (layoutLocked) return null;
+      // Layout lock prevents manual dragging/resizing but never blocks preset selection.
       const nextPreset = getWorkspacePreset(presetId);
       applyPresetToRegistry(registry, nextPreset);
       setActivePresetId(presetId);
@@ -320,7 +320,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
       bump();
       return nextPreset;
     },
-    [registry, layoutLocked, bump],
+    [registry, bump],
   );
 
   const togglePanelVisibility = useCallback(

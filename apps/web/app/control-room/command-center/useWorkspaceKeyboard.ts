@@ -117,12 +117,12 @@ export function useWorkspaceKeyboard({
         return;
       }
 
-      // Ctrl+1…5 — Workspace presets
+      // Ctrl+1…5 — Workspace presets (always allowed; lock only prevents drag-resize)
       if (mod && !shiftKey && !altKey) {
         const preset = DIGIT_TO_PRESET[key];
         if (preset) {
           event.preventDefault();
-          if (!layoutLocked) onSelectPreset(preset);
+          onSelectPreset(preset);
           return;
         }
       }

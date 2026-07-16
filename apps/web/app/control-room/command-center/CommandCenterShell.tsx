@@ -228,7 +228,7 @@ export function CommandCenterShell({
   const handleSelectPreset = useCallback(
     (presetId: WorkspacePresetId) => {
       const nextPreset = applyPreset(presetId);
-      if (!nextPreset) return; // layout locked
+      if (!nextPreset) return; // unknown preset id (safety guard)
       const bottomTab = presetBottomTab(nextPreset);
       onDockTabChange(bottomTab);
       const opsTab = presetOperationsTab(presetId);

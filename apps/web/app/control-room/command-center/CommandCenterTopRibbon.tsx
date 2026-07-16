@@ -75,7 +75,7 @@ export function CommandCenterTopRibbon({
         <span
           title={
             layoutLocked
-              ? 'Layout locked — use Workspace menu to switch'
+              ? 'Layout locked — dragging and resizing disabled; workspace switching still available'
               : (activePreset?.description ?? activePresetId)
           }
           className={cn(

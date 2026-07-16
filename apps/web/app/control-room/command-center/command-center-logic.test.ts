@@ -244,3 +244,194 @@ test('command center prefs migrate v1 and clamp valid zone sizes', () => {
   assert.equal('floating' in parsed.zoneSizes, false);
   assert.equal('bad' in parsed.zoneSizes, false);
 });
+
+// ── Workspace Manager Regression Tests ────────────────────────────────────────
+// These tests guard against the regression where selecting a workspace preset
+// did not visibly reconfigure the Control Room layout.
+
+test('all 9 presets are present and resolve', () => {
+  assert.equal(workspacePresetList.length, 9, 'must have exactly 9 presets');
+  const expectedIds = [
+    'director', 'solo-streamer', 'technical-director', 'audio-engineer',
+    'graphics-operator', 'replay-operator', 'streaming-operator', 'monitor-wall', 'compact',
+  ];
+  for (const id of expectedIds) {
+    const preset = workspacePresetList.find((p) => p.id === id);
+    assert.ok(preset, `preset "${id}" must exist in the preset list`);
+    assert.ok(preset.name.length > 0, `preset "${id}" must have a non-empty name`);
+    assert.ok(preset.visiblePanels.length > 0, `preset "${id}" must have at least one visible panel`);
+  }
+});
+
+test('each preset produces a distinct visible panel set or different zone configuration', () => {
+  const registry = createRegistry();
+
+  // Collect effective layout signature (visible panels + collapsed zones) per preset.
+  const signaturesByPreset: Map<string, string> = new Map();
+
+  for (const preset of workspacePresetList) {
+    applyPresetToRegistry(registry, preset);
+    const visiblePanels = registry.getPanelStates()
+      .filter((s: { visible: boolean }) => s.visible)
+      .map((s: { panelId: string }) => s.panelId)
+      .sort()
+      .join(',');
+    // Include zone collapse state in the signature: compact differs from director via zones.
+    const collapsedZones = preset.collapsedZones.slice().sort().join(',');
+    const centerEmphasis = preset.centerEmphasis;
+    signaturesByPreset.set(preset.id, `panels:${visiblePanels}|zones:${collapsedZones}|emphasis:${centerEmphasis}`);
+  }
+
+  // Every preset must produce a non-empty visible panel set.
+  for (const [presetId, signature] of signaturesByPreset) {
+    assert.ok(signature.includes('program-monitor'), `preset "${presetId}" must keep program-monitor visible`);
+    assert.ok(signature.includes('preview-monitor'), `preset "${presetId}" must keep preview-monitor visible`);
+  }
+
+  // These presets have distinct panel sets (different explicit visible/hidden lists).
+  const directorPanels = signaturesByPreset.get('director')!;
+  const soloStreamerPanels = signaturesByPreset.get('solo-streamer')!;
+  const audioEngineerPanels = signaturesByPreset.get('audio-engineer')!;
+  assert.notEqual(directorPanels, soloStreamerPanels, 'director and solo-streamer must differ in panel set or zone config');
+  assert.notEqual(directorPanels, audioEngineerPanels, 'director and audio-engineer must differ in panel set or zone config');
+
+  // Compact achieves its "maximized center" effect via zone collapsing, not panel hiding.
+  // Verify it collapses all three adjustable zones.
+  const compactPreset = workspacePresets.compact;
+  assert.ok(compactPreset.collapsedZones.includes('left-dock'), 'compact must collapse left-dock');
+  assert.ok(compactPreset.collapsedZones.includes('right-dock'), 'compact must collapse right-dock');
+  assert.ok(compactPreset.collapsedZones.includes('bottom-workspace'), 'compact must collapse bottom-workspace');
+  assert.equal(workspacePresets.director.collapsedZones.length, 0, 'director must collapse no zones');
+
+  // Compact and director must differ in their effective layout (different zone state).
+  assert.notEqual(
+    signaturesByPreset.get('director'),
+    signaturesByPreset.get('compact'),
+    'director and compact must have different effective layout signatures (compact collapses all zones)',
+  );
+});
+
+test('only one preset is active after applyPresetToRegistry', () => {
+  const registry = createRegistry();
+
+  // Apply director, then switch to solo-streamer — only solo-streamer panels should be active.
+  applyPresetToRegistry(registry, workspacePresets.director);
+  applyPresetToRegistry(registry, workspacePresets['solo-streamer']);
+
+  const soloStreamerVisible = new Set(workspacePresets['solo-streamer'].visiblePanels);
+  const soloStreamerHidden = new Set(workspacePresets['solo-streamer'].hiddenPanels);
+
+  for (const panelId of soloStreamerHidden) {
+    assert.equal(
+      registry.getPanelState(panelId)?.visible,
+      false,
+      `switching to solo-streamer must hide panel "${panelId}"`,
+    );
+  }
+  for (const panelId of soloStreamerVisible) {
+    assert.equal(
+      registry.getPanelState(panelId)?.visible,
+      true,
+      `switching to solo-streamer must show panel "${panelId}"`,
+    );
+  }
+});
+
+test('layout lock must not block applyPresetToRegistry', () => {
+  // applyPresetToRegistry is the pure logic function that preset switching calls.
+  // It must always work regardless of any lock state (lock is a UI/hook concern,
+  // not a logic layer concern). This test confirms that calling applyPresetToRegistry
+  // always produces the expected panel state.
+  const registry = createRegistry();
+
+  // Apply director first.
+  applyPresetToRegistry(registry, workspacePresets.director);
+  const directorVisible = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId);
+
+  // Apply solo-streamer next — this must succeed and change panel states.
+  applyPresetToRegistry(registry, workspacePresets['solo-streamer']);
+  const soloStreamerVisible = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId);
+
+  // The panel sets must differ.
+  assert.notDeepEqual(
+    directorVisible.sort(),
+    soloStreamerVisible.sort(),
+    'applyPresetToRegistry must change visible panel set (must not be blocked)',
+  );
+});
+
+test('applying a preset after save/load does not restore the old preset panels', () => {
+  // Regression: stale persisted layout must not overwrite a newly selected preset.
+  const registry = createRegistry();
+
+  // Simulate: saved layout has director panels.
+  applyPresetToRegistry(registry, workspacePresets.director);
+  const savedStates = registry.getPanelStates();
+
+  // Now switch to solo-streamer (as the user would do after page reload + hydration).
+  applyPresetToRegistry(registry, workspacePresets['solo-streamer']);
+
+  // Restore saved states via applyLayoutSnapshot-equivalent: the preset must still win.
+  // (The hook's hydration path calls applyPresetToRegistry FIRST, then applyLayoutSnapshot.
+  // applyLayoutSnapshot only overwrites individual panel states, not the full preset.)
+  // Verify that solo-streamer's hiddenPanels are actually hidden after the switch.
+  for (const panelId of workspacePresets['solo-streamer'].hiddenPanels) {
+    assert.equal(
+      registry.getPanelState(panelId)?.visible,
+      false,
+      `after switching to solo-streamer, panel "${panelId}" must be hidden (saved layout must not re-show it)`,
+    );
+  }
+
+  // Applying director's saved states back manually would re-show them (this is the
+  // old (broken) behavior — here we confirm restoring a different preset's snapshot
+  // after a preset switch would be wrong):
+  registry.restorePanelStates(savedStates);
+  for (const panelId of workspacePresets['solo-streamer'].hiddenPanels) {
+    // After restoring director's snapshot, those panels are visible again — showing
+    // the bug was a hydration order issue, not a logic bug.
+    const directorState = savedStates.find((s) => s.panelId === panelId);
+    if (directorState?.visible) {
+      assert.equal(
+        registry.getPanelState(panelId)?.visible,
+        true,
+        'restoring director snapshot re-shows solo-streamer hidden panels (confirms the old bug would surface here)',
+      );
+    }
+  }
+});
+
+test('Program and Preview remain visible in all 9 presets', () => {
+  const registry = createRegistry();
+  const monitors = [WORKSPACE_PANEL_IDS.programMonitor, WORKSPACE_PANEL_IDS.previewMonitor];
+  for (const preset of workspacePresetList) {
+    applyPresetToRegistry(registry, preset);
+    for (const monitorId of monitors) {
+      const state = registry.getPanelState(monitorId);
+      assert.ok(state?.visible, `preset "${preset.id}" must keep ${monitorId} visible`);
+    }
+  }
+});
+
+test('collapsed zones differ between presets (e.g., compact collapses all docks)', () => {
+  const compactPreset = workspacePresets.compact;
+  const directorPreset = workspacePresets.director;
+
+  assert.ok(
+    compactPreset.collapsedZones.includes('left-dock'),
+    'compact preset must collapse left-dock',
+  );
+  assert.ok(
+    compactPreset.collapsedZones.includes('right-dock'),
+    'compact preset must collapse right-dock',
+  );
+  assert.ok(
+    compactPreset.collapsedZones.includes('bottom-workspace'),
+    'compact preset must collapse bottom-workspace',
+  );
+  assert.equal(
+    directorPreset.collapsedZones.length,
+    0,
+    'director preset must not collapse any zone',
+  );
+});
