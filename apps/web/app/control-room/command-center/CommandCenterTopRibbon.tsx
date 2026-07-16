@@ -30,6 +30,7 @@ const zoneToggles: Array<{
 export function CommandCenterTopRibbon({
   activePresetId,
   layoutLocked,
+  hasUserSavedLayout = false,
   isZoneCollapsed,
   onSelectPreset,
   onToggleZone,
@@ -40,6 +41,8 @@ export function CommandCenterTopRibbon({
 }: {
   activePresetId: WorkspacePresetId;
   layoutLocked: boolean;
+  /** True when the active preset has an explicit user-saved layout. */
+  hasUserSavedLayout?: boolean;
   isZoneCollapsed: (zoneId: CommandCenterZoneToggleId) => boolean;
   onSelectPreset: (presetId: WorkspacePresetId) => void;
   onToggleZone: (zoneId: CommandCenterZoneToggleId) => void;
@@ -153,36 +156,42 @@ export function CommandCenterTopRibbon({
           {layoutLocked ? 'Locked' : 'Lock'}
         </button>
 
-        {/* Save layout */}
+        {/* Save layout — explicit per-preset save (Ctrl+S) */}
         <button
           type="button"
           onClick={onSaveLayout}
-          title="Save current layout to browser storage"
+          title={
+            hasUserSavedLayout
+              ? 'Save current layout for this workspace (previously saved)'
+              : 'Save current layout for this workspace (Ctrl+S)'
+          }
+          aria-label={hasUserSavedLayout ? 'Save layout (previously saved)' : 'Save layout'}
+          className={cn(
+            'rounded-ubos-sm px-2 py-0.5',
+            'text-[10px] font-medium',
+            'transition-colors duration-[var(--ubos-duration-fast)]',
+            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
+            hasUserSavedLayout
+              ? 'text-ubos-selection-text hover:bg-ubos-graphite'
+              : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
+          )}
+        >
+          {hasUserSavedLayout ? 'Saved ✓' : 'Save'}
+        </button>
+
+        {/* Reset layout — restores factory defaults for the current preset.
+            NOT disabled when locked — lock only restricts manual drag-resize. */}
+        <button
+          type="button"
+          onClick={onResetLayout}
+          title="Reset layout to factory defaults for this workspace (Ctrl+Shift+L)"
+          aria-label="Reset layout to factory defaults"
           className={cn(
             'rounded-ubos-sm px-2 py-0.5',
             'text-[10px] font-medium',
             'transition-colors duration-[var(--ubos-duration-fast)]',
             'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
-          )}
-        >
-          Save
-        </button>
-
-        {/* Reset layout */}
-        <button
-          type="button"
-          onClick={onResetLayout}
-          disabled={layoutLocked}
-          title={layoutLocked ? 'Unlock layout to reset' : 'Reset layout to defaults'}
-          className={cn(
-            'rounded-ubos-sm px-2 py-0.5',
-            'text-[10px] font-medium',
-            'transition-colors duration-[var(--ubos-duration-fast)]',
-            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ubos-selection/60',
-            layoutLocked
-              ? 'cursor-not-allowed text-ubos-fg-muted opacity-40'
-              : 'text-ubos-fg-muted hover:bg-ubos-graphite hover:text-ubos-fg-secondary',
           )}
         >
           Reset
