@@ -396,3 +396,76 @@
 - Platform release: yes; `.codex/RELEASES.md` marks v5.11 released locally with certification PASS. Release tag creation and publication were deferred because explicit authorization was not provided.
 - Blockers: none for local implementation and validation.
 - Next eligible phase: v5.12.0 pending an authoritative task specification and maintainer authorization.
+
+## Workspace Manager Regression Fix — 2026-07-16
+
+### Objective
+
+Restore workspace preset switching so that clicking a workspace in the Workspace menu visibly reconfigures the Control Room layout (panels, zones, tab, label).
+
+### Root Cause
+
+Three places in the codebase gated workspace preset selection behind `layoutLocked`:
+
+1. **`CommandCenterTopMenu.tsx` line 274** — `disabled: layoutLocked` on workspace menu items meant clicking any preset was impossible while layout was locked. The menu rendered the correct list but disabled every entry.
+
+2. **`useCommandCenterWorkspace.ts` `applyPreset`** — `if (layoutLocked) return null;` caused `applyPreset` to silently do nothing even if somehow called while locked, preventing the panel registry from being updated.
+
+3. **`useWorkspaceKeyboard.ts` line 125** — `if (!layoutLocked) onSelectPreset(preset);` blocked the Ctrl+1–5 keyboard shortcuts from switching presets when locked.
+
+The lock was intended to prevent manual dragging/resizing of dock zones, not to freeze the entire workspace selection. When a user had previously locked the layout and saved that state, reloading the page hydrated `layoutLocked: true` from localStorage and made workspace switching completely inoperative.
+
+The misleading tooltip on `CommandCenterTopRibbon` ("Layout locked — use Workspace menu to switch") further confused operators because the Workspace menu was also disabled.
+
+### Affected State Path
+
+```
+Workspace menu click
+→ workspaceItems[n].onClick (disabled: layoutLocked → no-op)
+→ onSelectPreset(presetId)  (never called)
+→ applyPreset(presetId)      (would have returned null anyway)
+→ applyPresetToRegistry()    (never called)
+→ registry panel states      (unchanged)
+→ isPanelVisible()           (stale values)
+→ CommandCenterRightDock/LeftDock (show old panels)
+```
+
+### Files Changed
+
+- `apps/web/app/control-room/command-center/useCommandCenterWorkspace.ts` — Removed `if (layoutLocked) return null;` from `applyPreset`. Lock now only blocks drag-resize, not preset selection.
+- `apps/web/app/control-room/command-center/CommandCenterTopMenu.tsx` — Removed `disabled: layoutLocked` from workspace preset menu items.
+- `apps/web/app/control-room/command-center/useWorkspaceKeyboard.ts` — Removed `if (!layoutLocked)` guard from Ctrl+1–5 preset shortcuts.
+- `apps/web/app/control-room/command-center/CommandCenterShell.tsx` — Updated stale comment ("layout locked") on `applyPreset` null-check guard.
+- `apps/web/app/control-room/command-center/CommandCenterTopRibbon.tsx` — Fixed misleading locked tooltip from "use Workspace menu to switch" to "dragging and resizing disabled; workspace switching still available".
+- `apps/web/app/control-room/command-center/command-center-logic.test.ts` — Added 7 regression tests.
+
+### Before / After Behavior
+
+**Before:** Clicking Director/Solo Streamer/etc. when `layoutLocked` was true did nothing. The layout remained in the previous preset. The tooltip said "use Workspace menu" but the menu was also disabled. On reload, localStorage-hydrated lock state made switching permanently impossible without manually clearing storage.
+
+**After:** Workspace preset selection works regardless of lock state. Lock continues to disable dock drag-resize handles, zone toggle buttons, and Reset Layout (which are operator customizations). Preset selection is now treated as navigation, not customization.
+
+### Tests Run
+
+- `pnpm --filter @ubos/shared test` — PASS (workspace-manager validation passed)
+- `pnpm --filter @ubos/web test` — PASS (76/76 subtests pass, 0 failures)
+- `git diff --check` — PASS (no whitespace errors)
+- Typecheck of changed files — no new errors introduced
+
+### Regression Tests Added (7 new tests)
+
+1. `all 9 presets are present and resolve` — verifies every preset id exists, has a name, and has visible panels
+2. `each preset produces a distinct visible panel set or different zone configuration` — verifies solo-streamer and audio-engineer differ from director in panel set; compact differs via zone collapse
+3. `only one preset is active after applyPresetToRegistry` — verifies switching from director to solo-streamer hides the correct panels and shows the correct ones
+4. `layout lock must not block applyPresetToRegistry` — verifies calling applyPresetToRegistry always changes panel state regardless of any external lock
+5. `applying a preset after save/load does not restore the old preset panels` — documents the hydration order requirement
+6. `Program and Preview remain visible in all 9 presets` — verifies monitor protection across all presets
+7. `collapsed zones differ between presets` — verifies compact collapses all zones, director collapses none
+
+### Commit Hash
+
+(see git log)
+
+### Status
+
+PASS
