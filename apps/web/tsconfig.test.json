@@ -15,8 +15,10 @@
     "app/control-room/broadcast-command-center/command-rail-constants.ts",
     "app/control-room/command-center/command-center-logic.ts",
     "app/control-room/command-center/command-center-logic.test.ts",
+    "app/control-room/operations/browser-recording-verification.ts",
     "lib/native-runtime/ffmpeg.ts",
     "lib/native-runtime/ffmpeg-discovery.test.ts",
-    "lib/native-runtime/ffmpeg-recording.test.ts"
+    "lib/native-runtime/ffmpeg-recording.test.ts",
+    "lib/program-pipeline/program-ownership.test.ts"
   ]
 }
