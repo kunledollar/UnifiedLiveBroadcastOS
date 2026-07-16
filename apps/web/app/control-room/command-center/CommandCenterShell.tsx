@@ -196,6 +196,7 @@ export function CommandCenterShell({
     safeAreasVisible,
     fullscreenMonitor,
     hasUserSavedLayout,
+    activeBottomTab: workspaceActiveBottomTab,
     applyPreset,
     togglePanelVisibility,
     setPanelVisible,
@@ -250,7 +251,14 @@ export function CommandCenterShell({
   );
 
   // Keep layout metadata in sync when other parts of the app switch the tab.
+  // Skip the first mount so the workspace manager's hydration-driven preset
+  // tab is not immediately overridden by the shell host's initial prop value.
+  const externalTabSyncInitialized = useRef(false);
   useEffect(() => {
+    if (!externalTabSyncInitialized.current) {
+      externalTabSyncInitialized.current = true;
+      return;
+    }
     setActiveBottomTab(activeDockTab);
   }, [activeDockTab, setActiveBottomTab]);
 
@@ -643,7 +651,7 @@ export function CommandCenterShell({
           style={bottomCollapsed || forceBottomCollapsed ? undefined : { height: bottomHeight }}
         >
           <CommandCenterBottomWorkspace
-            activeTab={activeDockTab}
+            activeTab={workspaceActiveBottomTab}
             onTabChange={handleBottomTabChange}
             collapsed={bottomCollapsed || forceBottomCollapsed}
             onToggleCollapse={
