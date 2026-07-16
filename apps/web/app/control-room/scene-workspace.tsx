@@ -2641,14 +2641,17 @@ export function SceneWorkspace({
   const liveProgramVisible = isLiveMediaStream(programStreamToShow);
 
   const createProgramRecordingStream = useCallback(() => {
-    const directStream = programStreamToShow ?? (programStreamOnAir ? firstLiveVideoStream : null);
-    if (isLiveMediaStream(directStream)) {
-      return {
-        stream: directStream,
-        sourceType: programLiveVideoSource?.type ?? 'camera',
-      } as const;
-    }
-    const programRoot = document.querySelector('[data-ubos-program-monitor=\"true\"]');
+    // Priority 1: DOM video capture from the Program monitor.
+    //
+    // The Program monitor element ([data-ubos-program-monitor]) is the single
+    // authoritative visual representation of Program. Capturing from it ensures
+    // that scene changes executed via CUT or AUTO during an active recording are
+    // reflected in the recording, because the monitor's video element is updated
+    // by the compositor whenever program.sceneId changes.
+    //
+    // Direct camera stream is only used as a fallback when no capturable video
+    // element is found in the monitor (e.g. empty scene, unsupported browser API).
+    const programRoot = document.querySelector('[data-ubos-program-monitor="true"]');
     const programVideo = programRoot?.querySelector('video') as
       | (HTMLVideoElement & {
           captureStream?: () => MediaStream;
@@ -2671,6 +2674,15 @@ export function SceneWorkspace({
       return {
         stream: mixed,
         sourceType: programScene.sources.find((source) => source.isVisible)?.type ?? 'media',
+      } as const;
+    }
+    // Priority 2: Direct camera/media stream as fallback when no Program monitor
+    // video element is available (e.g. browser-source-only scene, empty monitor).
+    const directStream = programStreamToShow ?? (programStreamOnAir ? firstLiveVideoStream : null);
+    if (isLiveMediaStream(directStream)) {
+      return {
+        stream: directStream,
+        sourceType: programLiveVideoSource?.type ?? 'camera',
       } as const;
     }
     return null;
