@@ -262,9 +262,6 @@ export function OperationsConsoleContent({
         {...(nativeRecordingState ? { nativeState: nativeRecordingState } : {})}
         {...(onStartNativeRecording ? { onStartNative: onStartNativeRecording } : {})}
         {...(onStopNativeRecording ? { onStopNative: onStopNativeRecording } : {})}
-        {...(nativeRecordingState ? { nativeState: nativeRecordingState } : {})}
-        {...(onStartNativeRecording ? { onStartNative: onStartNativeRecording } : {})}
-        {...(onStopNativeRecording ? { onStopNative: onStopNativeRecording } : {})}
       />
     ) : (
       <RecordingRuntimePanel

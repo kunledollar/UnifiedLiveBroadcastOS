@@ -530,3 +530,10 @@ Duplicate check: **No visually identical layouts. All 9 presets produce distinct
 | `artifacts/workspace-validation/report.html` | Browsable validation report |
 
 ### PASS
+
+## 2026-07-16 — Control Room Scene Routing and Native Recording UI Regression Investigation
+
+- Root cause: Control Room live monitor media binding used a global first-live-stream fallback after Program/Preview scene identity had changed, allowing labels to reflect Scene B/C while the renderer still displayed Scene A media.
+- Repair: scene-to-live-media resolution now binds Program and Preview monitors to the selected scene's own visible source ID and live stream; unrelated first-stream fallback is no longer used for scene rendering.
+- Native Recording visibility: the existing `RecordingRuntimePanel` remains the intended implementation and is exposed through the production Operations Console recording tab/menu path with explicit native blocked reason and browser-local fallback state.
+- Evidence: `artifacts/scene-routing-recording-ui/trace-report.md`, `measurements.json`, and `report.html` record the code-level trace. Genuine browser screenshots remain blocked because no Chromium/Chrome/Edge executable is installed in this host and apt installation is blocked by a 403 proxy; placeholder PNGs were removed and are not production evidence.

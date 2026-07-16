@@ -22,11 +22,11 @@ const programStatus: MonitorStatusInfo = {
 };
 
 const previewStatus: MonitorStatusInfo = {
-  state: 'ready',
+  state: 'preview',
   sourceName: 'Screen Capture',
   resolution: '1920×1080',
   fps: '30',
-  audioLevel: undefined,
+  audioLevel: null,
 };
 
 const operationsSections: OperationsDockSection[] = [];

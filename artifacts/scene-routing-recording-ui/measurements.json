@@ -1,0 +1,15 @@
+{
+  "status": "partial",
+  "capturedAt": "2026-07-16T00:00:00.000Z",
+  "rootCauseSceneRouting": "Control Room live monitor binding fell back to the first live MediaStream when the selected scene did not own a stream, so Program/Preview labels could change while video stayed bound to Scene A.",
+  "rootCauseRecordingUi": "Native Recording implementation existed in RecordingRuntimePanel and operation tab registry, but the default visible operations tab opened on Guests; the obvious path is the existing Recording operations tab/menu entry.",
+  "programSceneId": "scene-a",
+  "previewSceneId": "scene-c",
+  "programResolvedSourceIds": ["source-a"],
+  "previewResolvedSourceIds": ["source-c"],
+  "programStreamId": "stream-a",
+  "previewStreamId": "stream-c",
+  "programPreviewShareStream": false,
+  "panelVisibilityState": { "nativeRecordingPanelReachable": true, "operationsTab": "recording" },
+  "browserEvidence": "BLOCKED: no installed Chromium/Chrome/Edge executable was available in this host; apt installation was blocked by a 403 proxy. No PNG or MP4 artifact in this directory is presented as production browser evidence."
+}
