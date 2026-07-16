@@ -175,6 +175,10 @@ import {
   type OutputViewMode,
 } from './workspace/monitor-state';
 import {
+  createSceneRoutingEvidence,
+  resolveSceneLiveMedia,
+} from './workspace/scene-routing';
+import {
   GraphicsLayerStack,
   GraphicsPreviewControls,
   GraphicsWorkspace,
@@ -503,6 +507,10 @@ function LiveMediaMonitor({
       )}
     >
       <video
+        data-ubos-live-monitor-video={role}
+        data-ubos-scene-name={sceneName}
+        data-ubos-source-id={sourceId ?? ''}
+        data-ubos-stream-id={stream?.id ?? ''}
         ref={videoRef}
         autoPlay
         disablePictureInPicture
@@ -2228,7 +2236,6 @@ export function SceneWorkspace({
     [startTransition, setScenes],
   );
   const smokeMedia = useMediaCapture();
-  const [programStreamOnAir, setProgramStreamOnAir] = useState(false);
   const [cameraCaptureError, setCameraCaptureError] = useState('');
   const [liveSourceStreams, setLiveSourceStreams] = useState<Record<string, MediaStream>>({});
   const [audioLevel, setAudioLevel] = useState(0);
@@ -2616,29 +2623,37 @@ export function SceneWorkspace({
   const previewScene =
     sorted.find((scene) => scene.id === productionState.previewSceneId) ?? programScene;
   const activeScene = previewScene;
-  const previewLiveVideoSource = getFirstVisibleLiveVideoSource(previewScene);
-  const programLiveVideoSource = getFirstVisibleLiveVideoSource(programScene);
-  const previewCameraSourceId = previewLiveVideoSource?.id ?? null;
-  const programCameraSourceId = programLiveVideoSource?.id ?? null;
-  const previewCameraStream = previewCameraSourceId
-    ? liveSourceStreams[previewCameraSourceId]
-    : null;
-  const programCameraStream = programCameraSourceId
-    ? liveSourceStreams[programCameraSourceId]
-    : null;
+  const previewLiveMedia = useMemo(
+    () => resolveSceneLiveMedia(previewScene, liveSourceStreams),
+    [liveSourceStreams, previewScene],
+  );
+  const programLiveMedia = useMemo(
+    () => resolveSceneLiveMedia(programScene, liveSourceStreams),
+    [liveSourceStreams, programScene],
+  );
+  const previewLiveVideoSource = previewLiveMedia.sourceId
+    ? previewScene.sources.find((source) => source.id === previewLiveMedia.sourceId)
+    : undefined;
+  const programLiveVideoSource = programLiveMedia.sourceId
+    ? programScene.sources.find((source) => source.id === programLiveMedia.sourceId)
+    : undefined;
+  const previewCameraSourceId = previewLiveMedia.sourceId;
+  const programCameraSourceId = programLiveMedia.sourceId;
   const firstLiveVideoStream = useMemo(
     () => findFirstLiveVideoStream(liveSourceStreams),
     [liveSourceStreams],
   );
   const directCameraLive = isLiveMediaStream(firstLiveVideoStream);
-  const previewStreamToShow = previewCameraStream ?? firstLiveVideoStream;
-  const programStreamToShow =
-    programCameraStream ?? (directCameraLive && programStreamOnAir ? firstLiveVideoStream : null);
-  const previewHasCameraSource = Boolean(previewCameraSourceId) || directCameraLive;
-  const programHasCameraSource =
-    Boolean(programCameraSourceId) || (directCameraLive && programStreamOnAir);
-  const livePreviewVisible = isLiveMediaStream(previewStreamToShow);
-  const liveProgramVisible = isLiveMediaStream(programStreamToShow);
+  const previewStreamToShow = previewLiveMedia.stream;
+  const programStreamToShow = programLiveMedia.stream;
+  const previewHasCameraSource = Boolean(previewCameraSourceId);
+  const programHasCameraSource = Boolean(programCameraSourceId);
+  const livePreviewVisible = previewLiveMedia.active;
+  const liveProgramVisible = programLiveMedia.active;
+  const sceneRoutingEvidence = useMemo(
+    () => createSceneRoutingEvidence({ program: programLiveMedia, preview: previewLiveMedia }),
+    [programLiveMedia, previewLiveMedia],
+  );
 
   const createProgramRecordingStream = useCallback(() => {
     // Priority 1: DOM video capture from the Program monitor.
@@ -2678,7 +2693,7 @@ export function SceneWorkspace({
     }
     // Priority 2: Direct camera/media stream as fallback when no Program monitor
     // video element is available (e.g. browser-source-only scene, empty monitor).
-    const directStream = programStreamToShow ?? (programStreamOnAir ? firstLiveVideoStream : null);
+    const directStream = programStreamToShow;
     if (isLiveMediaStream(directStream)) {
       return {
         stream: directStream,
@@ -2687,10 +2702,8 @@ export function SceneWorkspace({
     }
     return null;
   }, [
-    firstLiveVideoStream,
     programLiveVideoSource?.type,
     programScene.sources,
-    programStreamOnAir,
     programStreamToShow,
   ]);
 
@@ -3280,9 +3293,6 @@ export function SceneWorkspace({
       window.setTimeout(() => setTransitionActive(false), Math.max(duration, 250));
     }
     refresh(sorted.map((scene) => ({ ...scene, isActive: scene.id === next.programSceneId })));
-    if (isLiveMediaStream(previewStreamToShow)) {
-      setProgramStreamOnAir(true);
-    }
     persistProductionState(next, type === 'fade' ? 'fade' : type === 'cut' ? 'cut' : 'take');
   };
 
@@ -3438,7 +3448,6 @@ export function SceneWorkspace({
   };
 
   const activateDirectCamera = useCallback(async () => {
-    setProgramStreamOnAir(false);
     await startCameraCapture(SMOKE_CAMERA_SOURCE_ID);
   }, [startCameraCapture]);
 
@@ -4757,8 +4766,7 @@ export function SceneWorkspace({
             onClick={() => {
               Object.keys(liveSourceStreams).forEach((sourceId) => stopLiveSourceStream(sourceId));
               smokeMedia.stopAll();
-              setProgramStreamOnAir(false);
-              setLiveSourceStreams({});
+                        setLiveSourceStreams({});
               setCameraCaptureError('');
             }}
           >
@@ -4967,6 +4975,12 @@ export function SceneWorkspace({
   )?.latencyMs;
 
   return (
+    <>
+      <script
+        id="ubos-scene-routing-evidence"
+        type="application/json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify({ ...sceneRoutingEvidence, panelVisibilityState: { activeOperationsTab, nativeRecordingPanelReachable: operationsTabsResolved.some((tab) => tab.id === 'recording') } }) }}
+      />
     <CommandCenterShell
       layoutStyle={layoutStyle}
       statusBar={
@@ -5059,5 +5073,6 @@ export function SceneWorkspace({
           primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
       }}
     />
+    </>
   );
 }

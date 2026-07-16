@@ -17,6 +17,7 @@ import {
   createPersistenceDiagnostics,
   getRecoveryPlan,
   type StreamHealthMetric,
+  SceneType,
 } from '@ubos/shared';
 
 const layouts: SceneLayout[] = [
@@ -90,7 +91,7 @@ const DEMO_SCENES: Scene[] = [
     id: 'scene-countdown',
     broadcastId: 'demo-broadcast',
     name: 'Opening Countdown',
-    type: 'countdown',
+    type: SceneType.Countdown,
     order: 0,
     isActive: false,
     thumbnailUrl: null,
@@ -109,7 +110,7 @@ const DEMO_SCENES: Scene[] = [
     id: 'scene-interview',
     broadcastId: 'demo-broadcast',
     name: 'Host + Guest Interview',
-    type: 'interview',
+    type: SceneType.Interview,
     order: 1,
     isActive: true,
     thumbnailUrl: null,
@@ -163,7 +164,7 @@ const DEMO_SCENES: Scene[] = [
     id: 'scene-demo',
     broadcastId: 'demo-broadcast',
     name: 'Product Demo + PiP',
-    type: 'screen_share',
+    type: SceneType.ScreenShare,
     order: 2,
     isActive: false,
     thumbnailUrl: null,

@@ -661,3 +661,7 @@ That is the execution standard for UBOS.
 
 
 
+
+## 2026-07-16 Regression Contract Clarification
+
+Program and Preview labels are not sufficient evidence of scene switching. The selected scene must resolve to its own source collection and renderer binding. Recording must capture the authoritative Program monitor after CUT/AUTO/TAKE, not a stale or Preview stream.

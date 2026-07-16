@@ -316,3 +316,8 @@ The central question for every subsystem is:
 
 
 
+
+## 2026-07-16 Scene Routing / Recording UI Update
+
+- Program/Preview Monitor: repaired stale live stream fallback so monitor media follows selected scene source IDs.
+- Native Recording UI: existing Recording Runtime panel is the intended production UI surface; visibility evidence is tracked under `artifacts/scene-routing-recording-ui/`.
