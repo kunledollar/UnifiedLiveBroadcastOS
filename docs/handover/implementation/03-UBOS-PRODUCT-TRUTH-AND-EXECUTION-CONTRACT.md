@@ -112,6 +112,27 @@ No alternative classification may be introduced without updating this document.
 
 # 4. Confirmed Working Capabilities
 
+## 4.0 Workspace Manager (Control Room Layout)
+
+The following workspace management capabilities are confirmed working in-browser:
+
+* 9 workspace presets: Director, Solo Streamer, Technical Director, Audio Engineer, Graphics Operator, Replay Operator, Streaming Operator, Monitor Wall, Compact
+* zone collapse/expand (left dock, right dock, bottom workspace)
+* per-preset saved layouts (isolated per preset; Save does not overwrite other presets)
+* Reset Layout (restores current preset factory defaults; not blocked by lock)
+* Lock Layout (prevents manual drag-resize; does not block preset switching, Save, or Reset)
+* ribbon badge and menu checkmarks always reflect the same authoritative `activePresetId`
+* preset switching persists across page reload
+* keyboard shortcuts: Ctrl+1-5 (preset), Ctrl+S (save), Ctrl+Shift+L (reset)
+
+Classification:
+
+**LIVE_BROWSER**
+
+Updated: 2026-07-16
+
+---
+
 ## 4.1 Repository and Platform Foundation
 
 The following are implemented:

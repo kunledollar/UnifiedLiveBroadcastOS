@@ -110,10 +110,11 @@ export function useWorkspaceKeyboard({
         return;
       }
 
-      // Ctrl+Shift+L — Reset Layout
+      // Ctrl+Shift+L — Reset Layout (not blocked by layout lock — lock only
+      // prevents manual drag-resize, not authoritative layout reset).
       if (mod && shiftKey && !altKey && key.toLowerCase() === 'l') {
         event.preventDefault();
-        if (!layoutLocked) onResetLayout();
+        onResetLayout();
         return;
       }
 

@@ -572,6 +572,11 @@ At the time of this document version:
 * native recording and streaming controls may be dynamically enabled only when real prerequisites are satisfied;
 * unsupported routes must remain hidden or disabled;
 * broad redesign is prohibited during runtime wiring.
+* the Workspace Manager (`useCommandCenterWorkspace`) is the single authoritative owner of preset selection, zone geometry, panel visibility, save/reset/lock state, ribbon badge, and menu checkmarks;
+* all 9 presets (Director, Solo Streamer, Technical Director, Audio Engineer, Graphics Operator, Replay Operator, Streaming Operator, Monitor Wall, Compact) must produce visibly distinct layouts on selection;
+* Reset Layout restores factory defaults for the CURRENT preset only; it does not switch to Director and is not blocked by Lock;
+* Save Layout writes an isolated per-preset record; saving one preset must not overwrite another;
+* Lock prevents manual drag-resize only; it must not block preset switching, Save, or Reset.
 
 ---
 

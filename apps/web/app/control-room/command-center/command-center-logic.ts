@@ -356,6 +356,48 @@ export type CommandCenterPrefs = {
 
 export const COMMAND_CENTER_PREFS_STORAGE_KEY = 'ubos.command-center.prefs.v1';
 
+/**
+ * Per-preset user-saved layout record.
+ *
+ * Stored under `COMMAND_CENTER_SAVED_LAYOUTS_KEY` as a map from preset id to
+ * this record. Only written when the operator explicitly triggers "Save
+ * Layout" — not on every registry mutation. Reset Layout deletes only the
+ * current preset's entry; other presets are untouched.
+ */
+export type SavedPresetLayout = {
+  panelStates: Array<{ panelId: string; zone: string; visible: boolean; collapsed: boolean }>;
+  collapsedZones: WorkspaceZoneId[];
+  zoneSizes: Partial<Record<WorkspaceZoneId, number>>;
+  activeBottomTab: DockTabId;
+  savedAt: string;
+};
+
+export type SavedLayoutsStore = {
+  version: 1;
+  presets: Partial<Record<WorkspacePresetId, SavedPresetLayout>>;
+};
+
+/** Storage key for the explicit per-preset saved layouts map. */
+export const COMMAND_CENTER_SAVED_LAYOUTS_KEY = 'ubos.command-center.saved-layouts.v1';
+
+export function parseSavedLayoutsStore(serialized: string): SavedLayoutsStore | null {
+  let raw: unknown;
+  try {
+    raw = JSON.parse(serialized);
+  } catch {
+    return null;
+  }
+  if (typeof raw !== 'object' || raw === null) return null;
+  const candidate = raw as Record<string, unknown>;
+  if (candidate.version !== 1) return null;
+  if (typeof candidate.presets !== 'object' || candidate.presets === null) return null;
+  return { version: 1, presets: candidate.presets as Partial<Record<WorkspacePresetId, SavedPresetLayout>> };
+}
+
+export function serializeSavedLayoutsStore(store: SavedLayoutsStore): string {
+  return JSON.stringify(store);
+}
+
 export function createDefaultCommandCenterPrefs(): CommandCenterPrefs {
   return {
     version: 2,

@@ -32,6 +32,7 @@ import {
 import type { DockTabId } from '../shell/types';
 import {
   COMMAND_CENTER_PREFS_STORAGE_KEY,
+  COMMAND_CENTER_SAVED_LAYOUTS_KEY,
   applyPresetToRegistry,
   bottomTabForPanel,
   createCommandCenterExtraPanelDefinitions,
@@ -39,8 +40,12 @@ import {
   effectivePresetForLayout,
   operationsTabForPanel,
   parseCommandCenterPrefs,
+  parseSavedLayoutsStore,
   presetBottomTab,
   serializeCommandCenterPrefs,
+  serializeSavedLayoutsStore,
+  type SavedLayoutsStore,
+  type SavedPresetLayout,
 } from './command-center-logic';
 import type { OperationsTabId } from '../shell/types';
 
@@ -89,6 +94,11 @@ export type CommandCenterWorkspace = {
   layoutLocked: boolean;
   safeAreasVisible: boolean;
   fullscreenMonitor: CommandCenterFullscreenTarget;
+  /**
+   * Whether the current preset has a user-saved layout (explicit Save Layout).
+   * False means the preset is showing its factory defaults.
+   */
+  hasUserSavedLayout: boolean;
   applyPreset: (presetId: WorkspacePresetId) => WorkspacePreset | null;
   togglePanelVisibility: (panelId: string) => void;
   setPanelVisible: (panelId: string, visible: boolean) => void;
@@ -104,7 +114,19 @@ export type CommandCenterWorkspace = {
   setLayoutLocked: (locked: boolean) => void;
   toggleSafeAreas: () => void;
   setFullscreenMonitor: (target: CommandCenterFullscreenTarget) => void;
+  /**
+   * Explicitly save the current layout for the active preset.
+   * Writes to a per-preset store so saving Compact never overwrites Director,
+   * and vice versa. The saved layout is restored when the preset is next
+   * activated (including after a page reload when the preset is active).
+   */
   saveLayout: () => void;
+  /**
+   * Restore the factory definition of the currently active preset.
+   * Clears only this preset's user-saved geometry overrides; other presets
+   * are unaffected. NOT blocked by layout lock (lock only prevents manual
+   * drag-resize, not authoritative reset).
+   */
   resetLayout: () => void;
   /**
    * One Owner Rule enforcement: navigate to the primary home of a panel.
@@ -155,6 +177,22 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   // Timer ref for debounced zone-size writes.
   const zoneSizePersistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * Per-preset explicit saved layouts (written only on "Save Layout").
+   * This is the source of truth for hasUserSavedLayout.
+   */
+  const [savedLayoutsStore, setSavedLayoutsStore] = useState<SavedLayoutsStore>({
+    version: 1,
+    presets: {},
+  });
+  // Ref so saveLayout/resetLayout always see the latest store without stale closure.
+  const savedLayoutsStoreRef = useRef(savedLayoutsStore);
+  savedLayoutsStoreRef.current = savedLayoutsStore;
+
+  // Ref for activePresetId — lets saveLayout/resetLayout read current value without deps.
+  const activePresetIdRef = useRef(activePresetId);
+  activePresetIdRef.current = activePresetId;
+
   const observerRef = useRef<ResizeObserver | null>(null);
   const containerRef = useCallback((node: HTMLElement | null) => {
     observerRef.current?.disconnect();
@@ -177,15 +215,30 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   // Restore persisted layout metadata (metadata only — never runtime state).
   useEffect(() => {
     try {
+      // 1. Restore per-preset saved layouts store (explicit Save Layout entries).
+      const storedSaved = window.localStorage.getItem(COMMAND_CENTER_SAVED_LAYOUTS_KEY);
+      const savedStore = storedSaved ? parseSavedLayoutsStore(storedSaved) : null;
+      if (savedStore) {
+        setSavedLayoutsStore(savedStore);
+        savedLayoutsStoreRef.current = savedStore;
+      }
+
+      // 2. Restore active preset from the auto-persist snapshot.
       const storedSnapshot = window.localStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY);
       const snapshot = storedSnapshot ? parseLayoutSnapshot(storedSnapshot) : null;
       if (snapshot) {
+        // Apply factory defaults for the preset first, then overlay the saved
+        // panel state so registry rules (non-closable monitors, etc.) still win.
         applyPresetToRegistry(registry, getWorkspacePreset(snapshot.activePresetId));
         applyLayoutSnapshot(registry, snapshot);
         setActivePresetId(snapshot.activePresetId);
+        activePresetIdRef.current = snapshot.activePresetId;
         setCollapsedZoneOverrides(snapshot.collapsedZones);
         setActiveBottomTabState(presetBottomTab(getWorkspacePreset(snapshot.activePresetId)));
       }
+
+      // 3. Restore shell prefs (bottom tab, lock, safe areas, zone sizes).
+      // These overlay the snapshot values; prefs always win for UI chrome state.
       const storedPrefs = window.localStorage.getItem(COMMAND_CENTER_PREFS_STORAGE_KEY);
       const prefs = storedPrefs ? parseCommandCenterPrefs(storedPrefs) : null;
       if (prefs) {
@@ -239,6 +292,36 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     // zoneSizes intentionally excluded — read from zoneSizesRef to avoid
     // running a full persist on every resize pointer-move event.
   ]);
+
+  /**
+   * Write the current preset's layout into the per-preset saved-layouts store.
+   * Reads active preset and zone sizes from refs so the callback stays stable.
+   */
+  const writeSavedLayoutEntry = useCallback((
+    presetId: WorkspacePresetId,
+    collapseOverrides: WorkspaceZoneId[],
+    bottomTab: DockTabId,
+  ) => {
+    const entry: SavedPresetLayout = {
+      panelStates: registry.getPanelStates(),
+      collapsedZones: collapseOverrides,
+      zoneSizes: zoneSizesRef.current,
+      activeBottomTab: bottomTab,
+      savedAt: new Date().toISOString(),
+    };
+    const current = savedLayoutsStoreRef.current;
+    const next: SavedLayoutsStore = {
+      version: 1,
+      presets: { ...current.presets, [presetId]: entry },
+    };
+    setSavedLayoutsStore(next);
+    savedLayoutsStoreRef.current = next;
+    try {
+      window.localStorage.setItem(COMMAND_CENTER_SAVED_LAYOUTS_KEY, serializeSavedLayoutsStore(next));
+    } catch {
+      // Storage unavailable — saved-layout store stays in memory.
+    }
+  }, [registry]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -310,13 +393,46 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
 
   const applyPreset = useCallback(
     (presetId: WorkspacePresetId): WorkspacePreset | null => {
-      // Layout lock prevents manual dragging/resizing but never blocks preset selection.
+      // Layout lock prevents manual dragging/resizing but NEVER blocks preset selection.
       const nextPreset = getWorkspacePreset(presetId);
+
+      // Step 1: apply factory defaults for the new preset.
       applyPresetToRegistry(registry, nextPreset);
       setActivePresetId(presetId);
-      setCollapsedZoneOverrides([]);
-      setExpandedZoneOverrides([]);
-      setActiveBottomTabState(presetBottomTab(nextPreset));
+      activePresetIdRef.current = presetId;
+
+      // Step 2: if the operator has previously saved a layout for this preset,
+      // overlay it on top of the factory defaults so their customizations are
+      // restored when they switch back to it.
+      const saved = savedLayoutsStoreRef.current.presets[presetId];
+      if (saved) {
+        try {
+          registry.restorePanelStates(
+            saved.panelStates.map((s) => ({
+              panelId: s.panelId,
+              zone: s.zone as import('@ubos/shared').WorkspaceZoneId,
+              visible: s.visible,
+              collapsed: s.collapsed,
+            })),
+          );
+          setCollapsedZoneOverrides(saved.collapsedZones);
+          if (Object.keys(saved.zoneSizes).length > 0) {
+            setZoneSizesState(saved.zoneSizes);
+          }
+          setExpandedZoneOverrides([]);
+          setActiveBottomTabState(saved.activeBottomTab);
+        } catch {
+          // Saved state invalid (e.g. registered panels changed) — use factory defaults.
+          setCollapsedZoneOverrides([]);
+          setExpandedZoneOverrides([]);
+          setActiveBottomTabState(presetBottomTab(nextPreset));
+        }
+      } else {
+        setCollapsedZoneOverrides([]);
+        setExpandedZoneOverrides([]);
+        setActiveBottomTabState(presetBottomTab(nextPreset));
+      }
+
       bump();
       return nextPreset;
     },
@@ -405,8 +521,13 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   }, []);
 
   const saveLayout = useCallback(() => {
+    // Auto-persist the full shell state (active preset + panel states + prefs).
     persist();
-  }, [persist]);
+    // Additionally write a per-preset explicit save so switching away and back
+    // restores this exact layout, and so resetting only this preset leaves
+    // other presets' saved states untouched.
+    writeSavedLayoutEntry(activePresetIdRef.current, collapsedZoneOverrides, activeBottomTab);
+  }, [persist, writeSavedLayoutEntry, collapsedZoneOverrides, activeBottomTab]);
 
   /**
    * One Owner Rule: navigate to the single registered primary home of a panel.
@@ -482,24 +603,49 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   );
 
   const resetLayout = useCallback(() => {
-    if (layoutLocked) return;
+    // Reset is NOT blocked by layout lock.
+    // It restores the factory definition of the CURRENT preset (not director),
+    // clears only this preset's user-saved geometry overrides, and leaves every
+    // other preset's saved state untouched.
+    const currentPresetId = activePresetIdRef.current;
+    const factoryPreset = getWorkspacePreset(currentPresetId);
+
+    // Remove the per-preset saved layout for the current preset only.
+    const current = savedLayoutsStoreRef.current;
+    if (current.presets[currentPresetId]) {
+      const { [currentPresetId]: _removed, ...remaining } = current.presets;
+      const next: SavedLayoutsStore = { version: 1, presets: remaining };
+      setSavedLayoutsStore(next);
+      savedLayoutsStoreRef.current = next;
+      try {
+        window.localStorage.setItem(COMMAND_CENTER_SAVED_LAYOUTS_KEY, serializeSavedLayoutsStore(next));
+      } catch {
+        // Ignore storage failures.
+      }
+    }
+
+    // Clear the auto-persist snapshot (it will be rewritten on next state change).
     try {
       window.localStorage.removeItem(WORKSPACE_LAYOUT_STORAGE_KEY);
-      window.localStorage.removeItem(COMMAND_CENTER_PREFS_STORAGE_KEY);
     } catch {
       // Ignore storage failures.
     }
-    const defaults = createDefaultCommandCenterPrefs();
-    applyPresetToRegistry(registry, getWorkspacePreset(defaultWorkspacePresetId));
-    setActivePresetId(defaultWorkspacePresetId);
+
+    // Restore factory panel layout for the current preset.
+    applyPresetToRegistry(registry, factoryPreset);
     setCollapsedZoneOverrides([]);
     setExpandedZoneOverrides([]);
+    // Reset zone sizes for this preset only (clear all — per-preset size tracking
+    // is not yet implemented, so clearing all sizes is the safe conservative choice).
     setZoneSizesState({});
-    setActiveBottomTabState(defaults.activeBottomTab);
-    setSafeAreasVisible(defaults.safeAreasVisible);
+    setActiveBottomTabState(presetBottomTab(factoryPreset));
     setFullscreenMonitor(null);
+    // Do NOT change activePresetId — reset stays on the same preset.
+    // Do NOT forcibly unlock — lock state is a separate setting.
     bump();
-  }, [registry, layoutLocked, bump]);
+  }, [registry, bump]);
+
+  const hasUserSavedLayout = activePresetId in savedLayoutsStore.presets;
 
   return {
     containerRef,
@@ -516,6 +662,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     layoutLocked,
     safeAreasVisible,
     fullscreenMonitor,
+    hasUserSavedLayout,
     applyPreset,
     togglePanelVisibility,
     setPanelVisible,

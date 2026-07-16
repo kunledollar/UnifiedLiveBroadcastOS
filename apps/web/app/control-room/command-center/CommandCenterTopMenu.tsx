@@ -202,6 +202,8 @@ export type CommandCenterTopMenuProps = {
   activePresetId: WorkspacePresetId;
   layoutLocked: boolean;
   safeAreasVisible: boolean;
+  /** True when the active preset has an explicit user-saved layout. */
+  hasUserSavedLayout?: boolean;
   dockPanels: WorkspacePanelDefinition[];
   isPanelVisible: (panelId: string) => boolean;
   isZoneCollapsed: (zoneId: CommandCenterZoneToggleId) => boolean;
@@ -235,6 +237,7 @@ export function CommandCenterTopMenu({
   activePresetId,
   layoutLocked,
   safeAreasVisible,
+  hasUserSavedLayout = false,
   dockPanels,
   isPanelVisible,
   isZoneCollapsed,
@@ -314,8 +317,13 @@ export function CommandCenterTopMenu({
       items: [
         ...workspaceItems,
         { divider: true, label: '' },
-        { label: 'Reset Layout', shortcut: 'Ctrl+Shift+L', onClick: onResetLayout, disabled: layoutLocked },
-        { label: 'Save Layout', onClick: onSaveLayout },
+        // Reset restores the factory definition of the current preset; NOT blocked by lock.
+        { label: 'Reset Layout', shortcut: 'Ctrl+Shift+L', onClick: onResetLayout },
+        {
+          label: hasUserSavedLayout ? 'Save Layout (Saved ✓)' : 'Save Layout',
+          shortcut: 'Ctrl+S',
+          onClick: onSaveLayout,
+        },
         { label: layoutLocked ? 'Unlock Layout' : 'Lock Layout', checked: layoutLocked, onClick: onToggleLayoutLock },
       ],
     },
@@ -475,8 +483,13 @@ export function CommandCenterTopMenu({
       items: [
         // Layout actions (former "View" menu)
         { label: 'Layout', header: true },
-        { label: 'Reset Layout', shortcut: 'Ctrl+Shift+L', onClick: onResetLayout, disabled: layoutLocked },
-        { label: 'Save Layout', onClick: onSaveLayout },
+        // Reset is not blocked by layout lock (lock only restricts manual drag-resize).
+        { label: 'Reset Layout', shortcut: 'Ctrl+Shift+L', onClick: onResetLayout },
+        {
+          label: hasUserSavedLayout ? 'Save Layout (Saved ✓)' : 'Save Layout',
+          shortcut: 'Ctrl+S',
+          onClick: onSaveLayout,
+        },
         ...(onRestoreWorkspace
           ? [{ label: 'Load Layout', onClick: onRestoreWorkspace }]
           : [{ label: 'Load Layout', disabled: true }]),

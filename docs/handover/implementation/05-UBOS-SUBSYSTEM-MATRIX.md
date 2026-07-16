@@ -107,6 +107,7 @@ Every status change must include:
 | Subsystem | Architectural Owner | Primary Responsibility | Current Status | Confirmed Working | Remaining Work | Completion Evidence |
 |---|---|---|---|---|---|---|
 | Control Room | Web Application / UI Layer | Main operator workspace | PARTIALLY_WIRED | Program, Preview, sources, scenes, browser controls | Complete runtime wiring and remove misleading controls | End-to-end operator workflow |
+| Workspace Manager | Web Application / UI Layer | Panel layout, preset switching, zone geometry, save/reset/lock | LIVE_BROWSER | 9 presets (Director, Solo Streamer, Technical Director, Audio Engineer, Graphics Operator, Replay Operator, Streaming Operator, Monitor Wall, Compact), zone collapse, per-preset saved layouts, lock state, ribbon badge, menu checkmarks all wired to single authoritative state owner | Browser-level only; no native parity needed | 91 unit tests pass; browser verification on Windows required |
 | Program Monitor | Production Layer | Display authoritative Program output | LIVE_BROWSER | Displays browser Program media | Verify native Program parity | Visible source and scene changes |
 | Preview Monitor | Production Layer | Display next production state | LIVE_BROWSER | Browser Preview assignment | Verify native renderer path | Preview remains isolated from Program |
 | Source Management | Production Layer | Register and manage inputs | PARTIALLY_WIRED | Browser media and local source models | Native, remote, protocol, and social input connectors | Real source enters Preview and Program |

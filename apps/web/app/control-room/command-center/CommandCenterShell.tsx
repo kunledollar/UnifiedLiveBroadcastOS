@@ -195,6 +195,7 @@ export function CommandCenterShell({
     layoutLocked,
     safeAreasVisible,
     fullscreenMonitor,
+    hasUserSavedLayout,
     applyPreset,
     togglePanelVisibility,
     setPanelVisible,
@@ -491,6 +492,7 @@ export function CommandCenterShell({
           activePresetId={activePresetId}
           layoutLocked={layoutLocked}
           safeAreasVisible={safeAreasVisible}
+          hasUserSavedLayout={hasUserSavedLayout}
           dockPanels={panels}
           isPanelVisible={isPanelVisible}
           isZoneCollapsed={isZoneToggleCollapsed}
@@ -521,6 +523,7 @@ export function CommandCenterShell({
         <CommandCenterTopRibbon
           activePresetId={activePresetId}
           layoutLocked={layoutLocked}
+          hasUserSavedLayout={hasUserSavedLayout}
           isZoneCollapsed={isZoneToggleCollapsed}
           onSelectPreset={handleSelectPreset}
           onToggleZone={toggleZone}

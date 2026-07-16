@@ -469,3 +469,43 @@ Workspace menu click
 ### Status
 
 PASS
+
+---
+
+## Workspace Manager Functional Restoration — 2026-07-16
+
+### Objective
+
+Repair all workspace/layout controls: preset switching, Save Layout (per-preset isolation), Reset Layout (restore current preset, not director), Lock Layout (not blocking presets or reset), ribbon zone toggle icons, ribbon Save/Reset controls, and consistency between ribbon badge and menu checkmark.
+
+### Root Cause
+
+1. `resetLayout` always reset to `defaultWorkspacePresetId` ('director'), not the active preset
+2. `resetLayout` was blocked by `layoutLocked` (incorrect — lock only restricts manual drag-resize)
+3. `Ctrl+Shift+L` keyboard shortcut blocked by `layoutLocked`
+4. No per-preset saved layout isolation — `saveLayout()` overwrote a single flat snapshot
+5. `applyPreset` never loaded the user's saved customization for a preset on switch-back
+6. Badge/menu checkmark disagreement was a stale localStorage artifact from two competing state systems (old `ubos.controlRoom.workspace.v2` vs new `ubos.workspace-manager.layout.v1`)
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `useCommandCenterWorkspace.ts` | Per-preset saved layouts; `applyPreset` loads saved state; `resetLayout` restores current preset without lock guard; `saveLayout` writes per-preset entry; `hasUserSavedLayout` flag |
+| `command-center-logic.ts` | `SavedPresetLayout`, `SavedLayoutsStore`, `COMMAND_CENTER_SAVED_LAYOUTS_KEY`, `parseSavedLayoutsStore`, `serializeSavedLayoutsStore` |
+| `CommandCenterTopMenu.tsx` | `hasUserSavedLayout` prop; Save shows "Saved ✓"; Reset no longer disabled by lock |
+| `CommandCenterTopRibbon.tsx` | `hasUserSavedLayout` prop; Save shows "Saved ✓"; Reset never disabled |
+| `CommandCenterShell.tsx` | Pass `hasUserSavedLayout` to menu and ribbon |
+| `useWorkspaceKeyboard.ts` | `Ctrl+Shift+L` no longer blocked by `layoutLocked` |
+| `command-center-logic.test.ts` | 15 new regression tests |
+
+### Tests Run
+
+- `pnpm --filter @ubos/shared test` — PASS (all workspace-manager validations pass)
+- `pnpm --filter @ubos/web test` — PASS (91/91 subtests, 0 failures)
+- `git diff --check` — PASS (no whitespace errors)
+- TypeScript: 0 errors in modified files (pre-existing unrelated errors untouched)
+
+### Status
+
+PARTIAL — Unit tests PASS. Browser acceptance evidence on Windows Control Room PENDING.
