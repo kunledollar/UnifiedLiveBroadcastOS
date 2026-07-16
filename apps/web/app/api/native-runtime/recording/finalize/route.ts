@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { finalizeNativeRecording } from '../../../../../lib/native-runtime/ffmpeg';
 
+// Explicitly remove body-size restrictions for this route — WebM recordings
+// sent as base64 JSON can legitimately be tens of megabytes.
+export const dynamic = 'force-dynamic';
+
 function parseRequest(value: unknown) {
   const input = typeof value === 'object' && value !== null ? value as Record<string, unknown> : {};
   if (typeof input.base64Webm !== 'string' || !input.base64Webm) throw new Error('base64Webm is required.');

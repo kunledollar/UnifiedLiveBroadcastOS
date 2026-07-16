@@ -149,7 +149,7 @@ import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import { LogsPanel } from './operations/LogsPanel';
 import { RoutingPanel } from './operations/RoutingPanel';
-import type { BrowserRecordingPanelState } from './operations/RecordingRuntimePanel';
+import type { BrowserRecordingPanelState, NativeRecordingPanelState } from './operations/RecordingRuntimePanel';
 import { verifyBrowserRecordingArtifact } from './operations/browser-recording-verification';
 import type {
   BrowserStreamingPanelState,
@@ -2252,6 +2252,7 @@ export function SceneWorkspace({
   );
   const nativeRecorderRef = useRef<MediaRecorder | null>(null);
   const nativeRecordedChunksRef = useRef<Blob[]>([]);
+  const nativeExpectedAudioRef = useRef<boolean>(false);
   const [nativeRecordingState, setNativeRecordingState] = useState<NativeRecordingPanelState>({
     runtimeConnected: false,
     ffmpegAvailable: false,
@@ -2259,7 +2260,7 @@ export function SceneWorkspace({
     programMediaAvailable: false,
     outputWritable: false,
     adapterHealthy: false,
-    state: 'idle',
+    state: 'unavailable',
     elapsedMs: 0,
     blockedReason: 'Native runtime status has not loaded.',
     artifactPath: null,
@@ -2784,22 +2785,39 @@ export function SceneWorkspace({
   }, []);
 
   const refreshNativeRuntimeStatus = useCallback(async () => {
+    // States where a status refresh may safely update availability / readiness.
+    // Active recording states (preparing/recording/stopping/finalizing) are left
+    // untouched so a periodic poll cannot disrupt an in-progress session.
+    const settledStates: NativeRecordingPanelState['state'][] = [
+      'unavailable',
+      'ready',
+      'verified',
+      'failed',
+    ];
     try {
       const response = await fetch('/api/native-runtime/status', { cache: 'no-store' });
-      const status = await response.json();
+      const status = await response.json() as {
+        connected?: boolean;
+        ffmpeg?: { state?: string; reason?: string | null };
+        ffprobe?: { state?: string; reason?: string | null };
+        lastArtifactResult?: { artifactPath?: string; sizeBytes?: number; durationSeconds?: number; videoCodec?: string; audioCodec?: string | null } | null;
+        lastFailure?: string | null;
+      };
       setNativeRecordingState((current) => {
         const programMediaAvailable = liveProgramVisible;
-        const blocked = !status.connected
+        const blocked: string | null = !status.connected
           ? 'Native runtime API host is disconnected.'
           : status.ffmpeg?.state !== 'AVAILABLE'
-            ? status.ffmpeg?.reason ?? 'FFmpeg is unavailable.'
+            ? (status.ffmpeg?.reason ?? 'FFmpeg is unavailable.')
             : status.ffprobe?.state !== 'AVAILABLE'
-              ? status.ffprobe?.reason ?? 'FFprobe is unavailable.'
+              ? (status.ffprobe?.reason ?? 'FFprobe is unavailable.')
               : !programMediaAvailable
                 ? 'Program media is not available. Take a camera, screen, or media source to Program first.'
-                : current.state !== 'idle'
-                  ? null
-                  : null;
+                : null;
+        // Only update readiness state when not in an active recording session.
+        const nextState: NativeRecordingPanelState['state'] = settledStates.includes(current.state)
+          ? (blocked ? 'unavailable' : 'ready')
+          : current.state;
         return {
           ...current,
           runtimeConnected: Boolean(status.connected),
@@ -2807,7 +2825,8 @@ export function SceneWorkspace({
           ffprobeAvailable: status.ffprobe?.state === 'AVAILABLE',
           programMediaAvailable,
           outputWritable: true,
-          adapterHealthy: status.recordingReady || status.ffmpeg?.state === 'AVAILABLE',
+          adapterHealthy: status.ffmpeg?.state === 'AVAILABLE',
+          state: nextState,
           blockedReason: blocked,
           artifactPath: status.lastArtifactResult?.artifactPath ?? current.artifactPath,
           artifactSizeBytes: status.lastArtifactResult?.sizeBytes ?? current.artifactSizeBytes,
@@ -2821,6 +2840,7 @@ export function SceneWorkspace({
       setNativeRecordingState((current) => ({
         ...current,
         runtimeConnected: false,
+        state: settledStates.includes(current.state) ? 'unavailable' : current.state,
         blockedReason: 'Native runtime API host is disconnected.',
       }));
     }
@@ -2844,53 +2864,97 @@ export function SceneWorkspace({
     });
 
   const startNativeRecording = useCallback(() => {
-    if (nativeRecordingState.blockedReason || nativeRecorderRef.current) return;
+    // Only start from the 'ready' state; all prerequisites are confirmed at that point.
+    if (nativeRecordingState.state !== 'ready') return;
+    if (nativeRecorderRef.current) return;
+
+    setNativeRecordingState((current) => ({ ...current, state: 'preparing', failure: null }));
+
     const source = createProgramRecordingStream();
     if (!source) {
       setNativeRecordingState((current) => ({
         ...current,
         state: 'failed',
-        failure: 'No capturable Program media is available for native handoff.',
+        failure: 'No capturable Program media is available for native handoff. Ensure a camera, screen, or media source is on Program.',
       }));
       return;
     }
+
     nativeRecordedChunksRef.current = [];
     nativeRecordingStartedAtRef.current = new Date().toISOString();
-    const recorder = new MediaRecorder(source.stream, MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? { mimeType: 'video/webm;codecs=vp9,opus' } : undefined);
+    // Determine audio expectation from actual live tracks, not MIME type heuristics.
+    nativeExpectedAudioRef.current = source.stream.getAudioTracks().some(
+      (track) => track.readyState === 'live',
+    );
+
+    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
+      ? 'video/webm;codecs=vp9,opus'
+      : MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus')
+        ? 'video/webm;codecs=vp8,opus'
+        : MediaRecorder.isTypeSupported('video/webm')
+          ? 'video/webm'
+          : undefined;
+
+    const recorder = new MediaRecorder(source.stream, mimeType ? { mimeType } : undefined);
     nativeRecorderRef.current = recorder;
+
     recorder.ondataavailable = (event) => {
       if (event.data.size > 0) nativeRecordedChunksRef.current.push(event.data);
     };
+
     recorder.onerror = () => {
-      setNativeRecordingState((current) => ({ ...current, state: 'failed', failure: 'Native handoff recorder failed.' }));
+      setNativeRecordingState((current) => ({
+        ...current,
+        state: 'failed',
+        failure: 'Native handoff MediaRecorder reported an error.',
+      }));
       nativeRecorderRef.current = null;
     };
+
     recorder.onstop = () => {
       void (async () => {
         setNativeRecordingState((current) => ({ ...current, state: 'finalizing' }));
         try {
-          const blob = new Blob(nativeRecordedChunksRef.current, { type: recorder.mimeType || 'video/webm' });
+          const blob = new Blob(nativeRecordedChunksRef.current, {
+            type: recorder.mimeType || 'video/webm',
+          });
+          if (blob.size === 0) throw new Error('MediaRecorder produced an empty recording. Ensure the Program source was active during recording.');
           const response = await fetch('/api/native-runtime/recording/finalize', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify({
               base64Webm: await blobToBase64(blob),
               mimeType: blob.type,
-              expectedAudio: blob.type.includes('opus'),
+              expectedAudio: nativeExpectedAudioRef.current,
             }),
           });
-          const payload = await response.json();
-          if (!response.ok || !payload.ok) throw new Error(payload.message ?? 'Native recording finalization failed.');
+          const payload = await response.json() as {
+            ok?: boolean;
+            message?: string;
+            artifact?: {
+              artifactPath: string;
+              sizeBytes: number;
+              durationSeconds: number;
+              videoCodec: string;
+              audioCodec: string | null;
+            };
+          };
+          if (!response.ok || !payload.ok) {
+            throw new Error(payload.message ?? 'Native recording finalization failed.');
+          }
           setNativeRecordingState((current) => ({
             ...current,
-            state: 'completed',
-            artifactPath: payload.artifact.artifactPath,
-            artifactSizeBytes: payload.artifact.sizeBytes,
-            durationSeconds: payload.artifact.durationSeconds,
-            videoCodec: payload.artifact.videoCodec,
-            audioCodec: payload.artifact.audioCodec,
+            state: 'verified',
+            artifactPath: payload.artifact!.artifactPath,
+            artifactSizeBytes: payload.artifact!.sizeBytes,
+            durationSeconds: payload.artifact!.durationSeconds,
+            videoCodec: payload.artifact!.videoCodec,
+            audioCodec: payload.artifact!.audioCodec,
             failure: null,
           }));
+          // Trigger a status refresh so the server-side lastArtifactResult is
+          // synchronised and the state transitions to 'ready' once the operator
+          // is ready to start another recording.
           void refreshNativeRuntimeStatus();
         } catch (error) {
           setNativeRecordingState((current) => ({
@@ -2903,19 +2967,35 @@ export function SceneWorkspace({
         }
       })();
     };
+
     recorder.start(1000);
-    setNativeRecordingState((current) => ({ ...current, state: 'recording', elapsedMs: 0, failure: null }));
-  }, [createProgramRecordingStream, nativeRecordingState.blockedReason, refreshNativeRuntimeStatus]);
+    setNativeRecordingState((current) => ({
+      ...current,
+      state: 'recording',
+      elapsedMs: 0,
+      failure: null,
+    }));
+  }, [createProgramRecordingStream, nativeRecordingState.state, refreshNativeRuntimeStatus]);
 
   const stopNativeRecording = useCallback(() => {
+    if (nativeRecordingState.state !== 'recording') return;
     if (nativeRecorderRef.current?.state === 'recording') {
-      setNativeRecordingState((current) => ({ ...current, state: 'finalizing' }));
+      // 'stopping' indicates we are waiting for the MediaRecorder to flush its
+      // final timesliced chunk before onstop fires and hands off to the server.
+      setNativeRecordingState((current) => ({ ...current, state: 'stopping' }));
       nativeRecorderRef.current.stop();
     }
-  }, []);
+  }, [nativeRecordingState.state]);
 
   useEffect(() => {
-    if (nativeRecordingState.state !== 'recording' || !nativeRecordingStartedAtRef.current) return;
+    // Track elapsed time while in recording or stopping state (stopping = final
+    // chunk being flushed, still counts toward total elapsed time).
+    if (
+      (nativeRecordingState.state !== 'recording' && nativeRecordingState.state !== 'stopping') ||
+      !nativeRecordingStartedAtRef.current
+    ) {
+      return;
+    }
     const tick = () =>
       setNativeRecordingState((current) => ({
         ...current,

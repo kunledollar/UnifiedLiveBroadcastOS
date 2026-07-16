@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/app/control-room/browsers/browser-workflows.test.js dist-test/app/control-room/command-center/command-center-logic.test.js dist-test/lib/native-runtime/ffmpeg-discovery.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/app/control-room/browsers/browser-workflows.test.js dist-test/app/control-room/command-center/command-center-logic.test.js dist-test/lib/native-runtime/ffmpeg-discovery.test.js dist-test/lib/native-runtime/ffmpeg-recording.test.js"
   },
   "dependencies": {
     "@ubos/shared": "workspace:*",

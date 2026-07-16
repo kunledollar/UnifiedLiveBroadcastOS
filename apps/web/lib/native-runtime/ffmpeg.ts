@@ -1,5 +1,5 @@
 import { execFile, execFileSync, spawn } from 'node:child_process';
-import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { isAbsolute, join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -55,6 +55,19 @@ function execText(command: string, args: string[]) {
     execFile(command, args, { encoding: 'utf8', maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
       if (error) reject(error);
       else resolve(`${stdout}${stderr}`);
+    });
+  });
+}
+
+/**
+ * Like execText but returns stdout only.  Use when the output will be JSON-parsed
+ * to avoid stderr (library load messages etc.) contaminating the parse input.
+ */
+function execStdout(command: string, args: string[]) {
+  return new Promise<string>((resolve, reject) => {
+    execFile(command, args, { encoding: 'utf8', maxBuffer: 1024 * 1024 }, (error, stdout) => {
+      if (error) reject(error);
+      else resolve(stdout);
     });
   });
 }
@@ -146,23 +159,27 @@ export async function finalizeNativeRecording(input: { base64Webm: string; mimeT
   if (activeRecordingState !== 'idle') throw new Error('A native recording finalization is already active.');
   activeRecordingState = 'finalizing';
   lastFailure = null;
+  const dir = join(tmpdir(), 'ubos-native-recordings');
+  mkdirSync(dir, { recursive: true });
+  const id = randomUUID();
+  const sourcePath = join(dir, `${id}.webm`);
+  const artifactPath = join(dir, `${id}.mp4`);
   try {
     const status = await getNativeRuntimeStatus();
     if (status.ffmpeg.state !== 'AVAILABLE' || !status.ffmpeg.path) throw new Error(status.ffmpeg.reason ?? 'FFmpeg unavailable.');
     if (status.ffprobe.state !== 'AVAILABLE' || !status.ffprobe.path) throw new Error(status.ffprobe.reason ?? 'FFprobe unavailable.');
-    const dir = join(tmpdir(), 'ubos-native-recordings');
-    mkdirSync(dir, { recursive: true });
-    const id = randomUUID();
-    const sourcePath = join(dir, `${id}.webm`);
-    const artifactPath = join(dir, `${id}.mp4`);
     writeFileSync(sourcePath, Buffer.from(input.base64Webm, 'base64'));
     const ffmpegArgs = ['-hide_banner', '-nostdin', '-y', '-i', sourcePath, '-c:v', 'libx264', '-pix_fmt', 'yuv420p'];
     if (input.expectedAudio) ffmpegArgs.push('-c:a', 'aac', '-ar', '48000');
     else ffmpegArgs.push('-an');
     ffmpegArgs.push('-movflags', '+faststart', artifactPath);
     const ffmpegResult = await runFFmpeg(status.ffmpeg.path, ffmpegArgs);
+    // Clean up the source WebM after successful transcode.
+    try { unlinkSync(sourcePath); } catch { /* best-effort */ }
     if (!existsSync(artifactPath) || statSync(artifactPath).size <= 0) throw new Error('FFmpeg did not produce a non-empty artifact.');
-    const probe = JSON.parse(await execText(status.ffprobe.path, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', artifactPath]));
+    // Use execStdout (not execText) for ffprobe JSON parsing: some runtime environments
+    // emit shared-library load messages to stderr which would corrupt the JSON parse.
+    const probe = JSON.parse(await execStdout(status.ffprobe.path, ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', artifactPath]));
     const durationSeconds = Number(probe.format?.duration ?? 0);
     const video = probe.streams?.find((stream: { codec_type?: string }) => stream.codec_type === 'video');
     const audio = probe.streams?.find((stream: { codec_type?: string }) => stream.codec_type === 'audio');
@@ -175,6 +192,8 @@ export async function finalizeNativeRecording(input: { base64Webm: string; mimeT
   } catch (error) {
     activeRecordingState = 'failed';
     lastFailure = error instanceof Error ? error.message : 'Native recording failed.';
+    // Best-effort cleanup of temp source file on failure.
+    try { if (existsSync(sourcePath)) unlinkSync(sourcePath); } catch { /* best-effort */ }
     throw error;
   } finally {
     if (activeRecordingState === 'completed' || activeRecordingState === 'failed') activeRecordingState = 'idle';

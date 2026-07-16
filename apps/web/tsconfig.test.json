@@ -16,6 +16,7 @@
     "app/control-room/command-center/command-center-logic.ts",
     "app/control-room/command-center/command-center-logic.test.ts",
     "lib/native-runtime/ffmpeg.ts",
-    "lib/native-runtime/ffmpeg-discovery.test.ts"
+    "lib/native-runtime/ffmpeg-discovery.test.ts",
+    "lib/native-runtime/ffmpeg-recording.test.ts"
   ]
 }
