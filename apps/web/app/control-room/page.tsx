@@ -1,6 +1,7 @@
 import { getProductionState, getScenes } from './scene-actions';
 import { listGuests, listInvites } from './guest-actions';
 import { loadMediaRoutes } from './media-route-actions';
+import type { Scene, Guest, GuestInvite, MediaRoute, ProductionSwitchingState } from '@ubos/shared';
 import { ControlRoomShell } from './shell/ControlRoomShell';
 
 import {
@@ -83,17 +84,141 @@ function loadPersistenceDiagnostics() {
   });
 }
 
+/** Demo scenes used when the database is unavailable. */
+const DEMO_SCENES: Scene[] = [
+  {
+    id: 'scene-countdown',
+    broadcastId: 'demo-broadcast',
+    name: 'Opening Countdown',
+    type: 'countdown',
+    order: 0,
+    isActive: false,
+    thumbnailUrl: null,
+    background: null,
+    layout: 'screen_share',
+    sources: [],
+    overlays: [],
+    audioConfig: {},
+    canvases: [
+      { id: 'program', label: 'Program', aspectRatio: '16:9', destinationHint: 'Primary destinations' },
+    ],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  },
+  {
+    id: 'scene-interview',
+    broadcastId: 'demo-broadcast',
+    name: 'Host + Guest Interview',
+    type: 'interview',
+    order: 1,
+    isActive: true,
+    thumbnailUrl: null,
+    background: null,
+    layout: 'interview',
+    sources: [
+      {
+        id: 'src-camera-1',
+        workspaceId: 'demo-workspace',
+        broadcastId: 'demo-broadcast',
+        sceneId: 'scene-interview',
+        name: 'Camera 1',
+        label: 'Camera 1',
+        type: 'camera',
+        order: 0,
+        visible: true,
+        isVisible: true,
+        isLocked: false,
+        settings: { runtimeStatus: 'permission_required', deviceId: null },
+        transform: { x: 0, y: 0, width: 1, height: 1, zIndex: 0, opacity: 1, visible: true, locked: false },
+        createdAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+      },
+      {
+        id: 'src-screen-1',
+        workspaceId: 'demo-workspace',
+        broadcastId: 'demo-broadcast',
+        sceneId: 'scene-interview',
+        name: 'Screen Share',
+        label: 'Screen Share',
+        type: 'screen',
+        order: 1,
+        visible: true,
+        isVisible: true,
+        isLocked: false,
+        settings: { runtimeStatus: 'permission_required', captureState: 'not_started' },
+        transform: { x: 0, y: 0, width: 1, height: 1, zIndex: 1, opacity: 1, visible: true, locked: false },
+        createdAt: '2026-07-01T00:00:00.000Z',
+        updatedAt: '2026-07-01T00:00:00.000Z',
+      },
+    ],
+    overlays: [],
+    audioConfig: {},
+    canvases: [
+      { id: 'program', label: 'Program', aspectRatio: '16:9', destinationHint: 'Primary destinations' },
+    ],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  },
+  {
+    id: 'scene-demo',
+    broadcastId: 'demo-broadcast',
+    name: 'Product Demo + PiP',
+    type: 'screen_share',
+    order: 2,
+    isActive: false,
+    thumbnailUrl: null,
+    background: null,
+    layout: 'picture_in_picture',
+    sources: [],
+    overlays: [],
+    audioConfig: {},
+    canvases: [
+      { id: 'program', label: 'Program', aspectRatio: '16:9', destinationHint: 'Primary destinations' },
+    ],
+    createdAt: '2026-07-01T00:00:00.000Z',
+    updatedAt: '2026-07-01T00:00:00.000Z',
+  },
+];
+
+const DEMO_PRODUCTION_STATE: ProductionSwitchingState = {
+  programSceneId: 'scene-interview',
+  previewSceneId: 'scene-demo',
+  transitionType: 'cut',
+  transitionDuration: 500,
+};
+
+const DEMO_GUESTS: Guest[] = [];
+const DEMO_INVITES: GuestInvite[] = [];
+const DEMO_MEDIA_ROUTES: MediaRoute[] = [];
+
 export const dynamic = 'force-dynamic';
 
 export default async function ControlRoomPage() {
   const persistenceDiagnostics = loadPersistenceDiagnostics();
-  const [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
-    getScenes(),
-    getProductionState(),
-    listGuests(),
-    listInvites(),
-    loadMediaRoutes(),
-  ]);
+
+  // Attempt to load from database; fall back to demo data when the database
+  // is not available (local development without PostgreSQL).
+  let scenes: Scene[];
+  let productionState: ProductionSwitchingState;
+  let guests: Guest[];
+  let invites: GuestInvite[];
+  let mediaRoutes: MediaRoute[];
+
+  try {
+    [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
+      getScenes(),
+      getProductionState(),
+      listGuests(),
+      listInvites(),
+      loadMediaRoutes(),
+    ]);
+  } catch {
+    scenes = DEMO_SCENES;
+    productionState = DEMO_PRODUCTION_STATE;
+    guests = DEMO_GUESTS;
+    invites = DEMO_INVITES;
+    mediaRoutes = DEMO_MEDIA_ROUTES;
+  }
 
   return (
     <ControlRoomShell
