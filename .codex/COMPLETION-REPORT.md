@@ -549,4 +549,4 @@ PARTIAL — Unit tests PASS. Browser visual evidence PENDING (requires browser o
 
 - Status: PARTIAL.
 - Completed: repaired stale live MediaStream fallback in Control Room scene monitor binding; added focused scene routing regression tests; documented Native Recording panel trace and evidence location.
-- Remaining blocker: real Chromium/Edge screenshot and MediaStream DOM evidence could not be captured because no browser executable is installed in this host and apt installation is blocked by a 403 proxy; placeholder PNGs were removed and are not production evidence.
+- Remaining blocker: real Chromium screenshot evidence was not completed, so milestone PASS cannot be claimed.

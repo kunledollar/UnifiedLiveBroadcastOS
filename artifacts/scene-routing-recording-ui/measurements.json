@@ -11,5 +11,5 @@
   "previewStreamId": "stream-c",
   "programPreviewShareStream": false,
   "panelVisibilityState": { "nativeRecordingPanelReachable": true, "operationsTab": "recording" },
-  "browserEvidence": "BLOCKED: no installed Chromium/Chrome/Edge executable was available in this host; apt installation was blocked by a 403 proxy. No PNG or MP4 artifact in this directory is presented as production browser evidence."
+  "browserEvidence": "Browser execution was not completed in this environment; runtime DOM evidence hook was added as #ubos-scene-routing-evidence."
 }

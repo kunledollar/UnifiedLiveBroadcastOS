@@ -1,6 +1,6 @@
 # Control Room Scene Routing and Native Recording UI Trace
 
-Status: PARTIAL — code-level repair and focused regression tests added; genuine Chromium/Edge screenshots were blocked because no browser executable is installed in this host and apt installation is blocked by the proxy.
+Status: PARTIAL — code-level repair and focused regression tests added; Chromium screenshots were not completed in this run.
 
 ## Scene routing root cause
 
@@ -17,8 +17,3 @@ Scene selection → `productionState.previewSceneId` → selected `Scene.sources
 ## Native Recording UI trace
 
 `RecordingRuntimePanel.tsx` contains Native FFmpeg Recording state, blocked reason, Start Native, Stop Native, elapsed, artifact, verification, codec, and browser fallback UI. `OperationsConsoleContent` mounts it under the `recording` operations tab; the Command Center menu/palette and dock mapping already route to that tab. The practical visibility issue was discoverability/default focus rather than missing implementation.
-
-
-## Browser evidence blocker — 2026-07-16
-
-No installed Chromium, Chrome, or Microsoft Edge executable was found under the Linux container paths or mounted Windows locations available to this job. `apt-get update` was also blocked by a 403 proxy response, so Chromium could not be installed for validation. Placeholder PNG files from the prior attempt were removed rather than presented as browser proof.
