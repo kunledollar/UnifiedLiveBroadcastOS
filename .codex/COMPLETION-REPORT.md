@@ -509,3 +509,38 @@ Repair all workspace/layout controls: preset switching, Save Layout (per-preset 
 ### Status
 
 PARTIAL — Unit tests PASS. Browser acceptance evidence on Windows Control Room PENDING.
+
+---
+
+## 2026-07-16 — Workspace Manager Zone Geometry and Dock Rendering Restoration
+
+### Objective
+
+Restore visibly distinct preset geometry and program/preview sizing. The prior milestone fixed badge, save/reset, and persistence. This milestone fixes the two root causes that prevented visual differences between presets in the browser.
+
+### Root Causes Fixed
+
+1. **Monitor min-width constraints (800/480px) forced constant horizontal overflow** — At a 1536×960 viewport with both docks open, center stage was ~924px, less than 800+480=1280px minimum. Both monitors always rendered at their minimum sizes, making all presets look identical. Fixed by reducing Program min-width to 320px and Preview to 240px.
+
+2. **No per-preset zone size defaults** — All presets shared the same dock widths and bottom workspace height. Presets that emphasize different roles (audio, graphics, streaming, monitor) had identical geometry for their visible zones. Fixed by adding `zoneSizeDefaults` to all 9 presets.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `packages/shared/src/workspace-manager/types.ts` | Added optional `zoneSizeDefaults` field to `WorkspacePreset` |
+| `packages/shared/src/workspace-manager/presets.ts` | Added `zoneSizeDefaults` to all 9 presets; added validation |
+| `packages/shared/src/workspace-manager/layout.ts` | Applied preset zone size defaults in `zoneSize` helper; responsive compact-width safety preserved |
+| `apps/web/app/control-room/command-center/CommandCenterStage.tsx` | Program min-width 800→320px; Preview min-width 480→240px |
+| `apps/web/app/control-room/command-center/command-center-logic.test.ts` | 17 new zone geometry regression tests |
+
+### Tests Run
+
+- `pnpm --filter @ubos/shared test` — PASS (all workspace-manager validations pass)
+- `pnpm --filter @ubos/web test` — PASS (108/108 subtests, 17 new tests added)
+- `git diff --check` — PASS (no whitespace errors)
+- TypeScript: 0 errors in modified files (pre-existing unrelated errors untouched)
+
+### Status
+
+PARTIAL — Unit tests PASS. Browser visual evidence PENDING (requires browser operator at 1536×960 to confirm distinct layouts).

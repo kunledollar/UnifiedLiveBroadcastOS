@@ -140,13 +140,28 @@ export function calculateWorkspaceLayout(input: WorkspaceLayoutInput): Workspace
   const zoneSize = (zoneId: WorkspaceZoneId): number => {
     const zone = workspaceZoneDefinitions[zoneId];
     if (collapsed.has(zoneId)) return zone.collapsedSize;
+    // 1. Operator drag-resize override — highest priority.
     const override = input.zoneSizeOverrides?.[zoneId];
     if (override !== undefined && zone.resizable) {
       return clampZoneSize(zoneId, override);
     }
-    // PR-F: use viewport-responsive default for dock zones; non-dock zones
-    // fall through to their zone definition's defaultSize inside the helper.
-    return getResponsiveDockWidth(zoneId, viewportWidth);
+    // 2. PR-F responsive default for this viewport. At 1200–1439px the left
+    //    dock uses DOCK_COMPACT_WIDTH (200px) to protect the center-stage
+    //    minimum; this is a safety constraint that preset defaults may not
+    //    override. Non-dock zones fall through to their zone definition's
+    //    defaultSize.
+    const responsiveDefault = getResponsiveDockWidth(zoneId, viewportWidth);
+    // 3. Per-preset zone size default — applies only when the responsive rule
+    //    returns the zone's full-size default (i.e. not the compact-width safety
+    //    constraint). Allows presets to ship with role-specific geometry
+    //    (e.g. Audio Engineer taller bottom workspace, Streaming Operator wider
+    //    right dock) without disrupting PR-F compact-width behaviour.
+    const presetDefault = preset.zoneSizeDefaults?.[zoneId];
+    if (presetDefault !== undefined && zone.resizable &&
+        responsiveDefault === (workspaceZoneDefinitions[zoneId]?.defaultSize ?? 0)) {
+      return clampZoneSize(zoneId, presetDefault);
+    }
+    return responsiveDefault;
   };
 
   // Fixed chrome first.

@@ -446,9 +446,105 @@ PENDING — requires local Windows Control Room run. The unit test suite confirm
 
 ### Commit Hash
 
-(generated below)
+41e6d79
 
 ### PARTIAL
 
 Unit tests: PASS (91/91)
 Browser evidence: PENDING (local Windows run required)
+
+---
+
+## Entry: 2026-07-16 — Workspace Manager Zone Geometry and Dock Rendering Restoration
+
+### Milestone
+
+Workspace Manager Zone Geometry and Dock Rendering Restoration (regression repair)
+
+### Objective
+
+Recover visibly distinct preset geometry and working dock toggles. The previous milestone fixed badge, save/reset, and persistence. This milestone fixes the rendering pipeline so presets produce materially different visual layouts in the browser.
+
+### Root Causes Identified
+
+1. **Monitor min-width constraints flattened all preset differences**: `CommandCenterStage` enforced `minWidth: 800px` for Program and `minWidth: 480px` for Preview. At a typical 1536×960 viewport with both docks open, the center stage is ~924px. Since 800+480=1280px > 924px, both monitors were always at their minimum sizes with horizontal overflow. No flex distribution occurred, so emphasis changes (`balanced` vs `program`) produced no visible change, and dock collapse had a muted visual effect.
+
+2. **No per-preset zone size defaults**: All presets shared the same dock widths and bottom workspace height (270px docks, 280px bottom). Audio Engineer (which emphasizes audio), Streaming Operator (which emphasizes outputs), and Monitor Wall (which emphasizes the monitor grid) all had identical geometry for their visible zones. The preset definitions lacked a mechanism to declare role-specific default sizes.
+
+3. **CSS gap accounting gap** (non-blocking): The `gap-1` (4px) between flex children in the shell was not accounted for in `calculateWorkspaceLayout`. This made the computed center-stage width slightly wider than the actual CSS-rendered width. The force-collapse threshold (900px) compensated partially, and the difference was small enough that all safety invariants still held.
+
+### Files Changed
+
+- `packages/shared/src/workspace-manager/types.ts`: Added optional `zoneSizeDefaults` field to `WorkspacePreset` interface.
+- `packages/shared/src/workspace-manager/presets.ts`: Added per-preset `zoneSizeDefaults` to all 9 presets; added validation for the new field in `validateWorkspacePreset`.
+- `packages/shared/src/workspace-manager/layout.ts`: Applied `preset.zoneSizeDefaults` as a lower-priority fallback in the `zoneSize` helper; responsive compact-width safety rule (PR-F, 1200–1439px) still overrides preset defaults to protect center-stage minimum.
+- `apps/web/app/control-room/command-center/CommandCenterStage.tsx`: Reduced Program min-width 800→320px and Preview min-width 480→240px; proportionally reduced stacked min-heights; enables flex distribution at typical desktop viewports.
+- `apps/web/app/control-room/command-center/command-center-logic.test.ts`: Added 17 new regression tests covering zone geometry distinctness at 1536×960, dock toggle behavior, preset-specific bottom workspace heights, responsive rule preservation, lock behavior, and drag-resize override priority.
+
+### Commands Executed
+
+```
+pnpm --filter @ubos/shared build   → exit 0
+pnpm --filter @ubos/shared test    → exit 0 (all validation tests pass)
+pnpm --filter @ubos/web test       → exit 0 (108 tests pass, 17 new zone geometry tests added)
+pnpm --filter @ubos/web typecheck  → pre-existing errors only (Prisma, any types in scene-actions/media-route-actions)
+git diff --check                   → exit 0 (no trailing whitespace)
+```
+
+### Test Results
+
+- `pnpm --filter @ubos/shared test`: PASS (workspace-manager validation + all other suites)
+- `pnpm --filter @ubos/web test`: PASS (108/108, including 17 new zone geometry tests)
+- `pnpm --filter @ubos/web typecheck`: pre-existing errors only (not introduced by this work)
+- `git diff --check`: PASS
+
+### New Tests Added (17)
+
+1. each preset has a distinct zone/geometry signature at 1536x960
+2. applying Director changes shell to open-dock geometry
+3. applying Audio Engineer collapses left dock and expands bottom workspace
+4. applying Graphics Operator changes bottom workspace height relative to Director
+5. applying Streaming Operator exposes right dock at expanded width
+6. applying Monitor Wall collapses both side docks and expands bottom workspace
+7. applying Compact collapses all intended zones
+8. toggle left dock changes rendered width/visibility in the layout
+9. toggle right dock changes rendered width/visibility in the layout
+10. toggle bottom workspace changes rendered height/visibility in the layout
+11. menu toggles and icon toggles use identical zone logic (same collapsedZones input)
+12. shell consumes current Workspace Manager zones — layout has correct presetId
+13. Program and Preview remain visible in every preset layout (not covered by docks)
+14. responsive rules do not flatten all presets at 1536x960 desktop width
+15. lock blocks drag-resize but not zone toggles, reset, save, or preset changes
+16. preset zoneSizeDefaults produce distinct bottom workspace heights
+17. user drag-resize overrides preset zoneSizeDefaults
+
+### Geometry Evidence
+
+At 1536×960 with the new code (no user overrides):
+
+| Preset | Left Dock | Right Dock | Bottom WS | Center W | Program W |
+|---|---|---|---|---|---|
+| Director | 270px | force-collapsed(~0) | 280px | ~1194px | ~776px |
+| Solo Streamer | collapsed (20px) | 300px | 240px | ~966px | ~659px |
+| Technical Director | 270px | force-collapsed | 320px | ~1194px | ~776px |
+| Audio Engineer | collapsed (20px) | 300px | 360px | ~966px | ~657px |
+| Graphics Operator | 240px | force-collapsed | 340px | ~1248px | ~811px |
+| Replay Operator | 270px | force-collapsed | 360px | ~1194px | ~816px |
+| Streaming Operator | collapsed (20px) | 340px | 300px | ~926px | ~630px |
+| Monitor Wall | collapsed (20px) | collapsed (20px) | 400px | ~1424px | ~925px |
+| Compact | collapsed (20px) | collapsed (20px) | collapsed (42px) | ~1424px | ~926px |
+
+Note: At 1536px the right dock auto-collapses for presets that don't set a zoneSizeDefault that raises center above 900px; force-collapse protects center minimum. Numbers are approximate due to CSS gaps.
+
+### Browser Acceptance
+
+PENDING — requires browser run. The geometry computations and all logic paths are verified by the expanded test suite. Per the task requirement, visual evidence of distinct geometries must be confirmed by a browser operator at 1536×960.
+
+### Commit Hash
+
+(generated below)
+
+### PARTIAL
+
+Unit tests: PASS (108/108)
+Browser evidence: PENDING

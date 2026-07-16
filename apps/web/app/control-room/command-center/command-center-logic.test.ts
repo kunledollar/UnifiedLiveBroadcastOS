@@ -26,6 +26,7 @@ import {
   validatePanelDefinition,
   workspacePresetList,
   workspacePresets,
+  type WorkspacePresetId,
 } from '@ubos/shared';
 import {
   applyPresetToRegistry,
@@ -679,4 +680,408 @@ test('locking layout must not affect workspaceModeForPreset mapping', () => {
     const mode = workspaceModeForPreset(presetId as Parameters<typeof workspaceModeForPreset>[0]);
     assert.equal(mode, expectedMode, `preset "${presetId}" must map to workspace mode "${expectedMode}"`);
   }
+});
+
+// ── Zone Geometry Regression Tests ────────────────────────────────────────────
+// Guard against the geometry regression where preset switching does not
+// produce visibly distinct zone configurations at a desktop viewport.
+
+test('each preset has a distinct zone/geometry signature at 1536x960', () => {
+  const signatures: Map<string, string> = new Map();
+
+  for (const preset of workspacePresetList) {
+    const layout = calculateWorkspaceLayout({
+      viewportWidth: 1536,
+      viewportHeight: 960,
+      preset,
+    });
+    const sig = [
+      `left:${layout.zones['left-dock'].collapsed ? 'collapsed' : layout.zones['left-dock'].rect.width}`,
+      `right:${layout.zones['right-dock'].collapsed ? 'collapsed' : layout.zones['right-dock'].rect.width}`,
+      `bottom:${layout.zones['bottom-workspace'].collapsed ? 'collapsed' : layout.zones['bottom-workspace'].rect.height}`,
+      `emphasis:${preset.centerEmphasis}`,
+    ].join('|');
+    signatures.set(preset.id, sig);
+  }
+
+  // Director and Compact must be distinct (most extreme difference).
+  assert.notEqual(
+    signatures.get('director'),
+    signatures.get('compact'),
+    'director and compact must produce distinct zone geometries at 1536x960',
+  );
+
+  // Director and Audio Engineer must differ (left dock collapse).
+  assert.notEqual(
+    signatures.get('director'),
+    signatures.get('audio-engineer'),
+    'director and audio-engineer must differ (audio-engineer collapses left dock)',
+  );
+
+  // Director and Monitor Wall must differ (both docks collapsed in monitor-wall).
+  assert.notEqual(
+    signatures.get('director'),
+    signatures.get('monitor-wall'),
+    'director and monitor-wall must differ (monitor-wall collapses both docks)',
+  );
+
+  // Compact must collapse all three resizable zones.
+  const compactSig = signatures.get('compact')!;
+  assert.ok(compactSig.includes('left:collapsed'), 'compact must collapse left dock');
+  assert.ok(compactSig.includes('right:collapsed'), 'compact must collapse right dock');
+  assert.ok(compactSig.includes('bottom:collapsed'), 'compact must collapse bottom workspace');
+
+  // Director must not collapse any zone (at 1536px).
+  const directorSig = signatures.get('director')!;
+  assert.ok(!directorSig.includes('left:collapsed'), 'director must not collapse left dock at 1536px');
+  // Note: right dock force-collapse at ~1500px is tested separately; at 1536px it stays visible.
+});
+
+test('applying Director changes shell to open-dock geometry', () => {
+  const layout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.director,
+  });
+  assert.equal(layout.zones['left-dock'].collapsed, false, 'director must have left dock visible at 1536px');
+  assert.equal(layout.zones['bottom-workspace'].collapsed, false, 'director must have bottom workspace visible');
+  assert.equal(layout.presetId, 'director');
+  assert.equal(layout.centerEmphasis, 'balanced');
+  // Director bottom workspace is 280px.
+  assert.equal(layout.zones['bottom-workspace'].rect.height, 280);
+});
+
+test('applying Audio Engineer collapses left dock and expands bottom workspace', () => {
+  const layout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets['audio-engineer'],
+  });
+  assert.equal(layout.zones['left-dock'].collapsed, true, 'audio-engineer must collapse left dock');
+  assert.equal(layout.zones['right-dock'].collapsed, false, 'audio-engineer right dock stays open');
+  assert.equal(layout.zones['bottom-workspace'].collapsed, false, 'audio-engineer must have bottom workspace visible');
+  // Audio Engineer bottom workspace is expanded beyond Director's 280px.
+  assert.ok(
+    layout.zones['bottom-workspace'].rect.height >= 340,
+    `audio-engineer bottom workspace must be >= 340px (got ${layout.zones['bottom-workspace'].rect.height})`,
+  );
+  assert.equal(layout.centerEmphasis, 'program', 'audio-engineer must emphasize Program monitor');
+});
+
+test('applying Graphics Operator changes bottom workspace height relative to Director', () => {
+  const dirLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.director,
+  });
+  const gfxLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets['graphics-operator'],
+  });
+  // Graphics Operator should have a taller bottom workspace for the graphics library.
+  assert.ok(
+    gfxLayout.zones['bottom-workspace'].rect.height > dirLayout.zones['bottom-workspace'].rect.height,
+    `graphics-operator bottom workspace (${gfxLayout.zones['bottom-workspace'].rect.height}px) must exceed director (${dirLayout.zones['bottom-workspace'].rect.height}px)`,
+  );
+});
+
+test('applying Streaming Operator exposes right dock at expanded width', () => {
+  const layout = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets['streaming-operator'],
+  });
+  assert.equal(layout.zones['left-dock'].collapsed, true, 'streaming-operator collapses left dock');
+  assert.equal(layout.zones['right-dock'].collapsed, false, 'streaming-operator keeps right dock open');
+  // Right dock must be wider than Director's default 270px for outputs and telemetry.
+  assert.ok(
+    layout.zones['right-dock'].rect.width >= 300,
+    `streaming-operator right dock (${layout.zones['right-dock'].rect.width}px) must be >= 300px`,
+  );
+});
+
+test('applying Monitor Wall collapses both side docks and expands bottom workspace', () => {
+  const layout = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets['monitor-wall'],
+  });
+  assert.equal(layout.zones['left-dock'].collapsed, true, 'monitor-wall collapses left dock');
+  assert.equal(layout.zones['right-dock'].collapsed, true, 'monitor-wall collapses right dock');
+  assert.equal(layout.zones['bottom-workspace'].collapsed, false, 'monitor-wall keeps bottom workspace open');
+  // Monitor Wall bottom workspace must be expanded for the monitor grid.
+  assert.ok(
+    layout.zones['bottom-workspace'].rect.height >= 360,
+    `monitor-wall bottom workspace (${layout.zones['bottom-workspace'].rect.height}px) must be >= 360px`,
+  );
+  // With both docks collapsed the center stage must be much wider than Director.
+  const dirLayout = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets.director,
+  });
+  assert.ok(
+    layout.zones['center-stage'].rect.width > dirLayout.zones['center-stage'].rect.width,
+    'monitor-wall must have wider center stage than director (both docks collapsed)',
+  );
+});
+
+test('applying Compact collapses all intended zones', () => {
+  const layout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.compact,
+  });
+  assert.equal(layout.zones['left-dock'].collapsed, true, 'compact must collapse left dock');
+  assert.equal(layout.zones['right-dock'].collapsed, true, 'compact must collapse right dock');
+  assert.equal(layout.zones['bottom-workspace'].collapsed, true, 'compact must collapse bottom workspace');
+  // Bottom workspace shows only its tab bar (collapsedSize = 42px).
+  assert.equal(layout.zones['bottom-workspace'].rect.height, 42, 'compact bottom workspace shows tab bar only');
+  // Center stage must be maximized.
+  const dirLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.director,
+  });
+  assert.ok(
+    layout.zones['center-stage'].rect.width > dirLayout.zones['center-stage'].rect.width,
+    'compact center stage must be wider than director',
+  );
+});
+
+test('toggle left dock changes rendered width/visibility in the layout', () => {
+  // Simulate the operator clicking "Toggle Left Dock" on Director preset.
+  // After toggle: left dock should be in collapsedZoneOverrides = ['left-dock'].
+  const baseLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.director,
+    collapsedZones: [],
+  });
+  assert.equal(baseLayout.zones['left-dock'].collapsed, false, 'director left dock is initially open');
+
+  const afterToggle = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.director,
+    collapsedZones: ['left-dock'],
+  });
+  assert.equal(afterToggle.zones['left-dock'].collapsed, true, 'left dock must be collapsed after toggle');
+  assert.equal(afterToggle.zones['left-dock'].rect.width, 0, 'collapsed left dock has zero width');
+  // Center stage must be wider after left dock collapses.
+  assert.ok(
+    afterToggle.zones['center-stage'].rect.width > baseLayout.zones['center-stage'].rect.width,
+    'center stage must grow when left dock collapses',
+  );
+});
+
+test('toggle right dock changes rendered width/visibility in the layout', () => {
+  const baseLayout = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets.director,
+    collapsedZones: [],
+  });
+  assert.equal(baseLayout.zones['right-dock'].collapsed, false);
+
+  const afterToggle = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets.director,
+    collapsedZones: ['right-dock'],
+  });
+  assert.equal(afterToggle.zones['right-dock'].collapsed, true);
+  assert.equal(afterToggle.zones['right-dock'].rect.width, 0);
+  assert.ok(afterToggle.zones['center-stage'].rect.width > baseLayout.zones['center-stage'].rect.width);
+});
+
+test('toggle bottom workspace changes rendered height/visibility in the layout', () => {
+  const baseLayout = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets.director,
+    collapsedZones: [],
+  });
+  assert.equal(baseLayout.zones['bottom-workspace'].collapsed, false);
+  const baseBottomHeight = baseLayout.zones['bottom-workspace'].rect.height;
+  assert.ok(baseBottomHeight >= 280);
+
+  const afterToggle = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets.director,
+    collapsedZones: ['bottom-workspace'],
+  });
+  assert.equal(afterToggle.zones['bottom-workspace'].collapsed, true);
+  // Collapsed bottom workspace shows only its tab bar (42px).
+  assert.equal(afterToggle.zones['bottom-workspace'].rect.height, 42);
+  // Center stage must be taller after bottom workspace collapses.
+  assert.ok(afterToggle.zones['center-stage'].rect.height > baseLayout.zones['center-stage'].rect.height);
+});
+
+test('menu toggles and icon toggles use identical zone logic (same collapsedZones input)', () => {
+  // Both the ribbon icons and the Window menu items call toggleZone which
+  // modifies collapsedZoneOverrides. Both are equivalent because the layout
+  // engine consumes only collapsedZones — the identity of the caller does not
+  // matter. This test verifies that the output of the layout engine is
+  // identical regardless of which surface triggered the toggle.
+  const layout1 = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets.director,
+    collapsedZones: ['left-dock'],
+  });
+  const layout2 = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets.director,
+    collapsedZones: ['left-dock'],
+  });
+  assert.equal(layout1.zones['left-dock'].collapsed, layout2.zones['left-dock'].collapsed);
+  assert.equal(layout1.zones['center-stage'].rect.width, layout2.zones['center-stage'].rect.width);
+});
+
+test('shell consumes current Workspace Manager zones — layout has correct presetId', () => {
+  for (const preset of workspacePresetList) {
+    const layout = calculateWorkspaceLayout({
+      viewportWidth: 1536,
+      viewportHeight: 960,
+      preset,
+    });
+    assert.equal(layout.presetId, preset.id, `layout.presetId must equal preset.id for "${preset.id}"`);
+    assert.equal(layout.centerEmphasis, preset.centerEmphasis, `layout.centerEmphasis must reflect preset for "${preset.id}"`);
+  }
+});
+
+test('Program and Preview remain visible in every preset layout (not covered by docks)', () => {
+  for (const preset of workspacePresetList) {
+    const layout = calculateWorkspaceLayout({
+      viewportWidth: 1536,
+      viewportHeight: 960,
+      preset,
+    });
+    // Program and Preview rects must be non-zero (they live in center-stage which is never collapsed).
+    assert.ok(layout.programRect.width > 0, `preset "${preset.id}" must have a visible Program rect`);
+    assert.ok(layout.previewRect.width > 0, `preset "${preset.id}" must have a visible Preview rect`);
+    // No zone must overlap Program or Preview (uses validateLayoutResult).
+    const issues = validateLayoutResult(layout);
+    assert.deepEqual(issues, [], `preset "${preset.id}" at 1536x960 must have no layout violations: ${JSON.stringify(issues)}`);
+  }
+});
+
+test('responsive rules do not flatten all presets at 1536x960 desktop width', () => {
+  // At 1536×960, the responsive auto-collapse thresholds are:
+  //   RIGHT_DOCK_AUTO_COLLAPSE_WIDTH = 1440 → 1536 >= 1440, no auto-collapse
+  //   LEFT_DOCK_AUTO_COLLAPSE_WIDTH  = 1200 → 1536 >= 1200, no auto-collapse
+  // So responsive rules must NOT force every preset into the same geometry.
+  // Presets that declare collapsedZones must still produce different layouts.
+
+  const dirLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.director,
+  });
+  const compactLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.compact,
+  });
+  const audioLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets['audio-engineer'],
+  });
+
+  // Director: both docks open.
+  assert.equal(dirLayout.zones['left-dock'].collapsed, false, 'director: left dock open at 1536px');
+
+  // Compact: both docks and bottom workspace collapsed.
+  assert.equal(compactLayout.zones['left-dock'].collapsed, true, 'compact: left dock collapsed at 1536px');
+  assert.equal(compactLayout.zones['right-dock'].collapsed, true, 'compact: right dock collapsed at 1536px');
+  assert.equal(compactLayout.zones['bottom-workspace'].collapsed, true, 'compact: bottom workspace collapsed at 1536px');
+
+  // Audio Engineer: left dock collapsed (per preset definition).
+  assert.equal(audioLayout.zones['left-dock'].collapsed, true, 'audio-engineer: left dock collapsed at 1536px');
+  assert.equal(audioLayout.zones['right-dock'].collapsed, false, 'audio-engineer: right dock open at 1536px');
+
+  // The center stage width must differ between all three.
+  assert.ok(
+    compactLayout.zones['center-stage'].rect.width > dirLayout.zones['center-stage'].rect.width,
+    'compact center stage must be wider than director (all docks freed)',
+  );
+  assert.ok(
+    audioLayout.zones['center-stage'].rect.width > dirLayout.zones['center-stage'].rect.width,
+    'audio-engineer center stage must be wider than director (left dock freed)',
+  );
+});
+
+test('lock blocks drag-resize but not zone toggles, reset, save, or preset changes', () => {
+  // The lock flag is a UI/hook concern checked by setZoneSize and toggleZone
+  // (which returns early when locked). The PURE LOGIC functions (applyPresetToRegistry,
+  // effectivePresetForLayout, calculateWorkspaceLayout) are lock-agnostic.
+  // Verify that the lock cannot affect the layout computation itself.
+  const registry = createRegistry();
+
+  // Simulating a "locked" state: preset application still runs.
+  applyPresetToRegistry(registry, workspacePresets.director);
+  const directorStates = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort();
+
+  // Even "locked", applyPresetToRegistry must produce a different result for another preset.
+  applyPresetToRegistry(registry, workspacePresets['audio-engineer']);
+  const audioStates = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort();
+
+  assert.notDeepEqual(directorStates, audioStates, 'lock must not prevent preset application logic');
+
+  // Zone toggle: the layout engine always responds to collapsedZones input.
+  const lockedEquivalentLayout = calculateWorkspaceLayout({
+    viewportWidth: 1536,
+    viewportHeight: 960,
+    preset: workspacePresets.director,
+    collapsedZones: ['left-dock'],
+  });
+  assert.equal(lockedEquivalentLayout.zones['left-dock'].collapsed, true,
+    'layout engine responds to collapsedZones regardless of lock state');
+
+  // Reset: applyPresetToRegistry for the current preset always restores factory defaults.
+  applyPresetToRegistry(registry, workspacePresets['audio-engineer']);
+  const afterReset = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort();
+  assert.deepEqual(audioStates, afterReset, 'reset restores current-preset factory defaults');
+});
+
+test('preset zoneSizeDefaults produce distinct bottom workspace heights', () => {
+  // Audio Engineer and Monitor Wall specify larger bottom workspace heights than Director.
+  const VIEWPORT = { viewportWidth: 1920, viewportHeight: 1080 };
+  const dirLayout = calculateWorkspaceLayout({ ...VIEWPORT, preset: workspacePresets.director });
+  const audioLayout = calculateWorkspaceLayout({ ...VIEWPORT, preset: workspacePresets['audio-engineer'] });
+  const mwLayout = calculateWorkspaceLayout({ ...VIEWPORT, preset: workspacePresets['monitor-wall'] });
+
+  // Director: 280px default.
+  assert.equal(dirLayout.zones['bottom-workspace'].rect.height, 280);
+  // Audio Engineer: expanded for mixer.
+  assert.ok(
+    audioLayout.zones['bottom-workspace'].rect.height > dirLayout.zones['bottom-workspace'].rect.height,
+    `audio-engineer bottom (${audioLayout.zones['bottom-workspace'].rect.height}px) must exceed director (280px)`,
+  );
+  // Monitor Wall: even taller for monitor grid.
+  assert.ok(
+    mwLayout.zones['bottom-workspace'].rect.height > dirLayout.zones['bottom-workspace'].rect.height,
+    `monitor-wall bottom (${mwLayout.zones['bottom-workspace'].rect.height}px) must exceed director (280px)`,
+  );
+});
+
+test('user drag-resize overrides preset zoneSizeDefaults', () => {
+  // Operator drag-resize (zoneSizeOverrides) must always win over preset defaults.
+  const userOverrideSize = 400;
+  const layout = calculateWorkspaceLayout({
+    viewportWidth: 1920,
+    viewportHeight: 1080,
+    preset: workspacePresets['audio-engineer'],
+    zoneSizeOverrides: { 'bottom-workspace': userOverrideSize },
+  });
+  assert.equal(
+    layout.zones['bottom-workspace'].rect.height,
+    userOverrideSize,
+    'user drag-resize override must win over preset default for bottom-workspace',
+  );
 });

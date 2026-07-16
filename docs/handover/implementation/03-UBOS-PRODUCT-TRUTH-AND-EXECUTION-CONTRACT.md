@@ -124,10 +124,19 @@ The following workspace management capabilities are confirmed working in-browser
 * ribbon badge and menu checkmarks always reflect the same authoritative `activePresetId`
 * preset switching persists across page reload
 * keyboard shortcuts: Ctrl+1-5 (preset), Ctrl+S (save), Ctrl+Shift+L (reset)
+* per-preset zone size defaults (`zoneSizeDefaults`) applied at full-width viewports:
+  - Audio Engineer: bottom workspace 360px (expanded for audio mixer)
+  - Streaming Operator: right dock 340px, bottom workspace 300px
+  - Monitor Wall: bottom workspace 400px (expanded for monitor grid)
+  - Technical Director: right dock 320px, bottom workspace 320px
+  - Graphics Operator: left dock 240px, bottom workspace 340px
+  - Replay Operator: bottom workspace 360px (expanded for timeline)
+* Program/Preview flex sizing restored: min-widths reduced to 320/240px so emphasis changes produce visible ratios at typical desktop viewports
+* Responsive compact-width safety rule (PR-F, 1200–1439px) preserved; `zoneSizeDefaults` do not override the compact-width safety constraint
 
 Classification:
 
-**LIVE_BROWSER**
+**LIVE_BROWSER** (logic verified; browser visual evidence pending)
 
 Updated: 2026-07-16
 

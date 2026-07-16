@@ -576,7 +576,10 @@ At the time of this document version:
 * all 9 presets (Director, Solo Streamer, Technical Director, Audio Engineer, Graphics Operator, Replay Operator, Streaming Operator, Monitor Wall, Compact) must produce visibly distinct layouts on selection;
 * Reset Layout restores factory defaults for the CURRENT preset only; it does not switch to Director and is not blocked by Lock;
 * Save Layout writes an isolated per-preset record; saving one preset must not overwrite another;
-* Lock prevents manual drag-resize only; it must not block preset switching, Save, or Reset.
+* Lock prevents manual drag-resize only; it must not block preset switching, Save, or Reset;
+* each preset declares `zoneSizeDefaults` which the layout engine applies as lower-priority defaults (operator drag-resize always wins; responsive compact-width safety rule at 1200–1439px always wins);
+* Program and Preview monitors use flex sizing with modest minimums (320px/240px) so emphasis (`balanced`, `program`, `preview`) produces visible proportional differences at all supported desktop viewports;
+* at a 1536×960 viewport, presets must show materially distinct zone geometry — not only different labels or active tabs.
 
 ---
 
