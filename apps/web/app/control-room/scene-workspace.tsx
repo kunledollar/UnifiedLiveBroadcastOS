@@ -104,6 +104,11 @@ import {
 } from 'react';
 import { useMediaCapture } from '../../lib/media/use-media-capture';
 import {
+  areScenesSameReference,
+  patchCaptureSourceStatusInScenes,
+  shouldRestoreLocalMediaSource,
+} from './scene-runtime-patching';
+import {
   addScene,
   addSource,
   deleteScene,
@@ -2362,6 +2367,11 @@ export function SceneWorkspace({
   const viewMode = workspace.viewMode;
   const selectedWorkspace = workspace.selectedWorkspace;
   const [scenes, setScenes] = useOptimistic(initialScenes, (_current, next: Scene[]) => next);
+  const scenesRef = useRef(scenes);
+
+  useEffect(() => {
+    scenesRef.current = scenes;
+  }, [scenes]);
   const [productionState, setProductionState] = useState(initialProductionState);
   const [transitionActive, setTransitionActive] = useState(false);
   const [lastTransitionLabel, setLastTransitionLabel] = useState('None');
@@ -2480,7 +2490,13 @@ export function SceneWorkspace({
   };
 
   const refresh = useCallback(
-    (next: Scene[]) => startTransition(() => setScenes(next)),
+    (nextOrPatch: Scene[] | ((current: Scene[]) => Scene[])) => {
+      const current = scenesRef.current;
+      const next = typeof nextOrPatch === 'function' ? nextOrPatch(current) : nextOrPatch;
+      if (areScenesSameReference(current, next)) return;
+      scenesRef.current = next;
+      startTransition(() => setScenes(next));
+    },
     [startTransition, setScenes],
   );
   const smokeMedia = useMediaCapture();
@@ -2649,6 +2665,7 @@ export function SceneWorkspace({
 
   const liveSourceStreamsRef = useRef<Record<string, MediaStream>>({});
   const localMediaElementsRef = useRef<Record<string, HTMLMediaElement>>({});
+  const localMediaRestoreInFlightRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     liveSourceStreamsRef.current = liveSourceStreams;
@@ -2671,29 +2688,15 @@ export function SceneWorkspace({
 
   const patchCaptureSourceStatus = useCallback(
     (runtimeStatus: string, sourceId?: string, message?: string) => {
-      refresh(
-        scenes.map((scene) => ({
-          ...scene,
-          sources: scene.sources.map((source) =>
-            (source.type === 'camera' ||
-              source.type === 'screen' ||
-              source.type === 'audio' ||
-              source.type === 'media') &&
-            (!sourceId || source.id === sourceId)
-              ? {
-                  ...source,
-                  settings: {
-                    ...source.settings,
-                    runtimeStatus,
-                    ...(message ? { message } : {}),
-                  },
-                }
-              : source,
-          ),
-        })),
+      refresh((currentScenes) =>
+        patchCaptureSourceStatusInScenes(currentScenes, {
+          runtimeStatus,
+          ...(sourceId === undefined ? {} : { sourceId }),
+          ...(message === undefined ? {} : { message }),
+        }),
       );
     },
-    [refresh, scenes],
+    [refresh],
   );
 
   const replaceMediaRuntimeForSource = useCallback(
@@ -2816,26 +2819,35 @@ export function SceneWorkspace({
     );
     mediaSources.forEach((source) => {
       if (
-        localMediaElementsRef.current[source.id] ||
-        isLiveMediaStream(liveSourceStreamsRef.current[source.id])
+        !shouldRestoreLocalMediaSource({
+          sourceId: source.id,
+          hasElement: Boolean(localMediaElementsRef.current[source.id]),
+          hasLiveStream: isLiveMediaStream(liveSourceStreamsRef.current[source.id]),
+          runtimeStatus: source.settings?.runtimeStatus,
+          restoreInFlight: localMediaRestoreInFlightRef.current,
+        })
       )
         return;
+      localMediaRestoreInFlightRef.current.add(source.id);
+      const finishRestore = () => localMediaRestoreInFlightRef.current.delete(source.id);
       const runtimeFile =
         source.settings?.runtimeFile instanceof File ? source.settings.runtimeFile : null;
       if (!source.settings?.mediaUrl && runtimeFile) {
-        void replaceMediaRuntimeForSource(source.id, runtimeFile);
+        void replaceMediaRuntimeForSource(source.id, runtimeFile).finally(finishRestore);
         return;
       }
       if (!source.settings?.mediaUrl && typeof source.settings?.assetId === 'string') {
-        void readManagedMediaAsset(source.settings.assetId).then((record) => {
-          if (record?.file) void replaceMediaRuntimeForSource(source.id, record.file);
-          else
+        void readManagedMediaAsset(source.settings.assetId)
+          .then((record) => {
+            if (record?.file) return replaceMediaRuntimeForSource(source.id, record.file);
             patchCaptureSourceStatus(
               'relink_required',
               source.id,
               'Relink required: local media bytes are unavailable.',
             );
-        });
+            return undefined;
+          })
+          .finally(finishRestore);
         return;
       }
       if (!source.settings?.mediaUrl) {
@@ -2844,6 +2856,7 @@ export function SceneWorkspace({
           source.id,
           'Relink required: local media bytes are unavailable.',
         );
+        finishRestore();
         return;
       }
       patchCaptureSourceStatus('loading', source.id, 'Loading local media.');
@@ -2852,28 +2865,41 @@ export function SceneWorkspace({
         (stream, durationMs) => {
           if (element) localMediaElementsRef.current[source.id] = element;
           retainLiveSourceStream(source.id, stream);
-          refresh(
-            scenes.map((scene) => ({
-              ...scene,
-              sources: scene.sources.map((item) =>
-                item.id === source.id
-                  ? {
-                      ...item,
-                      settings: {
-                        ...item.settings,
-                        runtimeStatus: 'live',
-                        captureState: 'live',
-                        sourceKind: 'local-media',
-                        ...(durationMs ? { durationMs } : {}),
-                        message: 'Local media ready.',
-                      },
-                    }
-                  : item,
-              ),
-            })),
+          refresh((currentScenes) =>
+            currentScenes.map((scene) => {
+              let changed = false;
+              const sources = scene.sources.map((item) => {
+                if (item.id !== source.id) return item;
+                if (
+                  item.settings?.runtimeStatus === 'live' &&
+                  item.settings?.captureState === 'live' &&
+                  item.settings?.sourceKind === 'local-media' &&
+                  item.settings?.message === 'Local media ready.' &&
+                  (!durationMs || item.settings?.durationMs === durationMs)
+                )
+                  return item;
+                changed = true;
+                return {
+                  ...item,
+                  settings: {
+                    ...item.settings,
+                    runtimeStatus: 'live',
+                    captureState: 'live',
+                    sourceKind: 'local-media',
+                    ...(durationMs ? { durationMs } : {}),
+                    message: 'Local media ready.',
+                  },
+                };
+              });
+              return changed ? { ...scene, sources } : scene;
+            }),
           );
+          finishRestore();
         },
-        (message) => patchCaptureSourceStatus('unavailable', source.id, message),
+        (message) => {
+          patchCaptureSourceStatus('unavailable', source.id, message);
+          finishRestore();
+        },
       );
       if (element) localMediaElementsRef.current[source.id] = element;
     });

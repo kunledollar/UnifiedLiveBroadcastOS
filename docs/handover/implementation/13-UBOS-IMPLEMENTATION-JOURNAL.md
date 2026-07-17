@@ -619,3 +619,19 @@ Status: PARTIAL
   - PASS: `pnpm --filter @ubos/web typecheck`
   - PASS: `git diff --check`
 - Browser evidence: PENDING. This container has no Windows Edge runtime, so real Windows Edge motion screenshots/screen recording remain required before PASS can be claimed.
+
+## 2026-07-17 — Local Media Relink Infinite Update Loop Regression Repair
+
+Status: COMPLETE (automated); Browser verification pending in this container.
+
+- Root cause: the local-media restore effect depended on `scenes` and repeatedly called `patchCaptureSourceStatus()`. That patch always cloned every scene and capture source, even when `runtimeStatus`/message/relink state were already identical, and `refresh()` always called `setScenes(next)`. The resulting no-op scene graph replacement retriggered the effect and could continuously restart relink/object-URL restore work.
+- Repaired scene status patching with idempotent source/scene reference preservation and `refresh()` no-op suppression.
+- Added a source-id keyed in-flight local media restore guard and skipped restore when a source already has a retained media element, live stream, or ready/live runtime status.
+- Stabilized the status patch callback so it no longer captures `scenes`, reducing effect churn without disabling dependency checks.
+- Added focused regression coverage for unchanged patches, one-time changed patches, in-flight restore suppression, ready media restore suppression, relink stability, stable failure state, and successful ready transition stability.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/shared test`
+  - PASS: `pnpm --filter @ubos/web test`
+  - PASS: `pnpm --filter @ubos/web typecheck`
+  - PASS: `git diff --check`
+- Browser evidence: PENDING. This container does not expose a browser runtime for several-minute Control Room validation.
