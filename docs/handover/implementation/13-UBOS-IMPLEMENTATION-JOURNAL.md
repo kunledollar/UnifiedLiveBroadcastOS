@@ -548,3 +548,59 @@ Duplicate check: **No visually identical layouts. All 9 presets produce distinct
 - Evidence: text runtime trace and measurements are stored under `artifacts/scene-routing-recording-ui/`.
 - Browser limitation: no Chromium/Edge executable was present in the container, so required PNG screenshot evidence remains pending and PASS cannot be claimed.
 - Validation: shared tests PASS; web tests PASS with FFmpeg/FFprobe-dependent cases skipped where host binaries are missing; web typecheck PASS; `validate:v512-native-runtime` fails because FFmpeg/FFprobe are absent from this host.
+
+## 2026-07-17 — Scene Source Activation and Program/Preview Overlay Cleanup
+
+### Status
+
+PARTIAL — implementation and automated validation pass; browser acceptance evidence remains blocked in this Linux container because no Chromium/Chrome/Edge executable or Playwright CLI is installed. Windows browser verification is still required before claiming PASS for camera/screen permission prompts and actual pixels.
+
+### Objective
+
+Repair Control Room source activation so selected scenes bind camera, screen, and safe generated media by exact source ID, expose explicit operator activation for inactive camera/screen sources, avoid unrelated fallback streams, and reduce Program/Preview monitor overlays to compact broadcast metadata.
+
+### Root Causes Found
+
+1. Scene routing could identify a selected scene source but did not expose an operator-facing activation action for an inactive camera or screen source.
+2. Screen capture could be started from source creation immediately; browser screen capture must be explicit and user initiated.
+3. Offline monitor feedback was mixed with generic monitor empty states instead of one concise warning per inactive source condition.
+4. Program/Preview monitor rendering still mounted verbose metadata overlays for graphics, media, collaboration, and automation inside the media region.
+
+### Implementation
+
+- Added routed media state for exact source ID, source type, stream, active state, compact warning text, and activation action.
+- Camera scenes now expose `Start Camera Source` when the exact selected camera source is inactive.
+- Screen scenes now expose `Start Screen Source` and do not silently call `getDisplayMedia` during source creation.
+- Granted camera/screen streams are retained under the exact source ID and rendered by Program/Preview when that scene is selected.
+- Ended/stopped capture tracks remove only the affected source stream and mark that source offline.
+- Generated test-pattern media remains automatically activated when safe and is bound by exact source ID.
+- Added cleanup for streams whose source IDs are no longer referenced by any scene, without stopping shared sources still referenced by other scenes.
+- Removed verbose in-monitor diagnostics/metadata overlays from the Program/Preview compositor path; diagnostics remain available through inspector/operations panels.
+
+### Validation
+
+- `pnpm --filter @ubos/shared test` — PASS.
+- `pnpm --filter @ubos/web test` — PASS, including source activation/routing regression coverage.
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `git diff --check` — PASS.
+
+### Browser Verification
+
+PENDING. The container does not provide Chromium/Chrome/Edge, and `pnpm exec playwright install chromium` is unavailable because the Playwright CLI is not installed in this workspace. Required Windows browser acceptance remains:
+
+1. Scene A camera offline shows one clear camera activation action.
+2. Starting camera renders Scene A camera pixels.
+3. Scene B screen inactive shows `Start Screen Source`.
+4. Starting screen share renders Scene B screen pixels.
+5. Preview switching A/B/C changes actual pixels.
+6. CUT/TAKE changes Program correctly.
+7. Program/Preview media area remains uncluttered.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/workspace/scene-routing.ts` | Exact source activation/warning state and unused stream cleanup helper |
+| `apps/web/app/control-room/workspace/scene-routing.test.ts` | Regression tests for camera/screen activation, exact source binding, stopped screen share offline state, no unrelated fallback, Program/Preview isolation, and shared-source cleanup |
+| `apps/web/app/control-room/scene-workspace.tsx` | Operator activation monitor, explicit screen-start behavior, source-ID stream binding, stopped-track offline marking, safe unused stream cleanup |
+| `apps/web/app/control-room/workspace/OutputViewRenderer.tsx` | Removed verbose in-monitor diagnostics/metadata overlays from Program/Preview media region |

@@ -1,13 +1,18 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveSceneLiveMedia, createSceneRoutingEvidence, type LiveStreamLike } from './scene-routing.js';
+import {
+  resolveSceneLiveMedia,
+  createSceneRoutingEvidence,
+  getUnusedLiveSourceIds,
+  type LiveStreamLike,
+} from './scene-routing.js';
 import { SceneType, type Scene } from '@ubos/shared';
 
 function stream(id: string): LiveStreamLike {
   return { id, active: true, getVideoTracks: () => [{ readyState: 'live' }] };
 }
 
-function scene(id: string, sourceId: string): Scene {
+function scene(id: string, sourceId: string, sourceType: Scene['sources'][number]['type'] = 'camera'): Scene {
   const at = '2026-07-16T00:00:00.000Z';
   return {
     id,
@@ -17,7 +22,7 @@ function scene(id: string, sourceId: string): Scene {
     isActive: false,
     type: SceneType.Camera,
     layout: null,
-    sources: [{ id: sourceId, name: sourceId, type: 'camera', label: sourceId, order: 1, visible: true, isVisible: true, isLocked: false, settings: {}, transform: {} }],
+    sources: [{ id: sourceId, name: sourceId, type: sourceType, label: sourceId, order: 1, visible: true, isVisible: true, isLocked: false, settings: {}, transform: {} }],
     overlays: [],
     audioConfig: {},
     canvases: [],
@@ -118,4 +123,64 @@ test('recording capture evidence follows authoritative Program after transitions
   assert.equal(afterCutC.programStreamId, 'stream-c');
   assert.equal(afterTakeB.programSceneId, 'scene-b');
   assert.equal(afterTakeB.programStreamId, 'stream-b');
+});
+
+test('selecting camera scene exposes activation when camera source is offline', () => {
+  const routed = resolveSceneLiveMedia(scene('scene-a', 'camera-a', 'camera'), {});
+
+  assert.equal(routed.sourceId, 'camera-a');
+  assert.equal(routed.stream, null);
+  assert.equal(routed.warning, 'CAMERA OFFLINE');
+  assert.equal(routed.activationAction, 'start-camera');
+});
+
+test('authorized camera stream binds to exact source ID only', () => {
+  const routed = resolveSceneLiveMedia(scene('scene-a', 'camera-a', 'camera'), {
+    'camera-a': stream('camera-stream'),
+    'screen-b': stream('unrelated-screen-stream'),
+  });
+
+  assert.equal(routed.sourceId, 'camera-a');
+  assert.equal(routed.stream?.id, 'camera-stream');
+  assert.equal(routed.active, true);
+  assert.equal(routed.warning, null);
+});
+
+test('selecting screen scene exposes Start Screen Source when inactive', () => {
+  const routed = resolveSceneLiveMedia(scene('scene-b', 'screen-b', 'screen'), {});
+
+  assert.equal(routed.sourceId, 'screen-b');
+  assert.equal(routed.warning, 'SCREEN SOURCE NOT STARTED');
+  assert.equal(routed.activationAction, 'start-screen');
+});
+
+test('authorized screen stream binds to exact source ID only', () => {
+  const routed = resolveSceneLiveMedia(scene('scene-b', 'screen-b', 'screen'), {
+    'camera-a': stream('camera-stream'),
+    'screen-b': stream('screen-stream'),
+  });
+
+  assert.equal(routed.sourceId, 'screen-b');
+  assert.equal(routed.stream?.id, 'screen-stream');
+  assert.equal(routed.active, true);
+});
+
+test('stopped screen share marks source offline by removing its exact source stream', () => {
+  const routed = resolveSceneLiveMedia(scene('scene-b', 'screen-b', 'screen'), {
+    'camera-a': stream('camera-stream'),
+  });
+
+  assert.equal(routed.stream, null);
+  assert.equal(routed.warning, 'SCREEN SOURCE NOT STARTED');
+});
+
+test('unused stream cleanup does not stop shared sources still used by scenes', () => {
+  const streams = { 'shared-source': stream('shared'), orphan: stream('orphan') };
+  assert.deepEqual(
+    getUnusedLiveSourceIds({
+      scenes: [scene('scene-a', 'shared-source'), scene('scene-b', 'shared-source')],
+      liveSourceStreams: streams,
+    }),
+    ['orphan'],
+  );
 });

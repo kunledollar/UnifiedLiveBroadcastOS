@@ -176,6 +176,7 @@ import {
 } from './workspace/monitor-state';
 import {
   createSceneRoutingEvidence,
+  getUnusedLiveSourceIds,
   resolveSceneLiveMedia,
 } from './workspace/scene-routing';
 import {
@@ -581,6 +582,63 @@ function LiveMediaMonitor({
               CAMERA LIVE
             </span>
           ) : null}
+          <span className="text-slate-300">{sceneName}</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function OfflineSourceMonitor({
+  title,
+  sceneName,
+  warning,
+  actionLabel,
+  onAction,
+  role,
+  deckMode = false,
+}: {
+  title: string;
+  sceneName: string;
+  warning: string;
+  actionLabel?: string | undefined;
+  onAction?: (() => void) | undefined;
+  role: 'program' | 'preview';
+  deckMode?: boolean;
+}) {
+  return (
+    <div
+      className={cn(
+        'relative flex h-full min-h-0 flex-col overflow-hidden bg-black',
+        !deckMode &&
+          `rounded-xl border ${role === 'program' ? 'border-red-500/50' : 'border-emerald-400/50'}`,
+      )}
+      data-ubos-offline-monitor={role}
+    >
+      <div className="absolute left-3 top-3 z-20 rounded bg-black/80 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-white">
+        {title} · {sceneName}
+      </div>
+      <div className="absolute right-3 top-3 z-20 rounded bg-amber-400/90 px-2 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-black">
+        {warning}
+      </div>
+      <div className="absolute inset-0 z-10 flex items-center justify-center p-6 text-center">
+        {actionLabel && onAction ? (
+          <button
+            type="button"
+            className="rounded-ubos-sm bg-cyan-400 px-4 py-3 text-xs font-black uppercase tracking-[0.14em] text-slate-950"
+            onClick={onAction}
+          >
+            {actionLabel}
+          </button>
+        ) : (
+          <span className="rounded bg-black/70 px-3 py-2 text-xs font-black uppercase tracking-[0.16em] text-amber-100">
+            {warning}
+          </span>
+        )}
+      </div>
+      {!deckMode ? (
+        <div className="relative z-30 mt-auto flex items-center justify-between border-t border-white/10 bg-black/80 px-3 py-2 text-[10px] font-black uppercase tracking-[0.16em]">
+          <span className={role === 'program' ? 'text-red-200' : 'text-emerald-100'}>{title}</span>
           <span className="text-slate-300">{sceneName}</span>
         </div>
       ) : null}
@@ -2533,6 +2591,25 @@ export function SceneWorkspace({
     });
   }, [retainLiveSourceStream, scenes]);
 
+  useEffect(() => {
+    const unusedSourceIds = getUnusedLiveSourceIds({
+      scenes,
+      liveSourceStreams: liveSourceStreamsRef.current,
+    });
+    if (!unusedSourceIds.length) return;
+    setLiveSourceStreams((current) => {
+      let next = current;
+      unusedSourceIds.forEach((sourceId) => {
+        const stream = next[sourceId];
+        if (!stream) return;
+        stream.getTracks().forEach((track) => track.stop());
+        const { [sourceId]: _removed, ...remaining } = next;
+        next = remaining;
+      });
+      return next;
+    });
+  }, [scenes]);
+
   const startScreenCapture = useCallback(
     async (sourceId: string) => {
       patchCaptureSourceStatus('connecting', sourceId);
@@ -4262,7 +4339,8 @@ export function SceneWorkspace({
         formData.set('type', input.type);
         if (input.url) formData.set('url', input.url);
         if (input.type === 'camera') void startCameraCapture(tempSource.id);
-        else if (input.type === 'screen') void startScreenCapture(tempSource.id);
+        else if (input.type === 'screen')
+          patchCaptureSourceStatus('permission_required', tempSource.id, 'Start Screen Source');
         else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
@@ -4919,6 +4997,33 @@ export function SceneWorkspace({
     ],
   );
 
+  const programActivationLabel =
+    programLiveMedia.activationAction === 'start-screen'
+      ? 'Start Screen Source'
+      : programLiveMedia.activationAction === 'start-camera'
+        ? 'Start Camera Source'
+        : undefined;
+  const previewActivationLabel =
+    previewLiveMedia.activationAction === 'start-screen'
+      ? 'Start Screen Source'
+      : previewLiveMedia.activationAction === 'start-camera'
+        ? 'Start Camera Source'
+        : undefined;
+  const startProgramSource = () => {
+    if (!programLiveMedia.sourceId) return;
+    if (programLiveMedia.activationAction === 'start-screen')
+      void startScreenCapture(programLiveMedia.sourceId);
+    if (programLiveMedia.activationAction === 'start-camera')
+      void startCameraCapture(programLiveMedia.sourceId);
+  };
+  const startPreviewSource = () => {
+    if (!previewLiveMedia.sourceId) return;
+    if (previewLiveMedia.activationAction === 'start-screen')
+      void startScreenCapture(previewLiveMedia.sourceId);
+    if (previewLiveMedia.activationAction === 'start-camera')
+      void startCameraCapture(previewLiveMedia.sourceId);
+  };
+
   const programMonitorNode = liveProgramVisible ? (
     <LiveMediaMonitor
       title="Program"
@@ -4928,6 +5033,16 @@ export function SceneWorkspace({
       role="program"
       sourceId={programCameraSourceId}
       sourceType={programLiveVideoSource?.type}
+      deckMode
+    />
+  ) : programLiveMedia.warning ? (
+    <OfflineSourceMonitor
+      title="Program"
+      sceneName={programScene.name}
+      warning={programLiveMedia.warning}
+      actionLabel={programActivationLabel}
+      onAction={programActivationLabel ? startProgramSource : undefined}
+      role="program"
       deckMode
     />
   ) : (
@@ -4956,6 +5071,16 @@ export function SceneWorkspace({
       role="preview"
       sourceId={previewCameraSourceId}
       sourceType={previewLiveVideoSource?.type}
+      deckMode
+    />
+  ) : previewLiveMedia.warning ? (
+    <OfflineSourceMonitor
+      title="Preview"
+      sceneName={previewScene.name}
+      warning={previewLiveMedia.warning}
+      actionLabel={previewActivationLabel}
+      onAction={previewActivationLabel ? startPreviewSource : undefined}
+      role="preview"
       deckMode
     />
   ) : (

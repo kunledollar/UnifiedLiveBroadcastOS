@@ -12,6 +12,8 @@ export type RoutedSceneMedia<TStream extends LiveStreamLike> = {
   sourceType: SceneSourceType | null;
   stream: TStream | null;
   active: boolean;
+  warning: 'CAMERA OFFLINE' | 'SCREEN SOURCE NOT STARTED' | 'MEDIA UNAVAILABLE' | null;
+  activationAction: 'start-camera' | 'start-screen' | null;
 };
 
 export function getVisibleLiveVideoSources(scene: Scene): SceneSource[] {
@@ -51,12 +53,31 @@ export function resolveSceneLiveMedia<TStream extends LiveStreamLike>(
   const source = activeSource ?? visibleSources[0];
   const stream = source ? liveSourceStreams[source.id] ?? null : null;
   const active = isActiveVideoStream(stream);
+  const sourceType = source?.type ?? null;
+  const warning = active
+    ? null
+    : sourceType === 'camera'
+      ? 'CAMERA OFFLINE'
+      : sourceType === 'screen'
+        ? 'SCREEN SOURCE NOT STARTED'
+        : sourceType === 'media'
+          ? 'MEDIA UNAVAILABLE'
+          : null;
+  const activationAction = active
+    ? null
+    : sourceType === 'camera'
+      ? 'start-camera'
+      : sourceType === 'screen'
+        ? 'start-screen'
+        : null;
   return {
     sceneId: scene.id,
     sourceId: source?.id ?? null,
-    sourceType: source?.type ?? null,
+    sourceType,
     stream: active ? stream : null,
     active,
+    warning,
+    activationAction,
   };
 }
 
@@ -75,4 +96,12 @@ export function createSceneRoutingEvidence<TStream extends LiveStreamLike>(input
       input.program.stream && input.preview.stream && input.program.stream === input.preview.stream,
     ),
   };
+}
+
+export function getUnusedLiveSourceIds<TStream extends LiveStreamLike>(input: {
+  scenes: Scene[];
+  liveSourceStreams: Record<string, TStream>;
+}): string[] {
+  const referenced = new Set(input.scenes.flatMap((scene) => scene.sources.map((source) => source.id)));
+  return Object.keys(input.liveSourceStreams).filter((sourceId) => !referenced.has(sourceId));
 }
