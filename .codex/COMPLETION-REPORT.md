@@ -550,3 +550,22 @@ PARTIAL — Unit tests PASS. Browser visual evidence PENDING (requires browser o
 - Status: PARTIAL.
 - Completed: repaired stale live MediaStream fallback in Control Room scene monitor binding; added focused scene routing regression tests; documented Native Recording panel trace and evidence location.
 - Remaining blocker: real Chromium screenshot evidence was not completed, so milestone PASS cannot be claimed.
+
+## 2026-07-17 — Control Room Scene Routing and Native Recording UI Regression
+
+Status: PARTIAL
+
+- Repaired/locked scene routing behavior with focused tests for independent Program/Preview source resolution, Preview isolation, CUT/TAKE/AUTO Program binding, stale Scene A stream prevention, legitimate shared stream preservation, and recording capture following Program.
+- Restored Native Recording panel visibility in the default Director workspace while preserving existing panel registry and Broadcast menu paths.
+- Added text evidence under `artifacts/scene-routing-recording-ui/`.
+- Browser screenshot evidence remains pending because no Chromium/Edge executable is available in this container.
+- Native runtime validation remains blocked because FFmpeg/FFprobe are missing from this host.
+
+## 2026-07-17 — Browser-Truth Follow-up for Scene Routing / Recording UI
+
+Status: PARTIAL_BROWSER_BLOCKED
+
+- Added distinct generated A/B/C canvas MediaStreams to the demo Control Room scenes so local browser validation no longer depends on three camera/screen/media permissions.
+- Updated scene media resolution to prefer active selected-scene streams across visible z-ordered sources, preventing inactive permission-gated sources from blocking a live generated/media source in the same scene.
+- Keyed LiveMediaMonitor video elements by role/source/stream identity to avoid stale HTMLVideoElement `srcObject` reuse across scene changes.
+- Browser screenshot validation could not be completed because Chromium/Edge is unavailable and package installation/downloads are blocked by 403 responses in this container.

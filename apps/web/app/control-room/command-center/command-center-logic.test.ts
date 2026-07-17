@@ -1085,3 +1085,15 @@ test('user drag-resize overrides preset zoneSizeDefaults', () => {
     'user drag-resize override must win over preset default for bottom-workspace',
   );
 });
+
+test('Native Recording panel is registered and exposed by production workspaces', async () => {
+  const [{ WORKSPACE_PANEL_IDS, workspacePresets }, { panelForOperationsTab, operationsTabForPanel }] = await Promise.all([
+    import('@ubos/shared'),
+    import('./command-center-logic.js'),
+  ]);
+
+  assert.equal(panelForOperationsTab('recording'), WORKSPACE_PANEL_IDS.recording);
+  assert.equal(operationsTabForPanel(WORKSPACE_PANEL_IDS.recording), 'recording');
+  assert.ok(workspacePresets.director.visiblePanels.includes(WORKSPACE_PANEL_IDS.recording));
+  assert.ok(workspacePresets['solo-streamer'].visiblePanels.includes(WORKSPACE_PANEL_IDS.recording));
+});

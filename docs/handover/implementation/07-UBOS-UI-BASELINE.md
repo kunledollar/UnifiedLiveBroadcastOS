@@ -605,3 +605,14 @@ After saving:
 ## 2026-07-16 Control Room Baseline Addendum
 
 Program and Preview monitors must render pixels from the current scene's resolved sources. Preview-only changes must not alter Program pixels. The production Control Room must keep Native Recording reachable through the existing Recording operations surface and show exact blocked reasons when unavailable.
+
+## 2026-07-17 UI Baseline Update — Native Recording Visibility
+
+- The default Director Control Room workspace must expose the Recording operations panel so Native FFmpeg Recording is visible without requiring a workspace redesign.
+- The Broadcast menu path to the Recording panel remains valid.
+- The Recording panel must show native runtime state, blocked reason, Start Native, Stop Native, elapsed time, finalizing/verified state, artifact path, size, duration, video codec, audio codec, FFprobe result, and browser-local fallback.
+
+## 2026-07-17 Scene Routing Browser Evidence Baseline
+
+- The default demo Control Room must offer three visually distinct generated scene media sources: Scene A red pattern, Scene B green pattern, and Scene C blue pattern.
+- Browser acceptance requires visible pixel changes for Preview selection and Program CUT/AUTO/TAKE, plus visible Native Recording controls in Director.

@@ -300,6 +300,53 @@ function isLiveMediaStream(stream: MediaStream | null | undefined): stream is Me
 
 const SMOKE_CAMERA_SOURCE_ID = 'ubos-smoke-camera';
 
+function isGeneratedTestPatternSource(source: SceneSource): boolean {
+  return source.type === 'media' && source.settings?.sourceKind === 'test-pattern';
+}
+
+function createGeneratedTestPatternStream(source: SceneSource, sceneName: string): MediaStream | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 1280;
+  canvas.height = 720;
+  const context = canvas.getContext('2d');
+  const captureStream = canvas.captureStream?.bind(canvas);
+  if (!context || !captureStream) return null;
+  const label = String(source.settings?.patternLabel ?? source.name.slice(0, 1) ?? '?').toUpperCase();
+  const color = String(source.settings?.patternColor ?? '#2563eb');
+  let frame = 0;
+  let animationFrame = 0;
+  const draw = () => {
+    const t = frame++;
+    context.fillStyle = color;
+    context.fillRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = 'rgba(0,0,0,0.28)';
+    for (let x = -canvas.height; x < canvas.width; x += 96) {
+      context.save();
+      context.translate(x + (t % 96), 0);
+      context.rotate(-Math.PI / 5);
+      context.fillRect(0, 0, 42, canvas.height * 2);
+      context.restore();
+    }
+    context.fillStyle = '#ffffff';
+    context.font = '900 220px sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.fillText(label, canvas.width / 2, canvas.height / 2 - 30);
+    context.font = '700 54px sans-serif';
+    context.fillText(sceneName, canvas.width / 2, canvas.height / 2 + 140);
+    context.font = '600 30px monospace';
+    context.fillText(`${source.id} · frame ${String(t).padStart(5, '0')}`, canvas.width / 2, canvas.height - 56);
+    animationFrame = window.requestAnimationFrame(draw);
+  };
+  draw();
+  const stream = captureStream(30);
+  stream.getVideoTracks().forEach((track) => {
+    track.addEventListener('ended', () => window.cancelAnimationFrame(animationFrame), { once: true });
+  });
+  return stream;
+}
+
 function findFirstLiveVideoStream(streams: Record<string, MediaStream>): MediaStream | null {
   for (const stream of Object.values(streams)) {
     if (isLiveMediaStream(stream)) return stream;
@@ -507,6 +554,7 @@ function LiveMediaMonitor({
       )}
     >
       <video
+        key={`${role}:${sourceId ?? 'none'}:${stream?.id ?? 'no-stream'}`}
         data-ubos-live-monitor-video={role}
         data-ubos-scene-name={sceneName}
         data-ubos-source-id={sourceId ?? ''}
@@ -2471,6 +2519,19 @@ export function SceneWorkspace({
     },
     [markLiveSourceOffline],
   );
+
+  useEffect(() => {
+    const generatedSources = scenes.flatMap((scene) =>
+      scene.sources
+        .filter((source) => source.isVisible && isGeneratedTestPatternSource(source))
+        .map((source) => ({ scene, source })),
+    );
+    generatedSources.forEach(({ scene, source }) => {
+      if (isLiveMediaStream(liveSourceStreamsRef.current[source.id])) return;
+      const stream = createGeneratedTestPatternStream(source, scene.name);
+      if (stream) retainLiveSourceStream(source.id, stream);
+    });
+  }, [retainLiveSourceStream, scenes]);
 
   const startScreenCapture = useCallback(
     async (sourceId: string) => {

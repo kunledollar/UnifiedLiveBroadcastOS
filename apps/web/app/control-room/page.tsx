@@ -97,7 +97,15 @@ const DEMO_SCENES: Scene[] = [
     thumbnailUrl: null,
     background: null,
     layout: 'screen_share',
-    sources: [],
+    sources: [
+      {
+        id: 'src-pattern-countdown', workspaceId: 'demo-workspace', broadcastId: 'demo-broadcast', sceneId: 'scene-countdown',
+        name: 'Scene A Test Pattern', label: 'Scene A Test Pattern', type: 'media', order: 0, visible: true, isVisible: true, isLocked: false,
+        settings: { runtimeStatus: 'live', captureState: 'live', sourceKind: 'test-pattern', patternLabel: 'A', patternColor: '#dc2626' },
+        transform: { x: 0, y: 0, width: 1, height: 1, zIndex: 0, opacity: 1, visible: true, locked: false },
+        createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
+      },
+    ],
     overlays: [],
     audioConfig: {},
     canvases: [
@@ -117,6 +125,13 @@ const DEMO_SCENES: Scene[] = [
     background: null,
     layout: 'interview',
     sources: [
+      {
+        id: 'src-pattern-interview', workspaceId: 'demo-workspace', broadcastId: 'demo-broadcast', sceneId: 'scene-interview',
+        name: 'Scene B Test Pattern', label: 'Scene B Test Pattern', type: 'media', order: 2, visible: true, isVisible: true, isLocked: false,
+        settings: { runtimeStatus: 'live', captureState: 'live', sourceKind: 'test-pattern', patternLabel: 'B', patternColor: '#16a34a' },
+        transform: { x: 0, y: 0, width: 1, height: 1, zIndex: 2, opacity: 1, visible: true, locked: false },
+        createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
+      },
       {
         id: 'src-camera-1',
         workspaceId: 'demo-workspace',
@@ -170,7 +185,15 @@ const DEMO_SCENES: Scene[] = [
     thumbnailUrl: null,
     background: null,
     layout: 'picture_in_picture',
-    sources: [],
+    sources: [
+      {
+        id: 'src-pattern-demo', workspaceId: 'demo-workspace', broadcastId: 'demo-broadcast', sceneId: 'scene-demo',
+        name: 'Scene C Test Pattern', label: 'Scene C Test Pattern', type: 'media', order: 0, visible: true, isVisible: true, isLocked: false,
+        settings: { runtimeStatus: 'live', captureState: 'live', sourceKind: 'test-pattern', patternLabel: 'C', patternColor: '#2563eb' },
+        transform: { x: 0, y: 0, width: 1, height: 1, zIndex: 0, opacity: 1, visible: true, locked: false },
+        createdAt: '2026-07-01T00:00:00.000Z', updatedAt: '2026-07-01T00:00:00.000Z',
+      },
+    ],
     overlays: [],
     audioConfig: {},
     canvases: [

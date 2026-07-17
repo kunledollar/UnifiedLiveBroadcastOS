@@ -14,13 +14,24 @@ export type RoutedSceneMedia<TStream extends LiveStreamLike> = {
   active: boolean;
 };
 
+export function getVisibleLiveVideoSources(scene: Scene): SceneSource[] {
+  return scene.sources
+    .filter(
+      (source) =>
+        source.isVisible &&
+        !source.isLocked &&
+        (source.type === 'camera' || source.type === 'screen' || source.type === 'media'),
+    )
+    .sort((a, b) => {
+      const zA = typeof a.transform.zIndex === 'number' ? a.transform.zIndex : a.order;
+      const zB = typeof b.transform.zIndex === 'number' ? b.transform.zIndex : b.order;
+      if (zA !== zB) return zB - zA;
+      return a.order - b.order;
+    });
+}
+
 export function getFirstVisibleLiveVideoSource(scene: Scene): SceneSource | undefined {
-  return scene.sources.find(
-    (source) =>
-      source.isVisible &&
-      !source.isLocked &&
-      (source.type === 'camera' || source.type === 'screen' || source.type === 'media'),
-  );
+  return getVisibleLiveVideoSources(scene)[0];
 }
 
 function isActiveVideoStream<TStream extends LiveStreamLike>(stream: TStream | null | undefined): stream is TStream {
@@ -33,7 +44,11 @@ export function resolveSceneLiveMedia<TStream extends LiveStreamLike>(
   scene: Scene,
   liveSourceStreams: Record<string, TStream>,
 ): RoutedSceneMedia<TStream> {
-  const source = getFirstVisibleLiveVideoSource(scene);
+  const visibleSources = getVisibleLiveVideoSources(scene);
+  const activeSource = visibleSources.find((candidate) =>
+    isActiveVideoStream(liveSourceStreams[candidate.id] ?? null),
+  );
+  const source = activeSource ?? visibleSources[0];
   const stream = source ? liveSourceStreams[source.id] ?? null : null;
   const active = isActiveVideoStream(stream);
   return {

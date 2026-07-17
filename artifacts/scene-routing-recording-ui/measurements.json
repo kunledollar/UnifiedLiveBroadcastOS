@@ -1,47 +1,30 @@
 {
-  "status": "partial",
-  "capturedAt": "2026-07-16T00:00:00.000Z",
-  "certificationAttempt": "final Windows-host browser certification",
-  "branch": "work",
-  "headCommit": "16a36b94ed3bead7a9bf37fc81cd2457724197b0",
-  "requiredCommit": "590e5b4",
-  "requiredCommitPresent": false,
-  "requiredCommitCheck": "git merge-base --is-ancestor 590e5b4 HEAD failed because 590e5b4 is not a valid object in this shallow repository and no remotes are configured.",
-  "hostPlatform": "Linux a433c1373773 6.12.47 #1 SMP Mon Oct 27 10:01:15 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
-  "windowsBrowserExecutableFound": false,
-  "browserExecutableChecks": [
-    "which msedge",
-    "which google-chrome",
-    "find /mnt/c/Program Files* -maxdepth 4 -name msedge.exe -o -name chrome.exe"
-  ],
-  "browserCertificationExecuted": false,
-  "browserBlocker": "No locally installed Microsoft Edge or Google Chrome executable was available from the requested Windows host paths or Linux PATH in this container, so no genuine browser pixels, DOM MediaStream ownership data, console log capture, Native Recording panel verification, or recording sample could be produced in this run.",
-  "requestedGenuineEvidenceArtifactsCreatedThisRun": [],
-  "staleArtifactsNotRecertifiedThisRun": [
-    "artifacts/scene-routing-recording-ui/program-a-preview-b.png",
-    "artifacts/scene-routing-recording-ui/program-a-preview-c.png",
-    "artifacts/scene-routing-recording-ui/program-c-after-take.png",
-    "artifacts/scene-routing-recording-ui/native-recording-panel.png"
-  ],
-  "domMediaStreamEvidence": null,
-  "srcObjectSameWhenDifferentSources": null,
-  "nativeRecording": {
-    "panelVisiblyVerified": false,
-    "readyOrBlocked": "not inspected in browser",
-    "blockedReason": "Browser certification blocked before route inspection.",
-    "recordingSampleCreated": false
+  "status": "PARTIAL_BROWSER_BLOCKED",
+  "timestampUtc": "2026-07-17T01:55:00.000Z",
+  "sceneRouting": {
+    "rootCause": "Runtime demo scenes did not guarantee three distinct live media streams. A scene with an inactive camera/screen source could resolve metadata while the monitor had no scene-owned stream, and earlier behavior could appear as stale media. The resolver now prefers the selected scene's active visible stream and generated demo test-pattern streams provide unique A/B/C media without camera permissions.",
+    "programSceneIdOwner": "ProductionGraph graph.program.sceneId and productionState.programSceneId",
+    "previewSceneIdOwner": "ProductionGraph graph.preview.sceneId and productionState.previewSceneId",
+    "programResolvedSourceRule": "selected Program scene -> visible unlocked camera/screen/media sources sorted by z-index/order -> first active source stream, otherwise first eligible inactive source with null stream",
+    "previewResolvedSourceRule": "selected Preview scene -> visible unlocked camera/screen/media sources sorted by z-index/order -> first active source stream, otherwise first eligible inactive source with null stream",
+    "demoSources": [
+      { "sceneId": "scene-countdown", "sourceId": "src-pattern-countdown", "label": "A", "color": "#dc2626" },
+      { "sceneId": "scene-interview", "sourceId": "src-pattern-interview", "label": "B", "color": "#16a34a" },
+      { "sceneId": "scene-demo", "sourceId": "src-pattern-demo", "label": "C", "color": "#2563eb" }
+    ],
+    "resolvedInCode": true,
+    "browserVerified": false
   },
-  "browserConsole": {
-    "captured": false,
-    "errors": [],
-    "uncaughtExceptions": [],
-    "mediaErrors": [],
-    "reactHydrationErrors": []
+  "nativeRecordingUi": {
+    "rootCause": "The default Director production workspace did not include the registered recording panel in visiblePanels, so Native Recording existed in the registry/menu path but was not visible in the tested default Control Room workspace.",
+    "registeredPanelId": "recording",
+    "visibleInDirector": true,
+    "visibleInSoloStreamer": true,
+    "reachableThroughBroadcastMenu": true,
+    "browserMountedVerified": false
   },
-  "checks": {
-    "pnpm --filter @ubos/shared build": "pass",
-    "pnpm --filter @ubos/web typecheck": "pass",
-    "pnpm --filter @ubos/web exec tsc -p tsconfig.test.json && node --test apps/web/dist-test/app/control-room/workspace/scene-routing.test.js apps/web/dist-test/lib/program-pipeline/program-ownership.test.js": "pass_with_node_module_type_warning",
-    "git diff --check": "pass"
+  "browserEvidence": {
+    "available": false,
+    "reason": "No Chromium/Edge executable is installed in this container. apt-get install chromium ffmpeg failed with repository 403 responses, and npm/npx Playwright download failed with registry 403. Required screenshots remain blocked by environment, not generated or faked."
   }
 }

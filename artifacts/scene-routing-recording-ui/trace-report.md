@@ -1,53 +1,34 @@
 # Control Room Scene Routing and Native Recording UI Trace
 
-Status: PARTIAL — final Windows-host browser certification could not be executed in this container.
+Status: PARTIAL_BROWSER_BLOCKED — code paths were repaired and regression tests pass, but this container still cannot execute Chromium/Edge. Required screenshots are not faked.
 
-## Required commit gate
+## Runtime root cause update
 
-The requested certification required the current branch to contain commit `590e5b4`. The check `git merge-base --is-ancestor 590e5b4 HEAD` failed because `590e5b4` is not a valid object in this shallow checkout. `git remote -v` returned no configured remotes, so the missing object could not be fetched from this workspace.
+The previous code-only repair removed the unrelated global fallback, but it still did not guarantee three genuinely distinct live media sources in the local demo/runtime path. The default demo scenes included empty scenes or permission-gated camera/screen sources, so scene identity could change while there was no selected-scene-owned live stream to render. The repair now adds browser-generated canvas test-pattern streams for the three demo scenes and updates the media resolver to choose the selected scene's first active visible video source instead of stopping on an inactive permission-gated source.
 
-Current branch: `work`
-Current HEAD: `16a36b94ed3bead7a9bf37fc81cd2457724197b0`
+## Native Recording visibility root cause
 
-## Browser gate
+`RecordingRuntimePanel` and registry/menu paths existed, but the default Director production workspace did not include the recording panel in `visiblePanels`. The Director preset now exposes Recording without developer tools, and Solo Streamer remains a recording workspace.
 
-The requested evidence must come from a locally installed Windows-host Microsoft Edge or Google Chrome executable. This runtime is Linux (`uname -a`: `Linux a433c1373773 6.12.47 #1 SMP Mon Oct 27 10:01:15 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux`). No Edge or Chrome executable was found on PATH, and no `/mnt/c/Program Files...` Windows browser path was available.
+## Scene → Source → Renderer ownership trace
 
-Because no required host browser executable was available, Playwright was not installed and no browser was launched. Per the certification instructions, screenshots and MP4 files were not generated, fabricated, rendered, or substituted.
+Scene selection -> `stageScene(sceneId)` dispatches `SET_PREVIEW_SCENE` and persists `productionState.previewSceneId`.
+Preview identity -> `productionState.previewSceneId` and `graph.preview.sceneId`.
+Program identity -> `switchProgram()` dispatches CUT/AUTO/TAKE to `graph.program.sceneId` and persists `productionState.programSceneId`.
+Scene source collection -> `programScene.sources` / `previewScene.sources`.
+Source visibility and z-order -> `getVisibleLiveVideoSources()` filters visible unlocked camera/screen/media sources and sorts by z-index/order.
+Media resolver -> `resolveSceneLiveMedia()` prefers the selected scene's first active live source stream; if none is active, it returns the scene-owned source with `stream: null` instead of borrowing another scene.
+Generated demo media -> `createGeneratedTestPatternStream()` creates distinct red/green/blue A/B/C canvas MediaStreams for demo scenes and stores them in `liveSourceStreams[source.id]`.
+LiveMediaMonitor props -> Program and Preview receive independent `stream`, `sourceId`, `sourceType`, `role`, and keyed video elements.
+HTMLVideoElement binding -> `LiveMediaMonitor` assigns the current role's stream to `video.srcObject` and clears it during cleanup.
+Recording route -> `createProgramRecordingStream()` captures `[data-ubos-program-monitor] video` first and falls back only to the currently resolved Program stream.
 
-## Genuine browser evidence
+## Browser evidence blocker
 
-No new genuine browser evidence artifacts were created in this run.
+Attempted to install/use a browser in this environment:
 
-The following pre-existing files remain in the artifact directory but were not recertified by this run and are not being claimed as fresh Windows-host browser evidence:
+- `apt-get update && apt-get install -y chromium ffmpeg` failed with repository/proxy 403 responses.
+- `pnpm exec playwright --version || npx playwright --version` failed because Playwright is not installed and registry access returned 403.
+- Filesystem search found no existing Chromium/Chrome/Edge executable.
 
-- `artifacts/scene-routing-recording-ui/program-a-preview-b.png`
-- `artifacts/scene-routing-recording-ui/program-a-preview-c.png`
-- `artifacts/scene-routing-recording-ui/program-c-after-take.png`
-- `artifacts/scene-routing-recording-ui/native-recording-panel.png`
-
-## Scene routing verification status
-
-Code-level focused scene-routing and Program ownership tests passed. Real browser validation remains blocked, so the following required browser-only assertions are still unverified in this run:
-
-- Program Scene A and Preview Scene B rendered as genuine pixels.
-- Preview changed from Scene B to Scene C without altering Program.
-- CUT/TAKE changed Program to Scene C in the real browser.
-- Actual Program and Preview `<video>` elements reported distinct `srcObject` ownership for different sources.
-- `srcObjectSame` was observed as `false` when Program and Preview used different sources.
-- Browser console errors, uncaught exceptions, media errors, and React hydration errors were captured.
-
-## Native Recording verification status
-
-The Native Recording panel was not opened in a real browser in this run. Recording readiness or visible blocked reason could not be inspected. No `recording-running.png`, `recording-finished.png`, or `recording-sample.mp4` was created.
-
-## Checks completed
-
-- PASS: `pnpm --filter @ubos/shared build`
-- PASS: `pnpm --filter @ubos/web typecheck`
-- PASS: `pnpm --filter @ubos/web exec tsc -p tsconfig.test.json && node --test apps/web/dist-test/app/control-room/workspace/scene-routing.test.js apps/web/dist-test/lib/program-pipeline/program-ownership.test.js` (Node emitted a module type warning, but all 33 tests passed.)
-- PASS: `git diff --check`
-
-## Result
-
-PARTIAL — remaining blocker: the workspace lacks both the required commit object `590e5b4` and a locally installed Windows-host Edge/Chrome executable, so the requested genuine browser certification cannot be completed from this environment.
+Therefore the required PNG screenshots remain pending for a host that actually has Chromium/Edge. No binary screenshots were fabricated.
