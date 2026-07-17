@@ -22,9 +22,9 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
   director: {
     id: 'director',
     name: 'Director',
-    description: 'Program and Preview dominant with scenes, sources, and inspector at hand',
+    description: 'Program and Preview dominant with scenes, sources, inspector, and native recording at hand',
     activeBottomTab: P.scenes,
-    visiblePanels: [...MONITOR_PANELS, P.scenes, P.sources, P.inspector],
+    visiblePanels: [...MONITOR_PANELS, P.scenes, P.sources, P.inspector, P.recording],
     collapsedPanels: [],
     hiddenPanels: [P.routingMatrix, P.pipelineInspector, P.broadcastIo],
     zoneOverrides: {},

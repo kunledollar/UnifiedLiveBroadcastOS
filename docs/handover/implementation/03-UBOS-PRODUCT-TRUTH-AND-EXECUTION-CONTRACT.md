@@ -665,3 +665,10 @@ That is the execution standard for UBOS.
 ## 2026-07-16 Regression Contract Clarification
 
 Program and Preview labels are not sufficient evidence of scene switching. The selected scene must resolve to its own source collection and renderer binding. Recording must capture the authoritative Program monitor after CUT/AUTO/TAKE, not a stale or Preview stream.
+
+## 2026-07-17 Control Room Regression Truth Update
+
+- Browser scene routing remains classified as LIVE_BROWSER only when actual per-scene media is present and verified by pixels/stream identity, not by labels alone.
+- The authoritative Program model remains `ProductionGraph.program.sceneId`; Preview-only changes must not mutate Program or recording routes.
+- Native Recording UI visibility is restored in the default Director workspace, but native recording execution remains dependent on FFmpeg and FFprobe availability in the runtime host.
+- Current container evidence is PARTIAL because Chromium/Edge screenshot capture and FFmpeg/FFprobe native runtime validation were unavailable in this environment.
