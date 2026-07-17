@@ -105,6 +105,7 @@ import {
 import { useMediaCapture } from '../../lib/media/use-media-capture';
 import {
   areScenesSameReference,
+  areScenesSemanticallyEqual,
   patchCaptureSourceStatusInScenes,
   shouldRestoreLocalMediaSource,
 } from './scene-runtime-patching';
@@ -359,6 +360,69 @@ function createGeneratedTestPatternStream(
     });
   });
   return stream;
+}
+
+type StateWriteDebugEntry = {
+  label: string;
+  calls: number;
+  semanticChanges: number;
+  noopWrites: number;
+  referenceChanges: number;
+  effect: string;
+};
+
+function isStateWriteDebugEnabled(): boolean {
+  return (
+    typeof window !== 'undefined' && window.localStorage.getItem('ubos.debug.stateWrites') === '1'
+  );
+}
+
+function recordStateWriteDebug(input: {
+  label: string;
+  semanticEqual: boolean;
+  referenceChanged: boolean;
+  effect: string;
+}) {
+  if (!isStateWriteDebugEnabled()) return;
+  const globalKey = '__ubosStateWriteDebug';
+  const holder = window as typeof window & {
+    [globalKey]?: {
+      startedAt: number;
+      lastPrintAt: number;
+      entries: Record<string, StateWriteDebugEntry>;
+    };
+  };
+  const now = Date.now();
+  const store =
+    holder[globalKey] ?? (holder[globalKey] = { startedAt: now, lastPrintAt: now, entries: {} });
+  const entry =
+    store.entries[input.label] ??
+    (store.entries[input.label] = {
+      label: input.label,
+      calls: 0,
+      semanticChanges: 0,
+      noopWrites: 0,
+      referenceChanges: 0,
+      effect: input.effect,
+    });
+  entry.calls += 1;
+  entry.effect = input.effect;
+  if (input.semanticEqual) entry.noopWrites += 1;
+  else entry.semanticChanges += 1;
+  if (input.referenceChanged) entry.referenceChanges += 1;
+  if (now - store.lastPrintAt >= 5000) {
+    const elapsed = Math.max(1, (now - store.startedAt) / 1000);
+    const rows = Object.values(store.entries).map((item) => ({
+      'State writer': item.label,
+      'Calls/10s': Number(((item.calls / elapsed) * 10).toFixed(2)),
+      'Semantic changes': item.semanticChanges,
+      'No-op writes': item.noopWrites,
+      'Reference changes': item.referenceChanges,
+      'Triggering effect': item.effect,
+    }));
+    console.table(rows);
+    store.lastPrintAt = now;
+  }
 }
 
 const UBOS_MEDIA_DB_NAME = 'ubos-managed-media-assets';
@@ -2490,10 +2554,18 @@ export function SceneWorkspace({
   };
 
   const refresh = useCallback(
-    (nextOrPatch: Scene[] | ((current: Scene[]) => Scene[])) => {
+    (nextOrPatch: Scene[] | ((current: Scene[]) => Scene[]), effect = 'scene refresh') => {
       const current = scenesRef.current;
       const next = typeof nextOrPatch === 'function' ? nextOrPatch(current) : nextOrPatch;
-      if (areScenesSameReference(current, next)) return;
+      const sameReference = areScenesSameReference(current, next);
+      const semanticEqual = sameReference || areScenesSemanticallyEqual(current, next);
+      recordStateWriteDebug({
+        label: 'setScenes',
+        semanticEqual,
+        referenceChanged: current !== next,
+        effect,
+      });
+      if (semanticEqual) return;
       scenesRef.current = next;
       startTransition(() => setScenes(next));
     },
@@ -2688,12 +2760,14 @@ export function SceneWorkspace({
 
   const patchCaptureSourceStatus = useCallback(
     (runtimeStatus: string, sourceId?: string, message?: string) => {
-      refresh((currentScenes) =>
-        patchCaptureSourceStatusInScenes(currentScenes, {
-          runtimeStatus,
-          ...(sourceId === undefined ? {} : { sourceId }),
-          ...(message === undefined ? {} : { message }),
-        }),
+      refresh(
+        (currentScenes) =>
+          patchCaptureSourceStatusInScenes(currentScenes, {
+            runtimeStatus,
+            ...(sourceId === undefined ? {} : { sourceId }),
+            ...(message === undefined ? {} : { message }),
+          }),
+        `patchCaptureSourceStatus:${runtimeStatus}:${sourceId ?? 'all'}`,
       );
     },
     [refresh],
@@ -2787,7 +2861,14 @@ export function SceneWorkspace({
   const retainLiveSourceStream = useCallback(
     (sourceId: string, stream: MediaStream) => {
       setLiveSourceStreams((current) => {
+        if (current[sourceId] === stream) return current;
         current[sourceId]?.getTracks().forEach((track) => track.stop());
+        recordStateWriteDebug({
+          label: 'setLiveSourceStreams',
+          semanticEqual: false,
+          referenceChanged: true,
+          effect: 'retainLiveSourceStream',
+        });
         return { ...current, [sourceId]: stream };
       });
       stream.getTracks().forEach((track) => {
@@ -3312,7 +3393,7 @@ export function SceneWorkspace({
             ? 'unavailable'
             : 'ready'
           : current.state;
-        return {
+        const next = {
           ...current,
           runtimeConnected: Boolean(status.connected),
           ffmpegAvailable: status.ffmpeg?.state === 'AVAILABLE',
@@ -3329,14 +3410,32 @@ export function SceneWorkspace({
           audioCodec: status.lastArtifactResult?.audioCodec ?? current.audioCodec,
           failure: status.lastFailure ?? current.failure,
         };
+        const semanticEqual = JSON.stringify(current) === JSON.stringify(next);
+        recordStateWriteDebug({
+          label: 'setNativeRecordingState',
+          semanticEqual,
+          referenceChanged: current !== next,
+          effect: 'refreshNativeRuntimeStatus',
+        });
+        return semanticEqual ? current : next;
       });
     } catch {
-      setNativeRecordingState((current) => ({
-        ...current,
-        runtimeConnected: false,
-        state: settledStates.includes(current.state) ? 'unavailable' : current.state,
-        blockedReason: 'Native runtime API host is disconnected.',
-      }));
+      setNativeRecordingState((current) => {
+        const next = {
+          ...current,
+          runtimeConnected: false,
+          state: settledStates.includes(current.state) ? 'unavailable' : current.state,
+          blockedReason: 'Native runtime API host is disconnected.',
+        };
+        const semanticEqual = JSON.stringify(current) === JSON.stringify(next);
+        recordStateWriteDebug({
+          label: 'setNativeRecordingState',
+          semanticEqual,
+          referenceChanged: current !== next,
+          effect: 'refreshNativeRuntimeStatus:catch',
+        });
+        return semanticEqual ? current : next;
+      });
     }
   }, [liveProgramVisible]);
 

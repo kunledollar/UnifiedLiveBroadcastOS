@@ -1,44 +1,28 @@
 \# UBOS Implementation Journal
 
-
-
 \## Document Status
 
+Document ID: 13
 
+Document Name: UBOS Implementation Journal
 
-Document ID: 13  
+Version: 1.0
 
-Document Name: UBOS Implementation Journal  
+Status: Authoritative and Continuously Updated
 
-Version: 1.0  
+Owner: UBOS Core Engineering
 
-Status: Authoritative and Continuously Updated  
-
-Owner: UBOS Core Engineering  
-
-Last Updated: 2026-07-15  
-
-
+Last Updated: 2026-07-15
 
 \---
 
-
-
 \# 1. Purpose
-
-
 
 This document is the permanent engineering progress journal for the Unified Broadcast Operating System.
 
-
-
 It records the real implementation and verification history of every UBOS execution milestone.
 
-
-
 This journal must document:
-
-
 
 \- what was attempted;
 
@@ -56,31 +40,17 @@ This journal must document:
 
 \- and what remains to be completed.
 
-
-
 This document is not a roadmap.
-
-
 
 The roadmap describes intended future work.
 
-
-
 This journal records what actually happened.
-
-
 
 \---
 
-
-
 \# 2. Relationship to Other Documents
 
-
-
 This journal works together with:
-
-
 
 \- `03-UBOS-PRODUCT-TRUTH-AND-EXECUTION-CONTRACT.md`
 
@@ -92,11 +62,7 @@ This journal works together with:
 
 \- `10-UBOS-CAPABILITY-MATRIX.md`
 
-
-
 The responsibilities are different:
-
-
 
 | Document | Responsibility |
 
@@ -114,19 +80,11 @@ The responsibilities are different:
 
 | Implementation Journal | Historical milestone evidence |
 
-
-
 \---
-
-
 
 \# 3. Milestone Status Values
 
-
-
 Each milestone must use one of these statuses:
-
-
 
 \- `NOT\_STARTED`
 
@@ -140,23 +98,13 @@ Each milestone must use one of these statuses:
 
 \- `BLOCKED\_BY\_EXTERNAL\_DEPENDENCY`
 
-
-
 A milestone may only be marked `PASS` when all mandatory acceptance criteria have succeeded.
-
-
 
 \---
 
-
-
 \# 4. Authoritative Milestone List
 
-
-
 The current execution plan contains 14 milestones.
-
-
 
 | Milestone | Name | Current Status |
 
@@ -190,41 +138,23 @@ The current execution plan contains 14 milestones.
 
 | 14 | Automation, Rundown, Replay, and Cue Activation | NOT\_STARTED |
 
-
-
 \---
-
-
 
 \# 5. Milestone 1 — FFmpeg and FFprobe Discovery
 
-
-
 \## Status
-
-
 
 `PASS`
 
-
-
 \## Objective
-
-
 
 Ensure that the Node.js runtime used by UBOS can reliably discover and execute FFmpeg and FFprobe on Windows.
 
-
-
 \## Initial Problem
-
-
 
 PowerShell could execute:
 
-
-
-```text
+````text
 
 ffmpeg -version
 
@@ -490,18 +420,21 @@ Verify that every workspace preset produces a visually distinct layout in the re
 
 All 9 presets tested at 1920×1080 in the real Control Room. Screenshots and measurements saved to `artifacts/workspace-validation/`.
 
-```
-Preset              | Left dock   | Right dock  | Center      | Bottom   | Active tab
+````
+
+Preset | Left dock | Right dock | Center | Bottom | Active tab
 ---------------------------------------------------------------------------------------
-Director            | 270px open  | 270px open  | 1264×689    | 280px    | Scenes
-Solo Streamer       | Collapsed   | 270px open  | 1526×689    | 280px    | Scenes
-Technical Director  | 270px open  | 270px open  | 1264×689    | 280px    | Routing
-Audio Engineer      | Collapsed   | 270px open  | 1526×689    | 280px    | Audio Mixer
-Graphics Operator   | 270px open  | 270px open  | 1264×689    | 280px    | Graphics
-Replay Operator     | 270px open  | 270px open  | 1264×689    | 280px    | Replay
-Streaming Operator  | Collapsed   | 270px open  | 1526×689    | 280px    | System Status
-Monitor Wall        | Collapsed   | Collapsed   | 1788×689    | 280px    | System Status
-Compact             | Collapsed   | Collapsed   | 1788×940    | 37px tab | Scenes
+
+Director | 270px open | 270px open | 1264×689 | 280px | Scenes
+Solo Streamer | Collapsed | 270px open | 1526×689 | 280px | Scenes
+Technical Director | 270px open | 270px open | 1264×689 | 280px | Routing
+Audio Engineer | Collapsed | 270px open | 1526×689 | 280px | Audio Mixer
+Graphics Operator | 270px open | 270px open | 1264×689 | 280px | Graphics
+Replay Operator | 270px open | 270px open | 1264×689 | 280px | Replay
+Streaming Operator | Collapsed | 270px open | 1526×689 | 280px | System Status
+Monitor Wall | Collapsed | Collapsed | 1788×689 | 280px | System Status
+Compact | Collapsed | Collapsed | 1788×940 | 37px tab | Scenes
+
 ```
 
 Duplicate check: **No visually identical layouts. All 9 presets produce distinct configurations. ✓**
@@ -644,3 +577,49 @@ Status: COMPLETE (automated); Browser verification pending in this container.
 - Repair summary: `resolveSceneLiveMedia` now returns cached routed-media objects for unchanged semantics, monitor start actions are stable `useCallback` handlers keyed by source/action identity, capture status patching compares health/readiness/offline/relink fields before cloning, and local media restore no longer restarts for terminal relink/failure states.
 - Regression coverage: added tests proving stable `relink_required`, stable `permission_required`, unchanged warning text, unchanged scene graph references for identical polling/status patches, stable resolved-media references over 20 snapshots, no local media loading/relink alternation, and no screen permission/offline alternation.
 - Browser evidence: automated unit/type/diff checks passed locally; Windows Edge two-minute visual acceptance was not executed in this Linux container.
+
+## 2026-07-17 — Forensic Repair of Global Scene Flicker and Continuous State Writes
+
+Status: PARTIAL — automated regression repair complete; Windows Edge two-minute visual acceptance remains pending outside this container.
+
+### Root Cause
+
+The repeated no-op state writer was the Control Room scene refresh boundary: `patchCaptureSourceStatus()` and other reconciliation paths could propose a newly cloned scene graph that was semantically identical to the current graph. The previous guard only compared top-level scene references, so an equivalent clone still reached `setScenes()` and forced global scene, badge, Program/Preview, and control rerenders. Native runtime polling also returned a freshly allocated recording-panel state on unchanged poll results.
+
+### Forensic Write Summary
+
+| State writer | Calls/10s before | Semantic changes before | No-op writes before | Calls/10s after | Semantic changes after | No-op writes after | Triggering effect |
+|---|---:|---:|---:|---:|---:|---:|---|
+| `setScenes` | 100 simulated reconciliation cycles | 0 | 100 accepted no-op replacements | 100 simulated reconciliation cycles | 0 | 0 committed writes | `patchCaptureSourceStatus:*`, scene reconciliation |
+| `setNativeRecordingState` | 2 polling attempts per 10s | 0 when runtime status unchanged | 2 committed equivalent objects | 2 polling attempts per 10s | 0 | 0 committed writes | `refreshNativeRuntimeStatus` |
+| `setLiveSourceStreams` | operator/source event driven | source stream changes only | possible same-stream replacement | operator/source event driven | source stream changes only | same-stream replacement suppressed | `retainLiveSourceStream` |
+
+### Repair
+
+- Added semantic scene equality at the Control Room `refresh()` state boundary so cloned-but-equivalent scene graphs return the current graph and do not call `setScenes()`.
+- Kept the prior reference identity fast path for unchanged scene/source objects.
+- Added an explicit debug counter behind `localStorage.setItem('ubos.debug.stateWrites', '1')`; it prints a concise state-write summary every five seconds only when enabled.
+- Made native runtime status polling idempotent by returning the previous `NativeRecordingPanelState` when the fetched status does not change effective panel state.
+- Suppressed same-stream `setLiveSourceStreams` replacements in `retainLiveSourceStream()`.
+- Added regression coverage for cloned no-op scene reconciliation and 100 stable health reconciliation cycles preserving the exact scene graph reference.
+
+### Local Diagnostic Instructions
+
+1. Open `/control-room` in the Windows browser.
+2. Run `localStorage.setItem('ubos.debug.stateWrites', '1')` in the browser console.
+3. Reload `/control-room`.
+4. Leave the page untouched for two minutes.
+5. Confirm the console summary prints every five seconds and shows no repeated committed no-op scene writes.
+6. Switch scenes, start a screen source, and relink media; each action should produce a small bounded burst and then return to idle.
+7. Disable diagnostics with `localStorage.removeItem('ubos.debug.stateWrites')`.
+
+### Validation
+
+- `pnpm --filter @ubos/shared test` — PASS.
+- `pnpm --filter @ubos/web test` — PASS after `@ubos/shared` build/test generated package output; direct web test before shared build failed because `@ubos/shared` dist types were absent in this workspace.
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `git diff --check` — PASS.
+
+### Browser Verification
+
+PENDING. The container cannot run Windows Edge/Chromium, so the required two-minute visual stillness and interactivity acceptance must be completed by a Windows operator.
