@@ -1,15 +1,47 @@
 {
   "status": "partial",
   "capturedAt": "2026-07-16T00:00:00.000Z",
-  "rootCauseSceneRouting": "Control Room live monitor binding fell back to the first live MediaStream when the selected scene did not own a stream, so Program/Preview labels could change while video stayed bound to Scene A.",
-  "rootCauseRecordingUi": "Native Recording implementation existed in RecordingRuntimePanel and operation tab registry, but the default visible operations tab opened on Guests; the obvious path is the existing Recording operations tab/menu entry.",
-  "programSceneId": "scene-a",
-  "previewSceneId": "scene-c",
-  "programResolvedSourceIds": ["source-a"],
-  "previewResolvedSourceIds": ["source-c"],
-  "programStreamId": "stream-a",
-  "previewStreamId": "stream-c",
-  "programPreviewShareStream": false,
-  "panelVisibilityState": { "nativeRecordingPanelReachable": true, "operationsTab": "recording" },
-  "browserEvidence": "Browser execution was not completed in this environment; runtime DOM evidence hook was added as #ubos-scene-routing-evidence."
+  "certificationAttempt": "final Windows-host browser certification",
+  "branch": "work",
+  "headCommit": "16a36b94ed3bead7a9bf37fc81cd2457724197b0",
+  "requiredCommit": "590e5b4",
+  "requiredCommitPresent": false,
+  "requiredCommitCheck": "git merge-base --is-ancestor 590e5b4 HEAD failed because 590e5b4 is not a valid object in this shallow repository and no remotes are configured.",
+  "hostPlatform": "Linux a433c1373773 6.12.47 #1 SMP Mon Oct 27 10:01:15 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux",
+  "windowsBrowserExecutableFound": false,
+  "browserExecutableChecks": [
+    "which msedge",
+    "which google-chrome",
+    "find /mnt/c/Program Files* -maxdepth 4 -name msedge.exe -o -name chrome.exe"
+  ],
+  "browserCertificationExecuted": false,
+  "browserBlocker": "No locally installed Microsoft Edge or Google Chrome executable was available from the requested Windows host paths or Linux PATH in this container, so no genuine browser pixels, DOM MediaStream ownership data, console log capture, Native Recording panel verification, or recording sample could be produced in this run.",
+  "requestedGenuineEvidenceArtifactsCreatedThisRun": [],
+  "staleArtifactsNotRecertifiedThisRun": [
+    "artifacts/scene-routing-recording-ui/program-a-preview-b.png",
+    "artifacts/scene-routing-recording-ui/program-a-preview-c.png",
+    "artifacts/scene-routing-recording-ui/program-c-after-take.png",
+    "artifacts/scene-routing-recording-ui/native-recording-panel.png"
+  ],
+  "domMediaStreamEvidence": null,
+  "srcObjectSameWhenDifferentSources": null,
+  "nativeRecording": {
+    "panelVisiblyVerified": false,
+    "readyOrBlocked": "not inspected in browser",
+    "blockedReason": "Browser certification blocked before route inspection.",
+    "recordingSampleCreated": false
+  },
+  "browserConsole": {
+    "captured": false,
+    "errors": [],
+    "uncaughtExceptions": [],
+    "mediaErrors": [],
+    "reactHydrationErrors": []
+  },
+  "checks": {
+    "pnpm --filter @ubos/shared build": "pass",
+    "pnpm --filter @ubos/web typecheck": "pass",
+    "pnpm --filter @ubos/web exec tsc -p tsconfig.test.json && node --test apps/web/dist-test/app/control-room/workspace/scene-routing.test.js apps/web/dist-test/lib/program-pipeline/program-ownership.test.js": "pass_with_node_module_type_warning",
+    "git diff --check": "pass"
+  }
 }
