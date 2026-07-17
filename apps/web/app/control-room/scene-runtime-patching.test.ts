@@ -3,6 +3,7 @@ import test from 'node:test';
 import type { Scene } from '@ubos/shared';
 import {
   areScenesSameReference,
+  areScenesSemanticallyEqual,
   patchCaptureSourceStatusInScenes,
   shouldRestoreLocalMediaSource,
 } from './scene-runtime-patching.js';
@@ -191,4 +192,29 @@ test('screen source permission_required does not alternate with offline on ident
   );
 
   assert.ok(snapshots.every((snapshot) => snapshot === stable));
+});
+
+test('100 simulated reconciliation cycles preserve the same scene graph reference for unchanged health', () => {
+  let graph = [scene('permission_required', 'Start Screen Source')];
+  const initial = graph;
+  for (let index = 0; index < 100; index += 1) {
+    graph = patchCaptureSourceStatusInScenes(graph, {
+      runtimeStatus: 'permission_required',
+      sourceId: 'media-1',
+      message: 'Start Screen Source',
+    });
+  }
+  assert.equal(graph, initial);
+});
+
+test('semantic scene equality catches cloned no-op reconciliation before setScenes', () => {
+  const current = [scene('live', 'Local media ready.')];
+  const cloned = current.map((item) => ({
+    ...item,
+    sources: item.sources.map((source) => ({ ...source, settings: { ...source.settings } })),
+  }));
+
+  assert.notEqual(cloned, current);
+  assert.equal(areScenesSameReference(current, cloned), false);
+  assert.equal(areScenesSemanticallyEqual(current, cloned), true);
 });
