@@ -604,3 +604,18 @@ PENDING. The container does not provide Chromium/Chrome/Edge, and `pnpm exec pla
 | `apps/web/app/control-room/workspace/scene-routing.test.ts` | Regression tests for camera/screen activation, exact source binding, stopped screen share offline state, no unrelated fallback, Program/Preview isolation, and shared-source cleanup |
 | `apps/web/app/control-room/scene-workspace.tsx` | Operator activation monitor, explicit screen-start behavior, source-ID stream binding, stopped-track offline marking, safe unused stream cleanup |
 | `apps/web/app/control-room/workspace/OutputViewRenderer.tsx` | Removed verbose in-monitor diagnostics/metadata overlays from Program/Preview media region |
+
+## 2026-07-17 — Continuous Screen Playback, Local Media Runtime, and Recording Reachability Repair
+
+Status: PARTIAL
+
+- Repaired Control Room live monitor attachment so Program/Preview video elements keep the same DOM node for a source stream, attach `srcObject`, call and await `play()`, retry playback on `loadedmetadata`/`canplay`, and avoid cleanup-driven first-frame freezes during normal rendering.
+- Added local media runtime binding for imported MP4/video files: object URLs are loaded into an off-DOM video element, readiness is promoted only after `loadedmetadata`/`canplay` yields a live `captureStream()`, playback errors surface as one concise source message, and blob URLs are revoked only during source cleanup/unmount.
+- Preserved exact-source offline behavior for ended/stopped screen tracks and kept reactivation path through the existing Start Screen Source action.
+- Verified Director and Solo Streamer Recording panel reachability through existing workspace-visible panel registry coverage; Monitor Wall remains unchanged by default.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/shared test`
+  - PASS: `pnpm --filter @ubos/web test`
+  - PASS: `pnpm --filter @ubos/web typecheck`
+  - PASS: `git diff --check`
+- Browser evidence: PENDING. This container has no Windows Edge runtime, so real Windows Edge motion screenshots/screen recording remain required before PASS can be claimed.

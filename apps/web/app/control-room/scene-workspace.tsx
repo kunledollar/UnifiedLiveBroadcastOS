@@ -348,6 +348,58 @@ function createGeneratedTestPatternStream(source: SceneSource, sceneName: string
   return stream;
 }
 
+
+function createLocalMediaElementStream(
+  source: SceneSource,
+  onReady: (stream: MediaStream, durationMs?: number) => void,
+  onError: (message: string) => void,
+): HTMLMediaElement | null {
+  if (typeof document === 'undefined') return null;
+  const mediaUrl = typeof source.settings?.mediaUrl === 'string' ? source.settings.mediaUrl : '';
+  if (!mediaUrl) {
+    onError('Local media file must be relinked before playback.');
+    return null;
+  }
+  const video = document.createElement('video') as HTMLVideoElementWithCapture;
+  video.src = mediaUrl;
+  video.muted = true;
+  video.loop = Boolean(source.settings?.loop);
+  video.autoplay = true;
+  video.playsInline = true;
+  video.preload = 'auto';
+  video.crossOrigin = 'anonymous';
+  const captureStream = video.captureStream?.bind(video) ?? video.mozCaptureStream?.bind(video);
+  if (!captureStream) {
+    onError('This browser cannot bind local media into the live monitor.');
+    return video;
+  }
+  let settled = false;
+  const markReady = () => {
+    if (settled) return;
+    const stream = captureStream();
+    if (!isLiveMediaStream(stream)) return;
+    settled = true;
+    onReady(stream, Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined);
+  };
+  video.onloadedmetadata = markReady;
+  video.oncanplay = () => {
+    markReady();
+    void playVideoSafely(video, { target: 'local-media', sourceId: source.id });
+  };
+  video.onerror = () => {
+    const code = video.error?.code;
+    onError(`Local media failed to load${code ? ` (code ${code})` : ''}.`);
+  };
+  void playVideoSafely(video, { target: 'local-media', sourceId: source.id }, undefined, onError);
+  video.load();
+  return video;
+}
+
+type HTMLVideoElementWithCapture = HTMLVideoElement & {
+  captureStream?: () => MediaStream;
+  mozCaptureStream?: () => MediaStream;
+};
+
 function findFirstLiveVideoStream(streams: Record<string, MediaStream>): MediaStream | null {
   for (const stream of Object.values(streams)) {
     if (isLiveMediaStream(stream)) return stream;
@@ -434,11 +486,11 @@ function playVideoSafely(
   details?: Record<string, unknown>,
   onStarted?: () => void,
   onFailed?: (reason: string) => void,
-): void {
+): Promise<void> {
   try {
     const playPromise = video.play();
     if (playPromise) {
-      void playPromise
+      return playPromise
         .then(() => {
           onStarted?.();
         })
@@ -447,13 +499,14 @@ function playVideoSafely(
           warnMediaDiagnostic('video play failed', error, details);
           onFailed?.(reason);
         });
-      return;
     }
     onStarted?.();
+    return Promise.resolve();
   } catch (error) {
     const reason = describeCaptureError(error);
     warnMediaDiagnostic('video play failed', error, details);
     onFailed?.(reason);
+    return Promise.resolve();
   }
 }
 
@@ -536,11 +589,14 @@ function LiveMediaMonitor({
     configureInlineVideoPlayback(video, role === 'preview');
     pauseVideoSafely(video, details);
     if (nextStream) {
-      video.onloadedmetadata = () => playVideoSafely(video, details);
+      video.onloadedmetadata = () => { void playVideoSafely(video, details); };
+      video.oncanplay = () => { void playVideoSafely(video, details); };
     }
     assignVideoStreamSafely(video, nextStream, details);
+    if (nextStream) void playVideoSafely(video, details);
     return () => {
       video.onloadedmetadata = null;
+      video.oncanplay = null;
       const cleanupDetails = { ...details, cleanup: true };
       pauseVideoSafely(video, cleanupDetails);
       assignVideoStreamSafely(video, null, cleanupDetails);
@@ -555,7 +611,6 @@ function LiveMediaMonitor({
       )}
     >
       <video
-        key={`${role}:${sourceId ?? 'none'}:${stream?.id ?? 'no-stream'}`}
         data-ubos-live-monitor-video={role}
         data-ubos-scene-name={sceneName}
         data-ubos-source-id={sourceId ?? ''}
@@ -2506,6 +2561,7 @@ export function SceneWorkspace({
   );
 
   const liveSourceStreamsRef = useRef<Record<string, MediaStream>>({});
+  const localMediaElementsRef = useRef<Record<string, HTMLMediaElement>>({});
 
   useEffect(() => {
     liveSourceStreamsRef.current = liveSourceStreams;
@@ -2515,6 +2571,12 @@ export function SceneWorkspace({
     () => () => {
       Object.values(liveSourceStreamsRef.current).forEach((stream) => {
         stream.getTracks().forEach((track) => track.stop());
+      });
+      Object.entries(localMediaElementsRef.current).forEach(([sourceId, element]) => {
+        element.pause();
+        const url = element.currentSrc || element.getAttribute('src');
+        if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+        delete localMediaElementsRef.current[sourceId];
       });
     },
     [],
@@ -2526,7 +2588,7 @@ export function SceneWorkspace({
         scenes.map((scene) => ({
           ...scene,
           sources: scene.sources.map((source) =>
-            (source.type === 'camera' || source.type === 'screen' || source.type === 'audio') &&
+            (source.type === 'camera' || source.type === 'screen' || source.type === 'audio' || source.type === 'media') &&
             (!sourceId || source.id === sourceId)
               ? {
                   ...source,
@@ -2545,6 +2607,13 @@ export function SceneWorkspace({
   );
 
   const stopLiveSourceStream = useCallback((sourceId: string) => {
+    const mediaElement = localMediaElementsRef.current[sourceId];
+    if (mediaElement) {
+      mediaElement.pause();
+      const url = mediaElement.currentSrc || mediaElement.getAttribute('src');
+      if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+      delete localMediaElementsRef.current[sourceId];
+    }
     setLiveSourceStreams((current) => {
       const stream = current[sourceId];
       if (!stream) return current;
@@ -2592,6 +2661,51 @@ export function SceneWorkspace({
   }, [retainLiveSourceStream, scenes]);
 
   useEffect(() => {
+    const mediaSources = scenes.flatMap((scene) =>
+      scene.sources.filter(
+        (source) =>
+          source.type === 'media' &&
+          source.isVisible &&
+          !isGeneratedTestPatternSource(source) &&
+          typeof source.settings?.mediaUrl === 'string',
+      ),
+    );
+    mediaSources.forEach((source) => {
+      if (localMediaElementsRef.current[source.id] || isLiveMediaStream(liveSourceStreamsRef.current[source.id])) return;
+      patchCaptureSourceStatus('loading', source.id, 'Loading local media.');
+      const element = createLocalMediaElementStream(
+        source,
+        (stream, durationMs) => {
+          if (element) localMediaElementsRef.current[source.id] = element;
+          retainLiveSourceStream(source.id, stream);
+          refresh(
+            scenes.map((scene) => ({
+              ...scene,
+              sources: scene.sources.map((item) =>
+                item.id === source.id
+                  ? {
+                      ...item,
+                      settings: {
+                        ...item.settings,
+                        runtimeStatus: 'live',
+                        captureState: 'live',
+                        sourceKind: 'local-media',
+                        ...(durationMs ? { durationMs } : {}),
+                        message: 'Local media ready.',
+                      },
+                    }
+                  : item,
+              ),
+            })),
+          );
+        },
+        (message) => patchCaptureSourceStatus('unavailable', source.id, message),
+      );
+      if (element) localMediaElementsRef.current[source.id] = element;
+    });
+  }, [patchCaptureSourceStatus, refresh, retainLiveSourceStream, scenes]);
+
+  useEffect(() => {
     const unusedSourceIds = getUnusedLiveSourceIds({
       scenes,
       liveSourceStreams: liveSourceStreamsRef.current,
@@ -2602,6 +2716,13 @@ export function SceneWorkspace({
       unusedSourceIds.forEach((sourceId) => {
         const stream = next[sourceId];
         if (!stream) return;
+        const mediaElement = localMediaElementsRef.current[sourceId];
+        if (mediaElement) {
+          mediaElement.pause();
+          const url = mediaElement.currentSrc || mediaElement.getAttribute('src');
+          if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+          delete localMediaElementsRef.current[sourceId];
+        }
         stream.getTracks().forEach((track) => track.stop());
         const { [sourceId]: _removed, ...remaining } = next;
         next = remaining;
@@ -4341,6 +4462,7 @@ export function SceneWorkspace({
         if (input.type === 'camera') void startCameraCapture(tempSource.id);
         else if (input.type === 'screen')
           patchCaptureSourceStatus('permission_required', tempSource.id, 'Start Screen Source');
+        else if (input.type === 'media') patchCaptureSourceStatus('loading', tempSource.id, 'Loading local media.');
         else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);

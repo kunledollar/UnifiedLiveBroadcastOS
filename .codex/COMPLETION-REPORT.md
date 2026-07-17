@@ -579,3 +579,27 @@ Status: PARTIAL
   - PASS: `pnpm --filter @ubos/web typecheck`
   - PASS: `git diff --check`
 - Browser evidence: PENDING. This container has no Chromium/Chrome/Edge executable and no Playwright CLI, so Windows browser verification for real camera/screen activation and pixel changes is still required before PASS can be claimed.
+
+## 2026-07-17 — Continuous Screen Playback, Local Media Runtime, and Recording Reachability Repair
+
+### Objective
+
+Repair continuous screen rendering, playable local MP4/media runtime binding, and visible Recording panel reachability without redesigning the Control Room, changing Workspace Manager geometry, or implementing RTMP.
+
+### Completed
+
+- Live monitor playback now keeps a stable video element per Program/Preview monitor, attaches the selected source `MediaStream`, awaits `video.play()`, retries on media readiness events, and avoids premature cleanup during normal stream rendering.
+- Imported local videos now create a browser runtime media binding via object URL → off-DOM video element → `captureStream()` → `liveSourceStreams[sourceId]` after media readiness, rather than presenting filename metadata as playable media.
+- Local media error and relink states are concise, and object URLs are revoked only on source cleanup/unmount.
+- Director and Solo Streamer Recording reachability remains covered by registry/preset tests; Monitor Wall was not changed by default.
+
+### Tests Run
+
+- `pnpm --filter @ubos/shared test` — PASS
+- `pnpm --filter @ubos/web test` — PASS
+- `pnpm --filter @ubos/web typecheck` — PASS
+- `git diff --check` — PASS
+
+### Status
+
+PARTIAL — Automated regression tests pass. Real Windows Edge manual acceptance (continuous YouTube window motion, scroll updates, MP4 Preview/Program playback, screenshots, and short motion recording) remains pending outside this container.

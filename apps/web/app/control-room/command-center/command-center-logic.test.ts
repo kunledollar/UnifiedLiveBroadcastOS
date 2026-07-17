@@ -1097,3 +1097,25 @@ test('Native Recording panel is registered and exposed by production workspaces'
   assert.ok(workspacePresets.director.visiblePanels.includes(WORKSPACE_PANEL_IDS.recording));
   assert.ok(workspacePresets['solo-streamer'].visiblePanels.includes(WORKSPACE_PANEL_IDS.recording));
 });
+
+test('Control Room live monitor playback is awaited and does not key-recreate video elements', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`), 'utf8');
+
+  assert.match(source, /function playVideoSafely[\s\S]*Promise<void>/);
+  assert.match(source, /return playPromise[\s\S]*\.catch/);
+  assert.match(source, /if \(nextStream\) void playVideoSafely\(video, details\);/);
+  assert.doesNotMatch(source, /key=\{`\$\{role\}:\$\{sourceId/);
+});
+
+test('local media runtime creates captureStream binding and revokes blob URLs only on cleanup', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const source = await readFile(new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`), 'utf8');
+
+  assert.match(source, /createLocalMediaElementStream/);
+  assert.match(source, /video\.onloadedmetadata = markReady/);
+  assert.match(source, /video\.oncanplay = \(\) =>/);
+  assert.match(source, /retainLiveSourceStream\(source\.id, stream\)/);
+  assert.match(source, /URL\.revokeObjectURL\(url\)/);
+  assert.match(source, /Local media file must be relinked before playback\./);
+});
