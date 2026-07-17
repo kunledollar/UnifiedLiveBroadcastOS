@@ -672,8 +672,3 @@ Program and Preview labels are not sufficient evidence of scene switching. The s
 - The authoritative Program model remains `ProductionGraph.program.sceneId`; Preview-only changes must not mutate Program or recording routes.
 - Native Recording UI visibility is restored in the default Director workspace, but native recording execution remains dependent on FFmpeg and FFprobe availability in the runtime host.
 - Current container evidence is PARTIAL because Chromium/Edge screenshot capture and FFmpeg/FFprobe native runtime validation were unavailable in this environment.
-
-## 2026-07-17 Browser-Truth Follow-up
-
-- Local Control Room demo acceptance must use genuinely distinct scene-owned media. The demo fallback scenes now provide generated browser canvas A/B/C test-pattern MediaStreams so labels cannot be mistaken for media proof.
-- PASS still requires real Chromium/Edge screenshots proving Program/Preview pixels change through Preview selection and CUT/AUTO/TAKE. Code tests alone remain insufficient.

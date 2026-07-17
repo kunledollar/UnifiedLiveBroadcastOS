@@ -329,9 +329,3 @@ The central question for every subsystem is:
 - Monitor Rendering: Program and Preview have independent video elements and independent source IDs/stream IDs in runtime evidence.
 - Recording: browser/native handoff captures the authoritative Program monitor first and falls back only to the resolved Program scene stream.
 - Workspace Manager: the registered Recording panel is visible in Director and Solo Streamer production workspaces.
-
-## 2026-07-17 Scene Media Resolver Follow-up
-
-- Media Resolver: selected-scene video sources are filtered by visibility/lock/type, sorted by z-index/order, and resolved to the first active scene-owned stream.
-- Demo Source Registry: generated test-pattern sources are browser canvas MediaStreams stored by source ID in the same `liveSourceStreams` registry as camera/screen captures.
-- Renderer: Program/Preview live monitor video elements are keyed by role/source/stream identity and receive independent props.

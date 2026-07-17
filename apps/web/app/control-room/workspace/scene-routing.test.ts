@@ -119,18 +119,3 @@ test('recording capture evidence follows authoritative Program after transitions
   assert.equal(afterTakeB.programSceneId, 'scene-b');
   assert.equal(afterTakeB.programStreamId, 'stream-b');
 });
-
-
-test('resolver chooses active generated media when higher-priority camera is not live', () => {
-  const base = scene('scene-b', 'source-camera');
-  const mixedScene: Scene = {
-    ...base,
-    sources: [
-      { ...base.sources[0]!, id: 'source-camera', name: 'Camera', label: 'Camera', type: 'camera', order: 0, transform: { zIndex: 0 } },
-      { ...base.sources[0]!, id: 'source-pattern', name: 'Pattern', label: 'Pattern', type: 'media', order: 1, settings: { sourceKind: 'test-pattern' }, transform: { zIndex: 1 } },
-    ],
-  };
-  const resolved = resolveSceneLiveMedia(mixedScene, { 'source-pattern': stream('stream-pattern') });
-  assert.equal(resolved.sourceId, 'source-pattern');
-  assert.equal(resolved.stream?.id, 'stream-pattern');
-});

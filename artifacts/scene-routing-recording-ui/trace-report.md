@@ -1,34 +1,27 @@
 # Control Room Scene Routing and Native Recording UI Trace
 
-Status: PARTIAL_BROWSER_BLOCKED — code paths were repaired and regression tests pass, but this container still cannot execute Chromium/Edge. Required screenshots are not faked.
+Status: PARTIAL — code and regression tests pass locally, but this container has no Chromium/Edge executable for the required screenshot evidence.
 
-## Runtime root cause update
+## Root causes
 
-The previous code-only repair removed the unrelated global fallback, but it still did not guarantee three genuinely distinct live media sources in the local demo/runtime path. The default demo scenes included empty scenes or permission-gated camera/screen sources, so scene identity could change while there was no selected-scene-owned live stream to render. The repair now adds browser-generated canvas test-pattern streams for the three demo scenes and updates the media resolver to choose the selected scene's first active visible video source instead of stopping on an inactive permission-gated source.
+1. Scene routing: the regression signature is stale fallback media. Scene labels were driven by current Program/Preview state, while live media could fall back to the first active stream instead of the selected scene's resolved source stream. The repaired path resolves Program and Preview independently from each scene's visible source IDs and returns `null` rather than borrowing Scene A media when the selected scene has no live stream.
+2. Native Recording UI: `RecordingRuntimePanel` and right-dock/menu registry entries existed, but the default Director production workspace did not expose the recording panel. Operators starting in the default Control Room could miss Native Recording even though Solo Streamer and Broadcast menu paths existed.
 
-## Native Recording visibility root cause
-
-`RecordingRuntimePanel` and registry/menu paths existed, but the default Director production workspace did not include the recording panel in `visiblePanels`. The Director preset now exposes Recording without developer tools, and Solo Streamer remains a recording workspace.
-
-## Scene → Source → Renderer ownership trace
+## Ownership trace
 
 Scene selection -> `stageScene(sceneId)` dispatches `SET_PREVIEW_SCENE` and persists `productionState.previewSceneId`.
 Preview identity -> `productionState.previewSceneId` and `graph.preview.sceneId`.
 Program identity -> `switchProgram()` dispatches CUT/AUTO/TAKE to `graph.program.sceneId` and persists `productionState.programSceneId`.
-Scene source collection -> `programScene.sources` / `previewScene.sources`.
-Source visibility and z-order -> `getVisibleLiveVideoSources()` filters visible unlocked camera/screen/media sources and sorts by z-index/order.
-Media resolver -> `resolveSceneLiveMedia()` prefers the selected scene's first active live source stream; if none is active, it returns the scene-owned source with `stream: null` instead of borrowing another scene.
-Generated demo media -> `createGeneratedTestPatternStream()` creates distinct red/green/blue A/B/C canvas MediaStreams for demo scenes and stores them in `liveSourceStreams[source.id]`.
-LiveMediaMonitor props -> Program and Preview receive independent `stream`, `sourceId`, `sourceType`, `role`, and keyed video elements.
-HTMLVideoElement binding -> `LiveMediaMonitor` assigns the current role's stream to `video.srcObject` and clears it during cleanup.
-Recording route -> `createProgramRecordingStream()` captures `[data-ubos-program-monitor] video` first and falls back only to the currently resolved Program stream.
+Scene sources -> `programScene.sources` and `previewScene.sources` sorted by scene selection.
+Source registry -> `liveSourceStreams[source.id]` maps source IDs to retained MediaStreams.
+Visibility/z-order -> `getFirstVisibleLiveVideoSource()` requires visible, unlocked camera/screen/media source; Program/Preview compositor overlays continue to use scene-specific graphics/media composition.
+Renderer -> `LiveMediaMonitor` assigns the current role's resolved stream to its own video element and clears it on cleanup.
+Recording route -> `createProgramRecordingStream()` captures `[data-ubos-program-monitor] video` first, then falls back only to the currently resolved Program stream.
 
-## Browser evidence blocker
+## Runtime evidence schema
 
-Attempted to install/use a browser in this environment:
+The Control Room embeds `#ubos-scene-routing-evidence` JSON with Program scene ID, Preview scene ID, Program resolved source IDs, Preview resolved source IDs, stream IDs, shared-stream flag, and panel visibility state.
 
-- `apt-get update && apt-get install -y chromium ffmpeg` failed with repository/proxy 403 responses.
-- `pnpm exec playwright --version || npx playwright --version` failed because Playwright is not installed and registry access returned 403.
-- Filesystem search found no existing Chromium/Chrome/Edge executable.
+## Browser screenshots
 
-Therefore the required PNG screenshots remain pending for a host that actually has Chromium/Edge. No binary screenshots were fabricated.
+Not captured in this container: no Chromium/Edge executable was available. Required filenames were intentionally not faked.

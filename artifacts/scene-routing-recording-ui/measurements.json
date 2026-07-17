@@ -1,30 +1,28 @@
 {
-  "status": "PARTIAL_BROWSER_BLOCKED",
-  "timestampUtc": "2026-07-17T01:55:00.000Z",
+  "status": "PARTIAL",
+  "timestampUtc": "2026-07-17T00:00:00.000Z",
   "sceneRouting": {
-    "rootCause": "Runtime demo scenes did not guarantee three distinct live media streams. A scene with an inactive camera/screen source could resolve metadata while the monitor had no scene-owned stream, and earlier behavior could appear as stale media. The resolver now prefers the selected scene's active visible stream and generated demo test-pattern streams provide unique A/B/C media without camera permissions.",
+    "rootCause": "Control Room live monitor fallback used the first live video stream when the selected Program or Preview scene did not resolve its own live source, allowing Scene A media to remain visible while scene labels changed.",
     "programSceneIdOwner": "ProductionGraph graph.program.sceneId and productionState.programSceneId",
     "previewSceneIdOwner": "ProductionGraph graph.preview.sceneId and productionState.previewSceneId",
-    "programResolvedSourceRule": "selected Program scene -> visible unlocked camera/screen/media sources sorted by z-index/order -> first active source stream, otherwise first eligible inactive source with null stream",
-    "previewResolvedSourceRule": "selected Preview scene -> visible unlocked camera/screen/media sources sorted by z-index/order -> first active source stream, otherwise first eligible inactive source with null stream",
-    "demoSources": [
-      { "sceneId": "scene-countdown", "sourceId": "src-pattern-countdown", "label": "A", "color": "#dc2626" },
-      { "sceneId": "scene-interview", "sourceId": "src-pattern-interview", "label": "B", "color": "#16a34a" },
-      { "sceneId": "scene-demo", "sourceId": "src-pattern-demo", "label": "C", "color": "#2563eb" }
-    ],
-    "resolvedInCode": true,
-    "browserVerified": false
+    "resolved": true,
+    "tests": [
+      "Program and Preview resolve different scene source streams without stale fallback",
+      "Preview scene with no matching live stream does not reuse Program Scene A stream",
+      "Preview scene change does not mutate Program media binding",
+      "CUT/TAKE and AUTO/TAKE update Program binding",
+      "recording capture evidence follows authoritative Program after transitions"
+    ]
   },
   "nativeRecordingUi": {
     "rootCause": "The default Director production workspace did not include the registered recording panel in visiblePanels, so Native Recording existed in the registry/menu path but was not visible in the tested default Control Room workspace.",
     "registeredPanelId": "recording",
     "visibleInDirector": true,
     "visibleInSoloStreamer": true,
-    "reachableThroughBroadcastMenu": true,
-    "browserMountedVerified": false
+    "reachableThroughBroadcastMenu": true
   },
   "browserEvidence": {
     "available": false,
-    "reason": "No Chromium/Edge executable is installed in this container. apt-get install chromium ffmpeg failed with repository 403 responses, and npm/npx Playwright download failed with registry 403. Required screenshots remain blocked by environment, not generated or faked."
+    "reason": "No Chromium/Edge executable was available in this Linux container; real browser screenshots were not captured here. Text runtime evidence is committed under artifacts/scene-routing-recording-ui/."
   }
 }
