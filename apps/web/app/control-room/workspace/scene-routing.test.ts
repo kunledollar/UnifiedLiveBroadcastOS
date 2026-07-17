@@ -31,6 +31,17 @@ function scene(id: string, sourceId: string, sourceType: Scene['sources'][number
   };
 }
 
+function sceneWithSettings(
+  id: string,
+  sourceId: string,
+  sourceType: Scene['sources'][number]['type'],
+  settings: Scene['sources'][number]['settings'],
+): Scene {
+  const next = scene(id, sourceId, sourceType);
+  next.sources[0]!.settings = settings;
+  return next;
+}
+
 test('Program and Preview resolve different scene source streams without stale fallback', () => {
   const program = resolveSceneLiveMedia(scene('scene-a', 'source-a'), { 'source-a': stream('stream-a'), 'source-b': stream('stream-b') });
   const preview = resolveSceneLiveMedia(scene('scene-b', 'source-b'), { 'source-a': stream('stream-a'), 'source-b': stream('stream-b') });
@@ -183,4 +194,54 @@ test('unused stream cleanup does not stop shared sources still used by scenes', 
     }),
     ['orphan'],
   );
+});
+
+test('relink_required media resolver output remains referentially stable across repeated calls', () => {
+  const mediaScene = sceneWithSettings('scene-media-stable', 'media-stable', 'media', {
+    runtimeStatus: 'relink_required',
+    message: 'Relink required: local media bytes are unavailable.',
+  });
+  const first = resolveSceneLiveMedia(mediaScene, {});
+  const snapshots = Array.from({ length: 20 }, () => resolveSceneLiveMedia(mediaScene, {}));
+
+  assert.equal(first.warning, 'Relink required: local media bytes are unavailable.');
+  assert.equal(first.activationAction, null);
+  assert.ok(snapshots.every((snapshot) => snapshot === first));
+});
+
+test('permission_required screen resolver output remains stable and does not oscillate offline', () => {
+  const screenScene = sceneWithSettings('scene-screen-stable', 'screen-stable', 'screen', {
+    runtimeStatus: 'permission_required',
+    captureState: 'not_started',
+  });
+  const first = resolveSceneLiveMedia(screenScene, {});
+  const snapshots = Array.from({ length: 20 }, () => resolveSceneLiveMedia(screenScene, {}));
+
+  assert.equal(first.warning, 'SCREEN SOURCE NOT STARTED');
+  assert.equal(first.activationAction, 'start-screen');
+  assert.ok(snapshots.every((snapshot) => snapshot === first));
+});
+
+test('warning text remains stable for unchanged inactive media state', () => {
+  const mediaScene = sceneWithSettings('scene-media-warning-stable', 'media-warning-stable', 'media', {
+    runtimeStatus: 'relink_required',
+    message: 'Relink required: local media bytes are unavailable.',
+  });
+  const warnings = Array.from({ length: 20 }, () => resolveSceneLiveMedia(mediaScene, {}).warning);
+
+  assert.deepEqual(warnings, Array(20).fill('Relink required: local media bytes are unavailable.'));
+});
+
+test('resolver returns a new reference only when effective stream identity changes', () => {
+  const cameraScene = scene('scene-stream-identity', 'camera-stream-identity', 'camera');
+  const offline = resolveSceneLiveMedia(cameraScene, {});
+  const ready = resolveSceneLiveMedia(cameraScene, {
+    'camera-stream-identity': stream('camera-stream'),
+  });
+  const stillReady = resolveSceneLiveMedia(cameraScene, {
+    'camera-stream-identity': ready.stream!,
+  });
+
+  assert.notEqual(ready, offline);
+  assert.equal(stillReady, ready);
 });

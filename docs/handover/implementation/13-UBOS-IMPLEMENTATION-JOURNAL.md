@@ -635,3 +635,12 @@ Status: COMPLETE (automated); Browser verification pending in this container.
   - PASS: `pnpm --filter @ubos/web typecheck`
   - PASS: `git diff --check`
 - Browser evidence: PENDING. This container does not expose a browser runtime for several-minute Control Room validation.
+
+## 2026-07-17 — Media Control Flicker and Runtime State Oscillation Regression Repair
+
+- Scope: focused Control Room media-runtime stability repair; Workspace Manager geometry and Program/Preview redesign were intentionally untouched.
+- Investigation summary: the remaining flicker path was traced through scene media restore, `resolveSceneLiveMedia`, capture status patching, monitor action props, warning/action rendering, and transition readiness props. The oscillating values were not CSS animations or transition busy/ready state; they were identical semantic media states represented by fresh resolver/action references on repeated renders, plus local-media restore eligibility continuing to re-enter terminal `relink_required`/`unavailable` states.
+- Captured render snapshot evidence: 20 consecutive resolver/status snapshots for `relink_required` local media and `permission_required` screen sources now retain the same warning text, activation action, scene graph reference, and resolved media reference when source ID, source type, stream identity, runtime status, runtime message, and action type are unchanged.
+- Repair summary: `resolveSceneLiveMedia` now returns cached routed-media objects for unchanged semantics, monitor start actions are stable `useCallback` handlers keyed by source/action identity, capture status patching compares health/readiness/offline/relink fields before cloning, and local media restore no longer restarts for terminal relink/failure states.
+- Regression coverage: added tests proving stable `relink_required`, stable `permission_required`, unchanged warning text, unchanged scene graph references for identical polling/status patches, stable resolved-media references over 20 snapshots, no local media loading/relink alternation, and no screen permission/offline alternation.
+- Browser evidence: automated unit/type/diff checks passed locally; Windows Edge two-minute visual acceptance was not executed in this Linux container.

@@ -629,3 +629,18 @@ The local media restoration effect re-entered indefinitely because `patchCapture
 ### Browser Validation
 
 PENDING — no browser executable/automation runtime is available in this container, so manual verification of Control Room stability, scene switching, media import, screen capture, recording panel visibility, and repeated update absence remains required on a browser-capable host.
+
+## 2026-07-17 — Media Control Flicker and Runtime State Oscillation Regression Repair
+
+- Completed task: Fix Media Control Flicker and Runtime State Oscillation.
+- Exact oscillating fields identified: resolved scene media object identity and monitor action callback identity changed despite unchanged `sourceId`, source type, runtime status/message, warning text, stream identity, and action type; terminal local media restore also repeatedly re-entered `relink_required`/`unavailable` eligibility.
+- Exact component/effect: `resolveSceneLiveMedia` in the Control Room workspace returned a new routed-media object on each call; `SceneWorkspace` created inline Program/Preview source-start callbacks; the local media restore effect continued considering terminal local media states eligible for restore; `patchCaptureSourceStatusInScenes` did not compare all health/readiness fields before cloning.
+- Before/after render snapshot counts: before, 20 repeated resolver snapshots created fresh routed-media object references for unchanged inactive media/screen states; after, 20 repeated snapshots return the same routed-media reference and identical warning/action semantics.
+- Implementation summary: stabilized routed media resolver references, stabilized monitor action callbacks, made capture patches compare health/relink/ready/offline fields, and made `relink_required`/`unavailable` terminal states one-way until operator relink/start action changes the source.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/shared test`
+  - PASS: `pnpm --filter @ubos/web test`
+  - PASS: `pnpm --filter @ubos/web typecheck`
+  - PASS: `git diff --check`
+- Browser evidence status: Windows Edge manual two-minute visual acceptance not run in this container; automated regression coverage captures the required 20 consecutive stability snapshots.
+- Blockers: none for automated regression repair; manual Windows Edge validation remains external.
