@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRenderForensics, recordForensicsStateWrite, ubosForensicsFlag } from '../render-forensics';
 import { BroadcastPanel, StatusBadge, cn, ubosTypographyClasses } from '@ubos/ui';
 import { AudioMeter } from './AudioMeter';
 
@@ -72,6 +73,7 @@ export function ProfessionalAudioMixer({
   className?: string;
   compact?: boolean;
 }) {
+  useRenderForensics('ProfessionalAudioMixer');
   const [metadata, setMetadata] = useState<Record<string, ChannelMetadata>>(() =>
     Object.fromEntries(sources.map((source) => [source.id, createDefaultMetadata(source.type)])),
   );
@@ -189,13 +191,18 @@ export function ProfessionalAudioMixer({
           channels: 2,
           sampleRate: Object.values(nodesRef.current)[0]?.context.sampleRate ?? null,
         };
-        setMeters(nextMeters);
+        if (!ubosForensicsFlag('mixer-setter-disabled')) {
+          setMeters((current) => {
+            recordForensicsStateWrite('ProfessionalAudioMixer.setMeters', current, nextMeters);
+            return nextMeters;
+          });
+        }
         for (const source of sources) {
           if (nextMeters[source.id]?.clipping) appendHistory(source.name, 'clipping detected');
         }
         lastUpdate = time;
       }
-      frameRef.current = window.requestAnimationFrame(tick);
+      if (!ubosForensicsFlag('mixer-raf-disabled')) frameRef.current = window.requestAnimationFrame(tick);
     };
     frameRef.current = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameRef.current);

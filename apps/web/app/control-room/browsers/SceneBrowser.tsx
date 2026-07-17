@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRenderForensics } from '../render-forensics';
 import {
   AssetList,
   AssetRow,

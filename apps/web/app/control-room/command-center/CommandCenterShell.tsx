@@ -35,6 +35,7 @@
  *   <900px:      compact mode — Program/Preview stacked, bottom workspace tab bar only
  */
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useRenderForensics } from '../render-forensics';
 import { cn } from '@ubos/ui';
 import { workspaceZoneDefinitions, type WorkspacePresetId, type WorkspaceZoneId } from '@ubos/shared';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from '../menu';
@@ -182,6 +183,7 @@ export function CommandCenterShell({
   onSimulateDemo,
   onResetDemo,
 }: CommandCenterShellProps) {
+  useRenderForensics('CommandCenterShell');
   const workspace = useCommandCenterWorkspace();
   const {
     containerRef,
