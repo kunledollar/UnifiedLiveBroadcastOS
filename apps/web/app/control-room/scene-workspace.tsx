@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, getTallyState } from '@ubos/ui';
+import { ubosForensicsFlag, useRenderForensics } from './render-forensics';
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
@@ -2426,6 +2427,7 @@ export function SceneWorkspace({
   workspaceId?: string;
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
+  useRenderForensics('SceneWorkspace');
   const [isPending, startTransition] = useTransition();
   const [workspace, setWorkspace] = useState<ControlRoomWorkspaceState>(factoryWorkspace);
   const viewMode = workspace.viewMode;
@@ -4987,7 +4989,7 @@ export function SceneWorkspace({
           </div>
         )
       ) : null}
-      {activeBottomDock === 'audio' ? (
+      {activeBottomDock === 'audio' && !ubosForensicsFlag('mixer-disabled') ? (
         <ProfessionalAudioMixer sources={mixerSources} compact />
       ) : null}
       {activeBottomDock === 'graphics' ? (

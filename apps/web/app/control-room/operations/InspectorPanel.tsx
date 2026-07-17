@@ -1,6 +1,7 @@
 'use client';
 
 import { ConsoleSection, InspectorRow, StatusBadge } from '@ubos/ui';
+import { useRenderForensics } from '../render-forensics';
 import type { MediaRoute, ProductionPipelineModel, Scene } from '@ubos/shared';
 import { OperationsPanel } from './OperationsChrome';
 import type { OperationsInspectorSelection } from './operations-inspector-selection';
@@ -110,6 +111,7 @@ export function InspectorPanel({
   pipeline?: ProductionPipelineModel;
   selection?: OperationsInspectorSelection;
 }) {
+  useRenderForensics('InspectorPanel');
   const mediaSources = [...previewScene.sources, ...programScene.sources].filter(
     (source, index, all) =>
       source.type === 'media' &&
