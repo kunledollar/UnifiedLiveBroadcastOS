@@ -560,3 +560,22 @@ Status: PARTIAL
 - Added text evidence under `artifacts/scene-routing-recording-ui/`.
 - Browser screenshot evidence remains pending because no Chromium/Edge executable is available in this container.
 - Native runtime validation remains blocked because FFmpeg/FFprobe are missing from this host.
+
+## 2026-07-17 — Scene Source Activation and Program/Preview Overlay Cleanup
+
+Status: PARTIAL
+
+- Implemented focused runtime repair for scene-selected source activation and Program/Preview overlay cleanup.
+- Camera and screen scene routing now exposes exact-source activation actions and concise warning states instead of falling back to unrelated streams.
+- Screen capture is no longer started silently when adding a screen source; `Start Screen Source` is displayed for inactive selected screen scenes.
+- Authorized camera/screen streams are stored under the selected source ID and Program/Preview bind to those exact streams.
+- Ended capture tracks remove the exact source stream and mark that source offline with one concise warning.
+- Generated test-pattern sources continue to auto-activate safely and bind by exact source ID.
+- Unused source streams are cleaned up without stopping shared streams still referenced by scenes.
+- Verbose graphics/media/collaboration/automation overlays were removed from the monitor media region; diagnostics remain available outside the monitor.
+- Validation results:
+  - PASS: `pnpm --filter @ubos/shared test`
+  - PASS: `pnpm --filter @ubos/web test`
+  - PASS: `pnpm --filter @ubos/web typecheck`
+  - PASS: `git diff --check`
+- Browser evidence: PENDING. This container has no Chromium/Chrome/Edge executable and no Playwright CLI, so Windows browser verification for real camera/screen activation and pixel changes is still required before PASS can be claimed.

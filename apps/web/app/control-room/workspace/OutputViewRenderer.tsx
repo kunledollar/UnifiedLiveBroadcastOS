@@ -6,7 +6,6 @@ import {
   MonitorFrame,
   ProgramCompositor,
   ProductionMultiview,
-  StatusBadge,
   VerticalCompositor,
 } from '@ubos/ui';
 import type {
@@ -19,10 +18,6 @@ import type {
   Scene,
   StreamHealthMetric,
 } from '@ubos/shared';
-import { GraphicsMetadataOverlay } from '../graphics/GraphicsMetadataOverlay';
-import { MediaMetadataOverlay } from '../media/MediaMetadataOverlay';
-import { CollaborationMetadataOverlay } from '../collaboration/CollaborationMetadataOverlay';
-import { AutomationMetadataOverlay } from '../automation/AutomationMetadataOverlay';
 import {
   deriveEmptyStateMessage,
   deriveMonitorTelemetry,
@@ -187,9 +182,6 @@ export function ProgramMonitor({
         : {
             footer: (
               <MonitorFooter>
-                <StatusBadge variant={telemetry.recordingStatus === 'recording' ? 'rec' : 'neutral'}>
-                  {telemetry.recordingStatus === 'recording' ? 'REC' : 'REC idle'}
-                </StatusBadge>
                 <span className="ubos-truncate text-ubos-fg-muted">
                   {role === 'program' ? 'PROGRAM' : 'PREVIEW'} · {scene.name}
                 </span>
@@ -205,23 +197,6 @@ export function ProgramMonitor({
             layoutPreset={layoutPreset}
             guests={guests}
             monitorRole={role}
-          />
-          {graphicsLayers.length ? (
-            <GraphicsMetadataOverlay layers={graphicsLayers} mode={role === 'preview' ? 'preview' : 'program'} />
-          ) : null}
-          {mediaOverlayItems.length ? (
-            <MediaMetadataOverlay items={mediaOverlayItems} mode={role === 'preview' ? 'preview' : 'program'} />
-          ) : null}
-          <CollaborationMetadataOverlay
-            {...(collaborationDirectorName ? { directorName: collaborationDirectorName } : {})}
-            {...(collaborationLockCount !== undefined ? { activeLockCount: collaborationLockCount } : {})}
-            {...(collaborationOpenNoteCount !== undefined ? { openNoteCount: collaborationOpenNoteCount } : {})}
-            {...(collaborationPreviewChangedBy ? { previewChangedBy: collaborationPreviewChangedBy } : {})}
-          />
-          <AutomationMetadataOverlay
-            {...(automationCurrentSegmentName ? { currentSegmentName: automationCurrentSegmentName } : {})}
-            {...(automationNextSegmentName ? { nextSegmentName: automationNextSegmentName } : {})}
-            {...(automationModeLabel ? { automationMode: automationModeLabel } : {})}
           />
         </>
       ) : null}
