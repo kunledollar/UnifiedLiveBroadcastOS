@@ -603,3 +603,29 @@ Repair continuous screen rendering, playable local MP4/media runtime binding, an
 ### Status
 
 PARTIAL — Automated regression tests pass. Real Windows Edge manual acceptance (continuous YouTube window motion, scroll updates, MP4 Preview/Program playback, screenshots, and short motion recording) remains pending outside this container.
+
+## 2026-07-17 — UBOS Regression Repair: Infinite React Update Loop After Local Media Relink
+
+### Root Cause
+
+The local media restoration effect re-entered indefinitely because `patchCaptureSourceStatus()` rebuilt scene/source objects for unchanged runtime status, message, and relink state, and `refresh()` always called `setScenes(next)`. Since the effect depended on `scenes`, the no-op replacement rendered a new scene graph, which re-ran restoration and re-applied the same patch.
+
+### Completed
+
+- Made capture source status patching idempotent for runtime status, runtime message, ready/capture state, warning, and relink state.
+- Changed scene refresh to keep the current state when the scene graph references are unchanged.
+- Added a source-id keyed local media restore in-flight guard.
+- Prevented restoration when a source already has an active media element, live stream, or ready/live runtime status.
+- Stabilized involved callbacks by removing the `scenes` capture from capture status patching.
+- Added regression tests for no-op patching, one-time updates, restore in-flight guards, rerender stability, ready media skips, relink stability, stable errors, ready transitions, and render-loop prevention at the patch/restore layer.
+
+### Tests Run
+
+- `pnpm --filter @ubos/shared test` — PASS
+- `pnpm --filter @ubos/web test` — PASS
+- `pnpm --filter @ubos/web typecheck` — PASS
+- `git diff --check` — PASS
+
+### Browser Validation
+
+PENDING — no browser executable/automation runtime is available in this container, so manual verification of Control Room stability, scene switching, media import, screen capture, recording panel visibility, and repeated update absence remains required on a browser-capable host.

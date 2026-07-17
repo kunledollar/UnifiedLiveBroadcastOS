@@ -25,6 +25,8 @@
     "lib/native-runtime/ffmpeg-recording.test.ts",
     "lib/program-pipeline/program-ownership.test.ts",
     "app/control-room/workspace/scene-routing.ts",
-    "app/control-room/workspace/scene-routing.test.ts"
+    "app/control-room/workspace/scene-routing.test.ts",
+    "app/control-room/scene-runtime-patching.ts",
+    "app/control-room/scene-runtime-patching.test.ts"
   ]
 }
