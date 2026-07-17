@@ -135,21 +135,18 @@ import {
   buildSystemStatusMetrics,
   normalizeDockTabId,
 } from './broadcast-workspaces';
-import {
-  type RoutingMatrixEdge,
-  type DiagnosticMetric,
-} from './workspace-canvas';
+import { type RoutingMatrixEdge, type DiagnosticMetric } from './workspace-canvas';
 import { ProfessionalSwitcher } from './switcher';
 import { BroadcastStatusBar } from './shell/BroadcastStatusBar';
-import {
-  statusBarHeightForLayout,
-  switcherHeightForLayout,
-} from './shell/control-room-layout';
+import { statusBarHeightForLayout, switcherHeightForLayout } from './shell/control-room-layout';
 import { DockPanelEmpty, ProfessionalAudioMixer } from './audio-console';
 import { OperationsConsoleContent } from './operations';
 import { LogsPanel } from './operations/LogsPanel';
 import { RoutingPanel } from './operations/RoutingPanel';
-import type { BrowserRecordingPanelState, NativeRecordingPanelState } from './operations/RecordingRuntimePanel';
+import type {
+  BrowserRecordingPanelState,
+  NativeRecordingPanelState,
+} from './operations/RecordingRuntimePanel';
 import { verifyBrowserRecordingArtifact } from './operations/browser-recording-verification';
 import type {
   BrowserStreamingPanelState,
@@ -305,7 +302,10 @@ function isGeneratedTestPatternSource(source: SceneSource): boolean {
   return source.type === 'media' && source.settings?.sourceKind === 'test-pattern';
 }
 
-function createGeneratedTestPatternStream(source: SceneSource, sceneName: string): MediaStream | null {
+function createGeneratedTestPatternStream(
+  source: SceneSource,
+  sceneName: string,
+): MediaStream | null {
   if (typeof document === 'undefined') return null;
   const canvas = document.createElement('canvas');
   canvas.width = 1280;
@@ -313,7 +313,9 @@ function createGeneratedTestPatternStream(source: SceneSource, sceneName: string
   const context = canvas.getContext('2d');
   const captureStream = canvas.captureStream?.bind(canvas);
   if (!context || !captureStream) return null;
-  const label = String(source.settings?.patternLabel ?? source.name.slice(0, 1) ?? '?').toUpperCase();
+  const label = String(
+    source.settings?.patternLabel ?? source.name.slice(0, 1) ?? '?',
+  ).toUpperCase();
   const color = String(source.settings?.patternColor ?? '#2563eb');
   let frame = 0;
   let animationFrame = 0;
@@ -337,17 +339,92 @@ function createGeneratedTestPatternStream(source: SceneSource, sceneName: string
     context.font = '700 54px sans-serif';
     context.fillText(sceneName, canvas.width / 2, canvas.height / 2 + 140);
     context.font = '600 30px monospace';
-    context.fillText(`${source.id} · frame ${String(t).padStart(5, '0')}`, canvas.width / 2, canvas.height - 56);
+    context.fillText(
+      `${source.id} · frame ${String(t).padStart(5, '0')}`,
+      canvas.width / 2,
+      canvas.height - 56,
+    );
     animationFrame = window.requestAnimationFrame(draw);
   };
   draw();
   const stream = captureStream(30);
   stream.getVideoTracks().forEach((track) => {
-    track.addEventListener('ended', () => window.cancelAnimationFrame(animationFrame), { once: true });
+    track.addEventListener('ended', () => window.cancelAnimationFrame(animationFrame), {
+      once: true,
+    });
   });
   return stream;
 }
 
+const UBOS_MEDIA_DB_NAME = 'ubos-managed-media-assets';
+const UBOS_MEDIA_STORE_NAME = 'assets';
+
+type ManagedMediaAssetRecord = {
+  id: string;
+  file: File;
+  name: string;
+  type: string;
+  size: number;
+  updatedAt: number;
+};
+
+function openManagedMediaDatabase(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const request = indexedDB.open(UBOS_MEDIA_DB_NAME, 1);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(UBOS_MEDIA_STORE_NAME))
+        db.createObjectStore(UBOS_MEDIA_STORE_NAME, { keyPath: 'id' });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+  });
+}
+
+async function writeManagedMediaAsset(record: ManagedMediaAssetRecord): Promise<boolean> {
+  const db = await openManagedMediaDatabase();
+  if (!db) return false;
+  return new Promise((resolve) => {
+    const tx = db.transaction(UBOS_MEDIA_STORE_NAME, 'readwrite');
+    tx.objectStore(UBOS_MEDIA_STORE_NAME).put(record);
+    tx.oncomplete = () => {
+      db.close();
+      resolve(true);
+    };
+    tx.onerror = () => {
+      db.close();
+      resolve(false);
+    };
+  });
+}
+
+async function readManagedMediaAsset(id: string): Promise<ManagedMediaAssetRecord | null> {
+  const db = await openManagedMediaDatabase();
+  if (!db) return null;
+  return new Promise((resolve) => {
+    const tx = db.transaction(UBOS_MEDIA_STORE_NAME, 'readonly');
+    const request = tx.objectStore(UBOS_MEDIA_STORE_NAME).get(id);
+    request.onsuccess = () =>
+      resolve((request.result as ManagedMediaAssetRecord | undefined) ?? null);
+    request.onerror = () => resolve(null);
+    tx.oncomplete = () => db.close();
+    tx.onerror = () => db.close();
+  });
+}
+
+function describeMediaError(video: HTMLVideoElement, fallback: string): string {
+  const code = video.error?.code;
+  const codecProbe =
+    video.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"') ||
+    video.canPlayType('video/mp4');
+  if (code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED || codecProbe === '')
+    return 'Unsupported codec or media container in this browser.';
+  if (code === MediaError.MEDIA_ERR_DECODE) return 'Media decode failed in this browser.';
+  if (code === MediaError.MEDIA_ERR_NETWORK)
+    return 'Local media bytes became unavailable during playback.';
+  return code ? `${fallback} (media error code ${code}).` : fallback;
+}
 
 function createLocalMediaElementStream(
   source: SceneSource,
@@ -374,23 +451,32 @@ function createLocalMediaElementStream(
     return video;
   }
   let settled = false;
-  const markReady = () => {
+  const markReady = async () => {
+    if (settled) return;
+    await playVideoSafely(
+      video,
+      { target: 'local-media', sourceId: source.id },
+      undefined,
+      onError,
+    );
     if (settled) return;
     const stream = captureStream();
     if (!isLiveMediaStream(stream)) return;
     settled = true;
-    onReady(stream, Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined);
+    onReady(
+      stream,
+      Number.isFinite(video.duration) ? Math.round(video.duration * 1000) : undefined,
+    );
   };
-  video.onloadedmetadata = markReady;
+  video.onloadedmetadata = () => {
+    if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) void markReady();
+  };
   video.oncanplay = () => {
-    markReady();
-    void playVideoSafely(video, { target: 'local-media', sourceId: source.id });
+    void markReady();
   };
   video.onerror = () => {
-    const code = video.error?.code;
-    onError(`Local media failed to load${code ? ` (code ${code})` : ''}.`);
+    onError(describeMediaError(video, 'Local media failed to load'));
   };
-  void playVideoSafely(video, { target: 'local-media', sourceId: source.id }, undefined, onError);
   video.load();
   return video;
 }
@@ -407,10 +493,7 @@ function findFirstLiveVideoStream(streams: Record<string, MediaStream>): MediaSt
   return null;
 }
 
-function findSourceName(
-  sourceId: string,
-  scenes: Scene[],
-): string | undefined {
+function findSourceName(sourceId: string, scenes: Scene[]): string | undefined {
   for (const scene of scenes) {
     const source = scene.sources.find((item) => item.id === sourceId);
     if (source) return source.name;
@@ -589,8 +672,12 @@ function LiveMediaMonitor({
     configureInlineVideoPlayback(video, role === 'preview');
     pauseVideoSafely(video, details);
     if (nextStream) {
-      video.onloadedmetadata = () => { void playVideoSafely(video, details); };
-      video.oncanplay = () => { void playVideoSafely(video, details); };
+      video.onloadedmetadata = () => {
+        void playVideoSafely(video, details);
+      };
+      video.oncanplay = () => {
+        void playVideoSafely(video, details);
+      };
     }
     assignVideoStreamSafely(video, nextStream, details);
     if (nextStream) void playVideoSafely(video, details);
@@ -2588,7 +2675,10 @@ export function SceneWorkspace({
         scenes.map((scene) => ({
           ...scene,
           sources: scene.sources.map((source) =>
-            (source.type === 'camera' || source.type === 'screen' || source.type === 'audio' || source.type === 'media') &&
+            (source.type === 'camera' ||
+              source.type === 'screen' ||
+              source.type === 'audio' ||
+              source.type === 'media') &&
             (!sourceId || source.id === sourceId)
               ? {
                   ...source,
@@ -2596,6 +2686,63 @@ export function SceneWorkspace({
                     ...source.settings,
                     runtimeStatus,
                     ...(message ? { message } : {}),
+                  },
+                }
+              : source,
+          ),
+        })),
+      );
+    },
+    [refresh, scenes],
+  );
+
+  const replaceMediaRuntimeForSource = useCallback(
+    async (sourceId: string, file: File) => {
+      const existingElement = localMediaElementsRef.current[sourceId];
+      if (existingElement) {
+        existingElement.pause();
+        const existingUrl = existingElement.currentSrc || existingElement.getAttribute('src');
+        if (existingUrl?.startsWith('blob:')) URL.revokeObjectURL(existingUrl);
+        delete localMediaElementsRef.current[sourceId];
+      }
+      setLiveSourceStreams((current) => {
+        current[sourceId]?.getTracks().forEach((track) => track.stop());
+        const { [sourceId]: _removed, ...remaining } = current;
+        return remaining;
+      });
+      const assetId = `managed-media:${sourceId}`;
+      const stored = await writeManagedMediaAsset({
+        id: assetId,
+        file,
+        name: file.name,
+        type: file.type,
+        size: file.size,
+        updatedAt: Date.now(),
+      });
+      const mediaUrl = URL.createObjectURL(file);
+      refresh(
+        scenes.map((scene) => ({
+          ...scene,
+          sources: scene.sources.map((source) =>
+            source.id === sourceId
+              ? {
+                  ...source,
+                  name: source.name || file.name,
+                  label: source.label || file.name,
+                  settings: {
+                    ...source.settings,
+                    runtimeFile: file,
+                    mediaUrl,
+                    assetId,
+                    durableMediaAvailable: stored,
+                    runtimeStatus: 'loading',
+                    captureState: 'loading',
+                    filename: file.name,
+                    fileSize: file.size,
+                    fileType: file.type || file.name.split('.').pop()?.toLowerCase(),
+                    message: stored
+                      ? 'Loading managed media asset.'
+                      : 'Loading temporary local media; relink required after reload.',
                   },
                 }
               : source,
@@ -2664,14 +2811,41 @@ export function SceneWorkspace({
     const mediaSources = scenes.flatMap((scene) =>
       scene.sources.filter(
         (source) =>
-          source.type === 'media' &&
-          source.isVisible &&
-          !isGeneratedTestPatternSource(source) &&
-          typeof source.settings?.mediaUrl === 'string',
+          source.type === 'media' && source.isVisible && !isGeneratedTestPatternSource(source),
       ),
     );
     mediaSources.forEach((source) => {
-      if (localMediaElementsRef.current[source.id] || isLiveMediaStream(liveSourceStreamsRef.current[source.id])) return;
+      if (
+        localMediaElementsRef.current[source.id] ||
+        isLiveMediaStream(liveSourceStreamsRef.current[source.id])
+      )
+        return;
+      const runtimeFile =
+        source.settings?.runtimeFile instanceof File ? source.settings.runtimeFile : null;
+      if (!source.settings?.mediaUrl && runtimeFile) {
+        void replaceMediaRuntimeForSource(source.id, runtimeFile);
+        return;
+      }
+      if (!source.settings?.mediaUrl && typeof source.settings?.assetId === 'string') {
+        void readManagedMediaAsset(source.settings.assetId).then((record) => {
+          if (record?.file) void replaceMediaRuntimeForSource(source.id, record.file);
+          else
+            patchCaptureSourceStatus(
+              'relink_required',
+              source.id,
+              'Relink required: local media bytes are unavailable.',
+            );
+        });
+        return;
+      }
+      if (!source.settings?.mediaUrl) {
+        patchCaptureSourceStatus(
+          'relink_required',
+          source.id,
+          'Relink required: local media bytes are unavailable.',
+        );
+        return;
+      }
       patchCaptureSourceStatus('loading', source.id, 'Loading local media.');
       const element = createLocalMediaElementStream(
         source,
@@ -2703,7 +2877,13 @@ export function SceneWorkspace({
       );
       if (element) localMediaElementsRef.current[source.id] = element;
     });
-  }, [patchCaptureSourceStatus, refresh, retainLiveSourceStream, scenes]);
+  }, [
+    patchCaptureSourceStatus,
+    refresh,
+    replaceMediaRuntimeForSource,
+    retainLiveSourceStream,
+    scenes,
+  ]);
 
   useEffect(() => {
     const unusedSourceIds = getUnusedLiveSourceIds({
@@ -2960,11 +3140,7 @@ export function SceneWorkspace({
       } as const;
     }
     return null;
-  }, [
-    programLiveVideoSource?.type,
-    programScene.sources,
-    programStreamToShow,
-  ]);
+  }, [programLiveVideoSource?.type, programScene.sources, programStreamToShow]);
 
   const startSmokeRecording = useCallback(() => {
     if (recorderRef.current && recorderRef.current.state !== 'inactive') return;
@@ -3080,11 +3256,17 @@ export function SceneWorkspace({
     ];
     try {
       const response = await fetch('/api/native-runtime/status', { cache: 'no-store' });
-      const status = await response.json() as {
+      const status = (await response.json()) as {
         connected?: boolean;
         ffmpeg?: { state?: string; reason?: string | null };
         ffprobe?: { state?: string; reason?: string | null };
-        lastArtifactResult?: { artifactPath?: string; sizeBytes?: number; durationSeconds?: number; videoCodec?: string; audioCodec?: string | null } | null;
+        lastArtifactResult?: {
+          artifactPath?: string;
+          sizeBytes?: number;
+          durationSeconds?: number;
+          videoCodec?: string;
+          audioCodec?: string | null;
+        } | null;
         lastFailure?: string | null;
       };
       setNativeRecordingState((current) => {
@@ -3100,7 +3282,9 @@ export function SceneWorkspace({
                 : null;
         // Only update readiness state when not in an active recording session.
         const nextState: NativeRecordingPanelState['state'] = settledStates.includes(current.state)
-          ? (blocked ? 'unavailable' : 'ready')
+          ? blocked
+            ? 'unavailable'
+            : 'ready'
           : current.state;
         return {
           ...current,
@@ -3141,9 +3325,10 @@ export function SceneWorkspace({
       const reader = new FileReader();
       reader.onloadend = () => {
         const value = String(reader.result ?? '');
-        resolve(value.includes(',') ? value.split(',')[1] ?? '' : value);
+        resolve(value.includes(',') ? (value.split(',')[1] ?? '') : value);
       };
-      reader.onerror = () => reject(reader.error ?? new Error('Failed to read native recording blob.'));
+      reader.onerror = () =>
+        reject(reader.error ?? new Error('Failed to read native recording blob.'));
       reader.readAsDataURL(blob);
     });
 
@@ -3159,7 +3344,8 @@ export function SceneWorkspace({
       setNativeRecordingState((current) => ({
         ...current,
         state: 'failed',
-        failure: 'No capturable Program media is available for native handoff. Ensure a camera, screen, or media source is on Program.',
+        failure:
+          'No capturable Program media is available for native handoff. Ensure a camera, screen, or media source is on Program.',
       }));
       return;
     }
@@ -3167,9 +3353,9 @@ export function SceneWorkspace({
     nativeRecordedChunksRef.current = [];
     nativeRecordingStartedAtRef.current = new Date().toISOString();
     // Determine audio expectation from actual live tracks, not MIME type heuristics.
-    nativeExpectedAudioRef.current = source.stream.getAudioTracks().some(
-      (track) => track.readyState === 'live',
-    );
+    nativeExpectedAudioRef.current = source.stream
+      .getAudioTracks()
+      .some((track) => track.readyState === 'live');
 
     const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
       ? 'video/webm;codecs=vp9,opus'
@@ -3202,7 +3388,10 @@ export function SceneWorkspace({
           const blob = new Blob(nativeRecordedChunksRef.current, {
             type: recorder.mimeType || 'video/webm',
           });
-          if (blob.size === 0) throw new Error('MediaRecorder produced an empty recording. Ensure the Program source was active during recording.');
+          if (blob.size === 0)
+            throw new Error(
+              'MediaRecorder produced an empty recording. Ensure the Program source was active during recording.',
+            );
           const response = await fetch('/api/native-runtime/recording/finalize', {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
@@ -3212,7 +3401,7 @@ export function SceneWorkspace({
               expectedAudio: nativeExpectedAudioRef.current,
             }),
           });
-          const payload = await response.json() as {
+          const payload = (await response.json()) as {
             ok?: boolean;
             message?: string;
             artifact?: {
@@ -3982,7 +4171,9 @@ export function SceneWorkspace({
     }
 
     if (selectedGraphicsLayerId) {
-      const layer = previewSceneComposition.layers.find((item) => item.id === selectedGraphicsLayerId);
+      const layer = previewSceneComposition.layers.find(
+        (item) => item.id === selectedGraphicsLayerId,
+      );
       if (layer) {
         return {
           kind: 'graphics-layer',
@@ -4273,16 +4464,15 @@ export function SceneWorkspace({
 
   const mixerSources = useMemo(() => {
     const liveEntries = Object.entries(liveSourceStreams)
-      .filter(([, stream]) =>
-        stream.getAudioTracks().some((track) => track.readyState === 'live'),
-      )
+      .filter(([, stream]) => stream.getAudioTracks().some((track) => track.readyState === 'live'))
       .map(([sourceId, stream]) => {
         const source = sorted
           .flatMap((scene) => scene.sources)
           .find((item) => item.id === sourceId);
         return {
           id: sourceId,
-          name: source?.name ?? findSourceName(sourceId, sorted) ?? `Source ${sourceId.slice(0, 8)}`,
+          name:
+            source?.name ?? findSourceName(sourceId, sorted) ?? `Source ${sourceId.slice(0, 8)}`,
           type: toMixerSourceType(source?.type),
           stream,
         };
@@ -4301,8 +4491,7 @@ export function SceneWorkspace({
   const routingEdges = useMemo<RoutingMatrixEdge[]>(
     () =>
       mediaRoutes.map((route) => {
-        const gain =
-          typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
+        const gain = typeof route.metadata.gainDb === 'number' ? route.metadata.gainDb : undefined;
         return {
           id: route.id,
           sourceId: route.sourceId ?? route.id,
@@ -4462,7 +4651,8 @@ export function SceneWorkspace({
         if (input.type === 'camera') void startCameraCapture(tempSource.id);
         else if (input.type === 'screen')
           patchCaptureSourceStatus('permission_required', tempSource.id, 'Start Screen Source');
-        else if (input.type === 'media') patchCaptureSourceStatus('loading', tempSource.id, 'Loading local media.');
+        else if (input.type === 'media')
+          patchCaptureSourceStatus('loading', tempSource.id, 'Loading local media.');
         else if (input.type === 'audio') void startSmokeCapture(tempSource.id);
         startTransition(async () => {
           await addSource(formData);
@@ -4579,6 +4769,9 @@ export function SceneWorkspace({
       onSelectMediaAsset={setSelectedMediaAssetId}
       onSelectReplayClip={setSelectedReplayClipId}
       onSelectSource={handleSelectSource}
+      onRelinkMedia={(sourceId, file) => {
+        void replaceMediaRuntimeForSource(sourceId, file);
+      }}
     />
   );
 
@@ -5027,7 +5220,7 @@ export function SceneWorkspace({
             onClick={() => {
               Object.keys(liveSourceStreams).forEach((sourceId) => stopLiveSourceStream(sourceId));
               smokeMedia.stopAll();
-                        setLiveSourceStreams({});
+              setLiveSourceStreams({});
               setCameraCaptureError('');
             }}
           >
@@ -5254,10 +5447,7 @@ export function SceneWorkspace({
         dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
           durationMs: transitionDuration,
         });
-        persistProductionState(
-          { ...productionState, transitionType, transitionDuration },
-          'stage',
-        );
+        persistProductionState({ ...productionState, transitionType, transitionDuration }, 'stage');
       }}
       onDurationChange={(transitionDuration) => {
         const normalizedDuration = normalizeTransitionDuration(
@@ -5287,100 +5477,110 @@ export function SceneWorkspace({
       <script
         id="ubos-scene-routing-evidence"
         type="application/json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify({ ...sceneRoutingEvidence, panelVisibilityState: { activeOperationsTab, nativeRecordingPanelReachable: operationsTabsResolved.some((tab) => tab.id === 'recording') } }) }}
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify({
+            ...sceneRoutingEvidence,
+            panelVisibilityState: {
+              activeOperationsTab,
+              nativeRecordingPanelReachable: operationsTabsResolved.some(
+                (tab) => tab.id === 'recording',
+              ),
+            },
+          }),
+        }}
       />
-    <CommandCenterShell
-      layoutStyle={layoutStyle}
-      statusBar={
-        <BroadcastStatusBar
-          sessionName="Launch Day"
-          isLive={activeRouteCount > 0}
-          isRecording={recordingState === 'recording'}
-          runTime={formatElapsed(elapsedSeconds)}
-          clock={clock}
-          transitionActive={transitionActive}
-          fps={safeHealthMetrics.fps}
-          cpu={safeHealthMetrics.cpu}
-          dropped={safeHealthMetrics.dropped}
-          upload={safeHealthMetrics.upload}
-          automationModeLabel={automationModeLabel(automationState.automationMode)}
-          aiStatusLabel={aiStatusLabel(aiState.assistant)}
-          outputHealthLabel={outputHealthSummaryLabel({
-            destinations: distributionState.destinations,
-            health: distributionState.outputHealth,
-          })}
-          deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
-          engineStatusLabel="Unavailable"
-          compactChrome={workspace.compactChrome}
-          toolsMenu={toolsMenu}
-        />
-      }
-      activeNav={activeNav}
-      onNavChange={(nav) => {
-        setActiveNav(nav);
-        const dockTab = preferredSourceDockTab(nav);
-        if (dockTab) setActiveSourceDockTab(dockTab);
-        if (nav === 'production-graph') {
-          setActiveBottomDock(normalizeDockTabId('production-graph'));
+      <CommandCenterShell
+        layoutStyle={layoutStyle}
+        statusBar={
+          <BroadcastStatusBar
+            sessionName="Launch Day"
+            isLive={activeRouteCount > 0}
+            isRecording={recordingState === 'recording'}
+            runTime={formatElapsed(elapsedSeconds)}
+            clock={clock}
+            transitionActive={transitionActive}
+            fps={safeHealthMetrics.fps}
+            cpu={safeHealthMetrics.cpu}
+            dropped={safeHealthMetrics.dropped}
+            upload={safeHealthMetrics.upload}
+            automationModeLabel={automationModeLabel(automationState.automationMode)}
+            aiStatusLabel={aiStatusLabel(aiState.assistant)}
+            outputHealthLabel={outputHealthSummaryLabel({
+              destinations: distributionState.destinations,
+              health: distributionState.outputHealth,
+            })}
+            deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
+            engineStatusLabel="Unavailable"
+            compactChrome={workspace.compactChrome}
+            toolsMenu={toolsMenu}
+          />
         }
-        if (nav === 'outputs') {
-          setActiveOperationsTab('outputs');
-        }
-        if (nav === 'settings') {
-          setActiveOperationsTab('inspector');
-        }
-      }}
-      sourceDockContent={leftNavContent}
-      activeSourceDockTab={activeSourceDockTab}
-      onSourceDockTabChange={setActiveSourceDockTab}
-      programMonitor={programMonitorNode}
-      previewMonitor={previewMonitorNode}
-      programStatus={programMonitorStatus}
-      previewStatus={previewMonitorStatus}
-      switcherContent={switcherNode}
-      operationsSections={operationsSections}
-      activeOperationsTab={activeOperationsTab}
-      activeDockTab={activeBottomDock}
-      onOperationsTabChange={setActiveOperationsTab}
-      onDockTabChange={(tab) => setActiveBottomDock(normalizeDockTabId(tab))}
-      onWorkspaceModeApplied={applyMenuWorkspaceMode}
-      onSaveWorkspace={saveWorkspace}
-      onRestoreWorkspace={restoreWorkspace}
-      onResetWorkspace={resetWorkspace}
-      onSeedDemo={() => startTransition(async () => seedDemoProductionState())}
-      onSimulateDemo={() => startTransition(async () => simulateDemoProduction())}
-      onResetDemo={() => startTransition(async () => resetDemoProductionState())}
-      bottomWorkspaceContent={bottomDockContent}
-      onCut={() => switchProgram('cut')}
-      onTake={() => switchProgram(productionState.transitionType)}
-      onAuto={() => switchProgram('fade')}
-      programOverlay={{
-        sceneName: programScene.name,
-        recordingLabel:
-          recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
-            ? 'ON'
-            : undefined,
-        streamingLabel:
-          streamingState.lifecycle === 'streaming'
-            ? 'LIVE'
-            : streamingState.lifecycle === 'connecting'
-              ? 'CONNECTING'
+        activeNav={activeNav}
+        onNavChange={(nav) => {
+          setActiveNav(nav);
+          const dockTab = preferredSourceDockTab(nav);
+          if (dockTab) setActiveSourceDockTab(dockTab);
+          if (nav === 'production-graph') {
+            setActiveBottomDock(normalizeDockTabId('production-graph'));
+          }
+          if (nav === 'outputs') {
+            setActiveOperationsTab('outputs');
+          }
+          if (nav === 'settings') {
+            setActiveOperationsTab('inspector');
+          }
+        }}
+        sourceDockContent={leftNavContent}
+        activeSourceDockTab={activeSourceDockTab}
+        onSourceDockTabChange={setActiveSourceDockTab}
+        programMonitor={programMonitorNode}
+        previewMonitor={previewMonitorNode}
+        programStatus={programMonitorStatus}
+        previewStatus={previewMonitorStatus}
+        switcherContent={switcherNode}
+        operationsSections={operationsSections}
+        activeOperationsTab={activeOperationsTab}
+        activeDockTab={activeBottomDock}
+        onOperationsTabChange={setActiveOperationsTab}
+        onDockTabChange={(tab) => setActiveBottomDock(normalizeDockTabId(tab))}
+        onWorkspaceModeApplied={applyMenuWorkspaceMode}
+        onSaveWorkspace={saveWorkspace}
+        onRestoreWorkspace={restoreWorkspace}
+        onResetWorkspace={resetWorkspace}
+        onSeedDemo={() => startTransition(async () => seedDemoProductionState())}
+        onSimulateDemo={() => startTransition(async () => simulateDemoProduction())}
+        onResetDemo={() => startTransition(async () => resetDemoProductionState())}
+        bottomWorkspaceContent={bottomDockContent}
+        onCut={() => switchProgram('cut')}
+        onTake={() => switchProgram(productionState.transitionType)}
+        onAuto={() => switchProgram('fade')}
+        programOverlay={{
+          sceneName: programScene.name,
+          recordingLabel:
+            recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
+              ? 'ON'
               : undefined,
-        droppedLabel:
-          safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
-        latencyLabel:
-          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
-      }}
-      previewOverlay={{
-        sceneName: previewScene.name,
-        transitionLabel: productionState.transitionType,
-        armedGraphicsCount: previewSceneComposition.layers.filter(
-          (layer) => layer.previewState === 'preview',
-        ).length,
-        latencyLabel:
-          primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
-      }}
-    />
+          streamingLabel:
+            streamingState.lifecycle === 'streaming'
+              ? 'LIVE'
+              : streamingState.lifecycle === 'connecting'
+                ? 'CONNECTING'
+                : undefined,
+          droppedLabel:
+            safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
+          latencyLabel:
+            primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+        }}
+        previewOverlay={{
+          sceneName: previewScene.name,
+          transitionLabel: productionState.transitionType,
+          armedGraphicsCount: previewSceneComposition.layers.filter(
+            (layer) => layer.previewState === 'preview',
+          ).length,
+          latencyLabel:
+            primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+        }}
+      />
     </>
   );
 }

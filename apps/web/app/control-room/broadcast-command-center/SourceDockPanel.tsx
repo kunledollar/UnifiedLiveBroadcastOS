@@ -63,6 +63,7 @@ export function SourceDockPanel({
   onSelectReplayClip,
   selectedSourceId,
   onSelectSource,
+  onRelinkMedia,
 }: {
   activeTab: SourceDockTabId;
   scenes: Scene[];
@@ -109,6 +110,7 @@ export function SourceDockPanel({
   onSelectReplayClip?: (clipId: string) => void;
   selectedSourceId?: string | null;
   onSelectSource?: (sourceId: string) => void;
+  onRelinkMedia?: (sourceId: string, file: File) => void;
 }): ReactNode {
   switch (activeTab) {
     case 'scenes':
@@ -149,6 +151,7 @@ export function SourceDockPanel({
           {...(onSourceToggleMute ? { onToggleMute: onSourceToggleMute } : {})}
           {...(selectedSourceId !== undefined ? { selectedSourceId } : {})}
           {...(onSelectSource ? { onSelectSource } : {})}
+          {...(onRelinkMedia ? { onRelinkMedia } : {})}
         />
       );
     case 'media':

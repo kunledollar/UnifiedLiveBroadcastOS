@@ -12,7 +12,7 @@ export type RoutedSceneMedia<TStream extends LiveStreamLike> = {
   sourceType: SceneSourceType | null;
   stream: TStream | null;
   active: boolean;
-  warning: 'CAMERA OFFLINE' | 'SCREEN SOURCE NOT STARTED' | 'MEDIA UNAVAILABLE' | null;
+  warning: string | null;
   activationAction: 'start-camera' | 'start-screen' | null;
 };
 
@@ -36,9 +36,14 @@ export function getFirstVisibleLiveVideoSource(scene: Scene): SceneSource | unde
   return getVisibleLiveVideoSources(scene)[0];
 }
 
-function isActiveVideoStream<TStream extends LiveStreamLike>(stream: TStream | null | undefined): stream is TStream {
+function isActiveVideoStream<TStream extends LiveStreamLike>(
+  stream: TStream | null | undefined,
+): stream is TStream {
   return Boolean(
-    stream?.active && stream.getVideoTracks().some((track) => track.readyState === undefined || track.readyState === 'live'),
+    stream?.active &&
+    stream
+      .getVideoTracks()
+      .some((track) => track.readyState === undefined || track.readyState === 'live'),
   );
 }
 
@@ -51,7 +56,7 @@ export function resolveSceneLiveMedia<TStream extends LiveStreamLike>(
     isActiveVideoStream(liveSourceStreams[candidate.id] ?? null),
   );
   const source = activeSource ?? visibleSources[0];
-  const stream = source ? liveSourceStreams[source.id] ?? null : null;
+  const stream = source ? (liveSourceStreams[source.id] ?? null) : null;
   const active = isActiveVideoStream(stream);
   const sourceType = source?.type ?? null;
   const warning = active
@@ -61,7 +66,11 @@ export function resolveSceneLiveMedia<TStream extends LiveStreamLike>(
       : sourceType === 'screen'
         ? 'SCREEN SOURCE NOT STARTED'
         : sourceType === 'media'
-          ? 'MEDIA UNAVAILABLE'
+          ? typeof source?.settings?.message === 'string'
+            ? source.settings.message
+            : source?.settings?.runtimeStatus === 'relink_required'
+              ? 'RELINK REQUIRED'
+              : 'MEDIA UNAVAILABLE'
           : null;
   const activationAction = active
     ? null
@@ -102,6 +111,8 @@ export function getUnusedLiveSourceIds<TStream extends LiveStreamLike>(input: {
   scenes: Scene[];
   liveSourceStreams: Record<string, TStream>;
 }): string[] {
-  const referenced = new Set(input.scenes.flatMap((scene) => scene.sources.map((source) => source.id)));
+  const referenced = new Set(
+    input.scenes.flatMap((scene) => scene.sources.map((source) => source.id)),
+  );
   return Object.keys(input.liveSourceStreams).filter((sourceId) => !referenced.has(sourceId));
 }

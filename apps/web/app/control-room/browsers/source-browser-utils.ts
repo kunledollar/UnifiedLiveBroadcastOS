@@ -2,7 +2,16 @@ import { GuestStatus, type Guest, type SceneSource, type SceneSourceType } from 
 
 export type SourceHealthFilter = 'all' | 'ready' | 'offline' | 'unavailable' | 'mock';
 export type SourceHealthStatus =
-  'ready' | 'offline' | 'permission_required' | 'unavailable' | 'mock' | 'live' | 'hidden' | 'loading' | 'failed';
+  | 'ready'
+  | 'offline'
+  | 'permission_required'
+  | 'relink_required'
+  | 'unavailable'
+  | 'mock'
+  | 'live'
+  | 'hidden'
+  | 'loading'
+  | 'failed';
 
 const sourceTypeLabels: Record<SceneSourceType, string> = {
   camera: 'Camera',
@@ -27,6 +36,7 @@ export function deriveSourceHealth(source: SceneSource, guests: Guest[]): Source
   if (runtimeStatus === 'failed') return 'failed';
   if (runtimeStatus === 'mock') return 'mock';
   if (runtimeStatus === 'permission_required') return 'permission_required';
+  if (runtimeStatus === 'relink_required') return 'relink_required';
   if (runtimeStatus === 'offline') return 'offline';
   if (runtimeStatus === 'unavailable') return 'unavailable';
 
@@ -59,6 +69,8 @@ export function sourceHealthLabel(status: SourceHealthStatus) {
       return 'Offline';
     case 'permission_required':
       return 'Permission required';
+    case 'relink_required':
+      return 'Relink required';
     case 'unavailable':
       return 'Unavailable';
     case 'mock':
@@ -75,6 +87,7 @@ export function sourceHealthVariant(status: SourceHealthStatus) {
       return 'success' as const;
     case 'mock':
     case 'permission_required':
+    case 'relink_required':
     case 'loading':
       return 'warning' as const;
     case 'offline':
