@@ -9,6 +9,10 @@ export type CaptureRuntimePatch = {
   captureState?: string;
   warning?: string | null;
   relinkState?: string | null;
+  health?: string | null;
+  relinkRequired?: boolean;
+  ready?: boolean;
+  offline?: boolean;
 };
 
 export function areScenesSameReference(current: Scene[], next: Scene[]): boolean {
@@ -40,12 +44,20 @@ export function patchCaptureSourceStatusInScenes(scenes: Scene[], patch: Capture
       const captureStateUnchanged = patch.captureState === undefined || patchValueIsUnchanged(settings, 'captureState', patch.captureState);
       const warningUnchanged = patch.warning === undefined || patchValueIsUnchanged(settings, 'warning', patch.warning ?? undefined);
       const relinkStateUnchanged = patch.relinkState === undefined || patchValueIsUnchanged(settings, 'relinkState', patch.relinkState ?? undefined);
+      const healthUnchanged = patch.health === undefined || patchValueIsUnchanged(settings, 'health', patch.health ?? undefined);
+      const relinkRequiredUnchanged = patch.relinkRequired === undefined || patchValueIsUnchanged(settings, 'relinkRequired', patch.relinkRequired);
+      const readyUnchanged = patch.ready === undefined || patchValueIsUnchanged(settings, 'ready', patch.ready);
+      const offlineUnchanged = patch.offline === undefined || patchValueIsUnchanged(settings, 'offline', patch.offline);
       if (
         patchValueIsUnchanged(settings, 'runtimeStatus', patch.runtimeStatus) &&
         messageUnchanged &&
         captureStateUnchanged &&
         warningUnchanged &&
-        relinkStateUnchanged
+        relinkStateUnchanged &&
+        healthUnchanged &&
+        relinkRequiredUnchanged &&
+        readyUnchanged &&
+        offlineUnchanged
       ) {
         return source;
       }
@@ -57,6 +69,10 @@ export function patchCaptureSourceStatusInScenes(scenes: Scene[], patch: Capture
         ...(patch.captureState === undefined ? {} : { captureState: patch.captureState }),
         ...(patch.warning === undefined ? {} : { warning: patch.warning ?? undefined }),
         ...(patch.relinkState === undefined ? {} : { relinkState: patch.relinkState ?? undefined }),
+        ...(patch.health === undefined ? {} : { health: patch.health ?? undefined }),
+        ...(patch.relinkRequired === undefined ? {} : { relinkRequired: patch.relinkRequired }),
+        ...(patch.ready === undefined ? {} : { ready: patch.ready }),
+        ...(patch.offline === undefined ? {} : { offline: patch.offline }),
       };
       return { ...source, settings: nextSettings };
     });
@@ -77,5 +93,6 @@ export function shouldRestoreLocalMediaSource(input: {
   if (input.restoreInFlight.has(input.sourceId)) return false;
   if (input.hasElement || input.hasLiveStream) return false;
   if (input.runtimeStatus === 'live' || input.runtimeStatus === 'ready') return false;
+  if (input.runtimeStatus === 'relink_required' || input.runtimeStatus === 'unavailable') return false;
   return true;
 }

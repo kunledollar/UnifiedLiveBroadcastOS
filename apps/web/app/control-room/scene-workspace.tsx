@@ -5350,20 +5350,30 @@ export function SceneWorkspace({
       : previewLiveMedia.activationAction === 'start-camera'
         ? 'Start Camera Source'
         : undefined;
-  const startProgramSource = () => {
+  const startProgramSource = useCallback(() => {
     if (!programLiveMedia.sourceId) return;
     if (programLiveMedia.activationAction === 'start-screen')
       void startScreenCapture(programLiveMedia.sourceId);
     if (programLiveMedia.activationAction === 'start-camera')
       void startCameraCapture(programLiveMedia.sourceId);
-  };
-  const startPreviewSource = () => {
+  }, [
+    programLiveMedia.activationAction,
+    programLiveMedia.sourceId,
+    startCameraCapture,
+    startScreenCapture,
+  ]);
+  const startPreviewSource = useCallback(() => {
     if (!previewLiveMedia.sourceId) return;
     if (previewLiveMedia.activationAction === 'start-screen')
       void startScreenCapture(previewLiveMedia.sourceId);
     if (previewLiveMedia.activationAction === 'start-camera')
       void startCameraCapture(previewLiveMedia.sourceId);
-  };
+  }, [
+    previewLiveMedia.activationAction,
+    previewLiveMedia.sourceId,
+    startCameraCapture,
+    startScreenCapture,
+  ]);
 
   const programMonitorNode = liveProgramVisible ? (
     <LiveMediaMonitor
