@@ -1,53 +1,27 @@
 # Control Room Scene Routing and Native Recording UI Trace
 
-Status: PARTIAL — final Windows-host browser certification could not be executed in this container.
+Status: PARTIAL — code and regression tests pass locally, but this container has no Chromium/Edge executable for the required screenshot evidence.
 
-## Required commit gate
+## Root causes
 
-The requested certification required the current branch to contain commit `590e5b4`. The check `git merge-base --is-ancestor 590e5b4 HEAD` failed because `590e5b4` is not a valid object in this shallow checkout. `git remote -v` returned no configured remotes, so the missing object could not be fetched from this workspace.
+1. Scene routing: the regression signature is stale fallback media. Scene labels were driven by current Program/Preview state, while live media could fall back to the first active stream instead of the selected scene's resolved source stream. The repaired path resolves Program and Preview independently from each scene's visible source IDs and returns `null` rather than borrowing Scene A media when the selected scene has no live stream.
+2. Native Recording UI: `RecordingRuntimePanel` and right-dock/menu registry entries existed, but the default Director production workspace did not expose the recording panel. Operators starting in the default Control Room could miss Native Recording even though Solo Streamer and Broadcast menu paths existed.
 
-Current branch: `work`
-Current HEAD: `16a36b94ed3bead7a9bf37fc81cd2457724197b0`
+## Ownership trace
 
-## Browser gate
+Scene selection -> `stageScene(sceneId)` dispatches `SET_PREVIEW_SCENE` and persists `productionState.previewSceneId`.
+Preview identity -> `productionState.previewSceneId` and `graph.preview.sceneId`.
+Program identity -> `switchProgram()` dispatches CUT/AUTO/TAKE to `graph.program.sceneId` and persists `productionState.programSceneId`.
+Scene sources -> `programScene.sources` and `previewScene.sources` sorted by scene selection.
+Source registry -> `liveSourceStreams[source.id]` maps source IDs to retained MediaStreams.
+Visibility/z-order -> `getFirstVisibleLiveVideoSource()` requires visible, unlocked camera/screen/media source; Program/Preview compositor overlays continue to use scene-specific graphics/media composition.
+Renderer -> `LiveMediaMonitor` assigns the current role's resolved stream to its own video element and clears it on cleanup.
+Recording route -> `createProgramRecordingStream()` captures `[data-ubos-program-monitor] video` first, then falls back only to the currently resolved Program stream.
 
-The requested evidence must come from a locally installed Windows-host Microsoft Edge or Google Chrome executable. This runtime is Linux (`uname -a`: `Linux a433c1373773 6.12.47 #1 SMP Mon Oct 27 10:01:15 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux`). No Edge or Chrome executable was found on PATH, and no `/mnt/c/Program Files...` Windows browser path was available.
+## Runtime evidence schema
 
-Because no required host browser executable was available, Playwright was not installed and no browser was launched. Per the certification instructions, screenshots and MP4 files were not generated, fabricated, rendered, or substituted.
+The Control Room embeds `#ubos-scene-routing-evidence` JSON with Program scene ID, Preview scene ID, Program resolved source IDs, Preview resolved source IDs, stream IDs, shared-stream flag, and panel visibility state.
 
-## Genuine browser evidence
+## Browser screenshots
 
-No new genuine browser evidence artifacts were created in this run.
-
-The following pre-existing files remain in the artifact directory but were not recertified by this run and are not being claimed as fresh Windows-host browser evidence:
-
-- `artifacts/scene-routing-recording-ui/program-a-preview-b.png`
-- `artifacts/scene-routing-recording-ui/program-a-preview-c.png`
-- `artifacts/scene-routing-recording-ui/program-c-after-take.png`
-- `artifacts/scene-routing-recording-ui/native-recording-panel.png`
-
-## Scene routing verification status
-
-Code-level focused scene-routing and Program ownership tests passed. Real browser validation remains blocked, so the following required browser-only assertions are still unverified in this run:
-
-- Program Scene A and Preview Scene B rendered as genuine pixels.
-- Preview changed from Scene B to Scene C without altering Program.
-- CUT/TAKE changed Program to Scene C in the real browser.
-- Actual Program and Preview `<video>` elements reported distinct `srcObject` ownership for different sources.
-- `srcObjectSame` was observed as `false` when Program and Preview used different sources.
-- Browser console errors, uncaught exceptions, media errors, and React hydration errors were captured.
-
-## Native Recording verification status
-
-The Native Recording panel was not opened in a real browser in this run. Recording readiness or visible blocked reason could not be inspected. No `recording-running.png`, `recording-finished.png`, or `recording-sample.mp4` was created.
-
-## Checks completed
-
-- PASS: `pnpm --filter @ubos/shared build`
-- PASS: `pnpm --filter @ubos/web typecheck`
-- PASS: `pnpm --filter @ubos/web exec tsc -p tsconfig.test.json && node --test apps/web/dist-test/app/control-room/workspace/scene-routing.test.js apps/web/dist-test/lib/program-pipeline/program-ownership.test.js` (Node emitted a module type warning, but all 33 tests passed.)
-- PASS: `git diff --check`
-
-## Result
-
-PARTIAL — remaining blocker: the workspace lacks both the required commit object `590e5b4` and a locally installed Windows-host Edge/Chrome executable, so the requested genuine browser certification cannot be completed from this environment.
+Not captured in this container: no Chromium/Edge executable was available. Required filenames were intentionally not faked.

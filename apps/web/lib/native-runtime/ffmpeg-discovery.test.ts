@@ -68,9 +68,14 @@ test('resolveExecutable: FFMPEG_PATH env var overrides PATH lookup', async (t) =
     else process.env['FFMPEG_PATH'] = original;
   });
 
+  const pathResolved = await resolveExecutable('ffmpeg');
+  if (!pathResolved) {
+    t.skip('ffmpeg not available on PATH for fallback test');
+    return;
+  }
   process.env['FFMPEG_PATH'] = '/nonexistent/path/ffmpeg';
   const resolved = await resolveExecutable('ffmpeg');
-  // Should fall back to PATH lookup and still resolve on this system.
+  // Should fall back to PATH lookup and still resolve on systems that provide ffmpeg.
   assert.ok(resolved !== null, 'Should fall back to PATH when configured path is missing');
   assert.ok(resolved.path.length > 0);
   assert.ok(resolved.versionOutput.includes('ffmpeg'));
@@ -109,6 +114,11 @@ test('resolveExecutable: FFPROBE_PATH env var is respected', async (t) => {
     else process.env['FFPROBE_PATH'] = original;
   });
 
+  const pathResolved = await resolveExecutable('ffprobe');
+  if (!pathResolved) {
+    t.skip('ffprobe not available on PATH for fallback test');
+    return;
+  }
   process.env['FFPROBE_PATH'] = '/nonexistent/ffprobe';
   const resolved = await resolveExecutable('ffprobe');
   // Falls back to PATH
@@ -140,18 +150,24 @@ test('which output newline is stripped from reported path', () => {
 
 test('resolveExecutable returns non-null for ffmpeg on this host', async (t) => {
   const resolved = await resolveExecutable('ffmpeg');
-  if (!resolved) t.skip('ffmpeg not installed');
-  assert.ok(resolved!.path.length > 0, 'path must be non-empty');
-  assert.ok(resolved!.versionOutput.length > 0, 'versionOutput must be non-empty');
-  const parsed = parseVersion(resolved!.versionOutput, 'ffmpeg');
-  assert.equal(parsed.ok, true, `Version must be parseable, got: ${resolved!.versionOutput.slice(0, 80)}`);
+  if (!resolved) {
+    t.skip('ffmpeg not installed');
+    return;
+  }
+  assert.ok(resolved.path.length > 0, 'path must be non-empty');
+  assert.ok(resolved.versionOutput.length > 0, 'versionOutput must be non-empty');
+  const parsed = parseVersion(resolved.versionOutput, 'ffmpeg');
+  assert.equal(parsed.ok, true, `Version must be parseable, got: ${resolved.versionOutput.slice(0, 80)}`);
 });
 
 test('resolveExecutable returns non-null for ffprobe on this host', async (t) => {
   const resolved = await resolveExecutable('ffprobe');
-  if (!resolved) t.skip('ffprobe not installed');
-  assert.ok(resolved!.path.length > 0);
-  const parsed = parseVersion(resolved!.versionOutput, 'ffprobe');
+  if (!resolved) {
+    t.skip('ffprobe not installed');
+    return;
+  }
+  assert.ok(resolved.path.length > 0);
+  const parsed = parseVersion(resolved.versionOutput, 'ffprobe');
   assert.equal(parsed.ok, true);
 });
 

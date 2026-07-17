@@ -550,3 +550,13 @@ PARTIAL — Unit tests PASS. Browser visual evidence PENDING (requires browser o
 - Status: PARTIAL.
 - Completed: repaired stale live MediaStream fallback in Control Room scene monitor binding; added focused scene routing regression tests; documented Native Recording panel trace and evidence location.
 - Remaining blocker: real Chromium screenshot evidence was not completed, so milestone PASS cannot be claimed.
+
+## 2026-07-17 — Control Room Scene Routing and Native Recording UI Regression
+
+Status: PARTIAL
+
+- Repaired/locked scene routing behavior with focused tests for independent Program/Preview source resolution, Preview isolation, CUT/TAKE/AUTO Program binding, stale Scene A stream prevention, legitimate shared stream preservation, and recording capture following Program.
+- Restored Native Recording panel visibility in the default Director workspace while preserving existing panel registry and Broadcast menu paths.
+- Added text evidence under `artifacts/scene-routing-recording-ui/`.
+- Browser screenshot evidence remains pending because no Chromium/Edge executable is available in this container.
+- Native runtime validation remains blocked because FFmpeg/FFprobe are missing from this host.

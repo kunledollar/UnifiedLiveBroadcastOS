@@ -70,7 +70,10 @@ test('getNativeRuntimeStatus returns connected:true and reports FFmpeg/FFprobe s
   const status = await getNativeRuntimeStatus();
   assert.equal(status.host, 'next-server');
   assert.equal(status.connected, true);
-  if (status.ffmpeg.state !== 'AVAILABLE') t.skip('FFmpeg not available on this host');
+  if (status.ffmpeg.state !== 'AVAILABLE') {
+    t.skip('FFmpeg not available on this host');
+    return;
+  }
   assert.ok(status.ffmpeg.path, 'ffmpeg path must be non-null when AVAILABLE');
   assert.ok(status.ffmpeg.version, 'ffmpeg version must be non-null when AVAILABLE');
   assert.equal(status.ffprobe.state, 'AVAILABLE', 'ffprobe must be AVAILABLE when ffmpeg is');

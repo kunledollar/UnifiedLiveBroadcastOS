@@ -321,3 +321,11 @@ The central question for every subsystem is:
 
 - Program/Preview Monitor: repaired stale live stream fallback so monitor media follows selected scene source IDs.
 - Native Recording UI: existing Recording Runtime panel is the intended production UI surface; visibility evidence is tracked under `artifacts/scene-routing-recording-ui/`.
+
+## 2026-07-17 Subsystem Matrix Update — Scene Routing / Recording UI
+
+- Production Graph: Program owner is `program.sceneId`; Preview owner is `preview.sceneId`.
+- Source Registry: live source streams are retained by source ID and resolved per selected scene; no monitor may borrow an unrelated stale stream as visual fallback.
+- Monitor Rendering: Program and Preview have independent video elements and independent source IDs/stream IDs in runtime evidence.
+- Recording: browser/native handoff captures the authoritative Program monitor first and falls back only to the resolved Program scene stream.
+- Workspace Manager: the registered Recording panel is visible in Director and Solo Streamer production workspaces.

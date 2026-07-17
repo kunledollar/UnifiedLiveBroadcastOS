@@ -537,3 +537,14 @@ Duplicate check: **No visually identical layouts. All 9 presets produce distinct
 - Repair: scene-to-live-media resolution now binds Program and Preview monitors to the selected scene's own visible source ID and live stream; unrelated first-stream fallback is no longer used for scene rendering.
 - Native Recording visibility: the existing `RecordingRuntimePanel` remains the intended implementation and is exposed through the production Operations Console recording tab/menu path with explicit native blocked reason and browser-local fallback state.
 - Evidence: `artifacts/scene-routing-recording-ui/trace-report.md`, `measurements.json`, and `report.html` record the code-level trace. Browser screenshots remain a blocker for full PASS.
+
+## 2026-07-17 — Control Room Scene Routing and Native Recording UI Regression Repair
+
+- Status: PARTIAL.
+- Scene routing root cause: Program/Preview labels followed current production state, but live media could remain visually stale when monitor media fell back to an unrelated first live stream instead of the selected scene's own resolved source stream.
+- Scene routing repair: Program and Preview now use independent `resolveSceneLiveMedia(scene, liveSourceStreams)` bindings and regression tests prove Preview-only changes do not mutate Program, CUT/TAKE/AUTO update Program binding, Scene A streams are not reused for B/C, shared source streams remain active when intentionally shared, and recording evidence follows authoritative Program.
+- Native Recording root cause: `RecordingRuntimePanel` and registry/menu paths existed, but the default Director production workspace did not expose the recording panel, making the native controls non-obvious in the tested Control Room workspace.
+- Native Recording repair: the Director preset now includes the registered Recording panel; Solo Streamer remains a recording workspace and Broadcast menu/operations-tab paths remain available.
+- Evidence: text runtime trace and measurements are stored under `artifacts/scene-routing-recording-ui/`.
+- Browser limitation: no Chromium/Edge executable was present in the container, so required PNG screenshot evidence remains pending and PASS cannot be claimed.
+- Validation: shared tests PASS; web tests PASS with FFmpeg/FFprobe-dependent cases skipped where host binaries are missing; web typecheck PASS; `validate:v512-native-runtime` fails because FFmpeg/FFprobe are absent from this host.
