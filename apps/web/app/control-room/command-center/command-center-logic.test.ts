@@ -62,7 +62,11 @@ function createRegistry(): WorkspacePanelRegistry {
 test('extra panel definitions are valid workspace-manager metadata', () => {
   for (const definition of createCommandCenterExtraPanelDefinitions()) {
     const issues = validatePanelDefinition(definition);
-    assert.deepEqual(issues, [], `panel ${definition.id} should be valid: ${JSON.stringify(issues)}`);
+    assert.deepEqual(
+      issues,
+      [],
+      `panel ${definition.id} should be valid: ${JSON.stringify(issues)}`,
+    );
   }
 });
 
@@ -77,7 +81,10 @@ test('applying a preset never hides Program or Preview monitors', () => {
   const registry = createRegistry();
   for (const preset of workspacePresetList) {
     applyPresetToRegistry(registry, preset);
-    for (const monitorId of [WORKSPACE_PANEL_IDS.programMonitor, WORKSPACE_PANEL_IDS.previewMonitor]) {
+    for (const monitorId of [
+      WORKSPACE_PANEL_IDS.programMonitor,
+      WORKSPACE_PANEL_IDS.previewMonitor,
+    ]) {
       const state = registry.getPanelState(monitorId);
       assert.ok(state, `monitor ${monitorId} must stay registered`);
       assert.equal(state.visible, true, `preset ${preset.id} must keep ${monitorId} visible`);
@@ -158,7 +165,10 @@ test('right dock sections all map to registered panels', () => {
     'system-health',
   ] as const) {
     const panelId = panelForRightDockSection(section);
-    assert.ok(registry.getPanel(panelId), `section ${section} maps to unregistered panel ${panelId}`);
+    assert.ok(
+      registry.getPanel(panelId),
+      `section ${section} maps to unregistered panel ${panelId}`,
+    );
     assert.ok(operationsTabForPanel(panelId), `panel ${panelId} needs an operations tab mapping`);
   }
 });
@@ -236,18 +246,20 @@ test('malformed prefs are rejected instead of breaking the shell', () => {
 });
 
 test('command center prefs migrate v1 and clamp valid zone sizes', () => {
-  const parsed = parseCommandCenterPrefs(JSON.stringify({
-    version: 1,
-    activeBottomTab: 'graphics',
-    expandedZones: ['left-dock', 'invalid-zone'],
-    zoneSizes: {
-      'left-dock': 999,
-      'right-dock': 100,
-      'bottom-workspace': 240,
-      floating: 1000,
-      bad: 300,
-    },
-  }));
+  const parsed = parseCommandCenterPrefs(
+    JSON.stringify({
+      version: 1,
+      activeBottomTab: 'graphics',
+      expandedZones: ['left-dock', 'invalid-zone'],
+      zoneSizes: {
+        'left-dock': 999,
+        'right-dock': 100,
+        'bottom-workspace': 240,
+        floating: 1000,
+        bad: 300,
+      },
+    }),
+  );
   assert.ok(parsed);
   assert.equal(parsed.version, 2);
   assert.deepEqual(parsed.expandedZones, ['left-dock']);
@@ -265,14 +277,24 @@ test('command center prefs migrate v1 and clamp valid zone sizes', () => {
 test('all 9 presets are present and resolve', () => {
   assert.equal(workspacePresetList.length, 9, 'must have exactly 9 presets');
   const expectedIds = [
-    'director', 'solo-streamer', 'technical-director', 'audio-engineer',
-    'graphics-operator', 'replay-operator', 'streaming-operator', 'monitor-wall', 'compact',
+    'director',
+    'solo-streamer',
+    'technical-director',
+    'audio-engineer',
+    'graphics-operator',
+    'replay-operator',
+    'streaming-operator',
+    'monitor-wall',
+    'compact',
   ];
   for (const id of expectedIds) {
     const preset = workspacePresetList.find((p) => p.id === id);
     assert.ok(preset, `preset "${id}" must exist in the preset list`);
     assert.ok(preset.name.length > 0, `preset "${id}" must have a non-empty name`);
-    assert.ok(preset.visiblePanels.length > 0, `preset "${id}" must have at least one visible panel`);
+    assert.ok(
+      preset.visiblePanels.length > 0,
+      `preset "${id}" must have at least one visible panel`,
+    );
   }
 });
 
@@ -284,7 +306,8 @@ test('each preset produces a distinct visible panel set or different zone config
 
   for (const preset of workspacePresetList) {
     applyPresetToRegistry(registry, preset);
-    const visiblePanels = registry.getPanelStates()
+    const visiblePanels = registry
+      .getPanelStates()
       .filter((s: { visible: boolean }) => s.visible)
       .map((s: { panelId: string }) => s.panelId)
       .sort()
@@ -292,29 +315,56 @@ test('each preset produces a distinct visible panel set or different zone config
     // Include zone collapse state in the signature: compact differs from director via zones.
     const collapsedZones = preset.collapsedZones.slice().sort().join(',');
     const centerEmphasis = preset.centerEmphasis;
-    signaturesByPreset.set(preset.id, `panels:${visiblePanels}|zones:${collapsedZones}|emphasis:${centerEmphasis}`);
+    signaturesByPreset.set(
+      preset.id,
+      `panels:${visiblePanels}|zones:${collapsedZones}|emphasis:${centerEmphasis}`,
+    );
   }
 
   // Every preset must produce a non-empty visible panel set.
   for (const [presetId, signature] of signaturesByPreset) {
-    assert.ok(signature.includes('program-monitor'), `preset "${presetId}" must keep program-monitor visible`);
-    assert.ok(signature.includes('preview-monitor'), `preset "${presetId}" must keep preview-monitor visible`);
+    assert.ok(
+      signature.includes('program-monitor'),
+      `preset "${presetId}" must keep program-monitor visible`,
+    );
+    assert.ok(
+      signature.includes('preview-monitor'),
+      `preset "${presetId}" must keep preview-monitor visible`,
+    );
   }
 
   // These presets have distinct panel sets (different explicit visible/hidden lists).
   const directorPanels = signaturesByPreset.get('director')!;
   const soloStreamerPanels = signaturesByPreset.get('solo-streamer')!;
   const audioEngineerPanels = signaturesByPreset.get('audio-engineer')!;
-  assert.notEqual(directorPanels, soloStreamerPanels, 'director and solo-streamer must differ in panel set or zone config');
-  assert.notEqual(directorPanels, audioEngineerPanels, 'director and audio-engineer must differ in panel set or zone config');
+  assert.notEqual(
+    directorPanels,
+    soloStreamerPanels,
+    'director and solo-streamer must differ in panel set or zone config',
+  );
+  assert.notEqual(
+    directorPanels,
+    audioEngineerPanels,
+    'director and audio-engineer must differ in panel set or zone config',
+  );
 
   // Compact achieves its "maximized center" effect via zone collapsing, not panel hiding.
   // Verify it collapses all three adjustable zones.
   const compactPreset = workspacePresets.compact;
   assert.ok(compactPreset.collapsedZones.includes('left-dock'), 'compact must collapse left-dock');
-  assert.ok(compactPreset.collapsedZones.includes('right-dock'), 'compact must collapse right-dock');
-  assert.ok(compactPreset.collapsedZones.includes('bottom-workspace'), 'compact must collapse bottom-workspace');
-  assert.equal(workspacePresets.director.collapsedZones.length, 0, 'director must collapse no zones');
+  assert.ok(
+    compactPreset.collapsedZones.includes('right-dock'),
+    'compact must collapse right-dock',
+  );
+  assert.ok(
+    compactPreset.collapsedZones.includes('bottom-workspace'),
+    'compact must collapse bottom-workspace',
+  );
+  assert.equal(
+    workspacePresets.director.collapsedZones.length,
+    0,
+    'director must collapse no zones',
+  );
 
   // Compact and director must differ in their effective layout (different zone state).
   assert.notEqual(
@@ -359,11 +409,17 @@ test('layout lock must not block applyPresetToRegistry', () => {
 
   // Apply director first.
   applyPresetToRegistry(registry, workspacePresets.director);
-  const directorVisible = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId);
+  const directorVisible = registry
+    .getPanelStates()
+    .filter((s) => s.visible)
+    .map((s) => s.panelId);
 
   // Apply solo-streamer next — this must succeed and change panel states.
   applyPresetToRegistry(registry, workspacePresets['solo-streamer']);
-  const soloStreamerVisible = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId);
+  const soloStreamerVisible = registry
+    .getPanelStates()
+    .filter((s) => s.visible)
+    .map((s) => s.panelId);
 
   // The panel sets must differ.
   assert.notDeepEqual(
@@ -468,10 +524,20 @@ test('switching presets changes the active panel set (badge/menu must reflect ne
 
   // Director → Audio Engineer: audio panels should appear, routing hidden panels should change.
   applyPresetToRegistry(registry, workspacePresets.director);
-  const directorVisible = new Set(registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId));
+  const directorVisible = new Set(
+    registry
+      .getPanelStates()
+      .filter((s) => s.visible)
+      .map((s) => s.panelId),
+  );
 
   applyPresetToRegistry(registry, workspacePresets['audio-engineer']);
-  const audioVisible = new Set(registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId));
+  const audioVisible = new Set(
+    registry
+      .getPanelStates()
+      .filter((s) => s.visible)
+      .map((s) => s.panelId),
+  );
 
   assert.notDeepEqual(
     [...directorVisible].sort(),
@@ -480,12 +546,18 @@ test('switching presets changes the active panel set (badge/menu must reflect ne
   );
 
   // Audio Engineer should include audio panels.
-  assert.ok(audioVisible.has(WORKSPACE_PANEL_IDS.audioMixer), 'audio-engineer must show audioMixer');
+  assert.ok(
+    audioVisible.has(WORKSPACE_PANEL_IDS.audioMixer),
+    'audio-engineer must show audioMixer',
+  );
   assert.ok(audioVisible.has(WORKSPACE_PANEL_IDS.masterBus), 'audio-engineer must show masterBus');
   // Director should NOT include audio panels by default (defaultCollapsed, not hidden, but visible=false
   // because collapsed means not in default visible list).
-  assert.ok(!directorVisible.has(WORKSPACE_PANEL_IDS.audioMixer) || directorVisible.has(WORKSPACE_PANEL_IDS.audioMixer),
-    'presence of audioMixer in director is preset-defined — just confirm the sets differ overall');
+  assert.ok(
+    !directorVisible.has(WORKSPACE_PANEL_IDS.audioMixer) ||
+      directorVisible.has(WORKSPACE_PANEL_IDS.audioMixer),
+    'presence of audioMixer in director is preset-defined — just confirm the sets differ overall',
+  );
 });
 
 test('all 9 preset names are distinct (menu can show unique labels)', () => {
@@ -503,15 +575,35 @@ test('every preset maps to a bottom-workspace tab — presetBottomTab never retu
 
 test('per-preset saved layouts are isolated — saving director does not affect compact', () => {
   const directorSave = {
-    panelStates: [{ panelId: 'program-monitor', zone: 'center-stage' as const, visible: true, collapsed: false }],
+    panelStates: [
+      {
+        panelId: 'program-monitor',
+        zone: 'center-stage' as const,
+        visible: true,
+        collapsed: false,
+      },
+    ],
     collapsedZones: [] as import('@ubos/shared').WorkspaceZoneId[],
-    zoneSizes: { 'left-dock': 320 } as Partial<Record<import('@ubos/shared').WorkspaceZoneId, number>>,
+    zoneSizes: { 'left-dock': 320 } as Partial<
+      Record<import('@ubos/shared').WorkspaceZoneId, number>
+    >,
     activeBottomTab: 'layers' as const,
     savedAt: '2026-07-16T00:00:00.000Z',
   };
   const compactSave = {
-    panelStates: [{ panelId: 'program-monitor', zone: 'center-stage' as const, visible: true, collapsed: false }],
-    collapsedZones: ['left-dock', 'right-dock', 'bottom-workspace'] as import('@ubos/shared').WorkspaceZoneId[],
+    panelStates: [
+      {
+        panelId: 'program-monitor',
+        zone: 'center-stage' as const,
+        visible: true,
+        collapsed: false,
+      },
+    ],
+    collapsedZones: [
+      'left-dock',
+      'right-dock',
+      'bottom-workspace',
+    ] as import('@ubos/shared').WorkspaceZoneId[],
     zoneSizes: {} as Partial<Record<import('@ubos/shared').WorkspaceZoneId, number>>,
     activeBottomTab: 'layers' as const,
     savedAt: '2026-07-16T01:00:00.000Z',
@@ -534,7 +626,11 @@ test('per-preset saved layouts are isolated — saving director does not affect 
 });
 
 test('parseSavedLayoutsStore rejects unknown version', () => {
-  assert.equal(parseSavedLayoutsStore('{"version":2,"presets":{}}'), null, 'version 2 must be rejected');
+  assert.equal(
+    parseSavedLayoutsStore('{"version":2,"presets":{}}'),
+    null,
+    'version 2 must be rejected',
+  );
   assert.equal(parseSavedLayoutsStore('not json'), null, 'invalid JSON must be rejected');
   assert.equal(parseSavedLayoutsStore('{}'), null, 'missing version must be rejected');
 });
@@ -553,7 +649,13 @@ test('resetLayout must restore current preset factory defaults without switching
 
   // Apply audio-engineer (simulates selecting the preset).
   applyPresetToRegistry(registry, workspacePresets['audio-engineer']);
-  const audioStates = JSON.stringify(registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort());
+  const audioStates = JSON.stringify(
+    registry
+      .getPanelStates()
+      .filter((s) => s.visible)
+      .map((s) => s.panelId)
+      .sort(),
+  );
 
   // Simulate some manual panel changes (open a hidden panel).
   // Apply director to "corrupt" the registry.
@@ -561,9 +663,19 @@ test('resetLayout must restore current preset factory defaults without switching
 
   // Reset should re-apply audio-engineer (the "current" preset), not director.
   applyPresetToRegistry(registry, workspacePresets['audio-engineer']);
-  const afterReset = JSON.stringify(registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort());
+  const afterReset = JSON.stringify(
+    registry
+      .getPanelStates()
+      .filter((s) => s.visible)
+      .map((s) => s.panelId)
+      .sort(),
+  );
 
-  assert.equal(audioStates, afterReset, 'resetting audio-engineer must restore its factory defaults (not director)');
+  assert.equal(
+    audioStates,
+    afterReset,
+    'resetting audio-engineer must restore its factory defaults (not director)',
+  );
 });
 
 test('lock state does not prevent applyPresetToRegistry from running', () => {
@@ -573,11 +685,21 @@ test('lock state does not prevent applyPresetToRegistry from running', () => {
 
   // Simulate locked state: apply director, note panels.
   applyPresetToRegistry(registry, workspacePresets.director);
-  const before = new Set(registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId));
+  const before = new Set(
+    registry
+      .getPanelStates()
+      .filter((s) => s.visible)
+      .map((s) => s.panelId),
+  );
 
   // Even "locked", calling applyPresetToRegistry must change the registry.
   applyPresetToRegistry(registry, workspacePresets.compact);
-  const after = new Set(registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId));
+  const after = new Set(
+    registry
+      .getPanelStates()
+      .filter((s) => s.visible)
+      .map((s) => s.panelId),
+  );
 
   // Compact has fewer visible panels (it collapses all zones, not panels, but the
   // visible set can still differ via preset visiblePanels declaration).
@@ -586,8 +708,15 @@ test('lock state does not prevent applyPresetToRegistry from running', () => {
     'compact must change the effective panel layout relative to director',
   );
   // The key assertion: compact's collapsedZones differ from director's.
-  assert.ok(workspacePresets.compact.collapsedZones.length > 0, 'compact must specify collapsed zones');
-  assert.equal(workspacePresets.director.collapsedZones.length, 0, 'director must have no collapsed zones');
+  assert.ok(
+    workspacePresets.compact.collapsedZones.length > 0,
+    'compact must specify collapsed zones',
+  );
+  assert.equal(
+    workspacePresets.director.collapsedZones.length,
+    0,
+    'director must have no collapsed zones',
+  );
 });
 
 test('only one preset is considered active at a time — preset IDs are unique', () => {
@@ -606,22 +735,30 @@ test('toolbar Save and Reset must call the same actions as menu items (action id
   const registry = createRegistry();
   for (const preset of workspacePresetList) {
     applyPresetToRegistry(registry, preset);
-    const stateA = JSON.stringify(registry.getPanelStates().map((s) => s.panelId + ':' + String(s.visible)).sort());
+    const stateA = JSON.stringify(
+      registry
+        .getPanelStates()
+        .map((s) => s.panelId + ':' + String(s.visible))
+        .sort(),
+    );
     applyPresetToRegistry(registry, preset);
-    const stateB = JSON.stringify(registry.getPanelStates().map((s) => s.panelId + ':' + String(s.visible)).sort());
-    assert.equal(stateA, stateB, `applyPresetToRegistry must be idempotent for preset "${preset.id}"`);
+    const stateB = JSON.stringify(
+      registry
+        .getPanelStates()
+        .map((s) => s.panelId + ':' + String(s.visible))
+        .sort(),
+    );
+    assert.equal(
+      stateA,
+      stateB,
+      `applyPresetToRegistry must be idempotent for preset "${preset.id}"`,
+    );
   }
 });
 
 test('corrupt or old localStorage format falls back to safe defaults (parseSavedLayoutsStore)', () => {
   // Each of these is a guard against real-world storage corruption scenarios.
-  const cases = [
-    'null',
-    '[]',
-    '"string"',
-    '{"version":1}',
-    '{"version":1,"presets":"not-object"}',
-  ];
+  const cases = ['null', '[]', '"string"', '{"version":1}', '{"version":1,"presets":"not-object"}'];
   for (const bad of cases) {
     const result = parseSavedLayoutsStore(bad);
     assert.equal(result, null, `corrupt format "${bad}" must return null (safe fallback)`);
@@ -640,7 +777,10 @@ test('page hydration: restored activePresetId must match the workspacePresetList
   assert.ok(found, `restored preset "${storedPresetId}" must exist in workspacePresetList`);
   assert.equal(found.id, storedPresetId, 'found preset id must match stored id');
   // workspacePresets map must also contain it.
-  assert.ok(workspacePresets[storedPresetId], 'workspacePresets map must contain the restored preset');
+  assert.ok(
+    workspacePresets[storedPresetId],
+    'workspacePresets map must contain the restored preset',
+  );
 });
 
 test('switching workspace changes visible tabs in the bottom dock (preset activeBottomTab)', () => {
@@ -678,7 +818,11 @@ test('locking layout must not affect workspaceModeForPreset mapping', () => {
   ];
   for (const [presetId, expectedMode] of expectedMappings) {
     const mode = workspaceModeForPreset(presetId as Parameters<typeof workspaceModeForPreset>[0]);
-    assert.equal(mode, expectedMode, `preset "${presetId}" must map to workspace mode "${expectedMode}"`);
+    assert.equal(
+      mode,
+      expectedMode,
+      `preset "${presetId}" must map to workspace mode "${expectedMode}"`,
+    );
   }
 });
 
@@ -733,7 +877,10 @@ test('each preset has a distinct zone/geometry signature at 1536x960', () => {
 
   // Director must not collapse any zone (at 1536px).
   const directorSig = signatures.get('director')!;
-  assert.ok(!directorSig.includes('left:collapsed'), 'director must not collapse left dock at 1536px');
+  assert.ok(
+    !directorSig.includes('left:collapsed'),
+    'director must not collapse left dock at 1536px',
+  );
   // Note: right dock force-collapse at ~1500px is tested separately; at 1536px it stays visible.
 });
 
@@ -743,8 +890,16 @@ test('applying Director changes shell to open-dock geometry', () => {
     viewportHeight: 960,
     preset: workspacePresets.director,
   });
-  assert.equal(layout.zones['left-dock'].collapsed, false, 'director must have left dock visible at 1536px');
-  assert.equal(layout.zones['bottom-workspace'].collapsed, false, 'director must have bottom workspace visible');
+  assert.equal(
+    layout.zones['left-dock'].collapsed,
+    false,
+    'director must have left dock visible at 1536px',
+  );
+  assert.equal(
+    layout.zones['bottom-workspace'].collapsed,
+    false,
+    'director must have bottom workspace visible',
+  );
   assert.equal(layout.presetId, 'director');
   assert.equal(layout.centerEmphasis, 'balanced');
   // Director bottom workspace is 280px.
@@ -759,7 +914,11 @@ test('applying Audio Engineer collapses left dock and expands bottom workspace',
   });
   assert.equal(layout.zones['left-dock'].collapsed, true, 'audio-engineer must collapse left dock');
   assert.equal(layout.zones['right-dock'].collapsed, false, 'audio-engineer right dock stays open');
-  assert.equal(layout.zones['bottom-workspace'].collapsed, false, 'audio-engineer must have bottom workspace visible');
+  assert.equal(
+    layout.zones['bottom-workspace'].collapsed,
+    false,
+    'audio-engineer must have bottom workspace visible',
+  );
   // Audio Engineer bottom workspace is expanded beyond Director's 280px.
   assert.ok(
     layout.zones['bottom-workspace'].rect.height >= 340,
@@ -781,7 +940,8 @@ test('applying Graphics Operator changes bottom workspace height relative to Dir
   });
   // Graphics Operator should have a taller bottom workspace for the graphics library.
   assert.ok(
-    gfxLayout.zones['bottom-workspace'].rect.height > dirLayout.zones['bottom-workspace'].rect.height,
+    gfxLayout.zones['bottom-workspace'].rect.height >
+      dirLayout.zones['bottom-workspace'].rect.height,
     `graphics-operator bottom workspace (${gfxLayout.zones['bottom-workspace'].rect.height}px) must exceed director (${dirLayout.zones['bottom-workspace'].rect.height}px)`,
   );
 });
@@ -793,7 +953,11 @@ test('applying Streaming Operator exposes right dock at expanded width', () => {
     preset: workspacePresets['streaming-operator'],
   });
   assert.equal(layout.zones['left-dock'].collapsed, true, 'streaming-operator collapses left dock');
-  assert.equal(layout.zones['right-dock'].collapsed, false, 'streaming-operator keeps right dock open');
+  assert.equal(
+    layout.zones['right-dock'].collapsed,
+    false,
+    'streaming-operator keeps right dock open',
+  );
   // Right dock must be wider than Director's default 270px for outputs and telemetry.
   assert.ok(
     layout.zones['right-dock'].rect.width >= 300,
@@ -809,7 +973,11 @@ test('applying Monitor Wall collapses both side docks and expands bottom workspa
   });
   assert.equal(layout.zones['left-dock'].collapsed, true, 'monitor-wall collapses left dock');
   assert.equal(layout.zones['right-dock'].collapsed, true, 'monitor-wall collapses right dock');
-  assert.equal(layout.zones['bottom-workspace'].collapsed, false, 'monitor-wall keeps bottom workspace open');
+  assert.equal(
+    layout.zones['bottom-workspace'].collapsed,
+    false,
+    'monitor-wall keeps bottom workspace open',
+  );
   // Monitor Wall bottom workspace must be expanded for the monitor grid.
   assert.ok(
     layout.zones['bottom-workspace'].rect.height >= 360,
@@ -835,9 +1003,17 @@ test('applying Compact collapses all intended zones', () => {
   });
   assert.equal(layout.zones['left-dock'].collapsed, true, 'compact must collapse left dock');
   assert.equal(layout.zones['right-dock'].collapsed, true, 'compact must collapse right dock');
-  assert.equal(layout.zones['bottom-workspace'].collapsed, true, 'compact must collapse bottom workspace');
+  assert.equal(
+    layout.zones['bottom-workspace'].collapsed,
+    true,
+    'compact must collapse bottom workspace',
+  );
   // Bottom workspace shows only its tab bar (collapsedSize = 42px).
-  assert.equal(layout.zones['bottom-workspace'].rect.height, 42, 'compact bottom workspace shows tab bar only');
+  assert.equal(
+    layout.zones['bottom-workspace'].rect.height,
+    42,
+    'compact bottom workspace shows tab bar only',
+  );
   // Center stage must be maximized.
   const dirLayout = calculateWorkspaceLayout({
     viewportWidth: 1536,
@@ -859,7 +1035,11 @@ test('toggle left dock changes rendered width/visibility in the layout', () => {
     preset: workspacePresets.director,
     collapsedZones: [],
   });
-  assert.equal(baseLayout.zones['left-dock'].collapsed, false, 'director left dock is initially open');
+  assert.equal(
+    baseLayout.zones['left-dock'].collapsed,
+    false,
+    'director left dock is initially open',
+  );
 
   const afterToggle = calculateWorkspaceLayout({
     viewportWidth: 1536,
@@ -867,7 +1047,11 @@ test('toggle left dock changes rendered width/visibility in the layout', () => {
     preset: workspacePresets.director,
     collapsedZones: ['left-dock'],
   });
-  assert.equal(afterToggle.zones['left-dock'].collapsed, true, 'left dock must be collapsed after toggle');
+  assert.equal(
+    afterToggle.zones['left-dock'].collapsed,
+    true,
+    'left dock must be collapsed after toggle',
+  );
   assert.equal(afterToggle.zones['left-dock'].rect.width, 0, 'collapsed left dock has zero width');
   // Center stage must be wider after left dock collapses.
   assert.ok(
@@ -893,7 +1077,9 @@ test('toggle right dock changes rendered width/visibility in the layout', () => 
   });
   assert.equal(afterToggle.zones['right-dock'].collapsed, true);
   assert.equal(afterToggle.zones['right-dock'].rect.width, 0);
-  assert.ok(afterToggle.zones['center-stage'].rect.width > baseLayout.zones['center-stage'].rect.width);
+  assert.ok(
+    afterToggle.zones['center-stage'].rect.width > baseLayout.zones['center-stage'].rect.width,
+  );
 });
 
 test('toggle bottom workspace changes rendered height/visibility in the layout', () => {
@@ -917,7 +1103,9 @@ test('toggle bottom workspace changes rendered height/visibility in the layout',
   // Collapsed bottom workspace shows only its tab bar (42px).
   assert.equal(afterToggle.zones['bottom-workspace'].rect.height, 42);
   // Center stage must be taller after bottom workspace collapses.
-  assert.ok(afterToggle.zones['center-stage'].rect.height > baseLayout.zones['center-stage'].rect.height);
+  assert.ok(
+    afterToggle.zones['center-stage'].rect.height > baseLayout.zones['center-stage'].rect.height,
+  );
 });
 
 test('menu toggles and icon toggles use identical zone logic (same collapsedZones input)', () => {
@@ -949,8 +1137,16 @@ test('shell consumes current Workspace Manager zones — layout has correct pres
       viewportHeight: 960,
       preset,
     });
-    assert.equal(layout.presetId, preset.id, `layout.presetId must equal preset.id for "${preset.id}"`);
-    assert.equal(layout.centerEmphasis, preset.centerEmphasis, `layout.centerEmphasis must reflect preset for "${preset.id}"`);
+    assert.equal(
+      layout.presetId,
+      preset.id,
+      `layout.presetId must equal preset.id for "${preset.id}"`,
+    );
+    assert.equal(
+      layout.centerEmphasis,
+      preset.centerEmphasis,
+      `layout.centerEmphasis must reflect preset for "${preset.id}"`,
+    );
   }
 });
 
@@ -962,11 +1158,21 @@ test('Program and Preview remain visible in every preset layout (not covered by 
       preset,
     });
     // Program and Preview rects must be non-zero (they live in center-stage which is never collapsed).
-    assert.ok(layout.programRect.width > 0, `preset "${preset.id}" must have a visible Program rect`);
-    assert.ok(layout.previewRect.width > 0, `preset "${preset.id}" must have a visible Preview rect`);
+    assert.ok(
+      layout.programRect.width > 0,
+      `preset "${preset.id}" must have a visible Program rect`,
+    );
+    assert.ok(
+      layout.previewRect.width > 0,
+      `preset "${preset.id}" must have a visible Preview rect`,
+    );
     // No zone must overlap Program or Preview (uses validateLayoutResult).
     const issues = validateLayoutResult(layout);
-    assert.deepEqual(issues, [], `preset "${preset.id}" at 1536x960 must have no layout violations: ${JSON.stringify(issues)}`);
+    assert.deepEqual(
+      issues,
+      [],
+      `preset "${preset.id}" at 1536x960 must have no layout violations: ${JSON.stringify(issues)}`,
+    );
   }
 });
 
@@ -997,13 +1203,33 @@ test('responsive rules do not flatten all presets at 1536x960 desktop width', ()
   assert.equal(dirLayout.zones['left-dock'].collapsed, false, 'director: left dock open at 1536px');
 
   // Compact: both docks and bottom workspace collapsed.
-  assert.equal(compactLayout.zones['left-dock'].collapsed, true, 'compact: left dock collapsed at 1536px');
-  assert.equal(compactLayout.zones['right-dock'].collapsed, true, 'compact: right dock collapsed at 1536px');
-  assert.equal(compactLayout.zones['bottom-workspace'].collapsed, true, 'compact: bottom workspace collapsed at 1536px');
+  assert.equal(
+    compactLayout.zones['left-dock'].collapsed,
+    true,
+    'compact: left dock collapsed at 1536px',
+  );
+  assert.equal(
+    compactLayout.zones['right-dock'].collapsed,
+    true,
+    'compact: right dock collapsed at 1536px',
+  );
+  assert.equal(
+    compactLayout.zones['bottom-workspace'].collapsed,
+    true,
+    'compact: bottom workspace collapsed at 1536px',
+  );
 
   // Audio Engineer: left dock collapsed (per preset definition).
-  assert.equal(audioLayout.zones['left-dock'].collapsed, true, 'audio-engineer: left dock collapsed at 1536px');
-  assert.equal(audioLayout.zones['right-dock'].collapsed, false, 'audio-engineer: right dock open at 1536px');
+  assert.equal(
+    audioLayout.zones['left-dock'].collapsed,
+    true,
+    'audio-engineer: left dock collapsed at 1536px',
+  );
+  assert.equal(
+    audioLayout.zones['right-dock'].collapsed,
+    false,
+    'audio-engineer: right dock open at 1536px',
+  );
 
   // The center stage width must differ between all three.
   assert.ok(
@@ -1025,13 +1251,25 @@ test('lock blocks drag-resize but not zone toggles, reset, save, or preset chang
 
   // Simulating a "locked" state: preset application still runs.
   applyPresetToRegistry(registry, workspacePresets.director);
-  const directorStates = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort();
+  const directorStates = registry
+    .getPanelStates()
+    .filter((s) => s.visible)
+    .map((s) => s.panelId)
+    .sort();
 
   // Even "locked", applyPresetToRegistry must produce a different result for another preset.
   applyPresetToRegistry(registry, workspacePresets['audio-engineer']);
-  const audioStates = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort();
+  const audioStates = registry
+    .getPanelStates()
+    .filter((s) => s.visible)
+    .map((s) => s.panelId)
+    .sort();
 
-  assert.notDeepEqual(directorStates, audioStates, 'lock must not prevent preset application logic');
+  assert.notDeepEqual(
+    directorStates,
+    audioStates,
+    'lock must not prevent preset application logic',
+  );
 
   // Zone toggle: the layout engine always responds to collapsedZones input.
   const lockedEquivalentLayout = calculateWorkspaceLayout({
@@ -1040,12 +1278,19 @@ test('lock blocks drag-resize but not zone toggles, reset, save, or preset chang
     preset: workspacePresets.director,
     collapsedZones: ['left-dock'],
   });
-  assert.equal(lockedEquivalentLayout.zones['left-dock'].collapsed, true,
-    'layout engine responds to collapsedZones regardless of lock state');
+  assert.equal(
+    lockedEquivalentLayout.zones['left-dock'].collapsed,
+    true,
+    'layout engine responds to collapsedZones regardless of lock state',
+  );
 
   // Reset: applyPresetToRegistry for the current preset always restores factory defaults.
   applyPresetToRegistry(registry, workspacePresets['audio-engineer']);
-  const afterReset = registry.getPanelStates().filter((s) => s.visible).map((s) => s.panelId).sort();
+  const afterReset = registry
+    .getPanelStates()
+    .filter((s) => s.visible)
+    .map((s) => s.panelId)
+    .sort();
   assert.deepEqual(audioStates, afterReset, 'reset restores current-preset factory defaults');
 });
 
@@ -1053,19 +1298,27 @@ test('preset zoneSizeDefaults produce distinct bottom workspace heights', () => 
   // Audio Engineer and Monitor Wall specify larger bottom workspace heights than Director.
   const VIEWPORT = { viewportWidth: 1920, viewportHeight: 1080 };
   const dirLayout = calculateWorkspaceLayout({ ...VIEWPORT, preset: workspacePresets.director });
-  const audioLayout = calculateWorkspaceLayout({ ...VIEWPORT, preset: workspacePresets['audio-engineer'] });
-  const mwLayout = calculateWorkspaceLayout({ ...VIEWPORT, preset: workspacePresets['monitor-wall'] });
+  const audioLayout = calculateWorkspaceLayout({
+    ...VIEWPORT,
+    preset: workspacePresets['audio-engineer'],
+  });
+  const mwLayout = calculateWorkspaceLayout({
+    ...VIEWPORT,
+    preset: workspacePresets['monitor-wall'],
+  });
 
   // Director: 280px default.
   assert.equal(dirLayout.zones['bottom-workspace'].rect.height, 280);
   // Audio Engineer: expanded for mixer.
   assert.ok(
-    audioLayout.zones['bottom-workspace'].rect.height > dirLayout.zones['bottom-workspace'].rect.height,
+    audioLayout.zones['bottom-workspace'].rect.height >
+      dirLayout.zones['bottom-workspace'].rect.height,
     `audio-engineer bottom (${audioLayout.zones['bottom-workspace'].rect.height}px) must exceed director (280px)`,
   );
   // Monitor Wall: even taller for monitor grid.
   assert.ok(
-    mwLayout.zones['bottom-workspace'].rect.height > dirLayout.zones['bottom-workspace'].rect.height,
+    mwLayout.zones['bottom-workspace'].rect.height >
+      dirLayout.zones['bottom-workspace'].rect.height,
     `monitor-wall bottom (${mwLayout.zones['bottom-workspace'].rect.height}px) must exceed director (280px)`,
   );
 });
@@ -1087,20 +1340,25 @@ test('user drag-resize overrides preset zoneSizeDefaults', () => {
 });
 
 test('Native Recording panel is registered and exposed by production workspaces', async () => {
-  const [{ WORKSPACE_PANEL_IDS, workspacePresets }, { panelForOperationsTab, operationsTabForPanel }] = await Promise.all([
-    import('@ubos/shared'),
-    import('./command-center-logic.js'),
-  ]);
+  const [
+    { WORKSPACE_PANEL_IDS, workspacePresets },
+    { panelForOperationsTab, operationsTabForPanel },
+  ] = await Promise.all([import('@ubos/shared'), import('./command-center-logic.js')]);
 
   assert.equal(panelForOperationsTab('recording'), WORKSPACE_PANEL_IDS.recording);
   assert.equal(operationsTabForPanel(WORKSPACE_PANEL_IDS.recording), 'recording');
   assert.ok(workspacePresets.director.visiblePanels.includes(WORKSPACE_PANEL_IDS.recording));
-  assert.ok(workspacePresets['solo-streamer'].visiblePanels.includes(WORKSPACE_PANEL_IDS.recording));
+  assert.ok(
+    workspacePresets['solo-streamer'].visiblePanels.includes(WORKSPACE_PANEL_IDS.recording),
+  );
 });
 
 test('Control Room live monitor playback is awaited and does not key-recreate video elements', async () => {
   const { readFile } = await import('node:fs/promises');
-  const source = await readFile(new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`), 'utf8');
+  const source = await readFile(
+    new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`),
+    'utf8',
+  );
 
   assert.match(source, /function playVideoSafely[\s\S]*Promise<void>/);
   assert.match(source, /return playPromise[\s\S]*\.catch/);
@@ -1110,12 +1368,38 @@ test('Control Room live monitor playback is awaited and does not key-recreate vi
 
 test('local media runtime creates captureStream binding and revokes blob URLs only on cleanup', async () => {
   const { readFile } = await import('node:fs/promises');
-  const source = await readFile(new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`), 'utf8');
+  const source = await readFile(
+    new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`),
+    'utf8',
+  );
 
   assert.match(source, /createLocalMediaElementStream/);
-  assert.match(source, /video\.onloadedmetadata = markReady/);
+  assert.match(source, /video\.onloadedmetadata = \(\) =>/);
   assert.match(source, /video\.oncanplay = \(\) =>/);
+  assert.match(source, /await playVideoSafely[\s\S]*const stream = captureStream\(\)/);
   assert.match(source, /retainLiveSourceStream\(source\.id, stream\)/);
   assert.match(source, /URL\.revokeObjectURL\(url\)/);
   assert.match(source, /Local media file must be relinked before playback\./);
+});
+
+test('local media runtime persists assets, relinks existing sources, and keeps active blob URLs', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const workspace = await readFile(
+    new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`),
+    'utf8',
+  );
+  const browser = await readFile(
+    new URL('app/control-room/browsers/SourceBrowser.tsx', `file://${process.cwd()}/`),
+    'utf8',
+  );
+
+  assert.match(workspace, /UBOS_MEDIA_DB_NAME = 'ubos-managed-media-assets'/);
+  assert.match(workspace, /writeManagedMediaAsset/);
+  assert.match(workspace, /readManagedMediaAsset/);
+  assert.match(workspace, /'relink_required'/);
+  assert.match(workspace, /replaceMediaRuntimeForSource\(source\.id, record\.file\)/);
+  assert.match(workspace, /mediaUrl = URL\.createObjectURL\(file\)/);
+  assert.match(workspace, /id === sourceId[\s\S]*mediaUrl[\s\S]*assetId/);
+  assert.match(browser, /label="Relink Media"/);
+  assert.doesNotMatch(browser, /URL\.revokeObjectURL\(mediaUrl\)/);
 });

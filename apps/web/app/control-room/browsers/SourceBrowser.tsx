@@ -1,11 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import {
-  AssetList,
-  AssetRow,
-  StatusBadge,
-} from '@ubos/ui';
+import { AssetList, AssetRow, StatusBadge } from '@ubos/ui';
 import type { Guest, Scene, SceneSource, SceneSourceType } from '@ubos/shared';
 import type { TallyState } from '@ubos/ui';
 import {
@@ -63,6 +59,7 @@ export function SourceBrowser({
   onToggleMute,
   selectedSourceId,
   onSelectSource,
+  onRelinkMedia,
 }: {
   scene: Scene;
   sceneName: string;
@@ -72,7 +69,14 @@ export function SourceBrowser({
   compact?: boolean;
   tallyState?: TallyState;
   directCameraLive?: boolean;
-  onAdd?: (input: { sceneId: string; name: string; type: SceneSourceType; url?: string; settings?: Record<string, unknown> }) => void;
+  onAdd?: (input: {
+    sceneId: string;
+    name: string;
+    type: SceneSourceType;
+    url?: string;
+    settings?: Record<string, unknown>;
+  }) => void;
+  onRelinkMedia?: (sourceId: string, file: File) => void;
   onRename?: (sourceId: string, name: string) => void;
   onDuplicate?: (sourceId: string) => void;
   onDelete?: (sourceId: string) => void;
@@ -94,20 +98,20 @@ export function SourceBrowser({
   const importMediaFiles = (fileList: FileList | File[]) => {
     Array.from(fileList).forEach((file) => {
       const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-      const kind = file.type.startsWith('video/') || ['mp4', 'mov', 'webm'].includes(ext)
-        ? 'video'
-        : file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif'].includes(ext)
-          ? 'image'
-          : null;
+      const kind =
+        file.type.startsWith('video/') || ['mp4', 'mov', 'webm'].includes(ext)
+          ? 'video'
+          : file.type.startsWith('image/') || ['jpg', 'jpeg', 'png', 'gif'].includes(ext)
+            ? 'image'
+            : null;
       if (!kind) return;
-      const mediaUrl = URL.createObjectURL(file);
       onAdd?.({
         sceneId: scene.id,
         name: file.name,
         type: 'media',
         settings: {
-          runtimeStatus: 'live',
-          mediaUrl,
+          runtimeStatus: 'loading',
+          runtimeFile: file,
           mediaKind: kind,
           filename: file.name,
           fileSize: file.size,
@@ -169,8 +173,14 @@ export function SourceBrowser({
       />
       <div
         className="flex flex-wrap gap-0.5 rounded-ubos-md border border-dashed border-transparent p-0.5"
-        onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'copy'; }}
-        onDrop={(event) => { event.preventDefault(); importMediaFiles(event.dataTransfer.files); }}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          importMediaFiles(event.dataTransfer.files);
+        }}
       >
         {sourceAddTypes
           .filter((type) => sourceTypes.includes(type))
@@ -181,7 +191,10 @@ export function SourceBrowser({
               {...(compact ? { icon: sourceTypeIcons[type], compact: true } : {})}
               disabled={isPending}
               onClick={() => {
-                if (type === 'media') { fileInputRef.current?.click(); return; }
+                if (type === 'media') {
+                  fileInputRef.current?.click();
+                  return;
+                }
                 if (type === 'browser') {
                   setShowBrowserUrlForm(true);
                   setBrowserUrlError('');
@@ -222,14 +235,18 @@ export function SourceBrowser({
                 url: normalizedUrl,
                 muted: true,
                 lastLoadedAt: null,
-                iframeBlockedWarning: 'Some sites block iframe embedding. If the preview stays blank, try another page or use screen capture.',
+                iframeBlockedWarning:
+                  'Some sites block iframe embedding. If the preview stays blank, try another page or use screen capture.',
               },
             });
             setShowBrowserUrlForm(false);
             setBrowserUrlError('');
           }}
         >
-          <label className="block text-ubos-metadata font-bold text-ubos-fg-secondary" htmlFor="browser-source-url">
+          <label
+            className="block text-ubos-metadata font-bold text-ubos-fg-secondary"
+            htmlFor="browser-source-url"
+          >
             Browser source URL
           </label>
           <div className="mt-1 flex gap-1">
@@ -240,10 +257,24 @@ export function SourceBrowser({
               className="min-w-0 flex-1 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-carbon px-2 py-1 text-ubos-caption text-ubos-fg-primary"
               placeholder="https://example.com"
             />
-            <button type="submit" disabled={isPending} className="rounded-ubos-sm border border-ubos-border-subtle bg-transparent px-1.5 text-ubos-metadata font-semibold text-ubos-fg-secondary hover:bg-ubos-midnight disabled:opacity-40">Add</button>
-            <RowIconButton label="Cancel" onClick={() => { setShowBrowserUrlForm(false); setBrowserUrlError(''); }} />
+            <button
+              type="submit"
+              disabled={isPending}
+              className="rounded-ubos-sm border border-ubos-border-subtle bg-transparent px-1.5 text-ubos-metadata font-semibold text-ubos-fg-secondary hover:bg-ubos-midnight disabled:opacity-40"
+            >
+              Add
+            </button>
+            <RowIconButton
+              label="Cancel"
+              onClick={() => {
+                setShowBrowserUrlForm(false);
+                setBrowserUrlError('');
+              }}
+            />
           </div>
-          {browserUrlError ? <p className="mt-1 text-ubos-metadata text-ubos-error-text">{browserUrlError}</p> : null}
+          {browserUrlError ? (
+            <p className="mt-1 text-ubos-metadata text-ubos-error-text">{browserUrlError}</p>
+          ) : null}
         </form>
       ) : null}
 
@@ -289,6 +320,7 @@ export function SourceBrowser({
             {...(onRename ? { onRename } : {})}
             {...(onDuplicate ? { onDuplicate } : {})}
             {...(onDelete ? { onDelete } : {})}
+            {...(onRelinkMedia ? { onRelinkMedia } : {})}
             {...(onToggleVisibility ? { onToggleVisibility } : {})}
             {...(onToggleLock ? { onToggleLock } : {})}
             {...(onReloadBrowserSource ? { onReloadBrowserSource } : {})}
@@ -318,6 +350,7 @@ function SourceBrowserRow({
   onToggleMute,
   selected = false,
   onSelectSource,
+  onRelinkMedia,
 }: {
   source: SceneSource;
   sceneName: string;
@@ -334,7 +367,9 @@ function SourceBrowserRow({
   onToggleMute?: (sourceId: string) => void;
   selected?: boolean;
   onSelectSource?: (sourceId: string) => void;
+  onRelinkMedia?: (sourceId: string, file: File) => void;
 }) {
+  const relinkInputRef = useRef<HTMLInputElement>(null);
   const health =
     directCameraLive && source.type === 'camera' ? 'live' : deriveSourceHealth(source, guests);
   const telemetry = getSourceTelemetry(source);
@@ -343,7 +378,11 @@ function SourceBrowserRow({
     : [
         telemetry.resolution ? `${telemetry.resolution}` : null,
         telemetry.fps ? `${telemetry.fps} fps` : null,
-        telemetry.audioEnabled === true ? 'audio on' : telemetry.audioEnabled === false ? 'audio off' : null,
+        telemetry.audioEnabled === true
+          ? 'audio on'
+          : telemetry.audioEnabled === false
+            ? 'audio off'
+            : null,
       ].filter(Boolean);
 
   const statusVariant =
@@ -368,7 +407,11 @@ function SourceBrowserRow({
     <AssetRow
       thumbnail={
         <SceneThumbnail
-          label={compact ? sourceTypeIcons[source.type] : getSourceTypeLabel(source.type).slice(0, 3).toUpperCase()}
+          label={
+            compact
+              ? sourceTypeIcons[source.type]
+              : getSourceTypeLabel(source.type).slice(0, 3).toUpperCase()
+          }
           {...(compact ? { compact: true } : {})}
         />
       }
@@ -386,7 +429,11 @@ function SourceBrowserRow({
           <StatusBadge variant={statusVariant} dot={health === 'live'}>
             {statusLabel}
           </StatusBadge>
-          <StatusBadge variant={source.isVisible ? (tallyState === 'preview' ? 'preview' : 'neutral') : 'offline'}>
+          <StatusBadge
+            variant={
+              source.isVisible ? (tallyState === 'preview' ? 'preview' : 'neutral') : 'offline'
+            }
+          >
             {source.isVisible ? 'Visible' : 'Hidden'}
           </StatusBadge>
         </div>
@@ -403,6 +450,26 @@ function SourceBrowserRow({
             {...(compact ? { compact: true } : {})}
             onClick={() => onToggleLock?.(source.id)}
           />
+          {source.type === 'media' && source.settings?.runtimeStatus === 'relink_required' ? (
+            <>
+              <input
+                ref={relinkInputRef}
+                type="file"
+                className="hidden"
+                accept=".mp4,.mov,.webm,video/mp4,video/quicktime,video/webm"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0];
+                  if (file) onRelinkMedia?.(source.id, file);
+                  event.currentTarget.value = '';
+                }}
+              />
+              <RowIconButton
+                label="Relink Media"
+                {...(compact ? { compact: true } : {})}
+                onClick={() => relinkInputRef.current?.click()}
+              />
+            </>
+          ) : null}
           {source.type === 'browser' ? (
             <RowIconButton
               label="Reload"
@@ -435,8 +502,6 @@ function SourceBrowserRow({
             variant="danger"
             onClick={() => {
               if (window.confirm(`Delete ${source.name}?`)) {
-                const mediaUrl = typeof source.settings?.mediaUrl === 'string' ? source.settings.mediaUrl : null;
-                if (mediaUrl) URL.revokeObjectURL(mediaUrl);
                 onDelete?.(source.id);
               }
             }}
