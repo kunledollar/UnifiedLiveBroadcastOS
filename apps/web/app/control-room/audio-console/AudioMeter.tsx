@@ -1,13 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { useRenderForensics, recordForensicsStateWrite, ubosForensicsFlag } from '../render-forensics';
 import { cn } from '@ubos/ui';
 import { meterSegmentColor } from './audio-console-utils';
+import { clampMeterLevel } from './audio-stabilization-utils';
 
 const SEGMENTS = 12;
+const meterVisualUpdateMs = 100;
 
-export function AudioMeter({
+
+function AudioMeterComponent({
   level,
   muted,
   className,
@@ -27,13 +30,19 @@ export function AudioMeter({
     }
 
     if (ubosForensicsFlag('audio-meter-disabled')) return;
-    const target = Math.max(0, Math.min(100, level));
+    const target = clampMeterLevel(level);
     let frame = 0;
-    const animate = () => {
+    let lastUpdate = 0;
+    const animate = (time = 0) => {
+      if (time - lastUpdate < meterVisualUpdateMs) {
+        frame = requestAnimationFrame(animate);
+        return;
+      }
+      lastUpdate = time;
       setDisplayLevel((current) => {
         recordForensicsStateWrite('AudioMeter.setDisplayLevel', current, target);
-        const next = current + (target - current) * 0.35;
-        if (Math.abs(next - target) < 0.5) return target;
+        const next = Math.round(current + (target - current) * 0.5);
+        if (current === target || Math.abs(next - target) < 1) return target;
         frame = requestAnimationFrame(animate);
         return next;
       });
@@ -47,10 +56,13 @@ export function AudioMeter({
     setPeakHold((current) => {
       const next = Math.max(current, displayLevel);
       recordForensicsStateWrite('AudioMeter.setPeakHold', current, next);
-      return next;
+      return next === current ? current : next;
     });
     const timeout = window.setTimeout(() => {
-      setPeakHold((current) => Math.max(displayLevel, current * 0.92));
+      setPeakHold((current) => {
+        const next = Math.max(displayLevel, Math.round(current * 0.92));
+        return next === current ? current : next;
+      });
     }, 120);
     return () => window.clearTimeout(timeout);
   }, [displayLevel, level, muted]);
@@ -90,6 +102,12 @@ export function AudioMeter({
     </div>
   );
 }
+
+export const AudioMeter = memo(AudioMeterComponent, (previous, next) =>
+  clampMeterLevel(previous.level) === clampMeterLevel(next.level) &&
+  previous.muted === next.muted &&
+  previous.className === next.className,
+);
 
 export function PeakIndicator({ level, muted }: { level: number | null; muted: boolean }) {
   if (level === null) {

@@ -410,7 +410,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
           registry.restorePanelStates(
             saved.panelStates.map((s) => ({
               panelId: s.panelId,
-              zone: s.zone as import('@ubos/shared').WorkspaceZoneId,
+              zone: s.zone as WorkspaceZoneId,
               visible: s.visible,
               collapsed: s.collapsed,
             })),
