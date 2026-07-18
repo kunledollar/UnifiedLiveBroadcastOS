@@ -41,8 +41,45 @@ test('existing reachable server skips automatic pnpm startup', async () => {
     },
   });
 
-  assert.equal(server, undefined);
+  assert.deepEqual(server, { started: false, alreadyRunning: true });
   assert.equal(spawned, false);
+});
+
+test('HTTP 200 response returns existing server result before spawn evaluation', async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => logs.push(message);
+
+  try {
+    let spawnCalled = false;
+    const server = await ensureServerAvailable('http://localhost:3000/control-room', {
+      fetchImpl: async (url, init) => {
+        assert.equal(url, 'http://localhost:3000/control-room');
+        assert.equal(init.method, 'HEAD');
+        return { ok: true, status: 200 };
+      },
+      spawnImpl: () => {
+        spawnCalled = true;
+        throw new Error('spawn must not be reached');
+      },
+      executable: new Proxy({}, {
+        get() {
+          throw new Error('spawn options must not be evaluated');
+        },
+      }),
+    });
+
+    assert.deepEqual(server, { started: false, alreadyRunning: true });
+    assert.equal(spawnCalled, false);
+    assert.deepEqual(logs, [
+      'Checking existing server...',
+      'HEAD returned 200',
+      'Using existing server.',
+      'Skipping startup.',
+    ]);
+  } finally {
+    console.log = originalLog;
+  }
 });
 
 test('Windows startup can use pnpm.cmd when spawning is required', async () => {
