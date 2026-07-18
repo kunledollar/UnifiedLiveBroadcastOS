@@ -1,6 +1,6 @@
 'use client';
 
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { memo, type ButtonHTMLAttributes, type ReactNode } from 'react';
 import { cn, ubosTypographyClasses } from '@ubos/ui';
 
 export type HardwareButtonTone = 'cut' | 'auto' | 'take' | 'utility' | 'disabled';
@@ -33,7 +33,7 @@ const toneClasses: Record<HardwareButtonTone, string> = {
   disabled: 'cursor-not-allowed border-ubos-border-subtle bg-ubos-carbon text-ubos-fg-disabled shadow-none',
 };
 
-export function HardwareButton({
+export const HardwareButton = memo(function HardwareButton({
   children,
   tone = 'utility',
   size = 'lg',
@@ -64,9 +64,9 @@ export function HardwareButton({
       {children}
     </button>
   );
-}
+});
 
-export function HardwareButtonGroup({
+export const HardwareButtonGroup = memo(function HardwareButtonGroup({
   children,
   label,
   className,
@@ -83,4 +83,4 @@ export function HardwareButtonGroup({
       <div className="flex flex-wrap items-stretch gap-ubos-2">{children}</div>
     </div>
   );
-}
+});
