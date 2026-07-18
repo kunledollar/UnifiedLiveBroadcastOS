@@ -5,11 +5,13 @@ import type {
   AIRiskSignal,
 } from './types.js';
 
-export function createDefaultAIAssistantState(): AIAssistantState {
+export function createDefaultAIAssistantState(
+  lastUpdated = new Date().toISOString(),
+): AIAssistantState {
   return {
     status: 'idle',
     mode: 'advisory',
-    lastUpdated: new Date().toISOString(),
+    lastUpdated,
     containsRuntimeHandles: false,
   };
 }
@@ -20,7 +22,8 @@ export function createSampleAIRecommendations(): AIRecommendation[] {
       id: 'ai-rec-scene-next',
       type: 'scene',
       title: 'Stage next guest scene',
-      description: 'Guest 2 segment is next in rundown. Consider staging preview scene before segment start.',
+      description:
+        'Guest 2 segment is next in rundown. Consider staging preview scene before segment start.',
       confidence: 0.82,
       riskLevel: 'info',
       targetType: 'scene',
@@ -32,7 +35,8 @@ export function createSampleAIRecommendations(): AIRecommendation[] {
       id: 'ai-rec-graphics-lower-third',
       type: 'graphics',
       title: 'Prepare guest lower third',
-      description: 'Guest 1 is active. Lower third graphics may be needed for on-air identification.',
+      description:
+        'Guest 1 is active. Lower third graphics may be needed for on-air identification.',
       confidence: 0.74,
       riskLevel: 'info',
       targetType: 'graphics',
@@ -44,7 +48,8 @@ export function createSampleAIRecommendations(): AIRecommendation[] {
       id: 'ai-rec-audio-levels',
       type: 'audio',
       title: 'Review guest mic levels',
-      description: 'Guest channel headroom appears low in metadata summary. Operator should verify levels.',
+      description:
+        'Guest channel headroom appears low in metadata summary. Operator should verify levels.',
       confidence: 0.68,
       riskLevel: 'warning',
       targetType: 'audio',
@@ -56,7 +61,8 @@ export function createSampleAIRecommendations(): AIRecommendation[] {
       id: 'ai-rec-automation-cue',
       type: 'automation',
       title: 'Arm intro graphics cue',
-      description: 'Intro segment cues are pending. Consider arming show logo cue before segment start.',
+      description:
+        'Intro segment cues are pending. Consider arming show logo cue before segment start.',
       confidence: 0.71,
       riskLevel: 'info',
       targetType: 'automation',
@@ -68,7 +74,8 @@ export function createSampleAIRecommendations(): AIRecommendation[] {
       id: 'ai-rec-highlight-clip',
       type: 'highlight',
       title: 'Mark highlight moment',
-      description: 'Replay buffer metadata suggests a highlight window. Clip suggestion placeholder only.',
+      description:
+        'Replay buffer metadata suggests a highlight window. Clip suggestion placeholder only.',
       confidence: 0.55,
       riskLevel: 'info',
       targetType: 'replay',
