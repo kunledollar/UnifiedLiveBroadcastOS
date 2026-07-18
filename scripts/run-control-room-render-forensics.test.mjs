@@ -45,6 +45,43 @@ test('existing reachable server skips automatic pnpm startup', async () => {
   assert.equal(spawned, false);
 });
 
+
+test('ensureServerAvailable skips spawn when HEAD fails and GET returns HTTP 200', async () => {
+  const logs = [];
+  const originalLog = console.log;
+  console.log = (message) => logs.push(message);
+
+  try {
+    const methods = [];
+    let spawnCalled = false;
+    const server = await ensureServerAvailable('http://localhost:3000/control-room', {
+      fetchImpl: async (url, init) => {
+        methods.push(init.method);
+        assert.equal(url, 'http://localhost:3000/control-room');
+        if (init.method === 'HEAD') throw new Error('simulated HEAD failure');
+        return {
+          ok: true,
+          status: 200,
+          url: 'http://localhost:3000/control-room',
+          headers: new Headers({ 'content-type': 'text/html; charset=utf-8' }),
+        };
+      },
+      spawnImpl: () => {
+        spawnCalled = true;
+        throw new Error('spawn must not be called');
+      },
+    });
+
+    assert.deepEqual(server, { started: false, alreadyRunning: true });
+    assert.deepEqual(methods, ['HEAD', 'GET']);
+    assert.equal(spawnCalled, false);
+    assert.equal(logs.some((line) => line.includes('HEAD exception') && line.includes('simulated HEAD failure')), true);
+    assert.equal(logs.some((line) => line === 'GET response requestUrl=http://localhost:3000/control-room status=200 location=none content-type=text/html; charset=utf-8'), true);
+  } finally {
+    console.log = originalLog;
+  }
+});
+
 test('HTTP 200 response returns existing server result before spawn evaluation', async () => {
   const logs = [];
   const originalLog = console.log;
@@ -72,8 +109,9 @@ test('HTTP 200 response returns existing server result before spawn evaluation',
     assert.deepEqual(server, { started: false, alreadyRunning: true });
     assert.equal(spawnCalled, false);
     assert.deepEqual(logs, [
-      'Checking existing server...',
-      'HEAD returned 200',
+      'Checking existing server at http://localhost:3000/control-room...',
+      'HEAD request requestUrl=http://localhost:3000/control-room method=HEAD',
+      'HEAD response requestUrl=http://localhost:3000/control-room status=200 location=none content-type=none',
       'Using existing server.',
       'Skipping startup.',
     ]);

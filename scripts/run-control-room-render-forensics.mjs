@@ -34,20 +34,64 @@ export async function reachable(url, fetchImpl = fetch) {
   return false;
 }
 
+function responseHeader(response, name) {
+  if (typeof response?.headers?.get === 'function') return response.headers.get(name);
+  return response?.headers?.[name] ?? response?.headers?.[name.toLowerCase()] ?? null;
+}
+
+function logResponse(method, requestUrl, response) {
+  const finalUrl = response?.url && response.url !== requestUrl ? ` finalUrl=${response.url}` : '';
+  console.log(`${method} response requestUrl=${requestUrl}${finalUrl} status=${response?.status ?? 'unknown'} location=${responseHeader(response, 'location') ?? 'none'} content-type=${responseHeader(response, 'content-type') ?? 'none'}`);
+}
+
+function describeReachabilityError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const stack = error instanceof Error ? error.stack : undefined;
+  const cause = error?.cause;
+  const causeCode = cause?.code ?? error?.code;
+  const causeMessage = cause?.message;
+  const details = [message];
+
+  if (causeCode) details.push(`code=${causeCode}`);
+  if (causeMessage) details.push(`cause=${causeMessage}`);
+
+  const combined = `${message} ${causeCode ?? ''} ${causeMessage ?? ''}`.toLowerCase();
+  if (combined.includes('tls') || combined.includes('ssl') || ['CERT_HAS_EXPIRED', 'DEPTH_ZERO_SELF_SIGNED_CERT', 'ERR_TLS_CERT_ALTNAME_INVALID'].includes(causeCode)) {
+    details.push('reason=TLS');
+  }
+  if (combined.includes('::1') || combined.includes('ipv6')) details.push('reason=IPv6/localhost resolution');
+  if (combined.includes('127.0.0.1') || combined.includes('ipv4')) details.push('reason=IPv4/localhost resolution');
+  if (['ENOTFOUND', 'EAI_AGAIN'].includes(causeCode) || combined.includes('localhost')) details.push('reason=localhost resolution');
+  if (error?.name === 'TimeoutError' || error?.name === 'AbortError' || combined.includes('abort') || combined.includes('timeout')) details.push('reason=AbortController timeout');
+
+  return { message: details.join(' '), stack };
+}
+
 async function probeExistingServer(url, fetchImpl = fetch) {
-  console.log('Checking existing server...');
+  console.log(`Checking existing server at ${url}...`);
 
   for (const method of ['HEAD', 'GET']) {
+    console.log(`${method} request requestUrl=${url} method=${method}`);
     try {
-      const response = await fetchImpl(url, { method, signal: AbortSignal.timeout(1500) });
-      console.log(`${method} returned ${response.status ?? (response.ok ? 200 : 'not ok')}`);
-      if (response.ok) {
+      const response = await fetchImpl(url, { method, redirect: 'follow', signal: AbortSignal.timeout(1500) });
+      logResponse(method, url, response);
+      if (method === 'GET' && response.status >= 200 && response.status < 300) {
         console.log('Using existing server.');
         console.log('Skipping startup.');
         return true;
       }
+      if (method === 'HEAD' && response.ok) {
+        console.log('Using existing server.');
+        console.log('Skipping startup.');
+        return true;
+      }
+      if (method === 'HEAD' && response.status >= 400) {
+        console.log(`HEAD unsupported or unavailable with status ${response.status}; retrying GET immediately.`);
+      }
     } catch (error) {
-      console.log(`${method} failed`);
+      const described = describeReachabilityError(error);
+      console.log(`${method} exception requestUrl=${url} method=${method} message=${described.message}`);
+      console.log(`${method} exception stack=${described.stack ?? 'none'}`);
     }
   }
 
