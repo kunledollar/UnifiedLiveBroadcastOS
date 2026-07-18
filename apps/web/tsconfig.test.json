@@ -6,10 +6,10 @@
     "rootDir": ".",
     "paths": {
       "@ubos/shared": [
-        "../../packages/shared/dist/index.js"
+        "packages/shared/dist/index.js"
       ],
       "@ubos/shared/*": [
-        "../../packages/shared/dist/*"
+        "packages/shared/dist/*"
       ]
     }
   },
