@@ -2454,8 +2454,11 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   );
   const [runtimeView, setRuntimeView] = useState(runtime.state);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [clock, setClock] = useState('00:00:00');
+  const startedAtRef = useRef(Date.now());
+  const [clockSnapshot] = useState(() => ({
+    elapsedSeconds: Math.floor((Date.now() - startedAtRef.current) / 1000),
+    clock: new Date().toLocaleTimeString([], { hour12: false }),
+  }));
 
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
@@ -2486,17 +2489,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   useEffect(() => {
     window.localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
   }, [workspace]);
-
-  useEffect(() => {
-    const startedAt = Date.now();
-    const tick = () => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
-      setClock(new Date().toLocaleTimeString([], { hour12: false }));
-    };
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   const selectViewMode = (mode: OutputViewMode) => {
     setWorkspace((current) => ({ ...current, viewMode: mode }));
@@ -5266,133 +5258,166 @@ export const SceneWorkspace = memo(function SceneWorkspace({
     </>
   );
 
-  const layoutStyle = {
-    '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
-    '--ubos-switcher-height': switcherHeightForLayout(
-      workspace.layoutFocus,
-      workspace.compactChrome,
-    ),
-  } as CSSProperties;
+  const layoutStyle = useMemo(
+    () =>
+      ({
+        '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
+        '--ubos-switcher-height': switcherHeightForLayout(
+          workspace.layoutFocus,
+          workspace.compactChrome,
+        ),
+      }) as CSSProperties,
+    [workspace.compactChrome, workspace.layoutFocus],
+  );
 
-  const rightTabContent = {
-    guests: operationsPanels.guests,
-    outputs: operationsPanels.outputs,
-    chat: (
-      <div className="space-y-2 text-ubos-caption text-ubos-fg-secondary">
-        {messages.length ? (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight p-2"
-            >
-              <div className="font-bold text-ubos-fg-primary">{message.authorName}</div>
-              <div>{message.body}</div>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-ubos-md border border-dashed border-ubos-border-subtle p-4 text-center">
-            No chat messages yet.
-          </div>
-        )}
-      </div>
-    ),
-    inspector: operationsPanels.inspector,
-    health: operationsPanels.health,
-    smoke: (
-      <div className="space-y-ubos-2">
-        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-3">
-          <p className="text-ubos-caption font-black uppercase tracking-[0.16em] text-ubos-fg-primary">
-            UBOS 3.1 Client-Ready Media Smoke Test
-          </p>
-          <p className="mt-1 text-ubos-caption text-ubos-fg-muted">
-            Browser camera, microphone, preview/program, audio meter, and WebM recording run
-            locally. RTMP streaming is unavailable until a real backend is configured.
-          </p>
-        </div>
-        <div className="grid gap-1">
-          <SmokeCheck label="Camera active" ok={directCameraLive} />
-          <SmokeCheck
-            label="Microphone active"
-            ok={Boolean(
-              firstLiveVideoStream?.getAudioTracks().some((t) => t.readyState === 'live'),
+  const rightTabContent = useMemo(
+    () =>
+      ({
+        guests: operationsPanels.guests,
+        outputs: operationsPanels.outputs,
+        chat: (
+          <div className="space-y-2 text-ubos-caption text-ubos-fg-secondary">
+            {messages.length ? (
+              messages.map((message) => (
+                <div
+                  key={message.id}
+                  className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight p-2"
+                >
+                  <div className="font-bold text-ubos-fg-primary">{message.authorName}</div>
+                  <div>{message.body}</div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-ubos-md border border-dashed border-ubos-border-subtle p-4 text-center">
+                No chat messages yet.
+              </div>
             )}
-          />
-          <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
-          <SmokeCheck label="Program visible" ok={liveProgramVisible} />
-          <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
-          <SmokeCheck label="Recording works" ok={recordingState === 'completed'} />
-          <SmokeCheck label="No camera errors" ok={!cameraCaptureError} />
-        </div>
-        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
-          <div className="mb-2 flex items-center justify-between text-ubos-caption text-ubos-fg-secondary">
-            <span>Mic level</span>
-            <span>{audioLevel}%</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-ubos-midnight">
-            <div
-              className="h-full bg-emerald-400 transition-all"
-              style={{ width: `${audioLevel}%` }}
-            />
+        ),
+        inspector: operationsPanels.inspector,
+        health: operationsPanels.health,
+        smoke: (
+          <div className="space-y-ubos-2">
+            <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-3">
+              <p className="text-ubos-caption font-black uppercase tracking-[0.16em] text-ubos-fg-primary">
+                UBOS 3.1 Client-Ready Media Smoke Test
+              </p>
+              <p className="mt-1 text-ubos-caption text-ubos-fg-muted">
+                Browser camera, microphone, preview/program, audio meter, and WebM recording run
+                locally. RTMP streaming is unavailable until a real backend is configured.
+              </p>
+            </div>
+            <div className="grid gap-1">
+              <SmokeCheck label="Camera active" ok={directCameraLive} />
+              <SmokeCheck
+                label="Microphone active"
+                ok={Boolean(
+                  firstLiveVideoStream?.getAudioTracks().some((t) => t.readyState === 'live'),
+                )}
+              />
+              <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
+              <SmokeCheck label="Program visible" ok={liveProgramVisible} />
+              <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
+              <SmokeCheck label="Recording works" ok={recordingState === 'completed'} />
+              <SmokeCheck label="No camera errors" ok={!cameraCaptureError} />
+            </div>
+            <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
+              <div className="mb-2 flex items-center justify-between text-ubos-caption text-ubos-fg-secondary">
+                <span>Mic level</span>
+                <span>{audioLevel}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-ubos-midnight">
+                <div
+                  className="h-full bg-emerald-400 transition-all"
+                  style={{ width: `${audioLevel}%` }}
+                />
+              </div>
+            </div>
+            {cameraCaptureError ? (
+              <p className="text-ubos-caption text-ubos-error-text">
+                Last Error: {cameraCaptureError}
+              </p>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
+                onClick={() => {
+                  void activateDirectCamera();
+                }}
+              >
+                Start camera + mic
+              </button>
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
+                onClick={() => {
+                  Object.keys(liveSourceStreams).forEach((sourceId) =>
+                    stopLiveSourceStream(sourceId),
+                  );
+                  smokeMedia.stopAll();
+                  setLiveSourceStreams({});
+                  setCameraCaptureError('');
+                }}
+              >
+                Stop devices
+              </button>
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
+                disabled={
+                  recordingState === 'recording' ||
+                  recordingState === 'preparing' ||
+                  recordingState === 'stopping'
+                }
+                onClick={startSmokeRecording}
+              >
+                Start WebM REC
+              </button>
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary disabled:opacity-50"
+                disabled={recordingState !== 'recording'}
+                onClick={stopSmokeRecording}
+              >
+                Stop REC
+              </button>
+            </div>
+            {recordedUrl ? (
+              <a
+                className="block rounded-ubos-sm bg-emerald-400 px-2 py-2 text-center text-xs font-black text-slate-950"
+                href={recordedUrl}
+                download={recordingFilename ?? 'ubos-smoke-test.webm'}
+              >
+                Download recorded WebM
+              </a>
+            ) : null}
           </div>
-        </div>
-        {cameraCaptureError ? (
-          <p className="text-ubos-caption text-ubos-error-text">Last Error: {cameraCaptureError}</p>
-        ) : null}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
-            onClick={() => {
-              void activateDirectCamera();
-            }}
-          >
-            Start camera + mic
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
-            onClick={() => {
-              Object.keys(liveSourceStreams).forEach((sourceId) => stopLiveSourceStream(sourceId));
-              smokeMedia.stopAll();
-              setLiveSourceStreams({});
-              setCameraCaptureError('');
-            }}
-          >
-            Stop devices
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
-            disabled={
-              recordingState === 'recording' ||
-              recordingState === 'preparing' ||
-              recordingState === 'stopping'
-            }
-            onClick={startSmokeRecording}
-          >
-            Start WebM REC
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary disabled:opacity-50"
-            disabled={recordingState !== 'recording'}
-            onClick={stopSmokeRecording}
-          >
-            Stop REC
-          </button>
-        </div>
-        {recordedUrl ? (
-          <a
-            className="block rounded-ubos-sm bg-emerald-400 px-2 py-2 text-center text-xs font-black text-slate-950"
-            href={recordedUrl}
-            download={recordingFilename ?? 'ubos-smoke-test.webm'}
-          >
-            Download recorded WebM
-          </a>
-        ) : null}
-      </div>
-    ),
-  } satisfies Record<typeof professionalRightTab, ReactNode>;
+        ),
+      }) satisfies Record<typeof professionalRightTab, ReactNode>,
+    [
+      operationsPanels.guests,
+      operationsPanels.outputs,
+      operationsPanels.inspector,
+      operationsPanels.health,
+      messages,
+      directCameraLive,
+      firstLiveVideoStream,
+      livePreviewVisible,
+      liveProgramVisible,
+      audioLevel,
+      recordingState,
+      cameraCaptureError,
+      recordedUrl,
+      recordingFilename,
+      activateDirectCamera,
+      liveSourceStreams,
+      stopLiveSourceStream,
+      smokeMedia,
+      startSmokeRecording,
+      stopSmokeRecording,
+    ],
+  );
 
   const monitorTelemetry = useMemo(
     () =>
@@ -5483,131 +5508,219 @@ export const SceneWorkspace = memo(function SceneWorkspace({
     startScreenCapture,
   ]);
 
-  const programMonitorNode = liveProgramVisible ? (
-    <LiveMediaMonitor
-      title="Program"
-      sceneName={programScene.name}
-      stream={programStreamToShow}
-      active={liveProgramVisible}
-      role="program"
-      sourceId={programCameraSourceId}
-      sourceType={programLiveVideoSource?.type}
-      deckMode
-    />
-  ) : programLiveMedia.warning ? (
-    <OfflineSourceMonitor
-      title="Program"
-      sceneName={programScene.name}
-      warning={programLiveMedia.warning}
-      actionLabel={programActivationLabel}
-      onAction={programActivationLabel ? startProgramSource : undefined}
-      role="program"
-      deckMode
-    />
-  ) : (
-    <ProgramMonitor
-      scene={programScene}
-      routes={mediaRoutes}
-      layoutPreset={layoutPreset}
-      guests={guests}
-      graph={productionGraphSession.graph}
-      healthFps={safeHealthMetrics.fps}
-      showSafeAreas={showSafeAreas}
-      graphicsLayers={programSceneComposition.layers.filter(
-        (layer) => layer.programState === 'live',
-      )}
-      mediaOverlayItems={programMediaOverlayItems}
-      deckMode
-    />
+  const programMonitorNode = useMemo(
+    () =>
+      liveProgramVisible ? (
+        <LiveMediaMonitor
+          title="Program"
+          sceneName={programScene.name}
+          stream={programStreamToShow}
+          active={liveProgramVisible}
+          role="program"
+          sourceId={programCameraSourceId}
+          sourceType={programLiveVideoSource?.type}
+          deckMode
+        />
+      ) : programLiveMedia.warning ? (
+        <OfflineSourceMonitor
+          title="Program"
+          sceneName={programScene.name}
+          warning={programLiveMedia.warning}
+          actionLabel={programActivationLabel}
+          onAction={programActivationLabel ? startProgramSource : undefined}
+          role="program"
+          deckMode
+        />
+      ) : (
+        <ProgramMonitor
+          scene={programScene}
+          routes={mediaRoutes}
+          layoutPreset={layoutPreset}
+          guests={guests}
+          graph={productionGraphSession.graph}
+          healthFps={safeHealthMetrics.fps}
+          showSafeAreas={showSafeAreas}
+          graphicsLayers={programSceneComposition.layers.filter(
+            (layer) => layer.programState === 'live',
+          )}
+          mediaOverlayItems={programMediaOverlayItems}
+          deckMode
+        />
+      ),
+    [
+      liveProgramVisible,
+      programScene.name,
+      programStreamToShow,
+      programCameraSourceId,
+      programLiveVideoSource?.type,
+      programLiveMedia.warning,
+      programActivationLabel,
+      startProgramSource,
+      programScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      programSceneComposition.layers,
+      programMediaOverlayItems,
+    ],
   );
 
-  const previewMonitorNode = livePreviewVisible ? (
-    <LiveMediaMonitor
-      title="Preview"
-      sceneName={previewScene.name}
-      stream={previewStreamToShow}
-      active={livePreviewVisible}
-      role="preview"
-      sourceId={previewCameraSourceId}
-      sourceType={previewLiveVideoSource?.type}
-      deckMode
-    />
-  ) : previewLiveMedia.warning ? (
-    <OfflineSourceMonitor
-      title="Preview"
-      sceneName={previewScene.name}
-      warning={previewLiveMedia.warning}
-      actionLabel={previewActivationLabel}
-      onAction={previewActivationLabel ? startPreviewSource : undefined}
-      role="preview"
-      deckMode
-    />
-  ) : (
-    <ProgramMonitor
-      scene={previewScene}
-      routes={mediaRoutes}
-      layoutPreset={layoutPreset}
-      guests={guests}
-      graph={productionGraphSession.graph}
-      healthFps={safeHealthMetrics.fps}
-      showSafeAreas={showSafeAreas}
-      graphicsLayers={previewSceneComposition.layers.filter(
-        (layer) => layer.previewState === 'preview' || layer.programState === 'live',
-      )}
-      mediaOverlayItems={previewMediaOverlayItems}
-      role="preview"
-      deckMode
-    />
+  const previewMonitorNode = useMemo(
+    () =>
+      livePreviewVisible ? (
+        <LiveMediaMonitor
+          title="Preview"
+          sceneName={previewScene.name}
+          stream={previewStreamToShow}
+          active={livePreviewVisible}
+          role="preview"
+          sourceId={previewCameraSourceId}
+          sourceType={previewLiveVideoSource?.type}
+          deckMode
+        />
+      ) : previewLiveMedia.warning ? (
+        <OfflineSourceMonitor
+          title="Preview"
+          sceneName={previewScene.name}
+          warning={previewLiveMedia.warning}
+          actionLabel={previewActivationLabel}
+          onAction={previewActivationLabel ? startPreviewSource : undefined}
+          role="preview"
+          deckMode
+        />
+      ) : (
+        <ProgramMonitor
+          scene={previewScene}
+          routes={mediaRoutes}
+          layoutPreset={layoutPreset}
+          guests={guests}
+          graph={productionGraphSession.graph}
+          healthFps={safeHealthMetrics.fps}
+          showSafeAreas={showSafeAreas}
+          graphicsLayers={previewSceneComposition.layers.filter(
+            (layer) => layer.previewState === 'preview' || layer.programState === 'live',
+          )}
+          mediaOverlayItems={previewMediaOverlayItems}
+          role="preview"
+          deckMode
+        />
+      ),
+    [
+      livePreviewVisible,
+      previewScene.name,
+      previewStreamToShow,
+      previewCameraSourceId,
+      previewLiveVideoSource?.type,
+      previewLiveMedia.warning,
+      previewActivationLabel,
+      startPreviewSource,
+      previewScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      previewSceneComposition.layers,
+      previewMediaOverlayItems,
+    ],
   );
 
-  const switcherNode = (
-    <ProfessionalSwitcher
-      productionState={productionState}
-      programSceneName={programScene.name}
-      previewSceneName={previewScene.name}
-      lastTransitionLabel={lastTransitionLabel}
-      feedbackLabel={switcherFeedback}
-      transitionActive={transitionActive}
-      transitionHistory={transitionHistory}
-      switcherReady={!isPending && !transitionActive}
-      transitionReady={!transitionActive}
-      programLocked={authorityDiagnostics.activeLocks.some((lock) => lock.scope === 'program')}
-      automationMode={productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'}
-      runtimeStatus={runtimeView.status}
-      queueSize={runtimeView.executionQueue.length}
-      compactChrome
-      detailsDefaultOpen={false}
-      onTake={() => switchProgram(productionState.transitionType)}
-      onCut={() => switchProgram('cut')}
-      onAuto={() => switchProgram('fade')}
-      onPrevious={() => stageAdjacentScene('previous')}
-      onNext={() => stageAdjacentScene('next')}
-      onTransitionChange={(transitionType) => {
-        const transitionDuration = normalizeTransitionDuration(
-          transitionType,
-          productionState.transitionDuration,
-        );
-        dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
-        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-          durationMs: transitionDuration,
-        });
-        persistProductionState({ ...productionState, transitionType, transitionDuration }, 'stage');
-      }}
-      onDurationChange={(transitionDuration) => {
-        const normalizedDuration = normalizeTransitionDuration(
-          productionState.transitionType,
-          transitionDuration,
-          productionState.transitionDuration,
-        );
-        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-          durationMs: normalizedDuration,
-        });
-        persistProductionState(
-          { ...productionState, transitionDuration: normalizedDuration },
-          'stage',
-        );
-      }}
-    />
+  const handleSwitcherTake = useCallback(
+    () => switchProgram(productionState.transitionType),
+    [switchProgram, productionState.transitionType],
+  );
+  const handleSwitcherCut = useCallback(() => switchProgram('cut'), [switchProgram]);
+  const handleSwitcherAuto = useCallback(() => switchProgram('fade'), [switchProgram]);
+  const handleSwitcherPrevious = useCallback(
+    () => stageAdjacentScene('previous'),
+    [stageAdjacentScene],
+  );
+  const handleSwitcherNext = useCallback(() => stageAdjacentScene('next'), [stageAdjacentScene]);
+  const handleSwitcherTransitionChange = useCallback(
+    (transitionType: TransitionType) => {
+      const transitionDuration = normalizeTransitionDuration(
+        transitionType,
+        productionState.transitionDuration,
+      );
+      dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
+      dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+        durationMs: transitionDuration,
+      });
+      persistProductionState({ ...productionState, transitionType, transitionDuration }, 'stage');
+    },
+    [dispatchProductionGraphCommand, persistProductionState, productionState],
+  );
+  const handleSwitcherDurationChange = useCallback(
+    (transitionDuration: number) => {
+      const normalizedDuration = normalizeTransitionDuration(
+        productionState.transitionType,
+        transitionDuration,
+        productionState.transitionDuration,
+      );
+      dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+        durationMs: normalizedDuration,
+      });
+      persistProductionState(
+        { ...productionState, transitionDuration: normalizedDuration },
+        'stage',
+      );
+    },
+    [dispatchProductionGraphCommand, persistProductionState, productionState],
+  );
+
+  const switcherNode = useMemo(
+    () => (
+      <ProfessionalSwitcher
+        productionState={productionState}
+        programSceneName={programScene.name}
+        previewSceneName={previewScene.name}
+        lastTransitionLabel={lastTransitionLabel}
+        feedbackLabel={switcherFeedback}
+        transitionActive={transitionActive}
+        transitionHistory={transitionHistory}
+        switcherReady={!isPending && !transitionActive}
+        transitionReady={!transitionActive}
+        programLocked={authorityDiagnostics.activeLocks.some((lock) => lock.scope === 'program')}
+        automationMode={productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'}
+        runtimeStatus={runtimeView.status}
+        queueSize={runtimeView.executionQueue.length}
+        compactChrome
+        detailsDefaultOpen={false}
+        onTake={handleSwitcherTake}
+        onCut={handleSwitcherCut}
+        onAuto={handleSwitcherAuto}
+        onPrevious={handleSwitcherPrevious}
+        onNext={handleSwitcherNext}
+        onTransitionChange={handleSwitcherTransitionChange}
+        onDurationChange={handleSwitcherDurationChange}
+      />
+    ),
+    [
+      productionState,
+      programScene.name,
+      previewScene.name,
+      lastTransitionLabel,
+      switcherFeedback,
+      transitionActive,
+      transitionHistory,
+      isPending,
+      authorityDiagnostics.activeLocks,
+      productionGraphSession.graph.automation.enabled,
+      runtimeView.status,
+      runtimeView.executionQueue.length,
+      workspace.compactChrome,
+      handleSwitcherTake,
+      handleSwitcherCut,
+      handleSwitcherAuto,
+      handleSwitcherPrevious,
+      handleSwitcherNext,
+      handleSwitcherTransitionChange,
+      handleSwitcherDurationChange,
+    ],
   );
 
   // Derive latency label from the first active output destination that
@@ -5711,8 +5824,8 @@ export const SceneWorkspace = memo(function SceneWorkspace({
         sessionName="Launch Day"
         isLive={activeRouteCount > 0}
         isRecording={recordingState === 'recording'}
-        runTime={formatElapsed(elapsedSeconds)}
-        clock={clock}
+        runTime={formatElapsed(clockSnapshot.elapsedSeconds)}
+        clock={clockSnapshot.clock}
         transitionActive={transitionActive}
         fps={safeHealthMetrics.fps}
         cpu={safeHealthMetrics.cpu}
@@ -5730,8 +5843,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
     [
       activeRouteCount,
       recordingState,
-      elapsedSeconds,
-      clock,
+      clockSnapshot,
       transitionActive,
       safeHealthMetrics.fps,
       safeHealthMetrics.cpu,

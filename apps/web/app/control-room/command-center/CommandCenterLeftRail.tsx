@@ -16,12 +16,13 @@
  *   (no JS, pointer-events-none, immediately readable at 100% zoom)
  * - Divider after the "home" item to separate navigation clusters
  */
+import { memo, useCallback } from 'react';
 import { cn } from '@ubos/ui';
 import { broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
 import type { NavItemId } from '../shell/types';
 import { commandCenterRailItems, type CommandCenterRailItem } from './command-center-logic';
 
-export function CommandCenterLeftRail({
+export const CommandCenterLeftRail = memo(function CommandCenterLeftRail({
   activeNav,
   onSelectItem,
   className,
@@ -30,6 +31,11 @@ export function CommandCenterLeftRail({
   onSelectItem: (item: CommandCenterRailItem) => void;
   className?: string;
 }) {
+  const handleSelect = useCallback(
+    (item: CommandCenterRailItem) => () => onSelectItem(item),
+    [onSelectItem],
+  );
+
   return (
     <nav
       className={cn(
@@ -62,7 +68,7 @@ export function CommandCenterLeftRail({
                 type="button"
                 aria-pressed={active}
                 aria-label={item.label}
-                onClick={() => onSelectItem(item)}
+                onClick={handleSelect(item)}
                 className={cn(
                   'relative flex w-full flex-col items-center gap-0.5 py-1.5',
                   'rounded-ubos-sm text-[9px] font-bold uppercase tracking-wide',
@@ -94,11 +100,7 @@ export function CommandCenterLeftRail({
               </button>
 
               {/* Tooltip — CSS-only, no JS required */}
-              <span
-                className="ubos-rail-tooltip"
-                role="tooltip"
-                aria-hidden="true"
-              >
+              <span className="ubos-rail-tooltip" role="tooltip" aria-hidden="true">
                 {item.label}
               </span>
             </span>
@@ -107,4 +109,4 @@ export function CommandCenterLeftRail({
       })}
     </nav>
   );
-}
+});

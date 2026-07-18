@@ -485,6 +485,21 @@ export const CommandCenterShell = memo(function CommandCenterShell({
     setFullscreenMonitor(null);
   }, [setFullscreenMonitor]);
 
+  const toggleLayoutLock = useCallback(() => {
+    setLayoutLocked(!layoutLocked);
+  }, [layoutLocked, setLayoutLocked]);
+  const fullscreenProgram = useCallback(
+    () => setFullscreenMonitor('program'),
+    [setFullscreenMonitor],
+  );
+  const fullscreenPreview = useCallback(
+    () => setFullscreenMonitor('preview'),
+    [setFullscreenMonitor],
+  );
+  const expandLeftDock = useCallback(() => toggleZone('left-dock'), [toggleZone]);
+  const expandRightDock = useCallback(() => toggleZone('right-dock'), [toggleZone]);
+  const toggleBottomWorkspace = useCallback(() => toggleZone('bottom-workspace'), [toggleZone]);
+
   useWorkspaceKeyboard({
     layoutLocked,
     onSelectPreset: handleSelectPreset,
@@ -521,10 +536,10 @@ export const CommandCenterShell = memo(function CommandCenterShell({
         onToggleZone={toggleZone}
         onResetLayout={resetLayout}
         onSaveLayout={saveLayout}
-        onToggleLayoutLock={() => setLayoutLocked(!layoutLocked)}
+        onToggleLayoutLock={toggleLayoutLock}
         onNavChange={onNavChange}
-        onFullscreenProgram={() => setFullscreenMonitor('program')}
-        onFullscreenPreview={() => setFullscreenMonitor('preview')}
+        onFullscreenProgram={fullscreenProgram}
+        onFullscreenPreview={fullscreenPreview}
       />
 
       <header
@@ -547,10 +562,10 @@ export const CommandCenterShell = memo(function CommandCenterShell({
           onTogglePanel={togglePanelVisibility}
           onToggleZone={toggleZone}
           onResetLayout={resetLayout}
-          onToggleLayoutLock={() => setLayoutLocked(!layoutLocked)}
+          onToggleLayoutLock={toggleLayoutLock}
           onSaveLayout={saveLayout}
-          onFullscreenProgram={() => setFullscreenMonitor('program')}
-          onFullscreenPreview={() => setFullscreenMonitor('preview')}
+          onFullscreenProgram={fullscreenProgram}
+          onFullscreenPreview={fullscreenPreview}
           onToggleSafeAreas={toggleSafeAreas}
           onActivateBottomTab={handleActivateBottomTab}
           onActivateSourceTab={handleActivateSourceTab}
@@ -574,7 +589,7 @@ export const CommandCenterShell = memo(function CommandCenterShell({
           isZoneCollapsed={isZoneToggleCollapsed}
           onSelectPreset={handleSelectPreset}
           onToggleZone={toggleZone}
-          onToggleLayoutLock={() => setLayoutLocked(!layoutLocked)}
+          onToggleLayoutLock={toggleLayoutLock}
           onSaveLayout={saveLayout}
           onResetLayout={resetLayout}
         />
@@ -587,11 +602,7 @@ export const CommandCenterShell = memo(function CommandCenterShell({
           </div>
 
           {leftCollapsed ? (
-            <CollapsedZoneStrip
-              side="left"
-              label="Sources"
-              onExpand={() => toggleZone('left-dock')}
-            />
+            <CollapsedZoneStrip side="left" label="Sources" onExpand={expandLeftDock} />
           ) : (
             <div
               className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-default)]"
@@ -647,11 +658,7 @@ export const CommandCenterShell = memo(function CommandCenterShell({
           )}
 
           {rightCollapsed ? (
-            <CollapsedZoneStrip
-              side="right"
-              label="Operations"
-              onExpand={() => toggleZone('right-dock')}
-            />
+            <CollapsedZoneStrip side="right" label="Operations" onExpand={expandRightDock} />
           ) : (
             <div
               className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-default)]"
@@ -689,9 +696,7 @@ export const CommandCenterShell = memo(function CommandCenterShell({
             onTabChange={handleBottomTabChange}
             collapsed={bottomCollapsed || forceBottomCollapsed}
             onToggleCollapse={
-              layoutLocked || forceBottomCollapsed
-                ? undefined
-                : () => toggleZone('bottom-workspace')
+              layoutLocked || forceBottomCollapsed ? undefined : toggleBottomWorkspace
             }
             isPanelVisible={isPanelVisible}
             className="h-full"

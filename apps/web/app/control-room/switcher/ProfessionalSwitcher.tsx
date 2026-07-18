@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { BroadcastPanel, cn } from '@ubos/ui';
 import type { ProductionSwitchingState, TransitionType } from '@ubos/shared';
 import { HardwareButton, HardwareButtonGroup } from './HardwareButton';
@@ -15,7 +15,7 @@ import { TransitionSelector } from './TransitionSelector';
 import { TransitionVisualization } from './TransitionVisualization';
 import { transitionDisplayLabel } from './switcher-config';
 
-export function ProfessionalSwitcher({
+export const ProfessionalSwitcher = memo(function ProfessionalSwitcher({
   productionState,
   programSceneName,
   previewSceneName,
@@ -64,12 +64,19 @@ export function ProfessionalSwitcher({
   onDurationChange: (value: number) => void;
   className?: string;
 }) {
-  const ready = switcherReady && !transitionActive;
+  const ready = useMemo(
+    () => switcherReady && !transitionActive,
+    [switcherReady, transitionActive],
+  );
   const [detailsOpen, setDetailsOpen] = useState(detailsDefaultOpen);
 
   useEffect(() => {
-    setDetailsOpen(detailsDefaultOpen);
+    setDetailsOpen((current) => (current === detailsDefaultOpen ? current : detailsDefaultOpen));
   }, [detailsDefaultOpen]);
+  const handleDetailsToggle = useCallback((event: React.ToggleEvent<HTMLDetailsElement>) => {
+    const open = event.currentTarget.open;
+    setDetailsOpen((current) => (current === open ? current : open));
+  }, []);
 
   return (
     <BroadcastPanel
@@ -161,7 +168,7 @@ export function ProfessionalSwitcher({
         <details
           className="group min-h-0 shrink-0"
           open={detailsOpen}
-          onToggle={(event) => setDetailsOpen((event.currentTarget as HTMLDetailsElement).open)}
+          onToggle={handleDetailsToggle}
         >
           <summary className="flex cursor-pointer list-none items-center gap-2 rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight px-2 py-1 text-ubos-metadata font-semibold uppercase tracking-wide text-ubos-fg-muted hover:bg-ubos-slate hover:text-ubos-fg-secondary">
             <span aria-hidden="true" className="transition-transform group-open:rotate-90">
@@ -203,7 +210,7 @@ export function ProfessionalSwitcher({
       </div>
     </BroadcastPanel>
   );
-}
+});
 
 /** @deprecated Use ProfessionalSwitcher */
 export const ProductionSwitcher = ProfessionalSwitcher;
