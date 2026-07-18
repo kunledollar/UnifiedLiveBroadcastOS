@@ -4,6 +4,7 @@ import { AssetList, AssetRow, ConsoleSection, StatusBadge } from '@ubos/ui';
 import type { ChatMessage } from '@ubos/shared';
 import type { BroadcastRealtimeEvent } from '@ubos/shared';
 import { OperationsPanel } from './OperationsChrome';
+import { ClientTime } from '../_components/client-time';
 
 export function LogsPanel({
   messages = [],
@@ -19,7 +20,9 @@ export function LogsPanel({
     return (
       <OperationsPanel title="Logs">
         <p className="text-ubos-caption text-ubos-fg-muted">No recent events.</p>
-        <p className="text-ubos-metadata text-ubos-fg-muted">Logs unavailable until activity is recorded.</p>
+        <p className="text-ubos-metadata text-ubos-fg-muted">
+          Logs unavailable until activity is recorded.
+        </p>
       </OperationsPanel>
     );
   }
@@ -36,7 +39,7 @@ export function LogsPanel({
                 subtitle={`${event.entityType}${event.entityId ? ` · ${event.entityId}` : ''}`}
                 status={
                   <StatusBadge variant="neutral">
-                    {new Date(event.timestamp).toLocaleTimeString()}
+                    <ClientTime iso={event.timestamp} />
                   </StatusBadge>
                 }
               />

@@ -66,6 +66,8 @@ import type { DeviceAction, DeviceState } from '../devices/device-state';
 import { createDeviceManifest } from '@ubos/shared';
 import { createInitialDeviceState } from '../devices/device-state';
 
+const operationsHydrationTimestamp = '2026-07-01T00:00:00.000Z';
+
 export function OperationsConsoleContent({
   broadcastId,
   workspaceId,
@@ -301,7 +303,10 @@ export function OperationsConsoleContent({
       ) : (
         <AIAssistantPanel
           state={createInitialAIState({
-            assistant: { ...createDefaultAIAssistantState(), status: 'disabled' },
+            assistant: {
+              ...createDefaultAIAssistantState(operationsHydrationTimestamp),
+              status: 'disabled',
+            },
             recommendations: [],
             riskSignals: [],
           })}
@@ -320,7 +325,7 @@ export function OperationsConsoleContent({
               status: 'draft',
               segments: [],
               estimatedDurationMs: 0,
-              updatedAt: new Date().toISOString(),
+              updatedAt: operationsHydrationTimestamp,
             },
             macros: [],
             automationMode: 'manual',

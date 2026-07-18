@@ -71,7 +71,7 @@ const fallbackSource = sources[0] as Source;
 
 function createLayout(preset: LayoutPreset, name = `${preset} Monitor Wall`): Layout {
   const count = presetCounts[preset];
-  return { id: `layout-${preset.toLowerCase().replace(/\W+/g, '-')}-${Date.now()}`, name, preset, favorite: preset === '9 View', tiles: Array.from({ length: count }, (_, index) => { const source = sources[index % sources.length] ?? fallbackSource; return ({ id: `tile-${index + 1}`, sourceId: source.id, label: source.label, aspectRatio: '16:9', borderColor: '#38bdf8', showAudio: true, pinned: index < 2, locked: false, hidden: false }); }), preferences: { safeAreas: ['titleSafe', 'actionSafe', 'centerCross'], virtualizeInactiveTiles: true, throttleHiddenTiles: true, reuseStreams: true }, inspectorMetadata: { version: '3.11', persistedState: 'layouts,tile assignments,preferences,inspector metadata', runtimeVideoPersisted: false } };
+  return { id: `layout-${preset.toLowerCase().replace(/\W+/g, '-')}-${name.toLowerCase().replace(/\W+/g, '-')}`, name, preset, favorite: preset === '9 View', tiles: Array.from({ length: count }, (_, index) => { const source = sources[index % sources.length] ?? fallbackSource; return ({ id: `tile-${index + 1}`, sourceId: source.id, label: source.label, aspectRatio: '16:9', borderColor: '#38bdf8', showAudio: true, pinned: index < 2, locked: false, hidden: false }); }), preferences: { safeAreas: ['titleSafe', 'actionSafe', 'centerCross'], virtualizeInactiveTiles: true, throttleHiddenTiles: true, reuseStreams: true }, inspectorMetadata: { version: '3.11', persistedState: 'layouts,tile assignments,preferences,inspector metadata', runtimeVideoPersisted: false } };
 }
 
 function getTally(source: Source): Tally {

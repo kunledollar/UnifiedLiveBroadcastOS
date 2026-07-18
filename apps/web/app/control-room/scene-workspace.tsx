@@ -105,6 +105,7 @@ import {
   useTransition,
 } from 'react';
 import { useMediaCapture } from '../../lib/media/use-media-capture';
+import { useClientNow } from './_components/client-now';
 import {
   areScenesSameReference,
   areScenesSemanticallyEqual,
@@ -254,8 +255,10 @@ import {
 } from './distribution';
 import {
   createDistributionManifest,
+  createSampleBroadcastDestinations,
   createSampleOutputHealth,
   createDeviceManifest,
+  createSampleBroadcastDevices,
 } from '@ubos/shared';
 import {
   DeviceManagerWorkspace,
@@ -263,6 +266,8 @@ import {
   deviceHealthSummaryLabel,
   deviceReducer,
 } from './devices';
+
+const controlRoomHydrationTimestamp = '2026-07-01T00:00:00.000Z';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
@@ -2256,7 +2261,8 @@ function createProductionGraphSessionFromScenes(input: {
   productionState: ProductionSwitchingState;
   broadcastId: string;
 }): ProductionBroadcastSession {
-  const timestamp = new Date().toISOString();
+  const timestamp =
+    input.scenes[0]?.updatedAt ?? input.scenes[0]?.createdAt ?? '1970-01-01T00:00:00.000Z';
   const graph = createInitialProductionGraph({
     broadcastSessionId: input.broadcastId,
     name: 'Control Room Session',
@@ -2454,11 +2460,27 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   );
   const [runtimeView, setRuntimeView] = useState(runtime.state);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
-  const startedAtRef = useRef(Date.now());
-  const [clockSnapshot] = useState(() => ({
-    elapsedSeconds: Math.floor((Date.now() - startedAtRef.current) / 1000),
-    clock: new Date().toLocaleTimeString([], { hour12: false }),
+  const startedAtRef = useRef<number | null>(null);
+  const [clockSnapshot, setClockSnapshot] = useState(() => ({
+    elapsedSeconds: 0,
+    clock: '—',
   }));
+
+  useEffect(() => {
+    startedAtRef.current = Date.now();
+    const tick = () => {
+      const startedAt = startedAtRef.current ?? Date.now();
+      setClockSnapshot({
+        elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
+        clock: new Date().toLocaleTimeString([], { hour12: false }),
+      });
+    };
+    tick();
+    const interval = window.setInterval(tick, 1000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  const clientNow = useClientNow(1000);
 
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
@@ -3757,7 +3779,10 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   const realtimeSyncEnabled = isRealtimeSyncEnabled(process.env);
   const realtimeSyncUrl = process.env.NEXT_PUBLIC_UBOS_SYNC_URL;
   const authorityDiagnostics = useMemo(() => {
-    const store = createMockAuthorityScenario(productionGraphSession.id);
+    const store = createMockAuthorityScenario(
+      productionGraphSession.id,
+      productionGraphSession.createdAt,
+    );
     const state = store.getAuthorityState();
     return {
       scopes: Object.values(state.scopes),
@@ -3767,21 +3792,34 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       decisions: store.listRecentDecisions(),
       canOverride: ['OWNER', 'ADMIN'].includes('DIRECTOR'),
     };
-  }, [productionGraphSession.id]);
+  }, [productionGraphSession.createdAt, productionGraphSession.id]);
   const syncDiagnostics = useMemo(() => {
+    const syncTimestamp = productionGraphSession.createdAt;
     const syncSession = createMockSyncScenario(
       createSyncSession({
         id: `sync:${productionGraphSession.id}`,
         broadcastSessionId: productionGraphSession.id,
         productionGraphId: productionGraphSession.graph.id,
         currentGraphRevision: productionGraphSession.graph.metadata.revision,
+        createdAt: syncTimestamp,
+        updatedAt: syncTimestamp,
       }),
+    );
+    syncSession.clients = Object.fromEntries(
+      Object.entries(syncSession.clients).map(([id, client]) => [
+        id,
+        { ...client, lastHeartbeatAt: syncTimestamp },
+      ]),
     );
     const clients = Object.values(syncSession.clients);
     return {
       session: syncSession,
       clients,
-      staleClientIds: new Set(getStaleClients(syncSession).map((client) => client.clientId)),
+      staleClientIds: new Set(
+        getStaleClients(syncSession, 30_000, clientNow ?? Date.parse(syncTimestamp)).map(
+          (client) => client.clientId,
+        ),
+      ),
       acceptedCommands: productionGraphSession.commandLog.length,
       rejectedCommands: productionGraphSession.eventLog.filter(
         (event) => event.type === 'COMMAND_REJECTED',
@@ -3801,7 +3839,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       lastHeartbeatAt: clients.find((client) => client.lastHeartbeatAt)?.lastHeartbeatAt ?? '—',
       reconnectAttempts: 0,
     };
-  }, [productionGraphSession, realtimeSyncEnabled, realtimeSyncUrl]);
+  }, [clientNow, productionGraphSession, realtimeSyncEnabled, realtimeSyncUrl]);
   const dispatchProductionGraphCommand = useCallback(
     (type: ProductionCommandType, payload: Record<string, unknown> = {}) => {
       const transition = productionGraphDispatcher.dispatch({
@@ -3979,19 +4017,37 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   const [automationState, dispatchAutomation] = useReducer(
     automationReducer,
     createInitialAutomationState(
-      enrichRunOfShowWithSampleCues(createDefaultRunOfShow()),
+      enrichRunOfShowWithSampleCues(
+        createDefaultRunOfShow('Show Rundown', {
+          id: 'ros-control-room-hydration-safe',
+          updatedAt: controlRoomHydrationTimestamp,
+        }),
+        controlRoomHydrationTimestamp,
+      ),
       createSampleMacros(),
     ),
   );
   const [aiState, dispatchAI] = useReducer(
     aiReducer,
     createInitialAIState({
-      assistant: createDefaultAIAssistantState(),
+      assistant: createDefaultAIAssistantState(controlRoomHydrationTimestamp),
       recommendations: createSampleAIRecommendations(),
       riskSignals: createSampleAIRiskSignals(),
     }),
   );
-  const distributionManifest = useMemo(() => createDistributionManifest(), []);
+  const distributionManifest = useMemo(() => {
+    const manifest = createDistributionManifest({
+      destinations: createSampleBroadcastDestinations(controlRoomHydrationTimestamp),
+    });
+    return {
+      ...manifest,
+      destinations: manifest.destinations.map((destination) => ({
+        ...destination,
+        createdAt: controlRoomHydrationTimestamp,
+        updatedAt: controlRoomHydrationTimestamp,
+      })),
+    };
+  }, []);
   const [distributionState, dispatchDistribution] = useReducer(
     distributionReducer,
     createInitialDistributionState({
@@ -4001,7 +4057,18 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       outputHealth: createSampleOutputHealth(distributionManifest.destinations),
     }),
   );
-  const deviceManifest = useMemo(() => createDeviceManifest(), []);
+  const deviceManifest = useMemo(() => {
+    const manifest = createDeviceManifest({
+      devices: createSampleBroadcastDevices(controlRoomHydrationTimestamp),
+    });
+    return {
+      ...manifest,
+      devices: manifest.devices.map((device) => ({
+        ...device,
+        lastSeen: controlRoomHydrationTimestamp,
+      })),
+    };
+  }, []);
   const [deviceState, dispatchDevice] = useReducer(
     deviceReducer,
     createInitialDeviceState(deviceManifest),
@@ -4060,18 +4127,21 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   const collaborationDemoEnabled = isCollaborationDemoEnabled();
   const remoteProductionOperators = useMemo(() => {
     if (collaborationDemoEnabled) {
-      return createMockCollaborationOperators(productionGraphSession.graph.metadata.revision).map(
-        (operator) => mapCollaborationOperatorToPresence(operator, true),
-      );
+      return createMockCollaborationOperators(
+        productionGraphSession.graph.metadata.revision,
+        productionGraphSession.createdAt,
+      ).map((operator) => mapCollaborationOperatorToPresence(operator, true));
     }
     return [
       createLocalOperatorPresence({
         workspaceId: selectedWorkspace,
         currentPanel: activeOperationsTab,
+        lastSeen: productionGraphSession.createdAt,
       }),
     ];
   }, [
     collaborationDemoEnabled,
+    productionGraphSession.createdAt,
     productionGraphSession.graph.metadata.revision,
     selectedWorkspace,
     activeOperationsTab,
@@ -4544,7 +4614,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           }
         : {}),
       collaborationLockCount: collaborationState.remoteProduction.locks.filter(
-        (lock) => Date.parse(lock.expiresAt) > Date.now(),
+        (lock) => clientNow === null || Date.parse(lock.expiresAt) > clientNow,
       ).length,
       collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
         (note) => note.status === 'open',
