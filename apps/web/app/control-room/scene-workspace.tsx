@@ -3443,9 +3443,13 @@ export function SceneWorkspace({
 
   useEffect(() => {
     void refreshNativeRuntimeStatus();
-    const interval = window.setInterval(() => void refreshNativeRuntimeStatus(), 5000);
+    const active = ['preparing', 'recording', 'stopping', 'finalizing'].includes(nativeRecordingState.state);
+    const shouldPoll = active || nativeRecordingState.state === 'ready';
+    if (!shouldPoll) return;
+    const intervalMs = active ? 5000 : 30000;
+    const interval = window.setInterval(() => void refreshNativeRuntimeStatus(), intervalMs);
     return () => window.clearInterval(interval);
-  }, [refreshNativeRuntimeStatus]);
+  }, [nativeRecordingState.state, refreshNativeRuntimeStatus]);
 
   const blobToBase64 = (blob: Blob) =>
     new Promise<string>((resolve, reject) => {

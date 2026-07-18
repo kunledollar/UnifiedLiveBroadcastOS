@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRenderForensics, recordForensicsStateWrite, ubosForensicsFlag } from '../render-forensics';
 import { BroadcastPanel, StatusBadge, cn, ubosTypographyClasses } from '@ubos/ui';
 import { AudioMeter } from './AudioMeter';
+import { metersSemanticallyEqual } from './audio-stabilization-utils';
 
 type RouteId = 'program' | 'recording' | 'streaming' | 'monitor';
 type MixerSourceType = 'camera' | 'screen' | 'media' | 'browser' | 'guest' | 'master';
@@ -45,6 +46,7 @@ type RuntimeNodes = {
 
 const routes: RouteId[] = ['program', 'recording', 'streaming', 'monitor'];
 const clippingThreshold = 92;
+const mixerMeterUpdateMs = 100;
 
 function createDefaultMetadata(type: MixerSourceType): ChannelMetadata {
   return {
@@ -84,9 +86,15 @@ export function ProfessionalAudioMixer({
 
   useEffect(() => {
     setMetadata((current) => {
+      let changed = false;
       const next = { ...current };
-      for (const source of sources) next[source.id] ??= createDefaultMetadata(source.type);
-      return next;
+      for (const source of sources) {
+        if (!next[source.id]) {
+          next[source.id] = createDefaultMetadata(source.type);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
     });
   }, [sources]);
 
@@ -159,7 +167,7 @@ export function ProfessionalAudioMixer({
   useEffect(() => {
     let lastUpdate = 0;
     const tick = (time: number) => {
-      if (time - lastUpdate > 66) {
+      if (time - lastUpdate >= mixerMeterUpdateMs) {
         const nextMeters: Record<string, MeterState> = {};
         let masterPeak = 0;
         for (const source of sources) {
@@ -193,8 +201,9 @@ export function ProfessionalAudioMixer({
         };
         if (!ubosForensicsFlag('mixer-setter-disabled')) {
           setMeters((current) => {
+            const semanticEqual = metersSemanticallyEqual(current, nextMeters);
             recordForensicsStateWrite('ProfessionalAudioMixer.setMeters', current, nextMeters);
-            return nextMeters;
+            return semanticEqual ? current : nextMeters;
           });
         }
         for (const source of sources) {
