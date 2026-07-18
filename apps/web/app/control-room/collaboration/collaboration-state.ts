@@ -1,8 +1,4 @@
-import type {
-  ProducerNote,
-  RemoteCollaborationEvent,
-  RemoteProductionState,
-} from '@ubos/shared';
+import type { ProducerNote, RemoteCollaborationEvent, RemoteProductionState } from '@ubos/shared';
 import { createCollaborationCommandIntent } from '@ubos/shared';
 
 export type CollaborationState = {
@@ -16,6 +12,13 @@ export type CollaborationAction =
   | { type: 'RESOLVE_NOTE'; noteId: string }
   | { type: 'PIN_NOTE'; noteId: string }
   | { type: 'ADD_EVENT'; event: RemoteCollaborationEvent };
+
+function remoteProductionStatesEqual(
+  current: RemoteProductionState,
+  next: RemoteProductionState,
+): boolean {
+  return JSON.stringify(current) === JSON.stringify(next);
+}
 
 export const initialCollaborationState: CollaborationState = {
   remoteProduction: {
@@ -35,6 +38,7 @@ export function collaborationReducer(
 ): CollaborationState {
   switch (action.type) {
     case 'SET_REMOTE_PRODUCTION':
+      if (remoteProductionStatesEqual(state.remoteProduction, action.state)) return state;
       return { ...state, remoteProduction: action.state };
     case 'ADD_NOTE':
       return {
@@ -54,7 +58,9 @@ export function collaborationReducer(
         remoteProduction: {
           ...state.remoteProduction,
           notes: state.remoteProduction.notes.map((note) =>
-            note.id === action.noteId ? { ...note, status: 'resolved' as const, updatedAt: new Date().toISOString() } : note,
+            note.id === action.noteId
+              ? { ...note, status: 'resolved' as const, updatedAt: new Date().toISOString() }
+              : note,
           ),
         },
       };
@@ -64,7 +70,9 @@ export function collaborationReducer(
         remoteProduction: {
           ...state.remoteProduction,
           notes: state.remoteProduction.notes.map((note) =>
-            note.id === action.noteId ? { ...note, status: 'pinned' as const, updatedAt: new Date().toISOString() } : note,
+            note.id === action.noteId
+              ? { ...note, status: 'pinned' as const, updatedAt: new Date().toISOString() }
+              : note,
           ),
         },
       };
