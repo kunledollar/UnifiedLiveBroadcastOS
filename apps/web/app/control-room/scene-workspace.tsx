@@ -92,6 +92,7 @@ import {
   createMockAuthorityScenario,
 } from '@ubos/shared';
 import {
+  memo,
   type CSSProperties,
   type ReactNode,
   useCallback,
@@ -2394,7 +2395,7 @@ function createProductionGraphSessionFromScenes(input: {
   };
 }
 
-export function SceneWorkspace({
+export const SceneWorkspace = memo(function SceneWorkspace({
   initialScenes,
   layouts,
   channels,
@@ -3443,7 +3444,9 @@ export function SceneWorkspace({
 
   useEffect(() => {
     void refreshNativeRuntimeStatus();
-    const active = ['preparing', 'recording', 'stopping', 'finalizing'].includes(nativeRecordingState.state);
+    const active = ['preparing', 'recording', 'stopping', 'finalizing'].includes(
+      nativeRecordingState.state,
+    );
     const shouldPoll = active || nativeRecordingState.state === 'ready';
     if (!shouldPoll) return;
     const intervalMs = active ? 5000 : 30000;
@@ -5613,6 +5616,136 @@ export function SceneWorkspace({
     (h) => h.latencyMs != null,
   )?.latencyMs;
 
+  const handleCommandNavChange = useCallback((nav: NavItemId) => {
+    setActiveNav(nav);
+    const dockTab = preferredSourceDockTab(nav);
+    if (dockTab) setActiveSourceDockTab(dockTab);
+    if (nav === 'production-graph') {
+      setActiveBottomDock(normalizeDockTabId('production-graph'));
+    }
+    if (nav === 'outputs') {
+      setActiveOperationsTab('outputs');
+    }
+    if (nav === 'settings') {
+      setActiveOperationsTab('inspector');
+    }
+  }, []);
+  const handleCommandDockTabChange = useCallback((tab: DockTabId) => {
+    setActiveBottomDock(normalizeDockTabId(tab));
+  }, []);
+  const handleSeedDemo = useCallback(
+    () => startTransition(async () => seedDemoProductionState()),
+    [startTransition],
+  );
+  const handleSimulateDemo = useCallback(
+    () => startTransition(async () => simulateDemoProduction()),
+    [startTransition],
+  );
+  const handleResetDemo = useCallback(
+    () => startTransition(async () => resetDemoProductionState()),
+    [startTransition],
+  );
+  const handleCommandCut = useCallback(() => switchProgram('cut'), [switchProgram]);
+  const handleCommandTake = useCallback(
+    () => switchProgram(productionState.transitionType),
+    [switchProgram, productionState.transitionType],
+  );
+  const handleCommandAuto = useCallback(() => switchProgram('fade'), [switchProgram]);
+  const programOverlay = useMemo(
+    () => ({
+      sceneName: programScene.name,
+      recordingLabel:
+        recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
+          ? 'ON'
+          : undefined,
+      streamingLabel:
+        streamingState.lifecycle === 'streaming'
+          ? 'LIVE'
+          : streamingState.lifecycle === 'connecting'
+            ? 'CONNECTING'
+            : undefined,
+      droppedLabel:
+        safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
+      latencyLabel: primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+    }),
+    [
+      programScene.name,
+      recordingState,
+      browserRecordingPanelState.state,
+      streamingState.lifecycle,
+      safeHealthMetrics.dropped,
+      primaryOutputLatencyMs,
+    ],
+  );
+  const previewOverlay = useMemo(
+    () => ({
+      sceneName: previewScene.name,
+      transitionLabel: productionState.transitionType,
+      armedGraphicsCount: previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview',
+      ).length,
+      latencyLabel: primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+    }),
+    [
+      previewScene.name,
+      productionState.transitionType,
+      previewSceneComposition.layers,
+      primaryOutputLatencyMs,
+    ],
+  );
+  const outputHealthLabel = useMemo(
+    () =>
+      outputHealthSummaryLabel({
+        destinations: distributionState.destinations,
+        health: distributionState.outputHealth,
+      }),
+    [distributionState.destinations, distributionState.outputHealth],
+  );
+  const deviceHealthLabel = useMemo(
+    () => deviceHealthSummaryLabel(deviceState.devices),
+    [deviceState.devices],
+  );
+  const commandStatusBar = useMemo(
+    () => (
+      <BroadcastStatusBar
+        sessionName="Launch Day"
+        isLive={activeRouteCount > 0}
+        isRecording={recordingState === 'recording'}
+        runTime={formatElapsed(elapsedSeconds)}
+        clock={clock}
+        transitionActive={transitionActive}
+        fps={safeHealthMetrics.fps}
+        cpu={safeHealthMetrics.cpu}
+        dropped={safeHealthMetrics.dropped}
+        upload={safeHealthMetrics.upload}
+        automationModeLabel={automationModeLabel(automationState.automationMode)}
+        aiStatusLabel={aiStatusLabel(aiState.assistant)}
+        outputHealthLabel={outputHealthLabel}
+        deviceHealthLabel={deviceHealthLabel}
+        engineStatusLabel="Unavailable"
+        compactChrome={workspace.compactChrome}
+        toolsMenu={toolsMenu}
+      />
+    ),
+    [
+      activeRouteCount,
+      recordingState,
+      elapsedSeconds,
+      clock,
+      transitionActive,
+      safeHealthMetrics.fps,
+      safeHealthMetrics.cpu,
+      safeHealthMetrics.dropped,
+      safeHealthMetrics.upload,
+      automationState.automationMode,
+      aiState.assistant,
+      outputHealthLabel,
+      deviceHealthLabel,
+      workspace.compactChrome,
+      toolsMenu,
+    ],
+  );
+
   return (
     <>
       <script
@@ -5632,45 +5765,9 @@ export function SceneWorkspace({
       />
       <CommandCenterShell
         layoutStyle={layoutStyle}
-        statusBar={
-          <BroadcastStatusBar
-            sessionName="Launch Day"
-            isLive={activeRouteCount > 0}
-            isRecording={recordingState === 'recording'}
-            runTime={formatElapsed(elapsedSeconds)}
-            clock={clock}
-            transitionActive={transitionActive}
-            fps={safeHealthMetrics.fps}
-            cpu={safeHealthMetrics.cpu}
-            dropped={safeHealthMetrics.dropped}
-            upload={safeHealthMetrics.upload}
-            automationModeLabel={automationModeLabel(automationState.automationMode)}
-            aiStatusLabel={aiStatusLabel(aiState.assistant)}
-            outputHealthLabel={outputHealthSummaryLabel({
-              destinations: distributionState.destinations,
-              health: distributionState.outputHealth,
-            })}
-            deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
-            engineStatusLabel="Unavailable"
-            compactChrome={workspace.compactChrome}
-            toolsMenu={toolsMenu}
-          />
-        }
+        statusBar={commandStatusBar}
         activeNav={activeNav}
-        onNavChange={(nav) => {
-          setActiveNav(nav);
-          const dockTab = preferredSourceDockTab(nav);
-          if (dockTab) setActiveSourceDockTab(dockTab);
-          if (nav === 'production-graph') {
-            setActiveBottomDock(normalizeDockTabId('production-graph'));
-          }
-          if (nav === 'outputs') {
-            setActiveOperationsTab('outputs');
-          }
-          if (nav === 'settings') {
-            setActiveOperationsTab('inspector');
-          }
-        }}
+        onNavChange={handleCommandNavChange}
         sourceDockContent={leftNavContent}
         activeSourceDockTab={activeSourceDockTab}
         onSourceDockTabChange={setActiveSourceDockTab}
@@ -5683,45 +5780,21 @@ export function SceneWorkspace({
         activeOperationsTab={activeOperationsTab}
         activeDockTab={activeBottomDock}
         onOperationsTabChange={setActiveOperationsTab}
-        onDockTabChange={(tab) => setActiveBottomDock(normalizeDockTabId(tab))}
+        onDockTabChange={handleCommandDockTabChange}
         onWorkspaceModeApplied={applyMenuWorkspaceMode}
         onSaveWorkspace={saveWorkspace}
         onRestoreWorkspace={restoreWorkspace}
         onResetWorkspace={resetWorkspace}
-        onSeedDemo={() => startTransition(async () => seedDemoProductionState())}
-        onSimulateDemo={() => startTransition(async () => simulateDemoProduction())}
-        onResetDemo={() => startTransition(async () => resetDemoProductionState())}
+        onSeedDemo={handleSeedDemo}
+        onSimulateDemo={handleSimulateDemo}
+        onResetDemo={handleResetDemo}
         bottomWorkspaceContent={bottomDockContent}
-        onCut={() => switchProgram('cut')}
-        onTake={() => switchProgram(productionState.transitionType)}
-        onAuto={() => switchProgram('fade')}
-        programOverlay={{
-          sceneName: programScene.name,
-          recordingLabel:
-            recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
-              ? 'ON'
-              : undefined,
-          streamingLabel:
-            streamingState.lifecycle === 'streaming'
-              ? 'LIVE'
-              : streamingState.lifecycle === 'connecting'
-                ? 'CONNECTING'
-                : undefined,
-          droppedLabel:
-            safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
-          latencyLabel:
-            primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
-        }}
-        previewOverlay={{
-          sceneName: previewScene.name,
-          transitionLabel: productionState.transitionType,
-          armedGraphicsCount: previewSceneComposition.layers.filter(
-            (layer) => layer.previewState === 'preview',
-          ).length,
-          latencyLabel:
-            primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
-        }}
+        onCut={handleCommandCut}
+        onTake={handleCommandTake}
+        onAuto={handleCommandAuto}
+        programOverlay={programOverlay}
+        previewOverlay={previewOverlay}
       />
     </>
   );
-}
+});
