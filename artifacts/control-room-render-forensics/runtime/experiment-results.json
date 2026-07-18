@@ -1,0 +1,340 @@
+[
+  {
+    "id": "baseline",
+    "name": "Experiment A — Baseline",
+    "durationMs": 10360,
+    "screenshot": "screenshots\\baseline.png",
+    "consoleErrors": [
+      "[baseline] error Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "[baseline] error A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                  ...\n",
+      "[baseline] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 2378,
+      "CommandCenterShell": 2378,
+      "GuestsPanel": 2354,
+      "InspectorPanel": 2354,
+      "ProfessionalAudioMixer": 3676,
+      "AudioMeter": 29408
+    },
+    "stateWrites": {
+      "AudioMeter.setPeakHold": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "AudioMeter.setDisplayLevel": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "ProfessionalAudioMixer.setMeters": {
+        "total": 1351,
+        "semantic": 2,
+        "noop": 0,
+        "reference": 1351
+      }
+    },
+    "domMutationCount": 62200,
+    "layoutShiftCount": 200,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 4106.949806949807,
+    "stateWritesPerSecond": 133.4942084942085,
+    "renderReductionPercent": 0,
+    "stateWriteReductionPercent": 0
+  },
+  {
+    "id": "mixer-closed",
+    "name": "Experiment B — Audio Mixer closed",
+    "durationMs": 10196,
+    "screenshot": "screenshots\\mixer-closed.png",
+    "consoleErrors": [
+      "[mixer-closed] error A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                  ...\n",
+      "[mixer-closed] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 3110,
+      "CommandCenterShell": 3110,
+      "GuestsPanel": 3082,
+      "InspectorPanel": 3080,
+      "ProfessionalAudioMixer": 4772,
+      "AudioMeter": 38176
+    },
+    "stateWrites": {
+      "AudioMeter.setPeakHold": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "AudioMeter.setDisplayLevel": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "ProfessionalAudioMixer.setMeters": {
+        "total": 1464,
+        "semantic": 2,
+        "noop": 0,
+        "reference": 1464
+      }
+    },
+    "domMutationCount": 81172,
+    "layoutShiftCount": 207,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 5426.637897214594,
+    "stateWritesPerSecond": 146.72420557081207,
+    "renderReductionPercent": 0,
+    "stateWriteReductionPercent": 0
+  },
+  {
+    "id": "mixer-disabled",
+    "name": "Experiment C — Mixer subtree disabled",
+    "durationMs": 10215,
+    "screenshot": "screenshots\\mixer-disabled.png",
+    "consoleErrors": [
+      "[mixer-disabled] Error: Hydration failed because the server rendered HTML didn't match the client. As a result this tree will be regenerated on the client. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\nhttps://react.dev/link/hydration-mismatch\n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                            ...\n                              <div className=\"min-h-0 sh...\" style={{height:280}}>\n                                <CommandCenterBottomWorkspace activeTab=\"layers\" ...>\n                                  <section className=\"flex min-h...\" aria-label=\"Bottom wor...\">\n                                    <div>\n                                    <div id=\"command-ce...\" role=\"tabpanel\" aria-labelledby=\"command-ce...\" ...>\n-                                     <section\n-                                       className=\"rounded-ubos-md border border-ubos-border bg-ubos-graphite shadow-u...\"\n-                                     >\n                  ...\n\n    at throwOnHydrationMismatch (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:4506:11)\n    at popHydrationState (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:4645:9)\n    at completeWork (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:11634:17)\n    at runWithFiberInDEV (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:872:30)\n    at completeUnitOfWork (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15863:19)\n    at performUnitOfWork (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15744:11)\n    at workLoopConcurrentByScheduler (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15721:9)\n    at renderRootConcurrent (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:15696:15)\n    at performWorkOnRoot (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:14990:13)\n    at performWorkOnRootViaSchedulerTask (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/react-dom/cjs/react-dom-client.development.js:16816:7)\n    at MessagePort.performWorkUntilDeadline (webpack-internal:///(app-pages-browser)/../../node_modules/.pnpm/next@15.5.19_@playwright+te_025bcecab52d996dea50de12beb6e2c4/node_modules/next/dist/compiled/scheduler/cjs/scheduler.development.js:45:48)",
+      "[mixer-disabled] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 3816,
+      "CommandCenterShell": 3816,
+      "GuestsPanel": 3808,
+      "InspectorPanel": 3806
+    },
+    "stateWrites": {},
+    "domMutationCount": 64739,
+    "layoutShiftCount": 514,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 1492.511013215859,
+    "stateWritesPerSecond": 0,
+    "renderReductionPercent": 64.16752843846949,
+    "stateWriteReductionPercent": 100
+  },
+  {
+    "id": "mixer-raf-disabled",
+    "name": "Experiment D — Mixer RAF disabled",
+    "durationMs": 10525,
+    "screenshot": "screenshots\\mixer-raf-disabled.png",
+    "consoleErrors": [
+      "[mixer-raf-disabled] error A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                  ...\n",
+      "[mixer-raf-disabled] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 1134,
+      "CommandCenterShell": 1136,
+      "GuestsPanel": 1116,
+      "InspectorPanel": 1116,
+      "ProfessionalAudioMixer": 1724,
+      "AudioMeter": 13792
+    },
+    "stateWrites": {
+      "AudioMeter.setPeakHold": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "AudioMeter.setDisplayLevel": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "ProfessionalAudioMixer.setMeters": {
+        "total": 978,
+        "semantic": 2,
+        "noop": 0,
+        "reference": 978
+      }
+    },
+    "domMutationCount": 29416,
+    "layoutShiftCount": 185,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 1901.9477434679334,
+    "stateWritesPerSecond": 95.96199524940617,
+    "renderReductionPercent": 52.95196013913698,
+    "stateWriteReductionPercent": 26.970354302241507
+  },
+  {
+    "id": "mixer-setter-disabled",
+    "name": "Experiment E — Mixer state setter disabled",
+    "durationMs": 10458,
+    "screenshot": "screenshots\\mixer-setter-disabled.png",
+    "consoleErrors": [
+      "[mixer-setter-disabled] error A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                  ...\n",
+      "[mixer-setter-disabled] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 918,
+      "CommandCenterShell": 918,
+      "GuestsPanel": 894,
+      "InspectorPanel": 894,
+      "ProfessionalAudioMixer": 1360,
+      "AudioMeter": 10880
+    },
+    "stateWrites": {
+      "AudioMeter.setPeakHold": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "AudioMeter.setDisplayLevel": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      }
+    },
+    "domMutationCount": 23484,
+    "layoutShiftCount": 177,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 1516.924842226047,
+    "stateWritesPerSecond": 3.0598584815452283,
+    "renderReductionPercent": 62.715051236250815,
+    "stateWriteReductionPercent": 97.68618944323933
+  },
+  {
+    "id": "audio-meter-disabled",
+    "name": "Experiment F — AudioMeter animation disabled",
+    "durationMs": 10635,
+    "screenshot": "screenshots\\audio-meter-disabled.png",
+    "consoleErrors": [
+      "[audio-meter-disabled] error A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                  ...\n",
+      "[audio-meter-disabled] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 846,
+      "CommandCenterShell": 848,
+      "GuestsPanel": 826,
+      "InspectorPanel": 826,
+      "ProfessionalAudioMixer": 1332,
+      "AudioMeter": 10656
+    },
+    "stateWrites": {
+      "ProfessionalAudioMixer.setMeters": {
+        "total": 882,
+        "semantic": 2,
+        "noop": 0,
+        "reference": 882
+      }
+    },
+    "domMutationCount": 22147,
+    "layoutShiftCount": 197,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 1441.8429713211096,
+    "stateWritesPerSecond": 82.93370944992948,
+    "renderReductionPercent": 63.960703205791106,
+    "stateWriteReductionPercent": 36.22559652928417
+  },
+  {
+    "id": "recording-poll-disabled",
+    "name": "Experiment G — Recording polling disabled",
+    "durationMs": 10467,
+    "screenshot": "screenshots\\recording-poll-disabled.png",
+    "consoleErrors": [
+      "[recording-poll-disabled] error A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                  ...\n",
+      "[recording-poll-disabled] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 786,
+      "CommandCenterShell": 786,
+      "GuestsPanel": 770,
+      "InspectorPanel": 770,
+      "ProfessionalAudioMixer": 1220,
+      "AudioMeter": 9760
+    },
+    "stateWrites": {
+      "AudioMeter.setPeakHold": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "AudioMeter.setDisplayLevel": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "ProfessionalAudioMixer.setMeters": {
+        "total": 841,
+        "semantic": 2,
+        "noop": 0,
+        "reference": 841
+      }
+    },
+    "domMutationCount": 20484,
+    "layoutShiftCount": 209,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 1346.326550109869,
+    "stateWritesPerSecond": 83.40498710232158,
+    "renderReductionPercent": 66.87975933063834,
+    "stateWriteReductionPercent": 36.8763557483731
+  },
+  {
+    "id": "scene-reconciliation-disabled",
+    "name": "Experiment H — Scene reconciliation disabled",
+    "durationMs": 10277,
+    "screenshot": "screenshots\\scene-reconciliation-disabled.png",
+    "consoleErrors": [
+      "[scene-reconciliation-disabled] error A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <HotReload assetPrefix=\"\" globalError={[...]}>\n      <AppDevOverlayErrorBoundary globalError={[...]}>\n        <ReplaySsrOnlyErrors>\n        <DevRootHTTPAccessFallbackBoundary>\n          <HTTPAccessFallbackBoundary notFound={<NotAllowedRootHTTPFallbackError>}>\n            <HTTPAccessFallbackErrorBoundary pathname=\"/control-room\" notFound={<NotAllowedRootHTTPFallbackError>} ...>\n              <RedirectBoundary>\n                <RedirectErrorBoundary router={{...}}>\n                  <Head>\n                  <__next_root_layout_boundary__>\n                    <SegmentViewNode type=\"layout\" pagePath=\"layout.tsx\">\n                      <SegmentTrieNode>\n                      <link>\n                      <RootLayout>\n                        <html lang=\"en\">\n                          <body\n-                           style={{zoom:\"100%\"}}\n                          >\n                  ...\n",
+      "[scene-reconciliation-disabled] error Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    ],
+    "visibleShaking": "unknown",
+    "renders": {
+      "SceneWorkspace": 1848,
+      "CommandCenterShell": 1848,
+      "GuestsPanel": 1834,
+      "InspectorPanel": 1834,
+      "ProfessionalAudioMixer": 2818,
+      "AudioMeter": 22544
+    },
+    "stateWrites": {
+      "AudioMeter.setPeakHold": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "AudioMeter.setDisplayLevel": {
+        "total": 16,
+        "semantic": 0,
+        "noop": 16,
+        "reference": 0
+      },
+      "ProfessionalAudioMixer.setMeters": {
+        "total": 1220,
+        "semantic": 2,
+        "noop": 0,
+        "reference": 1220
+      }
+    },
+    "domMutationCount": 48113,
+    "layoutShiftCount": 143,
+    "activeWorkspace": "unknown",
+    "bottomTab": "unknown",
+    "rendersPerSecond": 3184.392332392722,
+    "stateWritesPerSecond": 121.8254354383575,
+    "renderReductionPercent": 23.08451631098994,
+    "stateWriteReductionPercent": 9.472161966738973
+  }
+]

@@ -1,0 +1,64 @@
+{
+  "baseline": {
+    "SceneWorkspace": 2378,
+    "CommandCenterShell": 2378,
+    "GuestsPanel": 2354,
+    "InspectorPanel": 2354,
+    "ProfessionalAudioMixer": 3676,
+    "AudioMeter": 29408
+  },
+  "mixer-closed": {
+    "SceneWorkspace": 3110,
+    "CommandCenterShell": 3110,
+    "GuestsPanel": 3082,
+    "InspectorPanel": 3080,
+    "ProfessionalAudioMixer": 4772,
+    "AudioMeter": 38176
+  },
+  "mixer-disabled": {
+    "SceneWorkspace": 3816,
+    "CommandCenterShell": 3816,
+    "GuestsPanel": 3808,
+    "InspectorPanel": 3806
+  },
+  "mixer-raf-disabled": {
+    "SceneWorkspace": 1134,
+    "CommandCenterShell": 1136,
+    "GuestsPanel": 1116,
+    "InspectorPanel": 1116,
+    "ProfessionalAudioMixer": 1724,
+    "AudioMeter": 13792
+  },
+  "mixer-setter-disabled": {
+    "SceneWorkspace": 918,
+    "CommandCenterShell": 918,
+    "GuestsPanel": 894,
+    "InspectorPanel": 894,
+    "ProfessionalAudioMixer": 1360,
+    "AudioMeter": 10880
+  },
+  "audio-meter-disabled": {
+    "SceneWorkspace": 846,
+    "CommandCenterShell": 848,
+    "GuestsPanel": 826,
+    "InspectorPanel": 826,
+    "ProfessionalAudioMixer": 1332,
+    "AudioMeter": 10656
+  },
+  "recording-poll-disabled": {
+    "SceneWorkspace": 786,
+    "CommandCenterShell": 786,
+    "GuestsPanel": 770,
+    "InspectorPanel": 770,
+    "ProfessionalAudioMixer": 1220,
+    "AudioMeter": 9760
+  },
+  "scene-reconciliation-disabled": {
+    "SceneWorkspace": 1848,
+    "CommandCenterShell": 1848,
+    "GuestsPanel": 1834,
+    "InspectorPanel": 1834,
+    "ProfessionalAudioMixer": 2818,
+    "AudioMeter": 22544
+  }
+}
