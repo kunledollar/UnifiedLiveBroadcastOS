@@ -465,17 +465,23 @@ export const CommandCenterShell = memo(function CommandCenterShell({
   const leftDockStyle = useMemo(() => ({ width: leftDockWidth }), [leftDockWidth]);
   const rightDockStyle = useMemo(() => ({ width: rightDockWidth }), [rightDockWidth]);
   const bottomDockStyle = useMemo(() => ({ height: bottomHeight }), [bottomHeight]);
+  const centerStageHeight = layout.zones['center-stage'].rect.height;
   const centerViewportProps = useMemo(
-    () =>
-      layout.zones['center-stage'].rect.height > 0
-        ? { viewportHeight: layout.zones['center-stage'].rect.height }
-        : {},
-    [layout.zones],
+    () => (centerStageHeight > 0 ? { viewportHeight: centerStageHeight } : {}),
+    [centerStageHeight],
   );
 
   const isZoneToggleCollapsed = useCallback(
     (zoneId: CommandCenterZoneToggleId) => layout.zones[zoneId]?.collapsed ?? false,
-    [layout],
+    [layout.zones],
+  );
+  const getSourcePanelZone = useCallback(
+    (panelId: string) => panelStates.get(panelId)?.zone,
+    [panelStates],
+  );
+  const getPanelTitle = useCallback(
+    (panelId: string) => panels.find((panel) => panel.id === panelId)?.title,
+    [panels],
   );
 
   // ----- global keyboard shortcuts (3.15D-3) --------------------------------
@@ -613,7 +619,7 @@ export const CommandCenterShell = memo(function CommandCenterShell({
                 onTabChange={handleActivateSourceTab}
                 isPanelVisible={isPanelVisible}
                 onHidePanel={handleHideSourcePanel}
-                getPanelZone={(panelId) => panelStates.get(panelId)?.zone}
+                getPanelZone={getSourcePanelZone}
                 onMovePanel={handleMoveSourcePanel}
               >
                 {sourceDockContent}
@@ -669,7 +675,7 @@ export const CommandCenterShell = memo(function CommandCenterShell({
                 activeOperationsTab={activeOperationsTab}
                 isPanelVisible={isPanelVisible}
                 isPanelCollapsed={isPanelCollapsed}
-                getPanelTitle={(panelId) => panels.find((panel) => panel.id === panelId)?.title}
+                getPanelTitle={getPanelTitle}
                 onToggleCollapsed={togglePanelCollapsed}
                 onHidePanel={togglePanelVisibility}
               />

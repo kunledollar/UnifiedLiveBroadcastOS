@@ -105,7 +105,6 @@ import {
   useTransition,
 } from 'react';
 import { useMediaCapture } from '../../lib/media/use-media-capture';
-import { useClientNow } from './_components/client-now';
 import {
   areScenesSameReference,
   areScenesSemanticallyEqual,
@@ -2460,27 +2459,16 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   );
   const [runtimeView, setRuntimeView] = useState(runtime.state);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
-  const startedAtRef = useRef<number | null>(null);
-  const [clockSnapshot, setClockSnapshot] = useState(() => ({
-    elapsedSeconds: 0,
-    clock: '—',
-  }));
+  const startedAtRef = useRef(Date.now());
+  const stableNowRef = useRef(Date.now());
+  const clockSnapshot = useMemo(
+    () => ({
+      elapsedSeconds: 0,
+      clock: new Date(startedAtRef.current).toLocaleTimeString([], { hour12: false }),
+    }),
+    [],
+  );
 
-  useEffect(() => {
-    startedAtRef.current = Date.now();
-    const tick = () => {
-      const startedAt = startedAtRef.current ?? Date.now();
-      setClockSnapshot({
-        elapsedSeconds: Math.floor((Date.now() - startedAt) / 1000),
-        clock: new Date().toLocaleTimeString([], { hour12: false }),
-      });
-    };
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
-
-  const clientNow = useClientNow(1000);
 
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
@@ -3816,7 +3804,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       session: syncSession,
       clients,
       staleClientIds: new Set(
-        getStaleClients(syncSession, 30_000, clientNow ?? Date.parse(syncTimestamp)).map(
+        getStaleClients(syncSession, 30_000, stableNowRef.current).map(
           (client) => client.clientId,
         ),
       ),
@@ -3839,7 +3827,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       lastHeartbeatAt: clients.find((client) => client.lastHeartbeatAt)?.lastHeartbeatAt ?? '—',
       reconnectAttempts: 0,
     };
-  }, [clientNow, productionGraphSession, realtimeSyncEnabled, realtimeSyncUrl]);
+  }, [productionGraphSession, realtimeSyncEnabled, realtimeSyncUrl]);
   const dispatchProductionGraphCommand = useCallback(
     (type: ProductionCommandType, payload: Record<string, unknown> = {}) => {
       const transition = productionGraphDispatcher.dispatch({
@@ -4614,7 +4602,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           }
         : {}),
       collaborationLockCount: collaborationState.remoteProduction.locks.filter(
-        (lock) => clientNow === null || Date.parse(lock.expiresAt) > clientNow,
+        (lock) => Date.parse(lock.expiresAt) > stableNowRef.current,
       ).length,
       collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
         (note) => note.status === 'open',

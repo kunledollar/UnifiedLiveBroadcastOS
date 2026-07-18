@@ -252,6 +252,7 @@ export const CommandCenterStage = memo(function CommandCenterStage({
     () => toggleFullscreen('preview'),
     [toggleFullscreen],
   );
+  const closeFullscreen = useCallback(() => onFullscreenChange(null), [onFullscreenChange]);
 
   // Center Stage Layout Contract (3.15D-2 revised for zone-geometry restoration):
   //   Program: min 320×180; flex share = programShare(emphasis)
@@ -321,7 +322,7 @@ export const CommandCenterStage = memo(function CommandCenterStage({
         <div
           className="fixed inset-0 z-[75] bg-black/90 backdrop-blur-sm transition-opacity duration-[var(--ubos-duration-normal)]"
           aria-hidden="true"
-          onClick={() => onFullscreenChange(null)}
+          onClick={closeFullscreen}
         />
       ) : null}
 
