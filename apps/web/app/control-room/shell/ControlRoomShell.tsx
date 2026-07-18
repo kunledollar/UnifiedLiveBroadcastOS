@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { SceneWorkspace } from '../scene-workspace';
 import type {
   AudioChannel,
@@ -13,7 +14,7 @@ import type {
   StreamHealthMetric,
 } from '@ubos/shared';
 
-export function ControlRoomShell({
+export const ControlRoomShell = memo(function ControlRoomShell({
   scenes,
   productionState,
   layouts,
@@ -60,4 +61,4 @@ export function ControlRoomShell({
       />
     </main>
   );
-}
+});

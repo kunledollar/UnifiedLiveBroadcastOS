@@ -34,10 +34,23 @@
  *   <1200px:     secondary docks collapsed, Program/Preview side-by-side if ≥900px
  *   <900px:      compact mode — Program/Preview stacked, bottom workspace tab bar only
  */
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from 'react';
 import { useRenderForensics } from '../render-forensics';
 import { cn } from '@ubos/ui';
-import { workspaceZoneDefinitions, type WorkspacePresetId, type WorkspaceZoneId } from '@ubos/shared';
+import {
+  workspaceZoneDefinitions,
+  type WorkspacePresetId,
+  type WorkspaceZoneId,
+} from '@ubos/shared';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from '../menu';
 import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../shell/types';
 import type { MonitorStatusInfo } from './monitor-status';
@@ -96,7 +109,8 @@ export type CommandCenterShellProps = {
   onCut?: (() => void) | undefined;
   onTake?: (() => void) | undefined;
   onAuto?: (() => void) | undefined;
-  onWorkspaceModeApplied?: ((mode: UbosWorkspaceModeId, compactChrome?: boolean) => void) | undefined;
+  onWorkspaceModeApplied?:
+    ((mode: UbosWorkspaceModeId, compactChrome?: boolean) => void) | undefined;
   onSaveWorkspace?: (() => void) | undefined;
   onRestoreWorkspace?: (() => void) | undefined;
   onResetWorkspace?: (() => void) | undefined;
@@ -151,7 +165,7 @@ function CollapsedZoneStrip({
   );
 }
 
-export function CommandCenterShell({
+export const CommandCenterShell = memo(function CommandCenterShell({
   statusBar,
   activeNav,
   onNavChange,
@@ -369,23 +383,29 @@ export function CommandCenterShell({
   );
 
   // ----- overlays -----------------------------------------------------------
-  const programOverlayData: MonitorOverlayData = {
-    stateLabel: programStatus.state === 'live' ? 'LIVE' : 'STANDBY',
-    sourceName: programStatus.sourceName,
-    resolution: programStatus.resolution,
-    fps: programStatus.fps,
-    audioLevel: programStatus.audioLevel,
-    ...programOverlay,
-  };
+  const programOverlayData: MonitorOverlayData = useMemo(
+    () => ({
+      stateLabel: programStatus.state === 'live' ? 'LIVE' : 'STANDBY',
+      sourceName: programStatus.sourceName,
+      resolution: programStatus.resolution,
+      fps: programStatus.fps,
+      audioLevel: programStatus.audioLevel,
+      ...programOverlay,
+    }),
+    [programStatus, programOverlay],
+  );
 
-  const previewOverlayData: MonitorOverlayData = {
-    stateLabel: previewStatus.state === 'live' ? 'LIVE' : 'READY',
-    sourceName: previewStatus.sourceName,
-    resolution: previewStatus.resolution,
-    fps: previewStatus.fps,
-    audioLevel: previewStatus.audioLevel,
-    ...previewOverlay,
-  };
+  const previewOverlayData: MonitorOverlayData = useMemo(
+    () => ({
+      stateLabel: previewStatus.state === 'live' ? 'LIVE' : 'READY',
+      sourceName: previewStatus.sourceName,
+      resolution: previewStatus.resolution,
+      fps: previewStatus.fps,
+      audioLevel: previewStatus.audioLevel,
+      ...previewOverlay,
+    }),
+    [previewStatus, previewOverlay],
+  );
 
   // Stacking policy (3.15D-2):
   //   <900px center width  → Program above Preview (stacked)
@@ -396,9 +416,14 @@ export function CommandCenterShell({
 
   // Viewport width = center-stage + visible dock widths + rail.
   // Used exclusively for the forceBottomCollapsed policy below.
-  const viewportWidth = layout.zones['center-stage'].rect.width +
-    (leftCollapsed ? 0 : (leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize)) +
-    (rightCollapsed ? 0 : (rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize)) +
+  const viewportWidth =
+    layout.zones['center-stage'].rect.width +
+    (leftCollapsed
+      ? 0
+      : leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize) +
+    (rightCollapsed
+      ? 0
+      : rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize) +
     (layout.zones['left-rail'].rect.width || workspaceZoneDefinitions['left-rail'].defaultSize);
 
   // forceBottomCollapsed — operator-override policy (3.15D responsive):
@@ -434,6 +459,18 @@ export function CommandCenterShell({
   const bottomHeight = Math.max(
     bottomGeometry.rect.height || workspaceZoneDefinitions['bottom-workspace'].defaultSize,
     workspaceZoneDefinitions['bottom-workspace'].minSize,
+  );
+
+  const railStyle = useMemo(() => ({ width: railWidth }), [railWidth]);
+  const leftDockStyle = useMemo(() => ({ width: leftDockWidth }), [leftDockWidth]);
+  const rightDockStyle = useMemo(() => ({ width: rightDockWidth }), [rightDockWidth]);
+  const bottomDockStyle = useMemo(() => ({ height: bottomHeight }), [bottomHeight]);
+  const centerViewportProps = useMemo(
+    () =>
+      layout.zones['center-stage'].rect.height > 0
+        ? { viewportHeight: layout.zones['center-stage'].rect.height }
+        : {},
+    [layout.zones],
   );
 
   const isZoneToggleCollapsed = useCallback(
@@ -543,12 +580,9 @@ export function CommandCenterShell({
         />
       </header>
 
-      <div
-        ref={containerRef}
-        className="flex min-h-0 flex-1 flex-col overflow-hidden p-1"
-      >
+      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden p-1">
         <div className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-hidden">
-          <div className="shrink-0" style={{ width: railWidth }}>
+          <div className="shrink-0" style={railStyle}>
             <CommandCenterLeftRail activeNav={activeNav} onSelectItem={handleRailItem} />
           </div>
 
@@ -561,7 +595,7 @@ export function CommandCenterShell({
           ) : (
             <div
               className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-default)]"
-              style={{ width: leftDockWidth }}
+              style={leftDockStyle}
             >
               <CommandCenterLeftDock
                 activeTab={activeSourceDockTab}
@@ -598,9 +632,7 @@ export function CommandCenterShell({
               safeAreasVisible={safeAreasVisible}
               fullscreenMonitor={fullscreenMonitor}
               onFullscreenChange={setFullscreenMonitor}
-              {...(layout.zones['center-stage'].rect.height > 0
-                ? { viewportHeight: layout.zones['center-stage'].rect.height }
-                : {})}
+              {...centerViewportProps}
             />
           </div>
 
@@ -623,7 +655,7 @@ export function CommandCenterShell({
           ) : (
             <div
               className="min-h-0 shrink-0 overflow-hidden transition-[width] duration-[var(--ubos-duration-normal)] ease-[var(--ubos-easing-default)]"
-              style={{ width: rightDockWidth }}
+              style={rightDockStyle}
             >
               <CommandCenterRightDock
                 sections={operationsSections}
@@ -650,14 +682,16 @@ export function CommandCenterShell({
 
         <div
           className="min-h-0 shrink-0 overflow-hidden"
-          style={bottomCollapsed || forceBottomCollapsed ? undefined : { height: bottomHeight }}
+          style={bottomCollapsed || forceBottomCollapsed ? undefined : bottomDockStyle}
         >
           <CommandCenterBottomWorkspace
             activeTab={workspaceActiveBottomTab}
             onTabChange={handleBottomTabChange}
             collapsed={bottomCollapsed || forceBottomCollapsed}
             onToggleCollapse={
-              layoutLocked || forceBottomCollapsed ? undefined : () => toggleZone('bottom-workspace')
+              layoutLocked || forceBottomCollapsed
+                ? undefined
+                : () => toggleZone('bottom-workspace')
             }
             isPanelVisible={isPanelVisible}
             className="h-full"
@@ -668,4 +702,4 @@ export function CommandCenterShell({
       </div>
     </div>
   );
-}
+});
