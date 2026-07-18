@@ -34,8 +34,30 @@ export async function reachable(url, fetchImpl = fetch) {
   return false;
 }
 
+async function probeExistingServer(url, fetchImpl = fetch) {
+  console.log('Checking existing server...');
+
+  for (const method of ['HEAD', 'GET']) {
+    try {
+      const response = await fetchImpl(url, { method, signal: AbortSignal.timeout(1500) });
+      console.log(`${method} returned ${response.status ?? (response.ok ? 200 : 'not ok')}`);
+      if (response.ok) {
+        console.log('Using existing server.');
+        console.log('Skipping startup.');
+        return true;
+      }
+    } catch (error) {
+      console.log(`${method} failed`);
+    }
+  }
+
+  return false;
+}
+
 export async function ensureServerAvailable(url, { spawnImpl = spawn, fetchImpl = fetch, executable = pnpmExecutable } = {}) {
-  if (await reachable(url, fetchImpl)) return undefined;
+  if (await probeExistingServer(url, fetchImpl)) {
+    return { started: false, alreadyRunning: true };
+  }
 
   let server;
   try {
@@ -106,7 +128,7 @@ export async function run(args = parseArgs()) {
   const { chromium } = await import('@playwright/test');
   const browser=await chromium.launch({headless:!args.headed}); const allConsole=[], allErrors=[], results=[];
   for(const [id,name,file,flags] of experiments){const context=await browser.newContext({viewport:{width:1920,height:1080},deviceScaleFactor:1}); await context.addInitScript((flags)=>{localStorage.clear(); window.__UBOS_RENDER_FORENSICS__={enabled:true,renders:{},stateWrites:{},timers:{raf:{scheduled:0,fired:0,blocked:0},interval:{scheduled:0,fired:0,blocked:0},timeout:{scheduled:0,fired:0,blocked:0}},events:{}}; window.__UBOS_RENDER_FORENSICS_FLAGS__=flags; for(const [k,v] of Object.entries(flags)) if(v) localStorage.setItem(`ubos:render-forensics:${k}`,'1'); const s=window.__UBOS_RENDER_FORENSICS__; const oraf=window.requestAnimationFrame.bind(window), ointerval=window.setInterval.bind(window), otimeout=window.setTimeout.bind(window); window.requestAnimationFrame=(cb)=>{s.timers.raf.scheduled++; if(flags['disable-all-raf']){s.timers.raf.blocked++; return 0;} return oraf((t)=>{s.timers.raf.fired++; cb(t);});}; window.setInterval=(cb,delay,...rest)=>{s.timers.interval.scheduled++; if(flags['disable-all-polling']){s.timers.interval.blocked++; return 0;} return ointerval((...a)=>{s.timers.interval.fired++; return typeof cb==='function'?cb(...a):eval(cb);},delay,...rest);}; window.setTimeout=(cb,delay,...rest)=>{s.timers.timeout.scheduled++; if(flags['disable-all-polling'] && Number(delay||0)>=250){s.timers.timeout.blocked++; return 0;} return otimeout((...a)=>{s.timers.timeout.fired++; return typeof cb==='function'?cb(...a):eval(cb);},delay,...rest);};},flags); const page=await context.newPage(); let errors=[]; page.on('console',m=>{const line=`[${id}] ${m.type()} ${m.text()}`; allConsole.push(line); if(['error','warning'].includes(m.type())) errors.push(line)}); page.on('pageerror',e=>{const line=`[${id}] ${e.stack||e.message}`; allErrors.push(line); errors.push(line)}); await page.goto(url,{waitUntil:'domcontentloaded',timeout:60000}); await page.evaluate(()=>{document.body.style.zoom='100%'; new MutationObserver(m=>window.__ubosDomMutations=(window.__ubosDomMutations||0)+m.length).observe(document.body,{childList:true,subtree:true,attributes:true}); try{new PerformanceObserver(l=>window.__ubosLayoutShifts=(window.__ubosLayoutShifts||0)+l.getEntries().length).observe({type:'layout-shift',buffered:true});}catch{}}); await page.waitForLoadState('networkidle',{timeout:15000}).catch(()=>{}); if(flags.closeMixer){await page.getByLabel(/Collapse bottom workspace/i).click({timeout:3000}).catch(()=>{});} const start=Date.now(); await page.waitForTimeout(duration*1000); const data=await page.evaluate(()=>({renders:window.__UBOS_RENDER_FORENSICS__?.renders||{},stateWrites:window.__UBOS_RENDER_FORENSICS__?.stateWrites||{},timers:window.__UBOS_RENDER_FORENSICS__?.timers||{},events:window.__UBOS_RENDER_FORENSICS__?.events||{},domMutationCount:window.__ubosDomMutations||0,layoutShiftCount:window.__ubosLayoutShifts||0,activeWorkspace:document.body.innerText.includes('Director')?'Director':'unknown',bottomTab:document.body.innerText.includes('Mixer')?'audio':'unknown'})); const shot=path.join('screenshots',file); await page.screenshot({path:path.join(out,shot),fullPage:true}); results.push({id,name,durationMs:Date.now()-start,screenshot:shot,consoleErrors:errors,visibleShaking:'unknown',...data}); await context.close();}
-  await browser.close(); if(server) server.kill('SIGTERM');
+  await browser.close(); if(server?.kill) server.kill('SIGTERM');
   const compared=compareExperiments(results), conclusion=classify(results), complete=evidenceComplete(results);
   await writeFile(path.join(out,'experiment-results.json'),JSON.stringify(compared,null,2)); await writeFile(path.join(out,'render-counts.json'),JSON.stringify(Object.fromEntries(results.map(r=>[r.id,r.renders])),null,2)); await writeFile(path.join(out,'state-writes.json'),JSON.stringify(Object.fromEntries(results.map(r=>[r.id,r.stateWrites])),null,2)); await writeFile(path.join(out,'summary.json'),JSON.stringify({conclusion,evidenceComplete:complete,results:compared},null,2)); await writeFile(path.join(out,'console.log'),allConsole.join('\n')); await writeFile(path.join(out,'errors.log'),allErrors.join('\n')); await writeFile(path.join(out,'report.html'),htmlReport({results,conclusion,complete})); await writeFile(path.join(out,'findings.md'),markdownFindings({results,conclusion,complete})); console.log(`Conclusion: ${conclusion}\nArtifacts: ${out}`);
 }
