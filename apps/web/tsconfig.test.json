@@ -14,21 +14,21 @@
     }
   },
   "include": [
-    "app/control-room/browsers/browser-workflows.test.ts",
-    "app/control-room/browsers/source-browser-utils.ts",
-    "app/control-room/broadcast-command-center/command-rail-constants.ts",
-    "app/control-room/command-center/command-center-logic.ts",
-    "app/control-room/command-center/command-center-logic.test.ts",
-    "app/control-room/operations/browser-recording-verification.ts",
-    "lib/native-runtime/ffmpeg.ts",
-    "lib/native-runtime/ffmpeg-discovery.test.ts",
-    "lib/native-runtime/ffmpeg-recording.test.ts",
-    "lib/program-pipeline/program-ownership.test.ts",
-    "app/control-room/workspace/scene-routing.ts",
-    "app/control-room/workspace/scene-routing.test.ts",
-    "app/control-room/scene-runtime-patching.ts",
-    "app/control-room/scene-runtime-patching.test.ts",
-    "app/control-room/audio-console/audio-stabilization-utils.ts",
-    "app/control-room/audio-console/render-stabilization.test.ts"
+    "apps/web/../../app/control-room/browsers/browser-workflows.test.ts",
+    "apps/web/../../app/control-room/browsers/source-browser-utils.ts",
+    "apps/web/../../app/control-room/broadcast-command-center/command-rail-constants.ts",
+    "apps/web/../../app/control-room/command-center/command-center-logic.ts",
+    "apps/web/../../app/control-room/command-center/command-center-logic.test.ts",
+    "apps/web/../../app/control-room/operations/browser-recording-verification.ts",
+    "apps/web/../../lib/native-runtime/ffmpeg.ts",
+    "apps/web/../../lib/native-runtime/ffmpeg-discovery.test.ts",
+    "apps/web/../../lib/native-runtime/ffmpeg-recording.test.ts",
+    "apps/web/../../lib/program-pipeline/program-ownership.test.ts",
+    "apps/web/../../app/control-room/workspace/scene-routing.ts",
+    "apps/web/../../app/control-room/workspace/scene-routing.test.ts",
+    "apps/web/../../app/control-room/scene-runtime-patching.ts",
+    "apps/web/../../app/control-room/scene-runtime-patching.test.ts",
+    "apps/web/../../app/control-room/audio-console/audio-stabilization-utils.ts",
+    "apps/web/../../app/control-room/audio-console/render-stabilization.test.ts"
   ]
 }
