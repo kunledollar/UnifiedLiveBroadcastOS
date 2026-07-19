@@ -27,6 +27,7 @@ import {
   workspacePresetList,
   workspacePresets,
   type WorkspacePresetId,
+  type WorkspaceZoneId,
 } from '@ubos/shared';
 import {
   applyPresetToRegistry,
@@ -583,10 +584,8 @@ test('per-preset saved layouts are isolated — saving director does not affect 
         collapsed: false,
       },
     ],
-    collapsedZones: [] as import('@ubos/shared').WorkspaceZoneId[],
-    zoneSizes: { 'left-dock': 320 } as Partial<
-      Record<import('@ubos/shared').WorkspaceZoneId, number>
-    >,
+    collapsedZones: [] as WorkspaceZoneId[],
+    zoneSizes: { 'left-dock': 320 } as Partial<Record<WorkspaceZoneId, number>>,
     activeBottomTab: 'layers' as const,
     savedAt: '2026-07-16T00:00:00.000Z',
   };
@@ -599,12 +598,8 @@ test('per-preset saved layouts are isolated — saving director does not affect 
         collapsed: false,
       },
     ],
-    collapsedZones: [
-      'left-dock',
-      'right-dock',
-      'bottom-workspace',
-    ] as import('@ubos/shared').WorkspaceZoneId[],
-    zoneSizes: {} as Partial<Record<import('@ubos/shared').WorkspaceZoneId, number>>,
+    collapsedZones: ['left-dock', 'right-dock', 'bottom-workspace'] as WorkspaceZoneId[],
+    zoneSizes: {} as Partial<Record<WorkspaceZoneId, number>>,
     activeBottomTab: 'layers' as const,
     savedAt: '2026-07-16T01:00:00.000Z',
   };

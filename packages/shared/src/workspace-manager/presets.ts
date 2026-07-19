@@ -6,11 +6,7 @@
  * a panel renders.
  */
 import { WORKSPACE_PANEL_IDS } from './panels.js';
-import type {
-  WorkspacePreset,
-  WorkspacePresetId,
-  WorkspaceValidationIssue,
-} from './types.js';
+import type { WorkspacePreset, WorkspacePresetId, WorkspaceValidationIssue } from './types.js';
 import { WORKSPACE_PRESET_IDS, WORKSPACE_ZONE_IDS } from './types.js';
 
 const P = WORKSPACE_PANEL_IDS;
@@ -18,11 +14,18 @@ const P = WORKSPACE_PANEL_IDS;
 /** Panels every preset keeps on screen: Program/Preview may never disappear. */
 const MONITOR_PANELS = [P.programMonitor, P.previewMonitor];
 
-export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
+/**
+ * Layout fragments owned by the canonical WorkspaceDefinition catalog.
+ * This is intentionally not exported as the legacy preset API; definitions
+ * merge these bounded geometry fragments with the role contract and expose a
+ * compatibility adapter from `definitions.ts`.
+ */
+export const workspaceDefinitionLayouts: Record<WorkspacePresetId, WorkspacePreset> = {
   director: {
     id: 'director',
     name: 'Director',
-    description: 'Program and Preview dominant with scenes, sources, inspector, and native recording at hand',
+    description:
+      'Program and Preview dominant with scenes, sources, inspector, and native recording at hand',
     activeBottomTab: P.scenes,
     visiblePanels: [...MONITOR_PANELS, P.scenes, P.sources, P.inspector, P.recording],
     collapsedPanels: [],
@@ -40,7 +43,8 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
   'solo-streamer': {
     id: 'solo-streamer',
     name: 'Solo Streamer',
-    description: 'Program/Preview dominant with chat, recording, and streaming; routing and diagnostics hidden',
+    description:
+      'Program/Preview dominant with chat, recording, and streaming; routing and diagnostics hidden',
     activeBottomTab: P.sources,
     visiblePanels: [...MONITOR_PANELS, P.chat, P.recording, P.streaming, P.sources],
     collapsedPanels: [],
@@ -57,9 +61,16 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
   'technical-director': {
     id: 'technical-director',
     name: 'Technical Director',
-    description: 'Routing matrix, broadcast I/O, pipeline inspector, and telemetry front and center',
+    description:
+      'Routing matrix, broadcast I/O, pipeline inspector, and telemetry front and center',
     activeBottomTab: P.routingMatrix,
-    visiblePanels: [...MONITOR_PANELS, P.routingMatrix, P.broadcastIo, P.pipelineInspector, P.telemetry],
+    visiblePanels: [
+      ...MONITOR_PANELS,
+      P.routingMatrix,
+      P.broadcastIo,
+      P.pipelineInspector,
+      P.telemetry,
+    ],
     collapsedPanels: [],
     hiddenPanels: [P.chat],
     zoneOverrides: {},
@@ -174,14 +185,6 @@ export const workspacePresets: Record<WorkspacePresetId, WorkspacePreset> = {
   },
 };
 
-export const workspacePresetList: readonly WorkspacePreset[] = Object.values(workspacePresets);
-
-export const defaultWorkspacePresetId: WorkspacePresetId = 'director';
-
-export function getWorkspacePreset(presetId: WorkspacePresetId): WorkspacePreset {
-  return workspacePresets[presetId];
-}
-
 export function isWorkspacePresetId(value: string): value is WorkspacePresetId {
   return (WORKSPACE_PRESET_IDS as readonly string[]).includes(value);
 }
@@ -195,18 +198,24 @@ const zoneIdSet = new Set<string>(WORKSPACE_ZONE_IDS);
  */
 export function validateWorkspacePreset(preset: WorkspacePreset): WorkspaceValidationIssue[] {
   const issues: WorkspaceValidationIssue[] = [];
-  const issue = (code: string, message: string) => issues.push({ code, message, subject: preset.id });
+  const issue = (code: string, message: string) =>
+    issues.push({ code, message, subject: preset.id });
 
-  if (!isWorkspacePresetId(preset.id)) issue('PRESET_ID_INVALID', `Unknown preset id: ${preset.id}`);
+  if (!isWorkspacePresetId(preset.id))
+    issue('PRESET_ID_INVALID', `Unknown preset id: ${preset.id}`);
   if (!preset.name.trim()) issue('PRESET_NAME_REQUIRED', 'Preset name is required');
-  if (!preset.activeBottomTab.trim()) issue('PRESET_BOTTOM_TAB_REQUIRED', 'activeBottomTab is required');
+  if (!preset.activeBottomTab.trim())
+    issue('PRESET_BOTTOM_TAB_REQUIRED', 'activeBottomTab is required');
 
   const seen = new Map<string, string>();
   const checkList = (list: string[], label: string) => {
     for (const panelId of list) {
       const previous = seen.get(panelId);
       if (previous && previous !== label) {
-        issue('PRESET_PANEL_STATE_CONFLICT', `Panel "${panelId}" appears in both ${previous} and ${label}`);
+        issue(
+          'PRESET_PANEL_STATE_CONFLICT',
+          `Panel "${panelId}" appears in both ${previous} and ${label}`,
+        );
       }
       seen.set(panelId, label);
     }
@@ -225,7 +234,11 @@ export function validateWorkspacePreset(preset: WorkspacePreset): WorkspaceValid
   }
 
   for (const [panelId, zoneId] of Object.entries(preset.zoneOverrides)) {
-    if (!zoneIdSet.has(zoneId)) issue('PRESET_OVERRIDE_ZONE_INVALID', `Panel "${panelId}" overrides to unknown zone "${String(zoneId)}"`);
+    if (!zoneIdSet.has(zoneId))
+      issue(
+        'PRESET_OVERRIDE_ZONE_INVALID',
+        `Panel "${panelId}" overrides to unknown zone "${String(zoneId)}"`,
+      );
   }
 
   for (const zoneId of preset.collapsedZones) {
@@ -239,10 +252,16 @@ export function validateWorkspacePreset(preset: WorkspacePreset): WorkspaceValid
   if (preset.zoneSizeDefaults !== undefined) {
     for (const [zoneId, size] of Object.entries(preset.zoneSizeDefaults)) {
       if (!zoneIdSet.has(zoneId)) {
-        issue('PRESET_ZONE_SIZE_DEFAULT_UNKNOWN_ZONE', `zoneSizeDefaults references unknown zone "${zoneId}"`);
+        issue(
+          'PRESET_ZONE_SIZE_DEFAULT_UNKNOWN_ZONE',
+          `zoneSizeDefaults references unknown zone "${zoneId}"`,
+        );
       }
       if (typeof size !== 'number' || !Number.isFinite(size) || size < 0) {
-        issue('PRESET_ZONE_SIZE_DEFAULT_INVALID', `zoneSizeDefaults["${zoneId}"] must be a non-negative finite number`);
+        issue(
+          'PRESET_ZONE_SIZE_DEFAULT_INVALID',
+          `zoneSizeDefaults["${zoneId}"] must be a non-negative finite number`,
+        );
       }
     }
   }
@@ -255,17 +274,25 @@ export function validateWorkspacePreset(preset: WorkspacePreset): WorkspaceValid
 
 /** Validate the whole built-in preset catalog. */
 export function validateWorkspacePresetCatalog(
-  presets: Record<string, WorkspacePreset> = workspacePresets,
+  presets: Record<string, WorkspacePreset> = workspaceDefinitionLayouts,
 ): WorkspaceValidationIssue[] {
   const issues: WorkspaceValidationIssue[] = [];
   for (const requiredId of WORKSPACE_PRESET_IDS) {
     if (!(requiredId in presets)) {
-      issues.push({ code: 'PRESET_MISSING', message: `Missing preset "${requiredId}"`, subject: requiredId });
+      issues.push({
+        code: 'PRESET_MISSING',
+        message: `Missing preset "${requiredId}"`,
+        subject: requiredId,
+      });
     }
   }
   for (const [key, preset] of Object.entries(presets)) {
     if (key !== preset.id) {
-      issues.push({ code: 'PRESET_KEY_MISMATCH', message: `Catalog key "${key}" does not match preset id "${preset.id}"`, subject: key });
+      issues.push({
+        code: 'PRESET_KEY_MISMATCH',
+        message: `Catalog key "${key}" does not match preset id "${preset.id}"`,
+        subject: key,
+      });
     }
     issues.push(...validateWorkspacePreset(preset));
   }
