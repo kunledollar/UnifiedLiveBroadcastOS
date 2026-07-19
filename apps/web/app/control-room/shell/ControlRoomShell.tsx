@@ -42,10 +42,11 @@ export const ControlRoomShell = memo(function ControlRoomShell({
   messages?: ChatMessage[];
   healthMetrics?: StreamHealthMetric[];
 }) {
+  useRenderForensics('ControlRoomShell', { scenes, productionState, layouts, channels, assets, mediaRoutes, guests, invites, persistenceDiagnostics, destinations, messages, healthMetrics });
   return (
-    <main data-ubos-control-room-root="true" data-ubos-diagnostic-target="control-room-root" className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
-      <ControlRoomRenderForensicsMarker />
-      <div data-ubos-scene-workspace="true" data-ubos-diagnostic-target="scene-workspace" className="h-full">
+    <main data-ubos-control-room-root="true" className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
+      <ControlRoomRenderForensicsMarker summary={renderForensicsSummary} />
+      <div data-ubos-scene-workspace="true" className="h-full">
       <SceneWorkspace
         initialScenes={scenes}
         initialProductionState={productionState}
