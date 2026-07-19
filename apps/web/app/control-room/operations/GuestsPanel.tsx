@@ -7,7 +7,6 @@ import {
   StatusBadge,
 } from '@ubos/ui';
 import { GuestRole, GuestStatus, createGuestRuntimeState, createGuestRuntimeSession, type Guest, type GuestInvite, type MediaRoute } from '@ubos/shared';
-import { useRenderForensics } from '../render-forensics';
 import { useCallback, useEffect, useRef, useState, useTransition } from 'react';
 import { useBroadcastRealtime } from '../../../lib/realtime';
 import type { BroadcastRealtimeEvent } from '@ubos/shared';
@@ -123,7 +122,6 @@ export function GuestsPanel({
   broadcastId: string;
   routes?: MediaRoute[];
 }) {
-  useRenderForensics('GuestsPanel');
   const [isPending, startTransition] = useTransition();
   const [mediaIndicators, setMediaIndicators] = useState<Record<string, GuestMediaIndicators>>({});
   const peerConnections = useRef<Record<string, RTCPeerConnection>>({});

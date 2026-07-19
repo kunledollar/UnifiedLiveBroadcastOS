@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback } from 'react';
-import { useRenderForensics } from '../render-forensics';
 import {
   MonitorFooter,
   MonitorFrame,
@@ -135,7 +134,6 @@ export function ProgramMonitor({
   compact?: boolean;
   deckMode?: boolean;
 }) {
-  useRenderForensics('ProgramMonitor');
   const telemetry = deriveMonitorTelemetry({
     routes,
     healthFps,
@@ -209,7 +207,6 @@ export function ProgramMonitor({
 export function PreviewMonitorCompact(
   props: Omit<Parameters<typeof ProgramMonitor>[0], 'role' | 'compact'>,
 ) {
-  useRenderForensics('PreviewMonitor');
   return <ProgramMonitor {...props} role="preview" compact />;
 }
 

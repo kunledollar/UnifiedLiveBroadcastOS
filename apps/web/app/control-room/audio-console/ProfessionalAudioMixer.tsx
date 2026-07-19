@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRenderForensics, recordForensicsStateWrite, ubosForensicsFlag } from '../render-forensics';
 import { BroadcastPanel, StatusBadge, cn, ubosTypographyClasses } from '@ubos/ui';
 import { AudioMeter } from './AudioMeter';
 import { metersSemanticallyEqual } from './audio-stabilization-utils';
@@ -75,7 +74,6 @@ export function ProfessionalAudioMixer({
   className?: string;
   compact?: boolean;
 }) {
-  useRenderForensics('ProfessionalAudioMixer');
   const [metadata, setMetadata] = useState<Record<string, ChannelMetadata>>(() =>
     Object.fromEntries(sources.map((source) => [source.id, createDefaultMetadata(source.type)])),
   );
@@ -199,19 +197,16 @@ export function ProfessionalAudioMixer({
           channels: 2,
           sampleRate: Object.values(nodesRef.current)[0]?.context.sampleRate ?? null,
         };
-        if (!ubosForensicsFlag('mixer-setter-disabled')) {
-          setMeters((current) => {
-            const semanticEqual = metersSemanticallyEqual(current, nextMeters);
-            recordForensicsStateWrite('ProfessionalAudioMixer.setMeters', current, nextMeters);
-            return semanticEqual ? current : nextMeters;
-          });
-        }
+        setMeters((current) => {
+          const semanticEqual = metersSemanticallyEqual(current, nextMeters);
+          return semanticEqual ? current : nextMeters;
+        });
         for (const source of sources) {
           if (nextMeters[source.id]?.clipping) appendHistory(source.name, 'clipping detected');
         }
         lastUpdate = time;
       }
-      if (!ubosForensicsFlag('mixer-raf-disabled')) frameRef.current = window.requestAnimationFrame(tick);
+      frameRef.current = window.requestAnimationFrame(tick);
     };
     frameRef.current = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameRef.current);

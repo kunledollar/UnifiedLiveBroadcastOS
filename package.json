@@ -36,7 +36,6 @@
     "validate:v512-step3": "node scripts/validate-v512-step3.mjs",
     "validate:v512-native-adapters": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-adapters.mjs",
     "validate:v512-native-runtime": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-runtime.mjs",
-    "validate:control-room-render-forensics": "node scripts/run-control-room-render-forensics.mjs",
     "diagnose:control-room-stability": "node scripts/run-control-room-stability-diagnostics.mjs"
   },
   "devDependencies": {

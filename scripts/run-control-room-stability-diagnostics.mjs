@@ -129,10 +129,6 @@ function init(flags) {
     geometry: [],
     scrollChanges: [],
   });
-  window.__UBOS_RENDER_FORENSICS__ = d;
-  window.__UBOS_RENDER_FORENSICS_FLAGS__ = Object.fromEntries(
-    Object.entries(flags).map(([k, v]) => [k, Boolean(v)]),
-  );
   const raf = window.requestAnimationFrame.bind(window),
     interval = window.setInterval.bind(window),
     timeout = window.setTimeout.bind(window);

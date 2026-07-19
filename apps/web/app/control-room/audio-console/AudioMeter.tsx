@@ -1,7 +1,6 @@
 'use client';
 
 import { memo, useEffect, useState } from 'react';
-import { useRenderForensics, recordForensicsStateWrite, ubosForensicsFlag } from '../render-forensics';
 import { cn } from '@ubos/ui';
 import { meterSegmentColor } from './audio-console-utils';
 import { clampMeterLevel } from './audio-stabilization-utils';
@@ -19,7 +18,6 @@ function AudioMeterComponent({
   muted: boolean;
   className?: string;
 }) {
-  useRenderForensics('AudioMeter');
   const [displayLevel, setDisplayLevel] = useState(0);
   const [peakHold, setPeakHold] = useState(0);
 
@@ -29,7 +27,6 @@ function AudioMeterComponent({
       return;
     }
 
-    if (ubosForensicsFlag('audio-meter-disabled')) return;
     const target = clampMeterLevel(level);
     let frame = 0;
     let lastUpdate = 0;
@@ -40,7 +37,6 @@ function AudioMeterComponent({
       }
       lastUpdate = time;
       setDisplayLevel((current) => {
-        recordForensicsStateWrite('AudioMeter.setDisplayLevel', current, target);
         const next = Math.round(current + (target - current) * 0.5);
         if (current === target || Math.abs(next - target) < 1) return target;
         frame = requestAnimationFrame(animate);
@@ -52,10 +48,9 @@ function AudioMeterComponent({
   }, [level]);
 
   useEffect(() => {
-    if (level === null || muted || ubosForensicsFlag('audio-meter-disabled')) return;
+    if (level === null || muted) return;
     setPeakHold((current) => {
       const next = Math.max(current, displayLevel);
-      recordForensicsStateWrite('AudioMeter.setPeakHold', current, next);
       return next === current ? current : next;
     });
     const timeout = window.setTimeout(() => {

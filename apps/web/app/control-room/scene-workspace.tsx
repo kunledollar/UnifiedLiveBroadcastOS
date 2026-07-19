@@ -1,7 +1,6 @@
 'use client';
 
 import { cn, getTallyState } from '@ubos/ui';
-import { ubosForensicsFlag, recordForensicsUpdate, useRenderForensics } from './render-forensics';
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
@@ -2433,14 +2432,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   workspaceId?: string;
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
-  useRenderForensics('SceneWorkspace', {
-    initialScenes, initialProductionState, layouts, channels, assets, mediaRoutes, guests,
-    invites, destinations, messages, streamHealthMetrics, persistenceDiagnostics, broadcastId,
-    workspaceId, operationsTabs,
-  });
-  // Diagnostic-only isolation: preserve the monitor cells while preventing the
-  // video/canvas subtree from mounting. Normal URLs never take this branch.
-  const disableVideoDiagnostics = ubosForensicsFlag('disableVideo');
   const [isPending, startTransition] = useTransition();
   const [workspace, setWorkspace] = useState<ControlRoomWorkspaceState>(factoryWorkspace);
   const viewMode = workspace.viewMode;
@@ -3429,7 +3420,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           referenceChanged: current !== next,
           effect: 'refreshNativeRuntimeStatus',
         });
-        recordForensicsUpdate('SceneWorkspace.native-runtime-status.subscription', current, next, 'subscription', 'SceneWorkspace');
         return semanticEqual ? current : next;
       });
     } catch {
@@ -3447,7 +3437,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           referenceChanged: current !== next,
           effect: 'refreshNativeRuntimeStatus:catch',
         });
-        recordForensicsUpdate('SceneWorkspace.native-runtime-status.subscription', current, next, 'subscription', 'SceneWorkspace');
         return semanticEqual ? current : next;
       });
     }
@@ -3617,7 +3606,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
     const tick = () =>
       setNativeRecordingState((current) => {
         const next = { ...current, elapsedMs: Date.now() - Date.parse(nativeRecordingStartedAtRef.current!) };
-        recordForensicsUpdate('SceneWorkspace.native-recording-elapsed.interval', current, next, 'state', 'SceneWorkspace');
         return next;
       });
     tick();
@@ -3637,7 +3625,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           (Date.now() - Date.parse(streamingState.startedAt!)) / 60000,
         ),
         };
-        recordForensicsUpdate('SceneWorkspace.streaming-duration.interval', current, next, 'state', 'SceneWorkspace');
         return next;
       });
     tick();
@@ -3649,7 +3636,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
     if (recordingState !== 'recording' || !recordingStartedAt) return;
     const tick = () => setRecordingDurationMs((current) => {
       const next = Date.now() - Date.parse(recordingStartedAt);
-      recordForensicsUpdate('SceneWorkspace.browser-recording-duration.interval', current, next, 'state', 'SceneWorkspace');
       return next;
     });
     tick();
@@ -3708,7 +3694,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       const peak = data.reduce((max, value) => Math.max(max, Math.abs(value - 128)), 0);
       setAudioLevel((current) => {
         const next = Math.min(100, Math.round((peak / 64) * 100));
-        recordForensicsUpdate('SceneWorkspace.audio-level.raf', current, next, 'raf', 'SceneWorkspace');
         return next;
       });
       frame = window.requestAnimationFrame(tick);
@@ -5068,7 +5053,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           </div>
         )
       ) : null}
-      {activeBottomDock === 'audio' && !ubosForensicsFlag('mixer-disabled') ? (
+      {activeBottomDock === 'audio' ? (
         <div data-ubos-audio-panel="true"><ProfessionalAudioMixer sources={mixerSources} compact /></div>
       ) : null}
       {activeBottomDock === 'graphics' ? (
@@ -5590,7 +5575,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
 
   const programMonitorNode = useMemo(
     () =>
-      disableVideoDiagnostics ? <div className="h-full w-full bg-black" aria-label="Program video disabled for diagnostics" /> : liveProgramVisible ? (
+      liveProgramVisible ? (
         <LiveMediaMonitor
           title="Program"
           sceneName={programScene.name}
@@ -5629,7 +5614,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       ),
     [
       liveProgramVisible,
-      disableVideoDiagnostics,
       programScene.name,
       programStreamToShow,
       programCameraSourceId,
@@ -5651,7 +5635,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
 
   const previewMonitorNode = useMemo(
     () =>
-      disableVideoDiagnostics ? <div className="h-full w-full bg-black" aria-label="Preview video disabled for diagnostics" /> : livePreviewVisible ? (
+      livePreviewVisible ? (
         <LiveMediaMonitor
           title="Preview"
           sceneName={previewScene.name}
@@ -5691,7 +5675,6 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       ),
     [
       livePreviewVisible,
-      disableVideoDiagnostics,
       previewScene.name,
       previewStreamToShow,
       previewCameraSourceId,

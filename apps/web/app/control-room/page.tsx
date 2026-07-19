@@ -4,6 +4,8 @@ import { loadMediaRoutes } from './media-route-actions';
 import type { Scene, Guest, GuestInvite, MediaRoute, ProductionSwitchingState } from '@ubos/shared';
 import { ControlRoomShell } from './shell/ControlRoomShell';
 import { DiagnosticRuntime } from './diagnostic-runtime';
+import { RuntimeManagerScreen } from './runtime-manager';
+import { runtimeManager } from '../../lib/runtime/runtime-health';
 
 import {
   type AudioChannel,
@@ -220,11 +222,14 @@ export const dynamic = 'force-dynamic';
 
 export default async function ControlRoomPage({ searchParams }: { searchParams: Promise<{ diagnostic?: string; disableAudio?: string; disableVideo?: string; disableScenes?: string; disableRecording?: string; disableRuntime?: string; disableAnimations?: string; hideVideoCanvas?: string }> }) {
   const diagnostics = await searchParams;
+  const runtimeHealth = await runtimeManager.check();
+  if (runtimeHealth.status === 'blocked') {
+    return <RuntimeManagerScreen initialHealth={runtimeHealth} />;
+  }
+
   if (diagnostics.diagnostic === 'static') {
     return <><DiagnosticRuntime scenario="static-shell" /><main data-ubos-control-room-root="true" className="ubos-workstation grid h-screen grid-cols-[14rem_1fr_18rem] grid-rows-[3rem_1fr_12rem] gap-2 overflow-hidden bg-ubos-carbon p-2 text-ubos-fg-primary"><header className="col-span-3 rounded bg-ubos-graphite" /><aside data-ubos-left-rail="true" className="rounded bg-ubos-graphite" /><section data-ubos-command-center-stage="true" className="grid grid-cols-2 gap-2 rounded bg-ubos-graphite p-2"><div data-ubos-program-monitor="true" className="rounded bg-black" /><div data-ubos-preview-monitor="true" className="rounded bg-black" /></section><aside data-ubos-right-rail="true" className="rounded bg-ubos-graphite" /><footer data-ubos-audio-panel="true" data-ubos-diagnostic-target="audio-panel" className="col-span-3 rounded bg-ubos-graphite" /></main></>;
   }
-  const persistenceDiagnostics = loadPersistenceDiagnostics();
-
   const persistenceDiagnostics = loadPersistenceDiagnostics();
 
   const [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
