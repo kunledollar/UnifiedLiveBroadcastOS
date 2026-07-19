@@ -55,14 +55,23 @@ export function mediaCompositionReducer(
   action: MediaCompositionAction,
 ): MediaCompositionState {
   switch (action.type) {
-    case 'REGISTER_ASSETS':
-      return updateComposition(state, action.sceneId, (current) => ({
-        ...current,
-        assets: action.assets.map((asset) => ({
-          ...asset,
-          assignedSceneId: asset.assignedSceneId ?? action.sceneId,
-        })),
+    case 'REGISTER_ASSETS': {
+      const current = ensureSceneMediaComposition(state.compositions, action.sceneId);
+      const assets = action.assets.map((asset) => ({
+        ...asset,
+        assignedSceneId: asset.assignedSceneId ?? action.sceneId,
       }));
+
+      // Prevent unnecessary re-renders.
+      if (JSON.stringify(current.assets) === JSON.stringify(assets)) {
+        return state;
+      }
+
+      return updateComposition(state, action.sceneId, (composition) => ({
+        ...composition,
+        assets,
+      }));
+    }
     case 'ADD_CLIP': {
       const clip = createClipFromAsset(action.asset, action.sceneId);
       return updateComposition(
