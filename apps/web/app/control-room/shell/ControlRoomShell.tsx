@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { SceneWorkspace } from '../scene-workspace';
-import { useRenderForensics } from '../render-forensics';
+import { ControlRoomRenderForensicsMarker } from './ControlRoomRenderForensicsMarker';
 import type {
   AudioChannel,
   ChatMessage,
@@ -42,9 +42,28 @@ export const ControlRoomShell = memo(function ControlRoomShell({
   messages?: ChatMessage[];
   healthMetrics?: StreamHealthMetric[];
 }) {
-  useRenderForensics('ControlRoomShell');
+  // Server Components may render this shell, so only pass a compact,
+  // serializable snapshot to the client-side diagnostics marker. In particular,
+  // do not pass the full production payload or any runtime handles.
+  const renderForensicsSummary = {
+    sceneCount: scenes.length,
+    sceneIds: scenes.map((scene) => scene.id).join(','),
+    programSceneId: productionState.programSceneId,
+    previewSceneId: productionState.previewSceneId,
+    layoutCount: layouts.length,
+    channelCount: channels.length,
+    assetCount: assets.length,
+    mediaRouteCount: mediaRoutes.length,
+    guestCount: guests.length,
+    inviteCount: invites.length,
+    destinationCount: destinations.length,
+    messageCount: messages.length,
+    healthMetricCount: healthMetrics.length,
+    graphRevision: persistenceDiagnostics.currentGraphRevision ?? null,
+  };
   return (
     <main data-ubos-control-room-root="true" className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
+      <ControlRoomRenderForensicsMarker summary={renderForensicsSummary} />
       <div data-ubos-scene-workspace="true" className="h-full">
       <SceneWorkspace
         initialScenes={scenes}
