@@ -225,29 +225,15 @@ export default async function ControlRoomPage({ searchParams }: { searchParams: 
   }
   const persistenceDiagnostics = loadPersistenceDiagnostics();
 
-  // Attempt to load from database; fall back to demo data when the database
-  // is not available (local development without PostgreSQL).
-  let scenes: Scene[];
-  let productionState: ProductionSwitchingState;
-  let guests: Guest[];
-  let invites: GuestInvite[];
-  let mediaRoutes: MediaRoute[];
+  const persistenceDiagnostics = loadPersistenceDiagnostics();
 
-  try {
-    [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
-      getScenes(),
-      getProductionState(),
-      listGuests(),
-      listInvites(),
-      loadMediaRoutes(),
-    ]);
-  } catch {
-    scenes = DEMO_SCENES;
-    productionState = DEMO_PRODUCTION_STATE;
-    guests = DEMO_GUESTS;
-    invites = DEMO_INVITES;
-    mediaRoutes = DEMO_MEDIA_ROUTES;
-  }
+  const [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
+    getScenes(),
+    getProductionState(),
+    listGuests(),
+    listInvites(),
+    loadMediaRoutes(),
+  ]);
 
   return (
     <>
