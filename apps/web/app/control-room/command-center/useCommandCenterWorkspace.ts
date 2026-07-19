@@ -22,6 +22,20 @@ import {
   parseLayoutSnapshot,
   serializeLayoutSnapshot,
   defaultWorkspacePresetId,
+  workspacePresets,
+  normalizePresentation,
+  createCustomWorkspace,
+  createEmptyCustomWorkspaceRegistry,
+  deleteCustomWorkspace,
+  parseCustomWorkspaceRegistry,
+  renameCustomWorkspace,
+  saveCustomWorkspace,
+  serializeCustomWorkspaceRegistry,
+  CUSTOM_WORKSPACE_STORAGE_KEY,
+  type CustomWorkspace,
+  type CustomWorkspaceRegistry,
+  workspaceState,
+  type WorkspacePresentation,
   type WorkspaceLayoutResult,
   type WorkspacePanelDefinition,
   type WorkspacePanelState,
@@ -99,6 +113,14 @@ export type CommandCenterWorkspace = {
    * False means the preset is showing its factory defaults.
    */
   hasUserSavedLayout: boolean;
+  /** Factory, Saved, or Unsaved presentation state; never reflects runtime state. */
+  layoutState: 'factory' | 'saved' | 'unsaved';
+  customWorkspaces: CustomWorkspace[];
+  activeCustomWorkspaceId: string | null;
+  duplicateWorkspace: () => void;
+  applyCustomWorkspace: (id: string) => void;
+  renameCustomWorkspace: (id: string, name: string) => boolean;
+  deleteCustomWorkspace: (id: string) => void;
   applyPreset: (presetId: WorkspacePresetId) => WorkspacePreset | null;
   togglePanelVisibility: (panelId: string) => void;
   setPanelVisible: (panelId: string, visible: boolean) => void;
@@ -171,6 +193,11 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   const [hydrated, setHydrated] = useState(false);
   /** User-chosen dock sizes (keyed by zone id, in px). Persisted as part of prefs. */
   const [zoneSizes, setZoneSizesState] = useState<Partial<Record<WorkspaceZoneId, number>>>({});
+  const [customRegistry, setCustomRegistry] = useState<CustomWorkspaceRegistry>(
+    createEmptyCustomWorkspaceRegistry,
+  );
+  const [activeCustomWorkspaceId, setActiveCustomWorkspaceId] = useState<string | null>(null);
+  const factoryPresentationRef = useRef<WorkspacePresentation | null>(null);
   // Ref so persist() always writes the latest zone sizes without taking them as deps.
   const zoneSizesRef = useRef(zoneSizes);
   zoneSizesRef.current = zoneSizes;
@@ -222,6 +249,9 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
         setSavedLayoutsStore(savedStore);
         savedLayoutsStoreRef.current = savedStore;
       }
+      const storedCustom = window.localStorage.getItem(CUSTOM_WORKSPACE_STORAGE_KEY);
+      const custom = storedCustom ? parseCustomWorkspaceRegistry(storedCustom) : null;
+      if (custom) setCustomRegistry(custom);
 
       // 2. Restore active preset from the auto-persist snapshot.
       const storedSnapshot = window.localStorage.getItem(WORKSPACE_LAYOUT_STORAGE_KEY);
@@ -297,31 +327,33 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
    * Write the current preset's layout into the per-preset saved-layouts store.
    * Reads active preset and zone sizes from refs so the callback stays stable.
    */
-  const writeSavedLayoutEntry = useCallback((
-    presetId: WorkspacePresetId,
-    collapseOverrides: WorkspaceZoneId[],
-    bottomTab: DockTabId,
-  ) => {
-    const entry: SavedPresetLayout = {
-      panelStates: registry.getPanelStates(),
-      collapsedZones: collapseOverrides,
-      zoneSizes: zoneSizesRef.current,
-      activeBottomTab: bottomTab,
-      savedAt: new Date().toISOString(),
-    };
-    const current = savedLayoutsStoreRef.current;
-    const next: SavedLayoutsStore = {
-      version: 1,
-      presets: { ...current.presets, [presetId]: entry },
-    };
-    setSavedLayoutsStore(next);
-    savedLayoutsStoreRef.current = next;
-    try {
-      window.localStorage.setItem(COMMAND_CENTER_SAVED_LAYOUTS_KEY, serializeSavedLayoutsStore(next));
-    } catch {
-      // Storage unavailable — saved-layout store stays in memory.
-    }
-  }, [registry]);
+  const writeSavedLayoutEntry = useCallback(
+    (presetId: WorkspacePresetId, collapseOverrides: WorkspaceZoneId[], bottomTab: DockTabId) => {
+      const entry: SavedPresetLayout = {
+        panelStates: registry.getPanelStates(),
+        collapsedZones: collapseOverrides,
+        zoneSizes: zoneSizesRef.current,
+        activeBottomTab: bottomTab,
+        savedAt: new Date().toISOString(),
+      };
+      const current = savedLayoutsStoreRef.current;
+      const next: SavedLayoutsStore = {
+        version: 1,
+        presets: { ...current.presets, [presetId]: entry },
+      };
+      setSavedLayoutsStore(next);
+      savedLayoutsStoreRef.current = next;
+      try {
+        window.localStorage.setItem(
+          COMMAND_CENTER_SAVED_LAYOUTS_KEY,
+          serializeSavedLayoutsStore(next),
+        );
+      } catch {
+        // Storage unavailable — saved-layout store stays in memory.
+      }
+    },
+    [registry],
+  );
 
   useEffect(() => {
     if (!hydrated) return;
@@ -369,6 +401,17 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     return new Map(registry.getPanelStates().map((state) => [state.panelId, state]));
   }, [registry, revision]);
 
+  const currentPresentation = useMemo<WorkspacePresentation>(
+    () =>
+      normalizePresentation({
+        panelStates: [...panelStates.values()],
+        collapsedZones: collapsedZoneOverrides,
+        zoneSizes,
+        activeBottomTab,
+      }),
+    [panelStates, collapsedZoneOverrides, zoneSizes, activeBottomTab],
+  );
+
   const isPanelVisible = useCallback(
     (panelId: string) => panelStates.get(panelId)?.visible ?? false,
     [panelStates],
@@ -395,9 +438,16 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     (presetId: WorkspacePresetId): WorkspacePreset | null => {
       // Layout lock prevents manual dragging/resizing but NEVER blocks preset selection.
       const nextPreset = getWorkspacePreset(presetId);
+      setActiveCustomWorkspaceId(null);
 
       // Step 1: apply factory defaults for the new preset.
       applyPresetToRegistry(registry, nextPreset);
+      factoryPresentationRef.current = normalizePresentation({
+        panelStates: registry.getPanelStates(),
+        collapsedZones: [],
+        zoneSizes: {},
+        activeBottomTab: presetBottomTab(nextPreset),
+      });
       setActivePresetId(presetId);
       activePresetIdRef.current = presetId;
 
@@ -410,7 +460,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
           registry.restorePanelStates(
             saved.panelStates.map((s) => ({
               panelId: s.panelId,
-              zone: s.zone as import('@ubos/shared').WorkspaceZoneId,
+              zone: s.zone as WorkspaceZoneId,
               visible: s.visible,
               collapsed: s.collapsed,
             })),
@@ -521,13 +571,112 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   }, []);
 
   const saveLayout = useCallback(() => {
+    if (activeCustomWorkspaceId) {
+      const next = saveCustomWorkspace(
+        customRegistry,
+        activeCustomWorkspaceId,
+        currentPresentation,
+      );
+      setCustomRegistry(next);
+      try {
+        window.localStorage.setItem(
+          CUSTOM_WORKSPACE_STORAGE_KEY,
+          serializeCustomWorkspaceRegistry(next),
+        );
+      } catch {
+        /* in-memory state remains usable */
+      }
+      return;
+    }
     // Auto-persist the full shell state (active preset + panel states + prefs).
     persist();
     // Additionally write a per-preset explicit save so switching away and back
     // restores this exact layout, and so resetting only this preset leaves
     // other presets' saved states untouched.
     writeSavedLayoutEntry(activePresetIdRef.current, collapsedZoneOverrides, activeBottomTab);
-  }, [persist, writeSavedLayoutEntry, collapsedZoneOverrides, activeBottomTab]);
+  }, [
+    persist,
+    writeSavedLayoutEntry,
+    collapsedZoneOverrides,
+    activeBottomTab,
+    activeCustomWorkspaceId,
+    customRegistry,
+    currentPresentation,
+  ]);
+
+  const persistCustomRegistry = useCallback((next: CustomWorkspaceRegistry) => {
+    setCustomRegistry(next);
+    try {
+      window.localStorage.setItem(
+        CUSTOM_WORKSPACE_STORAGE_KEY,
+        serializeCustomWorkspaceRegistry(next),
+      );
+    } catch {
+      /* storage is optional */
+    }
+  }, []);
+
+  const duplicateWorkspace = useCallback(() => {
+    const source = activeCustomWorkspaceId ?? activePresetIdRef.current;
+    const name = activeCustomWorkspaceId
+      ? (customRegistry.workspaces[activeCustomWorkspaceId]?.name ?? 'Workspace')
+      : getWorkspacePreset(activePresetIdRef.current).name;
+    const workspace = createCustomWorkspace(source, `${name} copy`, currentPresentation);
+    persistCustomRegistry({
+      ...customRegistry,
+      workspaces: { ...customRegistry.workspaces, [workspace.id]: workspace },
+    });
+    setActiveCustomWorkspaceId(workspace.id);
+  }, [activeCustomWorkspaceId, customRegistry, currentPresentation, persistCustomRegistry]);
+
+  const applyCustomWorkspace = useCallback(
+    (id: string) => {
+      const custom = customRegistry.workspaces[id];
+      if (!custom) return;
+      const sourceId = custom.sourceWorkspaceId;
+      const base = (
+        sourceId in workspacePresets ? sourceId : defaultWorkspacePresetId
+      ) as WorkspacePresetId;
+      applyPreset(base);
+      try {
+        registry.restorePanelStates(custom.presentation.panelStates);
+      } catch {
+        /* validated metadata only */
+      }
+      setCollapsedZoneOverrides(custom.presentation.collapsedZones);
+      setZoneSizesState(custom.presentation.zoneSizes);
+      setActiveBottomTabState(custom.presentation.activeBottomTab as DockTabId);
+      setActiveCustomWorkspaceId(id);
+      bump();
+    },
+    [customRegistry, applyPreset, registry, bump],
+  );
+
+  const renameCustom = useCallback(
+    (id: string, name: string) => {
+      if (!name.trim() || !customRegistry.workspaces[id]) return false;
+      persistCustomRegistry(renameCustomWorkspace(customRegistry, id, name));
+      return true;
+    },
+    [customRegistry, persistCustomRegistry],
+  );
+
+  const removeCustom = useCallback(
+    (id: string) => {
+      const custom = customRegistry.workspaces[id];
+      if (!custom) return;
+      persistCustomRegistry(deleteCustomWorkspace(customRegistry, id));
+      if (activeCustomWorkspaceId === id) {
+        setActiveCustomWorkspaceId(null);
+        applyPreset(
+          (custom.sourceWorkspaceId in workspacePresets
+            ? custom.sourceWorkspaceId
+            : defaultWorkspacePresetId) as WorkspacePresetId,
+        );
+      }
+    },
+    [customRegistry, persistCustomRegistry, activeCustomWorkspaceId, applyPreset],
+  );
 
   /**
    * One Owner Rule: navigate to the single registered primary home of a panel.
@@ -603,6 +752,26 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
   );
 
   const resetLayout = useCallback(() => {
+    if (activeCustomWorkspaceId) {
+      const custom = customRegistry.workspaces[activeCustomWorkspaceId];
+      if (custom) {
+        const source = (
+          custom.sourceWorkspaceId in workspacePresets
+            ? custom.sourceWorkspaceId
+            : defaultWorkspacePresetId
+        ) as WorkspacePresetId;
+        applyPreset(source);
+        const presentation = normalizePresentation({
+          panelStates: registry.getPanelStates(),
+          collapsedZones: [],
+          zoneSizes: {},
+          activeBottomTab: presetBottomTab(getWorkspacePreset(source)),
+        });
+        const next = saveCustomWorkspace(customRegistry, activeCustomWorkspaceId, presentation);
+        persistCustomRegistry(next);
+      }
+      return;
+    }
     // Reset is NOT blocked by layout lock.
     // It restores the factory definition of the CURRENT preset (not director),
     // clears only this preset's user-saved geometry overrides, and leaves every
@@ -618,7 +787,10 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
       setSavedLayoutsStore(next);
       savedLayoutsStoreRef.current = next;
       try {
-        window.localStorage.setItem(COMMAND_CENTER_SAVED_LAYOUTS_KEY, serializeSavedLayoutsStore(next));
+        window.localStorage.setItem(
+          COMMAND_CENTER_SAVED_LAYOUTS_KEY,
+          serializeSavedLayoutsStore(next),
+        );
       } catch {
         // Ignore storage failures.
       }
@@ -633,6 +805,12 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
 
     // Restore factory panel layout for the current preset.
     applyPresetToRegistry(registry, factoryPreset);
+    factoryPresentationRef.current = normalizePresentation({
+      panelStates: registry.getPanelStates(),
+      collapsedZones: [],
+      zoneSizes: {},
+      activeBottomTab: presetBottomTab(factoryPreset),
+    });
     setCollapsedZoneOverrides([]);
     setExpandedZoneOverrides([]);
     // Reset zone sizes for this preset only (clear all — per-preset size tracking
@@ -643,9 +821,23 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     // Do NOT change activePresetId — reset stays on the same preset.
     // Do NOT forcibly unlock — lock state is a separate setting.
     bump();
-  }, [registry, bump]);
+  }, [registry, bump, activeCustomWorkspaceId, customRegistry, applyPreset, persistCustomRegistry]);
 
   const hasUserSavedLayout = activePresetId in savedLayoutsStore.presets;
+  const savedPresentation = savedLayoutsStore.presets[activePresetId]
+    ? normalizePresentation({
+        ...savedLayoutsStore.presets[activePresetId],
+        panelStates: savedLayoutsStore.presets[activePresetId].panelStates.map((state) => ({
+          ...state,
+          zone: state.zone as WorkspaceZoneId,
+        })),
+      })
+    : (factoryPresentationRef.current ?? currentPresentation);
+  const currentWorkspaceState = workspaceState(
+    currentPresentation,
+    savedPresentation,
+    hasUserSavedLayout,
+  );
 
   return {
     containerRef,
@@ -663,6 +855,13 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     safeAreasVisible,
     fullscreenMonitor,
     hasUserSavedLayout,
+    layoutState: currentWorkspaceState,
+    customWorkspaces: Object.values(customRegistry.workspaces),
+    activeCustomWorkspaceId,
+    duplicateWorkspace,
+    applyCustomWorkspace,
+    renameCustomWorkspace: renameCustom,
+    deleteCustomWorkspace: removeCustom,
     applyPreset,
     togglePanelVisibility,
     setPanelVisible,

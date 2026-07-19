@@ -13,5 +13,8 @@ export * from './zones.js';
 export * from './panels.js';
 export * from './registry.js';
 export * from './presets.js';
+export * from './definitions.js';
 export * from './layout.js';
 export * from './persistence.js';
+export * from './custom-workspaces.js';
+export * from './status.js';

@@ -20,13 +20,7 @@ export type WorkspaceZoneId =
 
 /** Broad behavioural category of a panel (affects chrome, not content). */
 export type WorkspacePanelKind =
-  | 'monitor'
-  | 'dock'
-  | 'tool'
-  | 'inspector'
-  | 'status'
-  | 'workspace'
-  | 'menu';
+  'monitor' | 'dock' | 'tool' | 'inspector' | 'status' | 'workspace' | 'menu';
 
 /**
  * Layout metadata for a registered panel.
@@ -66,13 +60,7 @@ export interface WorkspacePanelState {
 
 /** Physical placement class of a zone within the shell. */
 export type WorkspaceZonePlacement =
-  | 'top'
-  | 'left'
-  | 'center'
-  | 'right'
-  | 'bottom'
-  | 'floating'
-  | 'external';
+  'top' | 'left' | 'center' | 'right' | 'bottom' | 'floating' | 'external';
 
 /** Static geometry rules for a zone (reference viewport 1920x1080). */
 export interface WorkspaceZoneDefinition {
@@ -128,6 +116,27 @@ export interface WorkspacePreset {
    * Values are clamped to each zone's min/max before use.
    */
   zoneSizeDefaults?: Partial<Record<WorkspaceZoneId, number>>;
+}
+
+/**
+ * The operational contract for a Workspace.  A workspace is an operator
+ * environment, not a collection of dock sizes.  `WorkspacePreset` remains
+ * the backwards-compatible layout name; this is the product-facing source of
+ * truth consumed by the shell, persistence and validation layers.
+ */
+export interface WorkspaceDefinition extends WorkspacePreset {
+  role: string;
+  responsibilities: readonly string[];
+  operationalPriorities: readonly string[];
+  defaultPanels: readonly string[];
+  commands: readonly string[];
+  permissions: readonly string[];
+  responsiveRules: readonly string[];
+  persistenceRules: readonly string[];
+  acceptanceRules: readonly string[];
+  /** Labels only: values are rendered only when supplied by runtime telemetry. */
+  statusIndicators: readonly string[];
+  builtIn: true;
 }
 
 /** Axis-aligned rectangle in viewport pixels. */
