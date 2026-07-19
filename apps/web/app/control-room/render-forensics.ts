@@ -9,19 +9,23 @@ type ForensicsState = {
 };
 
 declare global {
-  interface Window { __UBOS_RENDER_FORENSICS__?: ForensicsState; __UBOS_RENDER_FORENSICS_FLAGS__?: Record<string, boolean>; }
+  interface Window { __UBOS_RENDER_FORENSICS__?: ForensicsState; __UBOS_RENDER_FORENSICS_FLAGS__?: Record<string, boolean>; __UBOS_CONTROL_ROOM_DIAGNOSTICS__?: ForensicsState; }
 }
 
 function getState(): ForensicsState | null {
-  if (typeof window === 'undefined' || !window.__UBOS_RENDER_FORENSICS__?.enabled) return null;
-  window.__UBOS_RENDER_FORENSICS__.renders ??= {};
-  window.__UBOS_RENDER_FORENSICS__.stateWrites ??= {};
-  return window.__UBOS_RENDER_FORENSICS__;
+  if (typeof window === 'undefined') return null;
+  const state = window.__UBOS_CONTROL_ROOM_DIAGNOSTICS__ ?? window.__UBOS_RENDER_FORENSICS__;
+  if (!state?.enabled) return null;
+  state.renders ??= {};
+  state.stateWrites ??= {};
+  return state;
 }
 
 export function ubosForensicsFlag(name: string) {
   if (typeof window === 'undefined') return false;
-  return Boolean(window.__UBOS_RENDER_FORENSICS_FLAGS__?.[name] || window.localStorage.getItem(`ubos:render-forensics:${name}`) === '1');
+  const query = new URLSearchParams(window.location.search);
+  const aliases: Record<string, string> = { 'mixer-disabled': 'disableAudio', 'audio-meter-disabled': 'disableAudio', 'recording-poll-disabled': 'disableRecording', 'scene-reconciliation-disabled': 'disableScenes' };
+  return Boolean(window.__UBOS_RENDER_FORENSICS_FLAGS__?.[name] || query.get(name) === '1' || query.get(aliases[name] ?? '') === '1' || window.localStorage.getItem(`ubos:render-forensics:${name}`) === '1');
 }
 
 export function useRenderForensics(component: string) {

@@ -2434,6 +2434,9 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
   useRenderForensics('SceneWorkspace');
+  // Diagnostic-only isolation: preserve the monitor cells while preventing the
+  // video/canvas subtree from mounting. Normal URLs never take this branch.
+  const disableVideoDiagnostics = ubosForensicsFlag('disableVideo');
   const [isPending, startTransition] = useTransition();
   const [workspace, setWorkspace] = useState<ControlRoomWorkspaceState>(factoryWorkspace);
   const viewMode = workspace.viewMode;
@@ -5047,7 +5050,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
         )
       ) : null}
       {activeBottomDock === 'audio' && !ubosForensicsFlag('mixer-disabled') ? (
-        <ProfessionalAudioMixer sources={mixerSources} compact />
+        <div data-ubos-audio-panel="true"><ProfessionalAudioMixer sources={mixerSources} compact /></div>
       ) : null}
       {activeBottomDock === 'graphics' ? (
         <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
@@ -5568,7 +5571,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
 
   const programMonitorNode = useMemo(
     () =>
-      liveProgramVisible ? (
+      disableVideoDiagnostics ? <div className="h-full w-full bg-black" aria-label="Program video disabled for diagnostics" /> : liveProgramVisible ? (
         <LiveMediaMonitor
           title="Program"
           sceneName={programScene.name}
@@ -5607,6 +5610,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       ),
     [
       liveProgramVisible,
+      disableVideoDiagnostics,
       programScene.name,
       programStreamToShow,
       programCameraSourceId,
@@ -5628,7 +5632,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
 
   const previewMonitorNode = useMemo(
     () =>
-      livePreviewVisible ? (
+      disableVideoDiagnostics ? <div className="h-full w-full bg-black" aria-label="Preview video disabled for diagnostics" /> : livePreviewVisible ? (
         <LiveMediaMonitor
           title="Preview"
           sceneName={previewScene.name}
@@ -5668,6 +5672,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       ),
     [
       livePreviewVisible,
+      disableVideoDiagnostics,
       previewScene.name,
       previewStreamToShow,
       previewCameraSourceId,

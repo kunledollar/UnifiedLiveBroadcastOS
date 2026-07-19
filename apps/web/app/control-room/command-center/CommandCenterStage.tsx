@@ -102,6 +102,7 @@ const StageMonitorCell = memo(function StageMonitorCell({
 
   return (
     <div
+      data-ubos-command-center-stage="true"
       {...(role === 'program' ? { 'data-ubos-program-monitor': 'true' } : {})}
       {...(role === 'preview' ? { 'data-ubos-preview-monitor': 'true' } : {})}
       className={cn(
