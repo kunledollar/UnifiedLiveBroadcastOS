@@ -1,5 +1,6 @@
 'use client';
 import { BroadcastPanel, StatusBadge } from '@ubos/ui';
+import { useRenderForensics } from '../render-forensics';
 import type { RecordingRuntimeState, SceneSourceType } from '@ubos/shared';
 import { createRecordingRuntimeState } from '@ubos/shared';
 

@@ -1,6 +1,9 @@
 import type { AutomationMacro, ProductionCue, RunOfShow } from '@ubos/shared';
 
-export function enrichRunOfShowWithSampleCues(runOfShow: RunOfShow): RunOfShow {
+export function enrichRunOfShowWithSampleCues(
+  runOfShow: RunOfShow,
+  updatedAt = runOfShow.updatedAt,
+): RunOfShow {
   const cueTemplates: Record<string, ProductionCue[]> = {
     intro: [
       {
@@ -67,7 +70,7 @@ export function enrichRunOfShowWithSampleCues(runOfShow: RunOfShow): RunOfShow {
     cues: cueTemplates[segment.type] ?? segment.cues,
   }));
 
-  return { ...runOfShow, segments, updatedAt: new Date().toISOString() };
+  return { ...runOfShow, segments, updatedAt };
 }
 
 export function createSampleMacros(): AutomationMacro[] {

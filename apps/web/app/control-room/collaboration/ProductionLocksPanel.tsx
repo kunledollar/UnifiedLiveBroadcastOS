@@ -3,7 +3,7 @@
 import type { ProductionLock } from '@ubos/shared';
 import { StatusBadge, cn, ubosTypographyClasses } from '@ubos/ui';
 import { CollaborationEmptyState } from './CollaborationEmptyState';
-import { formatLockAge } from './collaboration-utils';
+import { formatRelativeAge, useClientNow } from '../_components/client-now';
 
 export function ProductionLocksPanel({
   locks,
@@ -14,7 +14,9 @@ export function ProductionLocksPanel({
   conflicts?: number;
   className?: string;
 }) {
-  const activeLocks = locks.filter((lock) => Date.parse(lock.expiresAt) > Date.now());
+  const now = useClientNow(1000);
+  const activeLocks =
+    now === null ? locks : locks.filter((lock) => Date.parse(lock.expiresAt) > now);
 
   if (!activeLocks.length) {
     return (
@@ -44,8 +46,9 @@ export function ProductionLocksPanel({
             </StatusBadge>
           </div>
           <p className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-muted')}>
-            Owner: {lock.ownerName ?? lock.ownerOperatorId} · {formatLockAge(lock.createdAt)} · expires{' '}
-            {formatLockAge(lock.expiresAt)}
+            Owner: {lock.ownerName ?? lock.ownerOperatorId} ·{' '}
+            {formatRelativeAge(lock.createdAt, now)} · expires{' '}
+            {formatRelativeAge(lock.expiresAt, now)}
           </p>
         </div>
       ))}

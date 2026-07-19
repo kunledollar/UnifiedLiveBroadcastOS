@@ -2,6 +2,7 @@
 
 import { ConsoleSection, InspectorRow, StatusBadge, cn, ubosTypographyClasses } from '@ubos/ui';
 import type { OperatorPresence, ProductionLock } from '@ubos/shared';
+import { useClientNow } from '../_components/client-now';
 
 export function RemoteProductionPanel({
   operators,
@@ -25,11 +26,18 @@ export function RemoteProductionPanel({
   className?: string;
 }) {
   const connectedOperators = operators.filter((op) => op.status === 'connected').length;
-  const activeLocks = locks.filter((lock) => Date.parse(lock.expiresAt) > Date.now()).length;
+  const now = useClientNow(1000);
+  const activeLocks =
+    now === null ? locks.length : locks.filter((lock) => Date.parse(lock.expiresAt) > now).length;
 
   if (!collaborationEnabled) {
     return (
-      <div className={cn('rounded-ubos-md border border-dashed border-ubos-border-subtle p-ubos-3', className)}>
+      <div
+        className={cn(
+          'rounded-ubos-md border border-dashed border-ubos-border-subtle p-ubos-3',
+          className,
+        )}
+      >
         <p className={cn(ubosTypographyClasses.caption, 'text-ubos-fg-muted')}>
           Remote production not configured · Collaboration disabled
         </p>
@@ -42,7 +50,10 @@ export function RemoteProductionPanel({
       <InspectorRow label="Connected operators" value={String(connectedOperators)} />
       <InspectorRow label="Connected guests" value={String(guestCount)} />
       <InspectorRow label="Active locks" value={String(activeLocks)} />
-      <InspectorRow label="Routing" value={activeRouteCount ? `${activeRouteCount} routes` : 'not configured'} />
+      <InspectorRow
+        label="Routing"
+        value={activeRouteCount ? `${activeRouteCount} routes` : 'not configured'}
+      />
       <InspectorRow label="Output health" value={outputHealth} />
       <InspectorRow label="Production" value={productionStatus} />
       <InspectorRow label="Recovery" value={recoveryStatus} />

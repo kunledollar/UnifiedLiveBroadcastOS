@@ -1,0 +1,125 @@
+{
+  "baseline": {
+    "AudioMeter.setPeakHold": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "AudioMeter.setDisplayLevel": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "ProfessionalAudioMixer.setMeters": {
+      "total": 1351,
+      "semantic": 2,
+      "noop": 0,
+      "reference": 1351
+    }
+  },
+  "mixer-closed": {
+    "AudioMeter.setPeakHold": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "AudioMeter.setDisplayLevel": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "ProfessionalAudioMixer.setMeters": {
+      "total": 1464,
+      "semantic": 2,
+      "noop": 0,
+      "reference": 1464
+    }
+  },
+  "mixer-disabled": {},
+  "mixer-raf-disabled": {
+    "AudioMeter.setPeakHold": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "AudioMeter.setDisplayLevel": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "ProfessionalAudioMixer.setMeters": {
+      "total": 978,
+      "semantic": 2,
+      "noop": 0,
+      "reference": 978
+    }
+  },
+  "mixer-setter-disabled": {
+    "AudioMeter.setPeakHold": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "AudioMeter.setDisplayLevel": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    }
+  },
+  "audio-meter-disabled": {
+    "ProfessionalAudioMixer.setMeters": {
+      "total": 882,
+      "semantic": 2,
+      "noop": 0,
+      "reference": 882
+    }
+  },
+  "recording-poll-disabled": {
+    "AudioMeter.setPeakHold": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "AudioMeter.setDisplayLevel": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "ProfessionalAudioMixer.setMeters": {
+      "total": 841,
+      "semantic": 2,
+      "noop": 0,
+      "reference": 841
+    }
+  },
+  "scene-reconciliation-disabled": {
+    "AudioMeter.setPeakHold": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "AudioMeter.setDisplayLevel": {
+      "total": 16,
+      "semantic": 0,
+      "noop": 16,
+      "reference": 0
+    },
+    "ProfessionalAudioMixer.setMeters": {
+      "total": 1220,
+      "semantic": 2,
+      "noop": 0,
+      "reference": 1220
+    }
+  }
+}

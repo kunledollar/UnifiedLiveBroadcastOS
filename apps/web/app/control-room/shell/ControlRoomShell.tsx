@@ -1,4 +1,6 @@
+import { memo } from 'react';
 import { SceneWorkspace } from '../scene-workspace';
+import { useRenderForensics } from '../render-forensics';
 import type {
   AudioChannel,
   ChatMessage,
@@ -13,7 +15,7 @@ import type {
   StreamHealthMetric,
 } from '@ubos/shared';
 
-export function ControlRoomShell({
+export const ControlRoomShell = memo(function ControlRoomShell({
   scenes,
   productionState,
   layouts,
@@ -40,8 +42,10 @@ export function ControlRoomShell({
   messages?: ChatMessage[];
   healthMetrics?: StreamHealthMetric[];
 }) {
+  useRenderForensics('ControlRoomShell', { scenes, productionState, layouts, channels, assets, mediaRoutes, guests, invites, persistenceDiagnostics, destinations, messages, healthMetrics });
   return (
-    <main className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
+    <main data-ubos-control-room-root="true" className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
+      <div data-ubos-scene-workspace="true" className="h-full">
       <SceneWorkspace
         initialScenes={scenes}
         initialProductionState={productionState}
@@ -58,6 +62,7 @@ export function ControlRoomShell({
         broadcastId="demo-broadcast"
         workspaceId="demo-workspace"
       />
+      </div>
     </main>
   );
-}
+});

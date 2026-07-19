@@ -1,8 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRenderForensics, recordForensicsStateWrite, ubosForensicsFlag } from '../render-forensics';
 import { BroadcastPanel, StatusBadge, cn, ubosTypographyClasses } from '@ubos/ui';
 import { AudioMeter } from './AudioMeter';
+import { metersSemanticallyEqual } from './audio-stabilization-utils';
 
 type RouteId = 'program' | 'recording' | 'streaming' | 'monitor';
 type MixerSourceType = 'camera' | 'screen' | 'media' | 'browser' | 'guest' | 'master';
@@ -44,6 +46,7 @@ type RuntimeNodes = {
 
 const routes: RouteId[] = ['program', 'recording', 'streaming', 'monitor'];
 const clippingThreshold = 92;
+const mixerMeterUpdateMs = 100;
 
 function createDefaultMetadata(type: MixerSourceType): ChannelMetadata {
   return {
@@ -72,6 +75,7 @@ export function ProfessionalAudioMixer({
   className?: string;
   compact?: boolean;
 }) {
+  useRenderForensics('ProfessionalAudioMixer');
   const [metadata, setMetadata] = useState<Record<string, ChannelMetadata>>(() =>
     Object.fromEntries(sources.map((source) => [source.id, createDefaultMetadata(source.type)])),
   );
@@ -82,9 +86,15 @@ export function ProfessionalAudioMixer({
 
   useEffect(() => {
     setMetadata((current) => {
+      let changed = false;
       const next = { ...current };
-      for (const source of sources) next[source.id] ??= createDefaultMetadata(source.type);
-      return next;
+      for (const source of sources) {
+        if (!next[source.id]) {
+          next[source.id] = createDefaultMetadata(source.type);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
     });
   }, [sources]);
 
@@ -157,7 +167,7 @@ export function ProfessionalAudioMixer({
   useEffect(() => {
     let lastUpdate = 0;
     const tick = (time: number) => {
-      if (time - lastUpdate > 66) {
+      if (time - lastUpdate >= mixerMeterUpdateMs) {
         const nextMeters: Record<string, MeterState> = {};
         let masterPeak = 0;
         for (const source of sources) {
@@ -189,13 +199,19 @@ export function ProfessionalAudioMixer({
           channels: 2,
           sampleRate: Object.values(nodesRef.current)[0]?.context.sampleRate ?? null,
         };
-        setMeters(nextMeters);
+        if (!ubosForensicsFlag('mixer-setter-disabled')) {
+          setMeters((current) => {
+            const semanticEqual = metersSemanticallyEqual(current, nextMeters);
+            recordForensicsStateWrite('ProfessionalAudioMixer.setMeters', current, nextMeters);
+            return semanticEqual ? current : nextMeters;
+          });
+        }
         for (const source of sources) {
           if (nextMeters[source.id]?.clipping) appendHistory(source.name, 'clipping detected');
         }
         lastUpdate = time;
       }
-      frameRef.current = window.requestAnimationFrame(tick);
+      if (!ubosForensicsFlag('mixer-raf-disabled')) frameRef.current = window.requestAnimationFrame(tick);
     };
     frameRef.current = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameRef.current);

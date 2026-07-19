@@ -61,8 +61,7 @@ export function createDefaultStreamProfiles(): StreamProfile[] {
   ];
 }
 
-export function createSampleBroadcastDestinations(): BroadcastDestination[] {
-  const timestamp = now();
+export function createSampleBroadcastDestinations(timestamp = now()): BroadcastDestination[] {
   const redacted = {
     streamKeyConfigured: false,
     endpointConfigured: true,

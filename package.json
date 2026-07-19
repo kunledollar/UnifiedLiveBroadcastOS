@@ -35,7 +35,9 @@
     "validate:v512-wiring": "node scripts/validate-v512-capability-wiring.mjs",
     "validate:v512-step3": "node scripts/validate-v512-step3.mjs",
     "validate:v512-native-adapters": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-adapters.mjs",
-    "validate:v512-native-runtime": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-runtime.mjs"
+    "validate:v512-native-runtime": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-runtime.mjs",
+    "validate:control-room-render-forensics": "node scripts/run-control-room-render-forensics.mjs",
+    "diagnose:control-room-stability": "node scripts/run-control-room-stability-diagnostics.mjs"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",
@@ -45,6 +47,7 @@
     "eslint-config-next": "^15.1.3",
     "prettier": "^3.4.2",
     "turbo": "^2.3.3",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "@playwright/test": "^1.54.2"
   }
 }

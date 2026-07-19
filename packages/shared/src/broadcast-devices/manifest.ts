@@ -9,7 +9,11 @@ import type {
 
 const now = () => new Date().toISOString();
 
-function capability(type: DeviceCapability['type'], supported: boolean, notes?: string): DeviceCapability {
+function capability(
+  type: DeviceCapability['type'],
+  supported: boolean,
+  notes?: string,
+): DeviceCapability {
   return { type, supported, ...(notes ? { notes } : {}) };
 }
 
@@ -98,8 +102,7 @@ export function createDefaultProtocolDefinitions(): ProtocolDefinition[] {
   ];
 }
 
-export function createSampleBroadcastDevices(): BroadcastDevice[] {
-  const timestamp = now();
+export function createSampleBroadcastDevices(timestamp = now()): BroadcastDevice[] {
   return [
     {
       id: 'dev-bmd-atem',
@@ -237,9 +240,29 @@ export function createSampleRoutingEndpoints(): RoutingEndpoint[] {
     { id: 'in-cam-2', label: 'CAM 2', direction: 'input', status: 'ready' },
     { id: 'in-ndi-1', label: 'NDI 1', direction: 'input', status: 'unavailable' },
     { id: 'in-sdi-1', label: 'SDI 1', direction: 'input', status: 'ready' },
-    { id: 'in-replay', label: 'Replay', direction: 'input', status: 'assigned', assignedRouteId: 'route-replay-pgm' },
-    { id: 'out-pgm', label: 'Program', direction: 'output', status: 'assigned', sourceId: 'in-cam-1', assignedRouteId: 'route-cam1-pgm' },
-    { id: 'out-pvw', label: 'Preview', direction: 'output', status: 'assigned', sourceId: 'in-cam-2', assignedRouteId: 'route-cam2-pvw' },
+    {
+      id: 'in-replay',
+      label: 'Replay',
+      direction: 'input',
+      status: 'assigned',
+      assignedRouteId: 'route-replay-pgm',
+    },
+    {
+      id: 'out-pgm',
+      label: 'Program',
+      direction: 'output',
+      status: 'assigned',
+      sourceId: 'in-cam-1',
+      assignedRouteId: 'route-cam1-pgm',
+    },
+    {
+      id: 'out-pvw',
+      label: 'Preview',
+      direction: 'output',
+      status: 'assigned',
+      sourceId: 'in-cam-2',
+      assignedRouteId: 'route-cam2-pvw',
+    },
     { id: 'out-multiview', label: 'Multiview', direction: 'output', status: 'warning' },
     { id: 'out-clean', label: 'Clean Feed', direction: 'output', status: 'unassigned' },
   ];
@@ -247,22 +270,119 @@ export function createSampleRoutingEndpoints(): RoutingEndpoint[] {
 
 export function createSampleDevicePlugins(): DevicePluginDefinition[] {
   return [
-    { id: 'plugin-bmd', name: 'Blackmagic', manufacturer: 'Blackmagic Design', protocols: ['atem', 'hyperdeck'], status: 'unavailable', description: 'ATEM, HyperDeck metadata' },
-    { id: 'plugin-ross', name: 'Ross', manufacturer: 'Ross Video', protocols: ['rosstalk'], status: 'unavailable' },
-    { id: 'plugin-viz', name: 'Vizrt', manufacturer: 'Vizrt', protocols: ['mos', 'tcp'], status: 'coming_soon' },
-    { id: 'plugin-sony', name: 'Sony', manufacturer: 'Sony', protocols: ['visca_over_ip', 'onvif'], status: 'unavailable' },
-    { id: 'plugin-canon', name: 'Canon', manufacturer: 'Canon', protocols: ['visca_over_ip'], status: 'coming_soon' },
-    { id: 'plugin-panasonic', name: 'Panasonic', manufacturer: 'Panasonic', protocols: ['visca_over_ip'], status: 'coming_soon' },
-    { id: 'plugin-newtek', name: 'NewTek', manufacturer: 'NewTek', protocols: ['ndi', 'tcp'], status: 'unavailable' },
-    { id: 'plugin-birddog', name: 'BirdDog', manufacturer: 'BirdDog', protocols: ['ndi', 'visca_over_ip'], status: 'unavailable' },
-    { id: 'plugin-magewell', name: 'Magewell', manufacturer: 'Magewell', protocols: ['ndi', 'sdi'], status: 'unavailable' },
-    { id: 'plugin-aja', name: 'AJA', manufacturer: 'AJA', protocols: ['sdi'], status: 'unavailable' },
-    { id: 'plugin-evs', name: 'EVS', manufacturer: 'EVS', protocols: ['tcp', 'rest'], status: 'coming_soon' },
-    { id: 'plugin-obs', name: 'OBS', manufacturer: 'OBS Project', protocols: ['websocket', 'rest'], status: 'unavailable' },
-    { id: 'plugin-vmix', name: 'vMix', manufacturer: 'vMix', protocols: ['tcp', 'rest'], status: 'unavailable' },
-    { id: 'plugin-wirecast', name: 'Wirecast', manufacturer: 'Telestream', protocols: ['rest'], status: 'coming_soon' },
-    { id: 'plugin-tricaster', name: 'TriCaster', manufacturer: 'NewTek', protocols: ['tcp', 'ndi'], status: 'coming_soon' },
-    { id: 'plugin-future', name: 'Future Plugin', manufacturer: 'Custom', protocols: ['custom_plugin'], status: 'disabled' },
+    {
+      id: 'plugin-bmd',
+      name: 'Blackmagic',
+      manufacturer: 'Blackmagic Design',
+      protocols: ['atem', 'hyperdeck'],
+      status: 'unavailable',
+      description: 'ATEM, HyperDeck metadata',
+    },
+    {
+      id: 'plugin-ross',
+      name: 'Ross',
+      manufacturer: 'Ross Video',
+      protocols: ['rosstalk'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-viz',
+      name: 'Vizrt',
+      manufacturer: 'Vizrt',
+      protocols: ['mos', 'tcp'],
+      status: 'coming_soon',
+    },
+    {
+      id: 'plugin-sony',
+      name: 'Sony',
+      manufacturer: 'Sony',
+      protocols: ['visca_over_ip', 'onvif'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-canon',
+      name: 'Canon',
+      manufacturer: 'Canon',
+      protocols: ['visca_over_ip'],
+      status: 'coming_soon',
+    },
+    {
+      id: 'plugin-panasonic',
+      name: 'Panasonic',
+      manufacturer: 'Panasonic',
+      protocols: ['visca_over_ip'],
+      status: 'coming_soon',
+    },
+    {
+      id: 'plugin-newtek',
+      name: 'NewTek',
+      manufacturer: 'NewTek',
+      protocols: ['ndi', 'tcp'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-birddog',
+      name: 'BirdDog',
+      manufacturer: 'BirdDog',
+      protocols: ['ndi', 'visca_over_ip'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-magewell',
+      name: 'Magewell',
+      manufacturer: 'Magewell',
+      protocols: ['ndi', 'sdi'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-aja',
+      name: 'AJA',
+      manufacturer: 'AJA',
+      protocols: ['sdi'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-evs',
+      name: 'EVS',
+      manufacturer: 'EVS',
+      protocols: ['tcp', 'rest'],
+      status: 'coming_soon',
+    },
+    {
+      id: 'plugin-obs',
+      name: 'OBS',
+      manufacturer: 'OBS Project',
+      protocols: ['websocket', 'rest'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-vmix',
+      name: 'vMix',
+      manufacturer: 'vMix',
+      protocols: ['tcp', 'rest'],
+      status: 'unavailable',
+    },
+    {
+      id: 'plugin-wirecast',
+      name: 'Wirecast',
+      manufacturer: 'Telestream',
+      protocols: ['rest'],
+      status: 'coming_soon',
+    },
+    {
+      id: 'plugin-tricaster',
+      name: 'TriCaster',
+      manufacturer: 'NewTek',
+      protocols: ['tcp', 'ndi'],
+      status: 'coming_soon',
+    },
+    {
+      id: 'plugin-future',
+      name: 'Future Plugin',
+      manufacturer: 'Custom',
+      protocols: ['custom_plugin'],
+      status: 'disabled',
+    },
   ];
 }
 

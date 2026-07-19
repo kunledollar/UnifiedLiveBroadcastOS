@@ -1,10 +1,11 @@
 'use client';
 
+import { memo, useCallback } from 'react';
 import { cn, ubosTypographyClasses } from '@ubos/ui';
 import type { TransitionType } from '@ubos/shared';
 import { supportedTransitions } from './switcher-config';
 
-export function TransitionSelector({
+export const TransitionSelector = memo(function TransitionSelector({
   value,
   onChange,
   className,
@@ -13,6 +14,11 @@ export function TransitionSelector({
   onChange: (value: TransitionType) => void;
   className?: string;
 }) {
+  const handleChange = useCallback(
+    (optionValue: TransitionType) => () => onChange(optionValue),
+    [onChange],
+  );
+
   return (
     <div className={cn('flex min-w-0 flex-col gap-ubos-1', className)}>
       <span className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-muted')}>Transition</span>
@@ -30,7 +36,7 @@ export function TransitionSelector({
               role="radio"
               aria-checked={active}
               title={option.description}
-              onClick={() => onChange(option.value)}
+              onClick={handleChange(option.value)}
               className={cn(
                 'min-w-[2.75rem] flex-1 rounded-ubos-sm px-2 py-1.5 font-black uppercase tracking-[0.12em]',
                 ubosTypographyClasses.metadata,
@@ -47,4 +53,4 @@ export function TransitionSelector({
       </div>
     </div>
   );
-}
+});

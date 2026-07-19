@@ -1,6 +1,7 @@
 'use client';
 
 import { cn, getTallyState } from '@ubos/ui';
+import { ubosForensicsFlag, recordForensicsUpdate, useRenderForensics } from './render-forensics';
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
@@ -91,6 +92,7 @@ import {
   createMockAuthorityScenario,
 } from '@ubos/shared';
 import {
+  memo,
   type CSSProperties,
   type ReactNode,
   useCallback,
@@ -105,6 +107,7 @@ import {
 import { useMediaCapture } from '../../lib/media/use-media-capture';
 import {
   areScenesSameReference,
+  areScenesSemanticallyEqual,
   patchCaptureSourceStatusInScenes,
   shouldRestoreLocalMediaSource,
 } from './scene-runtime-patching';
@@ -251,8 +254,10 @@ import {
 } from './distribution';
 import {
   createDistributionManifest,
+  createSampleBroadcastDestinations,
   createSampleOutputHealth,
   createDeviceManifest,
+  createSampleBroadcastDevices,
 } from '@ubos/shared';
 import {
   DeviceManagerWorkspace,
@@ -260,6 +265,8 @@ import {
   deviceHealthSummaryLabel,
   deviceReducer,
 } from './devices';
+
+const controlRoomHydrationTimestamp = '2026-07-01T00:00:00.000Z';
 
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
@@ -359,6 +366,69 @@ function createGeneratedTestPatternStream(
     });
   });
   return stream;
+}
+
+type StateWriteDebugEntry = {
+  label: string;
+  calls: number;
+  semanticChanges: number;
+  noopWrites: number;
+  referenceChanges: number;
+  effect: string;
+};
+
+function isStateWriteDebugEnabled(): boolean {
+  return (
+    typeof window !== 'undefined' && window.localStorage.getItem('ubos.debug.stateWrites') === '1'
+  );
+}
+
+function recordStateWriteDebug(input: {
+  label: string;
+  semanticEqual: boolean;
+  referenceChanged: boolean;
+  effect: string;
+}) {
+  if (!isStateWriteDebugEnabled()) return;
+  const globalKey = '__ubosStateWriteDebug';
+  const holder = window as typeof window & {
+    [globalKey]?: {
+      startedAt: number;
+      lastPrintAt: number;
+      entries: Record<string, StateWriteDebugEntry>;
+    };
+  };
+  const now = Date.now();
+  const store =
+    holder[globalKey] ?? (holder[globalKey] = { startedAt: now, lastPrintAt: now, entries: {} });
+  const entry =
+    store.entries[input.label] ??
+    (store.entries[input.label] = {
+      label: input.label,
+      calls: 0,
+      semanticChanges: 0,
+      noopWrites: 0,
+      referenceChanges: 0,
+      effect: input.effect,
+    });
+  entry.calls += 1;
+  entry.effect = input.effect;
+  if (input.semanticEqual) entry.noopWrites += 1;
+  else entry.semanticChanges += 1;
+  if (input.referenceChanged) entry.referenceChanges += 1;
+  if (now - store.lastPrintAt >= 5000) {
+    const elapsed = Math.max(1, (now - store.startedAt) / 1000);
+    const rows = Object.values(store.entries).map((item) => ({
+      'State writer': item.label,
+      'Calls/10s': Number(((item.calls / elapsed) * 10).toFixed(2)),
+      'Semantic changes': item.semanticChanges,
+      'No-op writes': item.noopWrites,
+      'Reference changes': item.referenceChanges,
+      'Triggering effect': item.effect,
+    }));
+    console.table(rows);
+    store.lastPrintAt = now;
+  }
 }
 
 const UBOS_MEDIA_DB_NAME = 'ubos-managed-media-assets';
@@ -2190,7 +2260,8 @@ function createProductionGraphSessionFromScenes(input: {
   productionState: ProductionSwitchingState;
   broadcastId: string;
 }): ProductionBroadcastSession {
-  const timestamp = new Date().toISOString();
+  const timestamp =
+    input.scenes[0]?.updatedAt ?? input.scenes[0]?.createdAt ?? '1970-01-01T00:00:00.000Z';
   const graph = createInitialProductionGraph({
     broadcastSessionId: input.broadcastId,
     name: 'Control Room Session',
@@ -2329,7 +2400,7 @@ function createProductionGraphSessionFromScenes(input: {
   };
 }
 
-export function SceneWorkspace({
+export const SceneWorkspace = memo(function SceneWorkspace({
   initialScenes,
   layouts,
   channels,
@@ -2362,6 +2433,14 @@ export function SceneWorkspace({
   workspaceId?: string;
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
+  useRenderForensics('SceneWorkspace', {
+    initialScenes, initialProductionState, layouts, channels, assets, mediaRoutes, guests,
+    invites, destinations, messages, streamHealthMetrics, persistenceDiagnostics, broadcastId,
+    workspaceId, operationsTabs,
+  });
+  // Diagnostic-only isolation: preserve the monitor cells while preventing the
+  // video/canvas subtree from mounting. Normal URLs never take this branch.
+  const disableVideoDiagnostics = ubosForensicsFlag('disableVideo');
   const [isPending, startTransition] = useTransition();
   const [workspace, setWorkspace] = useState<ControlRoomWorkspaceState>(factoryWorkspace);
   const viewMode = workspace.viewMode;
@@ -2387,8 +2466,16 @@ export function SceneWorkspace({
   );
   const [runtimeView, setRuntimeView] = useState(runtime.state);
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(mediaRoutes[0]?.id ?? null);
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [clock, setClock] = useState('00:00:00');
+  const startedAtRef = useRef(Date.now());
+  const stableNowRef = useRef(Date.now());
+  const clockSnapshot = useMemo(
+    () => ({
+      elapsedSeconds: 0,
+      clock: new Date(startedAtRef.current).toLocaleTimeString([], { hour12: false }),
+    }),
+    [],
+  );
+
 
   useEffect(() => {
     const storedViewMode = window.localStorage.getItem(controlRoomViewStorageKey);
@@ -2419,17 +2506,6 @@ export function SceneWorkspace({
   useEffect(() => {
     window.localStorage.setItem(workspaceStorageKey, JSON.stringify(workspace));
   }, [workspace]);
-
-  useEffect(() => {
-    const startedAt = Date.now();
-    const tick = () => {
-      setElapsedSeconds(Math.floor((Date.now() - startedAt) / 1000));
-      setClock(new Date().toLocaleTimeString([], { hour12: false }));
-    };
-    tick();
-    const interval = window.setInterval(tick, 1000);
-    return () => window.clearInterval(interval);
-  }, []);
 
   const selectViewMode = (mode: OutputViewMode) => {
     setWorkspace((current) => ({ ...current, viewMode: mode }));
@@ -2490,10 +2566,18 @@ export function SceneWorkspace({
   };
 
   const refresh = useCallback(
-    (nextOrPatch: Scene[] | ((current: Scene[]) => Scene[])) => {
+    (nextOrPatch: Scene[] | ((current: Scene[]) => Scene[]), effect = 'scene refresh') => {
       const current = scenesRef.current;
       const next = typeof nextOrPatch === 'function' ? nextOrPatch(current) : nextOrPatch;
-      if (areScenesSameReference(current, next)) return;
+      const sameReference = areScenesSameReference(current, next);
+      const semanticEqual = sameReference || areScenesSemanticallyEqual(current, next);
+      recordStateWriteDebug({
+        label: 'setScenes',
+        semanticEqual,
+        referenceChanged: current !== next,
+        effect,
+      });
+      if (semanticEqual) return;
       scenesRef.current = next;
       startTransition(() => setScenes(next));
     },
@@ -2688,12 +2772,14 @@ export function SceneWorkspace({
 
   const patchCaptureSourceStatus = useCallback(
     (runtimeStatus: string, sourceId?: string, message?: string) => {
-      refresh((currentScenes) =>
-        patchCaptureSourceStatusInScenes(currentScenes, {
-          runtimeStatus,
-          ...(sourceId === undefined ? {} : { sourceId }),
-          ...(message === undefined ? {} : { message }),
-        }),
+      refresh(
+        (currentScenes) =>
+          patchCaptureSourceStatusInScenes(currentScenes, {
+            runtimeStatus,
+            ...(sourceId === undefined ? {} : { sourceId }),
+            ...(message === undefined ? {} : { message }),
+          }),
+        `patchCaptureSourceStatus:${runtimeStatus}:${sourceId ?? 'all'}`,
       );
     },
     [refresh],
@@ -2787,7 +2873,14 @@ export function SceneWorkspace({
   const retainLiveSourceStream = useCallback(
     (sourceId: string, stream: MediaStream) => {
       setLiveSourceStreams((current) => {
+        if (current[sourceId] === stream) return current;
         current[sourceId]?.getTracks().forEach((track) => track.stop());
+        recordStateWriteDebug({
+          label: 'setLiveSourceStreams',
+          semanticEqual: false,
+          referenceChanged: true,
+          effect: 'retainLiveSourceStream',
+        });
         return { ...current, [sourceId]: stream };
       });
       stream.getTracks().forEach((track) => {
@@ -3312,7 +3405,7 @@ export function SceneWorkspace({
             ? 'unavailable'
             : 'ready'
           : current.state;
-        return {
+        const next = {
           ...current,
           runtimeConnected: Boolean(status.connected),
           ffmpegAvailable: status.ffmpeg?.state === 'AVAILABLE',
@@ -3329,22 +3422,48 @@ export function SceneWorkspace({
           audioCodec: status.lastArtifactResult?.audioCodec ?? current.audioCodec,
           failure: status.lastFailure ?? current.failure,
         };
+        const semanticEqual = JSON.stringify(current) === JSON.stringify(next);
+        recordStateWriteDebug({
+          label: 'setNativeRecordingState',
+          semanticEqual,
+          referenceChanged: current !== next,
+          effect: 'refreshNativeRuntimeStatus',
+        });
+        recordForensicsUpdate('SceneWorkspace.native-runtime-status.subscription', current, next, 'subscription', 'SceneWorkspace');
+        return semanticEqual ? current : next;
       });
     } catch {
-      setNativeRecordingState((current) => ({
-        ...current,
-        runtimeConnected: false,
-        state: settledStates.includes(current.state) ? 'unavailable' : current.state,
-        blockedReason: 'Native runtime API host is disconnected.',
-      }));
+      setNativeRecordingState((current) => {
+        const next = {
+          ...current,
+          runtimeConnected: false,
+          state: settledStates.includes(current.state) ? 'unavailable' : current.state,
+          blockedReason: 'Native runtime API host is disconnected.',
+        };
+        const semanticEqual = JSON.stringify(current) === JSON.stringify(next);
+        recordStateWriteDebug({
+          label: 'setNativeRecordingState',
+          semanticEqual,
+          referenceChanged: current !== next,
+          effect: 'refreshNativeRuntimeStatus:catch',
+        });
+        recordForensicsUpdate('SceneWorkspace.native-runtime-status.subscription', current, next, 'subscription', 'SceneWorkspace');
+        return semanticEqual ? current : next;
+      });
     }
   }, [liveProgramVisible]);
 
   useEffect(() => {
     void refreshNativeRuntimeStatus();
-    const interval = window.setInterval(() => void refreshNativeRuntimeStatus(), 5000);
+    const active = ['preparing', 'recording', 'stopping', 'finalizing'].includes(
+      nativeRecordingState.state,
+    );
+    const shouldPoll = active || nativeRecordingState.state === 'ready';
+    if (!shouldPoll) return;
+    const intervalMs = active ? 5000 : 30000;
+    const interval = window.setInterval(() => void refreshNativeRuntimeStatus(), intervalMs);
     return () => window.clearInterval(interval);
-  }, [refreshNativeRuntimeStatus]);
+  }, [nativeRecordingState.state, refreshNativeRuntimeStatus]);
 
   const blobToBase64 = (blob: Blob) =>
     new Promise<string>((resolve, reject) => {
@@ -3496,10 +3615,11 @@ export function SceneWorkspace({
       return;
     }
     const tick = () =>
-      setNativeRecordingState((current) => ({
-        ...current,
-        elapsedMs: Date.now() - Date.parse(nativeRecordingStartedAtRef.current!),
-      }));
+      setNativeRecordingState((current) => {
+        const next = { ...current, elapsedMs: Date.now() - Date.parse(nativeRecordingStartedAtRef.current!) };
+        recordForensicsUpdate('SceneWorkspace.native-recording-elapsed.interval', current, next, 'state', 'SceneWorkspace');
+        return next;
+      });
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
@@ -3508,14 +3628,18 @@ export function SceneWorkspace({
   useEffect(() => {
     if (streamingState.lifecycle !== 'streaming' || !streamingState.startedAt) return;
     const tick = () =>
-      setStreamingState((current) => ({
+      setStreamingState((current) => {
+        const next = {
         ...current,
         durationMs: Date.now() - Date.parse(streamingState.startedAt!),
         bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps,
         droppedFrameEstimate: Math.floor(
           (Date.now() - Date.parse(streamingState.startedAt!)) / 60000,
         ),
-      }));
+        };
+        recordForensicsUpdate('SceneWorkspace.streaming-duration.interval', current, next, 'state', 'SceneWorkspace');
+        return next;
+      });
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
@@ -3523,7 +3647,11 @@ export function SceneWorkspace({
 
   useEffect(() => {
     if (recordingState !== 'recording' || !recordingStartedAt) return;
-    const tick = () => setRecordingDurationMs(Date.now() - Date.parse(recordingStartedAt));
+    const tick = () => setRecordingDurationMs((current) => {
+      const next = Date.now() - Date.parse(recordingStartedAt);
+      recordForensicsUpdate('SceneWorkspace.browser-recording-duration.interval', current, next, 'state', 'SceneWorkspace');
+      return next;
+    });
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
@@ -3578,7 +3706,11 @@ export function SceneWorkspace({
     const tick = () => {
       analyser.getByteTimeDomainData(data);
       const peak = data.reduce((max, value) => Math.max(max, Math.abs(value - 128)), 0);
-      setAudioLevel(Math.min(100, Math.round((peak / 64) * 100)));
+      setAudioLevel((current) => {
+        const next = Math.min(100, Math.round((peak / 64) * 100));
+        recordForensicsUpdate('SceneWorkspace.audio-level.raf', current, next, 'raf', 'SceneWorkspace');
+        return next;
+      });
       frame = window.requestAnimationFrame(tick);
     };
     tick();
@@ -3657,7 +3789,10 @@ export function SceneWorkspace({
   const realtimeSyncEnabled = isRealtimeSyncEnabled(process.env);
   const realtimeSyncUrl = process.env.NEXT_PUBLIC_UBOS_SYNC_URL;
   const authorityDiagnostics = useMemo(() => {
-    const store = createMockAuthorityScenario(productionGraphSession.id);
+    const store = createMockAuthorityScenario(
+      productionGraphSession.id,
+      productionGraphSession.createdAt,
+    );
     const state = store.getAuthorityState();
     return {
       scopes: Object.values(state.scopes),
@@ -3667,21 +3802,34 @@ export function SceneWorkspace({
       decisions: store.listRecentDecisions(),
       canOverride: ['OWNER', 'ADMIN'].includes('DIRECTOR'),
     };
-  }, [productionGraphSession.id]);
+  }, [productionGraphSession.createdAt, productionGraphSession.id]);
   const syncDiagnostics = useMemo(() => {
+    const syncTimestamp = productionGraphSession.createdAt;
     const syncSession = createMockSyncScenario(
       createSyncSession({
         id: `sync:${productionGraphSession.id}`,
         broadcastSessionId: productionGraphSession.id,
         productionGraphId: productionGraphSession.graph.id,
         currentGraphRevision: productionGraphSession.graph.metadata.revision,
+        createdAt: syncTimestamp,
+        updatedAt: syncTimestamp,
       }),
+    );
+    syncSession.clients = Object.fromEntries(
+      Object.entries(syncSession.clients).map(([id, client]) => [
+        id,
+        { ...client, lastHeartbeatAt: syncTimestamp },
+      ]),
     );
     const clients = Object.values(syncSession.clients);
     return {
       session: syncSession,
       clients,
-      staleClientIds: new Set(getStaleClients(syncSession).map((client) => client.clientId)),
+      staleClientIds: new Set(
+        getStaleClients(syncSession, 30_000, stableNowRef.current).map(
+          (client) => client.clientId,
+        ),
+      ),
       acceptedCommands: productionGraphSession.commandLog.length,
       rejectedCommands: productionGraphSession.eventLog.filter(
         (event) => event.type === 'COMMAND_REJECTED',
@@ -3879,19 +4027,37 @@ export function SceneWorkspace({
   const [automationState, dispatchAutomation] = useReducer(
     automationReducer,
     createInitialAutomationState(
-      enrichRunOfShowWithSampleCues(createDefaultRunOfShow()),
+      enrichRunOfShowWithSampleCues(
+        createDefaultRunOfShow('Show Rundown', {
+          id: 'ros-control-room-hydration-safe',
+          updatedAt: controlRoomHydrationTimestamp,
+        }),
+        controlRoomHydrationTimestamp,
+      ),
       createSampleMacros(),
     ),
   );
   const [aiState, dispatchAI] = useReducer(
     aiReducer,
     createInitialAIState({
-      assistant: createDefaultAIAssistantState(),
+      assistant: createDefaultAIAssistantState(controlRoomHydrationTimestamp),
       recommendations: createSampleAIRecommendations(),
       riskSignals: createSampleAIRiskSignals(),
     }),
   );
-  const distributionManifest = useMemo(() => createDistributionManifest(), []);
+  const distributionManifest = useMemo(() => {
+    const manifest = createDistributionManifest({
+      destinations: createSampleBroadcastDestinations(controlRoomHydrationTimestamp),
+    });
+    return {
+      ...manifest,
+      destinations: manifest.destinations.map((destination) => ({
+        ...destination,
+        createdAt: controlRoomHydrationTimestamp,
+        updatedAt: controlRoomHydrationTimestamp,
+      })),
+    };
+  }, []);
   const [distributionState, dispatchDistribution] = useReducer(
     distributionReducer,
     createInitialDistributionState({
@@ -3901,7 +4067,18 @@ export function SceneWorkspace({
       outputHealth: createSampleOutputHealth(distributionManifest.destinations),
     }),
   );
-  const deviceManifest = useMemo(() => createDeviceManifest(), []);
+  const deviceManifest = useMemo(() => {
+    const manifest = createDeviceManifest({
+      devices: createSampleBroadcastDevices(controlRoomHydrationTimestamp),
+    });
+    return {
+      ...manifest,
+      devices: manifest.devices.map((device) => ({
+        ...device,
+        lastSeen: controlRoomHydrationTimestamp,
+      })),
+    };
+  }, []);
   const [deviceState, dispatchDevice] = useReducer(
     deviceReducer,
     createInitialDeviceState(deviceManifest),
@@ -3960,18 +4137,21 @@ export function SceneWorkspace({
   const collaborationDemoEnabled = isCollaborationDemoEnabled();
   const remoteProductionOperators = useMemo(() => {
     if (collaborationDemoEnabled) {
-      return createMockCollaborationOperators(productionGraphSession.graph.metadata.revision).map(
-        (operator) => mapCollaborationOperatorToPresence(operator, true),
-      );
+      return createMockCollaborationOperators(
+        productionGraphSession.graph.metadata.revision,
+        productionGraphSession.createdAt,
+      ).map((operator) => mapCollaborationOperatorToPresence(operator, true));
     }
     return [
       createLocalOperatorPresence({
         workspaceId: selectedWorkspace,
         currentPanel: activeOperationsTab,
+        lastSeen: productionGraphSession.createdAt,
       }),
     ];
   }, [
     collaborationDemoEnabled,
+    productionGraphSession.createdAt,
     productionGraphSession.graph.metadata.revision,
     selectedWorkspace,
     activeOperationsTab,
@@ -4444,7 +4624,7 @@ export function SceneWorkspace({
           }
         : {}),
       collaborationLockCount: collaborationState.remoteProduction.locks.filter(
-        (lock) => Date.parse(lock.expiresAt) > Date.now(),
+        (lock) => Date.parse(lock.expiresAt) > stableNowRef.current,
       ).length,
       collaborationOpenNoteCount: collaborationState.remoteProduction.notes.filter(
         (note) => note.status === 'open',
@@ -4888,8 +5068,8 @@ export function SceneWorkspace({
           </div>
         )
       ) : null}
-      {activeBottomDock === 'audio' ? (
-        <ProfessionalAudioMixer sources={mixerSources} compact />
+      {activeBottomDock === 'audio' && !ubosForensicsFlag('mixer-disabled') ? (
+        <div data-ubos-audio-panel="true"><ProfessionalAudioMixer sources={mixerSources} compact /></div>
       ) : null}
       {activeBottomDock === 'graphics' ? (
         <div className="flex h-full min-h-0 flex-col gap-ubos-2 overflow-hidden px-ubos-2 py-ubos-2">
@@ -5158,133 +5338,166 @@ export function SceneWorkspace({
     </>
   );
 
-  const layoutStyle = {
-    '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
-    '--ubos-switcher-height': switcherHeightForLayout(
-      workspace.layoutFocus,
-      workspace.compactChrome,
-    ),
-  } as CSSProperties;
+  const layoutStyle = useMemo(
+    () =>
+      ({
+        '--ubos-status-bar-height': statusBarHeightForLayout(workspace.compactChrome),
+        '--ubos-switcher-height': switcherHeightForLayout(
+          workspace.layoutFocus,
+          workspace.compactChrome,
+        ),
+      }) as CSSProperties,
+    [workspace.compactChrome, workspace.layoutFocus],
+  );
 
-  const rightTabContent = {
-    guests: operationsPanels.guests,
-    outputs: operationsPanels.outputs,
-    chat: (
-      <div className="space-y-2 text-ubos-caption text-ubos-fg-secondary">
-        {messages.length ? (
-          messages.map((message) => (
-            <div
-              key={message.id}
-              className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight p-2"
-            >
-              <div className="font-bold text-ubos-fg-primary">{message.authorName}</div>
-              <div>{message.body}</div>
-            </div>
-          ))
-        ) : (
-          <div className="rounded-ubos-md border border-dashed border-ubos-border-subtle p-4 text-center">
-            No chat messages yet.
-          </div>
-        )}
-      </div>
-    ),
-    inspector: operationsPanels.inspector,
-    health: operationsPanels.health,
-    smoke: (
-      <div className="space-y-ubos-2">
-        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-3">
-          <p className="text-ubos-caption font-black uppercase tracking-[0.16em] text-ubos-fg-primary">
-            UBOS 3.1 Client-Ready Media Smoke Test
-          </p>
-          <p className="mt-1 text-ubos-caption text-ubos-fg-muted">
-            Browser camera, microphone, preview/program, audio meter, and WebM recording run
-            locally. RTMP streaming is unavailable until a real backend is configured.
-          </p>
-        </div>
-        <div className="grid gap-1">
-          <SmokeCheck label="Camera active" ok={directCameraLive} />
-          <SmokeCheck
-            label="Microphone active"
-            ok={Boolean(
-              firstLiveVideoStream?.getAudioTracks().some((t) => t.readyState === 'live'),
+  const rightTabContent = useMemo(
+    () =>
+      ({
+        guests: operationsPanels.guests,
+        outputs: operationsPanels.outputs,
+        chat: (
+          <div className="space-y-2 text-ubos-caption text-ubos-fg-secondary">
+            {messages.length ? (
+              messages.map((message) => (
+                <div
+                  key={message.id}
+                  className="rounded-ubos-sm border border-ubos-border-subtle bg-ubos-midnight p-2"
+                >
+                  <div className="font-bold text-ubos-fg-primary">{message.authorName}</div>
+                  <div>{message.body}</div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-ubos-md border border-dashed border-ubos-border-subtle p-4 text-center">
+                No chat messages yet.
+              </div>
             )}
-          />
-          <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
-          <SmokeCheck label="Program visible" ok={liveProgramVisible} />
-          <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
-          <SmokeCheck label="Recording works" ok={recordingState === 'completed'} />
-          <SmokeCheck label="No camera errors" ok={!cameraCaptureError} />
-        </div>
-        <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
-          <div className="mb-2 flex items-center justify-between text-ubos-caption text-ubos-fg-secondary">
-            <span>Mic level</span>
-            <span>{audioLevel}%</span>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-ubos-midnight">
-            <div
-              className="h-full bg-emerald-400 transition-all"
-              style={{ width: `${audioLevel}%` }}
-            />
+        ),
+        inspector: operationsPanels.inspector,
+        health: operationsPanels.health,
+        smoke: (
+          <div className="space-y-ubos-2">
+            <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-midnight p-3">
+              <p className="text-ubos-caption font-black uppercase tracking-[0.16em] text-ubos-fg-primary">
+                UBOS 3.1 Client-Ready Media Smoke Test
+              </p>
+              <p className="mt-1 text-ubos-caption text-ubos-fg-muted">
+                Browser camera, microphone, preview/program, audio meter, and WebM recording run
+                locally. RTMP streaming is unavailable until a real backend is configured.
+              </p>
+            </div>
+            <div className="grid gap-1">
+              <SmokeCheck label="Camera active" ok={directCameraLive} />
+              <SmokeCheck
+                label="Microphone active"
+                ok={Boolean(
+                  firstLiveVideoStream?.getAudioTracks().some((t) => t.readyState === 'live'),
+                )}
+              />
+              <SmokeCheck label="Preview visible" ok={livePreviewVisible} />
+              <SmokeCheck label="Program visible" ok={liveProgramVisible} />
+              <SmokeCheck label="Audio meter moving" ok={audioLevel > 2} />
+              <SmokeCheck label="Recording works" ok={recordingState === 'completed'} />
+              <SmokeCheck label="No camera errors" ok={!cameraCaptureError} />
+            </div>
+            <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon p-3">
+              <div className="mb-2 flex items-center justify-between text-ubos-caption text-ubos-fg-secondary">
+                <span>Mic level</span>
+                <span>{audioLevel}%</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-ubos-midnight">
+                <div
+                  className="h-full bg-emerald-400 transition-all"
+                  style={{ width: `${audioLevel}%` }}
+                />
+              </div>
+            </div>
+            {cameraCaptureError ? (
+              <p className="text-ubos-caption text-ubos-error-text">
+                Last Error: {cameraCaptureError}
+              </p>
+            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
+                onClick={() => {
+                  void activateDirectCamera();
+                }}
+              >
+                Start camera + mic
+              </button>
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
+                onClick={() => {
+                  Object.keys(liveSourceStreams).forEach((sourceId) =>
+                    stopLiveSourceStream(sourceId),
+                  );
+                  smokeMedia.stopAll();
+                  setLiveSourceStreams({});
+                  setCameraCaptureError('');
+                }}
+              >
+                Stop devices
+              </button>
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
+                disabled={
+                  recordingState === 'recording' ||
+                  recordingState === 'preparing' ||
+                  recordingState === 'stopping'
+                }
+                onClick={startSmokeRecording}
+              >
+                Start WebM REC
+              </button>
+              <button
+                type="button"
+                className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary disabled:opacity-50"
+                disabled={recordingState !== 'recording'}
+                onClick={stopSmokeRecording}
+              >
+                Stop REC
+              </button>
+            </div>
+            {recordedUrl ? (
+              <a
+                className="block rounded-ubos-sm bg-emerald-400 px-2 py-2 text-center text-xs font-black text-slate-950"
+                href={recordedUrl}
+                download={recordingFilename ?? 'ubos-smoke-test.webm'}
+              >
+                Download recorded WebM
+              </a>
+            ) : null}
           </div>
-        </div>
-        {cameraCaptureError ? (
-          <p className="text-ubos-caption text-ubos-error-text">Last Error: {cameraCaptureError}</p>
-        ) : null}
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-cyan-400 px-2 py-2 text-xs font-black text-slate-950"
-            onClick={() => {
-              void activateDirectCamera();
-            }}
-          >
-            Start camera + mic
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary"
-            onClick={() => {
-              Object.keys(liveSourceStreams).forEach((sourceId) => stopLiveSourceStream(sourceId));
-              smokeMedia.stopAll();
-              setLiveSourceStreams({});
-              setCameraCaptureError('');
-            }}
-          >
-            Stop devices
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-red-500 px-2 py-2 text-xs font-black text-white disabled:opacity-50"
-            disabled={
-              recordingState === 'recording' ||
-              recordingState === 'preparing' ||
-              recordingState === 'stopping'
-            }
-            onClick={startSmokeRecording}
-          >
-            Start WebM REC
-          </button>
-          <button
-            type="button"
-            className="rounded-ubos-sm bg-ubos-midnight px-2 py-2 text-xs font-bold text-ubos-fg-primary disabled:opacity-50"
-            disabled={recordingState !== 'recording'}
-            onClick={stopSmokeRecording}
-          >
-            Stop REC
-          </button>
-        </div>
-        {recordedUrl ? (
-          <a
-            className="block rounded-ubos-sm bg-emerald-400 px-2 py-2 text-center text-xs font-black text-slate-950"
-            href={recordedUrl}
-            download={recordingFilename ?? 'ubos-smoke-test.webm'}
-          >
-            Download recorded WebM
-          </a>
-        ) : null}
-      </div>
-    ),
-  } satisfies Record<typeof professionalRightTab, ReactNode>;
+        ),
+      }) satisfies Record<typeof professionalRightTab, ReactNode>,
+    [
+      operationsPanels.guests,
+      operationsPanels.outputs,
+      operationsPanels.inspector,
+      operationsPanels.health,
+      messages,
+      directCameraLive,
+      firstLiveVideoStream,
+      livePreviewVisible,
+      liveProgramVisible,
+      audioLevel,
+      recordingState,
+      cameraCaptureError,
+      recordedUrl,
+      recordingFilename,
+      activateDirectCamera,
+      liveSourceStreams,
+      stopLiveSourceStream,
+      smokeMedia,
+      startSmokeRecording,
+      stopSmokeRecording,
+    ],
+  );
 
   const monitorTelemetry = useMemo(
     () =>
@@ -5350,146 +5563,246 @@ export function SceneWorkspace({
       : previewLiveMedia.activationAction === 'start-camera'
         ? 'Start Camera Source'
         : undefined;
-  const startProgramSource = () => {
+  const startProgramSource = useCallback(() => {
     if (!programLiveMedia.sourceId) return;
     if (programLiveMedia.activationAction === 'start-screen')
       void startScreenCapture(programLiveMedia.sourceId);
     if (programLiveMedia.activationAction === 'start-camera')
       void startCameraCapture(programLiveMedia.sourceId);
-  };
-  const startPreviewSource = () => {
+  }, [
+    programLiveMedia.activationAction,
+    programLiveMedia.sourceId,
+    startCameraCapture,
+    startScreenCapture,
+  ]);
+  const startPreviewSource = useCallback(() => {
     if (!previewLiveMedia.sourceId) return;
     if (previewLiveMedia.activationAction === 'start-screen')
       void startScreenCapture(previewLiveMedia.sourceId);
     if (previewLiveMedia.activationAction === 'start-camera')
       void startCameraCapture(previewLiveMedia.sourceId);
-  };
+  }, [
+    previewLiveMedia.activationAction,
+    previewLiveMedia.sourceId,
+    startCameraCapture,
+    startScreenCapture,
+  ]);
 
-  const programMonitorNode = liveProgramVisible ? (
-    <LiveMediaMonitor
-      title="Program"
-      sceneName={programScene.name}
-      stream={programStreamToShow}
-      active={liveProgramVisible}
-      role="program"
-      sourceId={programCameraSourceId}
-      sourceType={programLiveVideoSource?.type}
-      deckMode
-    />
-  ) : programLiveMedia.warning ? (
-    <OfflineSourceMonitor
-      title="Program"
-      sceneName={programScene.name}
-      warning={programLiveMedia.warning}
-      actionLabel={programActivationLabel}
-      onAction={programActivationLabel ? startProgramSource : undefined}
-      role="program"
-      deckMode
-    />
-  ) : (
-    <ProgramMonitor
-      scene={programScene}
-      routes={mediaRoutes}
-      layoutPreset={layoutPreset}
-      guests={guests}
-      graph={productionGraphSession.graph}
-      healthFps={safeHealthMetrics.fps}
-      showSafeAreas={showSafeAreas}
-      graphicsLayers={programSceneComposition.layers.filter(
-        (layer) => layer.programState === 'live',
-      )}
-      mediaOverlayItems={programMediaOverlayItems}
-      deckMode
-    />
+  const programMonitorNode = useMemo(
+    () =>
+      disableVideoDiagnostics ? <div className="h-full w-full bg-black" aria-label="Program video disabled for diagnostics" /> : liveProgramVisible ? (
+        <LiveMediaMonitor
+          title="Program"
+          sceneName={programScene.name}
+          stream={programStreamToShow}
+          active={liveProgramVisible}
+          role="program"
+          sourceId={programCameraSourceId}
+          sourceType={programLiveVideoSource?.type}
+          deckMode
+        />
+      ) : programLiveMedia.warning ? (
+        <OfflineSourceMonitor
+          title="Program"
+          sceneName={programScene.name}
+          warning={programLiveMedia.warning}
+          actionLabel={programActivationLabel}
+          onAction={programActivationLabel ? startProgramSource : undefined}
+          role="program"
+          deckMode
+        />
+      ) : (
+        <ProgramMonitor
+          scene={programScene}
+          routes={mediaRoutes}
+          layoutPreset={layoutPreset}
+          guests={guests}
+          graph={productionGraphSession.graph}
+          healthFps={safeHealthMetrics.fps}
+          showSafeAreas={showSafeAreas}
+          graphicsLayers={programSceneComposition.layers.filter(
+            (layer) => layer.programState === 'live',
+          )}
+          mediaOverlayItems={programMediaOverlayItems}
+          deckMode
+        />
+      ),
+    [
+      liveProgramVisible,
+      disableVideoDiagnostics,
+      programScene.name,
+      programStreamToShow,
+      programCameraSourceId,
+      programLiveVideoSource?.type,
+      programLiveMedia.warning,
+      programActivationLabel,
+      startProgramSource,
+      programScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      programSceneComposition.layers,
+      programMediaOverlayItems,
+    ],
   );
 
-  const previewMonitorNode = livePreviewVisible ? (
-    <LiveMediaMonitor
-      title="Preview"
-      sceneName={previewScene.name}
-      stream={previewStreamToShow}
-      active={livePreviewVisible}
-      role="preview"
-      sourceId={previewCameraSourceId}
-      sourceType={previewLiveVideoSource?.type}
-      deckMode
-    />
-  ) : previewLiveMedia.warning ? (
-    <OfflineSourceMonitor
-      title="Preview"
-      sceneName={previewScene.name}
-      warning={previewLiveMedia.warning}
-      actionLabel={previewActivationLabel}
-      onAction={previewActivationLabel ? startPreviewSource : undefined}
-      role="preview"
-      deckMode
-    />
-  ) : (
-    <ProgramMonitor
-      scene={previewScene}
-      routes={mediaRoutes}
-      layoutPreset={layoutPreset}
-      guests={guests}
-      graph={productionGraphSession.graph}
-      healthFps={safeHealthMetrics.fps}
-      showSafeAreas={showSafeAreas}
-      graphicsLayers={previewSceneComposition.layers.filter(
-        (layer) => layer.previewState === 'preview' || layer.programState === 'live',
-      )}
-      mediaOverlayItems={previewMediaOverlayItems}
-      role="preview"
-      deckMode
-    />
+  const previewMonitorNode = useMemo(
+    () =>
+      disableVideoDiagnostics ? <div className="h-full w-full bg-black" aria-label="Preview video disabled for diagnostics" /> : livePreviewVisible ? (
+        <LiveMediaMonitor
+          title="Preview"
+          sceneName={previewScene.name}
+          stream={previewStreamToShow}
+          active={livePreviewVisible}
+          role="preview"
+          sourceId={previewCameraSourceId}
+          sourceType={previewLiveVideoSource?.type}
+          deckMode
+        />
+      ) : previewLiveMedia.warning ? (
+        <OfflineSourceMonitor
+          title="Preview"
+          sceneName={previewScene.name}
+          warning={previewLiveMedia.warning}
+          actionLabel={previewActivationLabel}
+          onAction={previewActivationLabel ? startPreviewSource : undefined}
+          role="preview"
+          deckMode
+        />
+      ) : (
+        <ProgramMonitor
+          scene={previewScene}
+          routes={mediaRoutes}
+          layoutPreset={layoutPreset}
+          guests={guests}
+          graph={productionGraphSession.graph}
+          healthFps={safeHealthMetrics.fps}
+          showSafeAreas={showSafeAreas}
+          graphicsLayers={previewSceneComposition.layers.filter(
+            (layer) => layer.previewState === 'preview' || layer.programState === 'live',
+          )}
+          mediaOverlayItems={previewMediaOverlayItems}
+          role="preview"
+          deckMode
+        />
+      ),
+    [
+      livePreviewVisible,
+      disableVideoDiagnostics,
+      previewScene.name,
+      previewStreamToShow,
+      previewCameraSourceId,
+      previewLiveVideoSource?.type,
+      previewLiveMedia.warning,
+      previewActivationLabel,
+      startPreviewSource,
+      previewScene,
+      mediaRoutes,
+      layoutPreset,
+      guests,
+      productionGraphSession.graph,
+      safeHealthMetrics.fps,
+      showSafeAreas,
+      previewSceneComposition.layers,
+      previewMediaOverlayItems,
+    ],
   );
 
-  const switcherNode = (
-    <ProfessionalSwitcher
-      productionState={productionState}
-      programSceneName={programScene.name}
-      previewSceneName={previewScene.name}
-      lastTransitionLabel={lastTransitionLabel}
-      feedbackLabel={switcherFeedback}
-      transitionActive={transitionActive}
-      transitionHistory={transitionHistory}
-      switcherReady={!isPending && !transitionActive}
-      transitionReady={!transitionActive}
-      programLocked={authorityDiagnostics.activeLocks.some((lock) => lock.scope === 'program')}
-      automationMode={productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'}
-      runtimeStatus={runtimeView.status}
-      queueSize={runtimeView.executionQueue.length}
-      compactChrome
-      detailsDefaultOpen={false}
-      onTake={() => switchProgram(productionState.transitionType)}
-      onCut={() => switchProgram('cut')}
-      onAuto={() => switchProgram('fade')}
-      onPrevious={() => stageAdjacentScene('previous')}
-      onNext={() => stageAdjacentScene('next')}
-      onTransitionChange={(transitionType) => {
-        const transitionDuration = normalizeTransitionDuration(
-          transitionType,
-          productionState.transitionDuration,
-        );
-        dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
-        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-          durationMs: transitionDuration,
-        });
-        persistProductionState({ ...productionState, transitionType, transitionDuration }, 'stage');
-      }}
-      onDurationChange={(transitionDuration) => {
-        const normalizedDuration = normalizeTransitionDuration(
-          productionState.transitionType,
-          transitionDuration,
-          productionState.transitionDuration,
-        );
-        dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
-          durationMs: normalizedDuration,
-        });
-        persistProductionState(
-          { ...productionState, transitionDuration: normalizedDuration },
-          'stage',
-        );
-      }}
-    />
+  const handleSwitcherTake = useCallback(
+    () => switchProgram(productionState.transitionType),
+    [switchProgram, productionState.transitionType],
+  );
+  const handleSwitcherCut = useCallback(() => switchProgram('cut'), [switchProgram]);
+  const handleSwitcherAuto = useCallback(() => switchProgram('fade'), [switchProgram]);
+  const handleSwitcherPrevious = useCallback(
+    () => stageAdjacentScene('previous'),
+    [stageAdjacentScene],
+  );
+  const handleSwitcherNext = useCallback(() => stageAdjacentScene('next'), [stageAdjacentScene]);
+  const handleSwitcherTransitionChange = useCallback(
+    (transitionType: TransitionType) => {
+      const transitionDuration = normalizeTransitionDuration(
+        transitionType,
+        productionState.transitionDuration,
+      );
+      dispatchProductionGraphCommand('SET_TRANSITION', { transitionType });
+      dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+        durationMs: transitionDuration,
+      });
+      persistProductionState({ ...productionState, transitionType, transitionDuration }, 'stage');
+    },
+    [dispatchProductionGraphCommand, persistProductionState, productionState],
+  );
+  const handleSwitcherDurationChange = useCallback(
+    (transitionDuration: number) => {
+      const normalizedDuration = normalizeTransitionDuration(
+        productionState.transitionType,
+        transitionDuration,
+        productionState.transitionDuration,
+      );
+      dispatchProductionGraphCommand('SET_TRANSITION_DURATION', {
+        durationMs: normalizedDuration,
+      });
+      persistProductionState(
+        { ...productionState, transitionDuration: normalizedDuration },
+        'stage',
+      );
+    },
+    [dispatchProductionGraphCommand, persistProductionState, productionState],
+  );
+
+  const switcherNode = useMemo(
+    () => (
+      <ProfessionalSwitcher
+        productionState={productionState}
+        programSceneName={programScene.name}
+        previewSceneName={previewScene.name}
+        lastTransitionLabel={lastTransitionLabel}
+        feedbackLabel={switcherFeedback}
+        transitionActive={transitionActive}
+        transitionHistory={transitionHistory}
+        switcherReady={!isPending && !transitionActive}
+        transitionReady={!transitionActive}
+        programLocked={authorityDiagnostics.activeLocks.some((lock) => lock.scope === 'program')}
+        automationMode={productionGraphSession.graph.automation.enabled ? 'automation' : 'manual'}
+        runtimeStatus={runtimeView.status}
+        queueSize={runtimeView.executionQueue.length}
+        compactChrome
+        detailsDefaultOpen={false}
+        onTake={handleSwitcherTake}
+        onCut={handleSwitcherCut}
+        onAuto={handleSwitcherAuto}
+        onPrevious={handleSwitcherPrevious}
+        onNext={handleSwitcherNext}
+        onTransitionChange={handleSwitcherTransitionChange}
+        onDurationChange={handleSwitcherDurationChange}
+      />
+    ),
+    [
+      productionState,
+      programScene.name,
+      previewScene.name,
+      lastTransitionLabel,
+      switcherFeedback,
+      transitionActive,
+      transitionHistory,
+      isPending,
+      authorityDiagnostics.activeLocks,
+      productionGraphSession.graph.automation.enabled,
+      runtimeView.status,
+      runtimeView.executionQueue.length,
+      workspace.compactChrome,
+      handleSwitcherTake,
+      handleSwitcherCut,
+      handleSwitcherAuto,
+      handleSwitcherPrevious,
+      handleSwitcherNext,
+      handleSwitcherTransitionChange,
+      handleSwitcherDurationChange,
+    ],
   );
 
   // Derive latency label from the first active output destination that
@@ -5497,6 +5810,135 @@ export function SceneWorkspace({
   const primaryOutputLatencyMs = distributionState.outputHealth.find(
     (h) => h.latencyMs != null,
   )?.latencyMs;
+
+  const handleCommandNavChange = useCallback((nav: NavItemId) => {
+    setActiveNav(nav);
+    const dockTab = preferredSourceDockTab(nav);
+    if (dockTab) setActiveSourceDockTab(dockTab);
+    if (nav === 'production-graph') {
+      setActiveBottomDock(normalizeDockTabId('production-graph'));
+    }
+    if (nav === 'outputs') {
+      setActiveOperationsTab('outputs');
+    }
+    if (nav === 'settings') {
+      setActiveOperationsTab('inspector');
+    }
+  }, []);
+  const handleCommandDockTabChange = useCallback((tab: DockTabId) => {
+    setActiveBottomDock(normalizeDockTabId(tab));
+  }, []);
+  const handleSeedDemo = useCallback(
+    () => startTransition(async () => seedDemoProductionState()),
+    [startTransition],
+  );
+  const handleSimulateDemo = useCallback(
+    () => startTransition(async () => simulateDemoProduction()),
+    [startTransition],
+  );
+  const handleResetDemo = useCallback(
+    () => startTransition(async () => resetDemoProductionState()),
+    [startTransition],
+  );
+  const handleCommandCut = useCallback(() => switchProgram('cut'), [switchProgram]);
+  const handleCommandTake = useCallback(
+    () => switchProgram(productionState.transitionType),
+    [switchProgram, productionState.transitionType],
+  );
+  const handleCommandAuto = useCallback(() => switchProgram('fade'), [switchProgram]);
+  const programOverlay = useMemo(
+    () => ({
+      sceneName: programScene.name,
+      recordingLabel:
+        recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
+          ? 'ON'
+          : undefined,
+      streamingLabel:
+        streamingState.lifecycle === 'streaming'
+          ? 'LIVE'
+          : streamingState.lifecycle === 'connecting'
+            ? 'CONNECTING'
+            : undefined,
+      droppedLabel:
+        safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
+      latencyLabel: primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+    }),
+    [
+      programScene.name,
+      recordingState,
+      browserRecordingPanelState.state,
+      streamingState.lifecycle,
+      safeHealthMetrics.dropped,
+      primaryOutputLatencyMs,
+    ],
+  );
+  const previewOverlay = useMemo(
+    () => ({
+      sceneName: previewScene.name,
+      transitionLabel: productionState.transitionType,
+      armedGraphicsCount: previewSceneComposition.layers.filter(
+        (layer) => layer.previewState === 'preview',
+      ).length,
+      latencyLabel: primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
+    }),
+    [
+      previewScene.name,
+      productionState.transitionType,
+      previewSceneComposition.layers,
+      primaryOutputLatencyMs,
+    ],
+  );
+  const outputHealthLabel = useMemo(
+    () =>
+      outputHealthSummaryLabel({
+        destinations: distributionState.destinations,
+        health: distributionState.outputHealth,
+      }),
+    [distributionState.destinations, distributionState.outputHealth],
+  );
+  const deviceHealthLabel = useMemo(
+    () => deviceHealthSummaryLabel(deviceState.devices),
+    [deviceState.devices],
+  );
+  const commandStatusBar = useMemo(
+    () => (
+      <BroadcastStatusBar
+        sessionName="Launch Day"
+        isLive={activeRouteCount > 0}
+        isRecording={recordingState === 'recording'}
+        runTime={formatElapsed(clockSnapshot.elapsedSeconds)}
+        clock={clockSnapshot.clock}
+        transitionActive={transitionActive}
+        fps={safeHealthMetrics.fps}
+        cpu={safeHealthMetrics.cpu}
+        dropped={safeHealthMetrics.dropped}
+        upload={safeHealthMetrics.upload}
+        automationModeLabel={automationModeLabel(automationState.automationMode)}
+        aiStatusLabel={aiStatusLabel(aiState.assistant)}
+        outputHealthLabel={outputHealthLabel}
+        deviceHealthLabel={deviceHealthLabel}
+        engineStatusLabel="Unavailable"
+        compactChrome={workspace.compactChrome}
+        toolsMenu={toolsMenu}
+      />
+    ),
+    [
+      activeRouteCount,
+      recordingState,
+      clockSnapshot,
+      transitionActive,
+      safeHealthMetrics.fps,
+      safeHealthMetrics.cpu,
+      safeHealthMetrics.dropped,
+      safeHealthMetrics.upload,
+      automationState.automationMode,
+      aiState.assistant,
+      outputHealthLabel,
+      deviceHealthLabel,
+      workspace.compactChrome,
+      toolsMenu,
+    ],
+  );
 
   return (
     <>
@@ -5517,45 +5959,9 @@ export function SceneWorkspace({
       />
       <CommandCenterShell
         layoutStyle={layoutStyle}
-        statusBar={
-          <BroadcastStatusBar
-            sessionName="Launch Day"
-            isLive={activeRouteCount > 0}
-            isRecording={recordingState === 'recording'}
-            runTime={formatElapsed(elapsedSeconds)}
-            clock={clock}
-            transitionActive={transitionActive}
-            fps={safeHealthMetrics.fps}
-            cpu={safeHealthMetrics.cpu}
-            dropped={safeHealthMetrics.dropped}
-            upload={safeHealthMetrics.upload}
-            automationModeLabel={automationModeLabel(automationState.automationMode)}
-            aiStatusLabel={aiStatusLabel(aiState.assistant)}
-            outputHealthLabel={outputHealthSummaryLabel({
-              destinations: distributionState.destinations,
-              health: distributionState.outputHealth,
-            })}
-            deviceHealthLabel={deviceHealthSummaryLabel(deviceState.devices)}
-            engineStatusLabel="Unavailable"
-            compactChrome={workspace.compactChrome}
-            toolsMenu={toolsMenu}
-          />
-        }
+        statusBar={commandStatusBar}
         activeNav={activeNav}
-        onNavChange={(nav) => {
-          setActiveNav(nav);
-          const dockTab = preferredSourceDockTab(nav);
-          if (dockTab) setActiveSourceDockTab(dockTab);
-          if (nav === 'production-graph') {
-            setActiveBottomDock(normalizeDockTabId('production-graph'));
-          }
-          if (nav === 'outputs') {
-            setActiveOperationsTab('outputs');
-          }
-          if (nav === 'settings') {
-            setActiveOperationsTab('inspector');
-          }
-        }}
+        onNavChange={handleCommandNavChange}
         sourceDockContent={leftNavContent}
         activeSourceDockTab={activeSourceDockTab}
         onSourceDockTabChange={setActiveSourceDockTab}
@@ -5568,45 +5974,21 @@ export function SceneWorkspace({
         activeOperationsTab={activeOperationsTab}
         activeDockTab={activeBottomDock}
         onOperationsTabChange={setActiveOperationsTab}
-        onDockTabChange={(tab) => setActiveBottomDock(normalizeDockTabId(tab))}
+        onDockTabChange={handleCommandDockTabChange}
         onWorkspaceModeApplied={applyMenuWorkspaceMode}
         onSaveWorkspace={saveWorkspace}
         onRestoreWorkspace={restoreWorkspace}
         onResetWorkspace={resetWorkspace}
-        onSeedDemo={() => startTransition(async () => seedDemoProductionState())}
-        onSimulateDemo={() => startTransition(async () => simulateDemoProduction())}
-        onResetDemo={() => startTransition(async () => resetDemoProductionState())}
+        onSeedDemo={handleSeedDemo}
+        onSimulateDemo={handleSimulateDemo}
+        onResetDemo={handleResetDemo}
         bottomWorkspaceContent={bottomDockContent}
-        onCut={() => switchProgram('cut')}
-        onTake={() => switchProgram(productionState.transitionType)}
-        onAuto={() => switchProgram('fade')}
-        programOverlay={{
-          sceneName: programScene.name,
-          recordingLabel:
-            recordingState === 'recording' || browserRecordingPanelState.state === 'recording'
-              ? 'ON'
-              : undefined,
-          streamingLabel:
-            streamingState.lifecycle === 'streaming'
-              ? 'LIVE'
-              : streamingState.lifecycle === 'connecting'
-                ? 'CONNECTING'
-                : undefined,
-          droppedLabel:
-            safeHealthMetrics.dropped !== 'unavailable' ? safeHealthMetrics.dropped : undefined,
-          latencyLabel:
-            primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
-        }}
-        previewOverlay={{
-          sceneName: previewScene.name,
-          transitionLabel: productionState.transitionType,
-          armedGraphicsCount: previewSceneComposition.layers.filter(
-            (layer) => layer.previewState === 'preview',
-          ).length,
-          latencyLabel:
-            primaryOutputLatencyMs != null ? `${primaryOutputLatencyMs}ms` : 'unavailable',
-        }}
+        onCut={handleCommandCut}
+        onTake={handleCommandTake}
+        onAuto={handleCommandAuto}
+        programOverlay={programOverlay}
+        previewOverlay={previewOverlay}
       />
     </>
   );
-}
+});

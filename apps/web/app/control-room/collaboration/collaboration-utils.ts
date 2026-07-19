@@ -138,6 +138,7 @@ export function createLocalOperatorPresence(input: {
   workspaceId: string;
   currentPanel?: string;
   role?: ProfessionalOperatorRole;
+  lastSeen?: string;
 }): OperatorPresence {
   const role = input.role ?? 'director';
   return {
@@ -147,7 +148,7 @@ export function createLocalOperatorPresence(input: {
     status: 'connected',
     activeWorkspace: input.workspaceId,
     currentPanel: input.currentPanel ?? 'Control Room',
-    lastSeen: new Date().toISOString(),
+    lastSeen: input.lastSeen ?? new Date().toISOString(),
     permissions: {
       scopes: roleWorkspaceMappings.find((m) => m.role === role)?.panels ?? [],
       canOverride: role === 'director',
@@ -190,4 +191,8 @@ export function mapMessagesToModeratorConnected(messages: ChatMessage[]): boolea
   return messages.length > 0;
 }
 
-export { createCollaborationCommandIntent, mapProfessionalRoleToProductionRole, roleWorkspaceMappings };
+export {
+  createCollaborationCommandIntent,
+  mapProfessionalRoleToProductionRole,
+  roleWorkspaceMappings,
+};
