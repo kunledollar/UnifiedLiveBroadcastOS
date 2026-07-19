@@ -4,7 +4,6 @@
   "version": "1.0.0-rc.1",
   "identifier": "com.ubos.desktop",
   "build": {
-    "beforeDevCommand": "pnpm --filter @ubos/web dev",
     "beforeBuildCommand": "pnpm --filter @ubos/web build",
     "devUrl": "http://localhost:3000/control-room",
     "frontendDist": "../../web/.next"
