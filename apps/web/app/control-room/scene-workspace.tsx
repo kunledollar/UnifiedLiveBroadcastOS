@@ -1,7 +1,7 @@
 'use client';
 
 import { cn, getTallyState } from '@ubos/ui';
-import { ubosForensicsFlag, useRenderForensics } from './render-forensics';
+import { ubosForensicsFlag, recordForensicsUpdate, useRenderForensics } from './render-forensics';
 import {
   MediaExecutionEngine,
   MockMediaExecutionAdapter,
@@ -2433,7 +2433,11 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   workspaceId?: string;
   operationsTabs?: Array<{ id: OperationsTabId; content: ReactNode }>;
 }) {
-  useRenderForensics('SceneWorkspace');
+  useRenderForensics('SceneWorkspace', {
+    initialScenes, initialProductionState, layouts, channels, assets, mediaRoutes, guests,
+    invites, destinations, messages, streamHealthMetrics, persistenceDiagnostics, broadcastId,
+    workspaceId, operationsTabs,
+  });
   // Diagnostic-only isolation: preserve the monitor cells while preventing the
   // video/canvas subtree from mounting. Normal URLs never take this branch.
   const disableVideoDiagnostics = ubosForensicsFlag('disableVideo');
@@ -3425,6 +3429,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           referenceChanged: current !== next,
           effect: 'refreshNativeRuntimeStatus',
         });
+        recordForensicsUpdate('SceneWorkspace.native-runtime-status.subscription', current, next, 'subscription', 'SceneWorkspace');
         return semanticEqual ? current : next;
       });
     } catch {
@@ -3442,6 +3447,7 @@ export const SceneWorkspace = memo(function SceneWorkspace({
           referenceChanged: current !== next,
           effect: 'refreshNativeRuntimeStatus:catch',
         });
+        recordForensicsUpdate('SceneWorkspace.native-runtime-status.subscription', current, next, 'subscription', 'SceneWorkspace');
         return semanticEqual ? current : next;
       });
     }
@@ -3609,10 +3615,11 @@ export const SceneWorkspace = memo(function SceneWorkspace({
       return;
     }
     const tick = () =>
-      setNativeRecordingState((current) => ({
-        ...current,
-        elapsedMs: Date.now() - Date.parse(nativeRecordingStartedAtRef.current!),
-      }));
+      setNativeRecordingState((current) => {
+        const next = { ...current, elapsedMs: Date.now() - Date.parse(nativeRecordingStartedAtRef.current!) };
+        recordForensicsUpdate('SceneWorkspace.native-recording-elapsed.interval', current, next, 'state', 'SceneWorkspace');
+        return next;
+      });
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
@@ -3621,14 +3628,18 @@ export const SceneWorkspace = memo(function SceneWorkspace({
   useEffect(() => {
     if (streamingState.lifecycle !== 'streaming' || !streamingState.startedAt) return;
     const tick = () =>
-      setStreamingState((current) => ({
+      setStreamingState((current) => {
+        const next = {
         ...current,
         durationMs: Date.now() - Date.parse(streamingState.startedAt!),
         bitrateEstimateKbps: current.destination.bitrateKbps + current.destination.audioBitrateKbps,
         droppedFrameEstimate: Math.floor(
           (Date.now() - Date.parse(streamingState.startedAt!)) / 60000,
         ),
-      }));
+        };
+        recordForensicsUpdate('SceneWorkspace.streaming-duration.interval', current, next, 'state', 'SceneWorkspace');
+        return next;
+      });
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
@@ -3636,7 +3647,11 @@ export const SceneWorkspace = memo(function SceneWorkspace({
 
   useEffect(() => {
     if (recordingState !== 'recording' || !recordingStartedAt) return;
-    const tick = () => setRecordingDurationMs(Date.now() - Date.parse(recordingStartedAt));
+    const tick = () => setRecordingDurationMs((current) => {
+      const next = Date.now() - Date.parse(recordingStartedAt);
+      recordForensicsUpdate('SceneWorkspace.browser-recording-duration.interval', current, next, 'state', 'SceneWorkspace');
+      return next;
+    });
     tick();
     const interval = window.setInterval(tick, 1000);
     return () => window.clearInterval(interval);
@@ -3691,7 +3706,11 @@ export const SceneWorkspace = memo(function SceneWorkspace({
     const tick = () => {
       analyser.getByteTimeDomainData(data);
       const peak = data.reduce((max, value) => Math.max(max, Math.abs(value - 128)), 0);
-      setAudioLevel(Math.min(100, Math.round((peak / 64) * 100)));
+      setAudioLevel((current) => {
+        const next = Math.min(100, Math.round((peak / 64) * 100));
+        recordForensicsUpdate('SceneWorkspace.audio-level.raf', current, next, 'raf', 'SceneWorkspace');
+        return next;
+      });
       frame = window.requestAnimationFrame(tick);
     };
     tick();

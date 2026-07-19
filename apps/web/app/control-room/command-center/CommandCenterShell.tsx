@@ -197,7 +197,14 @@ export const CommandCenterShell = memo(function CommandCenterShell({
   onSimulateDemo,
   onResetDemo,
 }: CommandCenterShellProps) {
-  useRenderForensics('CommandCenterShell');
+  useRenderForensics('CommandCenterShell', {
+    statusBar, activeNav, onNavChange, sourceDockContent, activeSourceDockTab,
+    onSourceDockTabChange, programMonitor, previewMonitor, programStatus, previewStatus,
+    switcherContent, operationsSections, bottomWorkspaceContent, activeOperationsTab,
+    activeDockTab, onOperationsTabChange, onDockTabChange, layoutStyle, programOverlay,
+    previewOverlay, onCut, onTake, onAuto, onWorkspaceModeApplied, onSaveWorkspace,
+    onRestoreWorkspace, onResetWorkspace, onSeedDemo, onSimulateDemo, onResetDemo,
+  });
   const workspace = useCommandCenterWorkspace();
   const {
     containerRef,

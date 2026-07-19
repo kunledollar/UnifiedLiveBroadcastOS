@@ -15,6 +15,7 @@ const output = path.resolve(
 const duration = Math.max(10, Number(process.env.UBOS_DIAGNOSTICS_DURATION || 10));
 const scenarios = [
   ['baseline', {}],
+  ['render-cause-trace', { renderCauseTrace: 1 }],
   ['static-shell', { diagnostic: 'static' }],
   ['audio-disabled', { disableAudio: 1 }],
   ['video-disabled', { disableVideo: 1 }],
@@ -107,6 +108,13 @@ function init(flags) {
     enabled: true,
     renders: {},
     stateWrites: {},
+    propChanges: {},
+    // A source scan found no React Context providers in the Control Room tree.
+    // Preserve this explicit empty evidence in the exported measurement.
+    providerChanges: {},
+    stateUpdateSources: {},
+    subscriptionSources: {},
+    rafSources: {},
     domMutations: 0,
     mutationObserverCallbacks: 0,
     resizeObserverCallbacks: 0,
@@ -128,30 +136,44 @@ function init(flags) {
   const raf = window.requestAnimationFrame.bind(window),
     interval = window.setInterval.bind(window),
     timeout = window.setTimeout.bind(window);
-  window.requestAnimationFrame = (cb) =>
-    raf((t) => {
+  const sourceLabel = (kind) => new Error().stack?.split('\n').find((line) => line.includes('/control-room/'))?.trim() || `browser:${kind}`;
+  const recordTimer = (kind, source = sourceLabel(kind)) => {
+    const bucket = (d[`${kind}Sources`] ??= {})[source] ??= { calls: 0, identityOnly: 0, semantic: 0, componentsInvalidated: [], location: source };
+    bucket.calls++;
+  };
+  window.requestAnimationFrame = (cb) => {
+    const source = sourceLabel('raf');
+    return raf((t) => {
       d.animationFrames++;
       d.timerCallbacks.raf++;
+      recordTimer('raf', source);
       cb(t);
     });
-  window.setInterval = (cb, ms, ...args) =>
-    interval(
+  };
+  window.setInterval = (cb, ms, ...args) => {
+    const source = sourceLabel('subscription');
+    return interval(
       (...a) => {
         d.timerCallbacks.interval++;
+        recordTimer('subscription', source);
         return typeof cb === 'function' ? cb(...a) : undefined;
       },
       ms,
       ...args,
     );
-  window.setTimeout = (cb, ms, ...args) =>
-    timeout(
+  };
+  window.setTimeout = (cb, ms, ...args) => {
+    const source = sourceLabel('subscription');
+    return timeout(
       (...a) => {
         d.timerCallbacks.timeout++;
+        recordTimer('subscription', source);
         return typeof cb === 'function' ? cb(...a) : undefined;
       },
       ms,
       ...args,
     );
+  };
   addEventListener('error', (e) => d.errors.push(`window error: ${e.message}`));
   addEventListener('unhandledrejection', (e) =>
     d.errors.push(`unhandled rejection: ${String(e.reason)}`),
@@ -275,6 +297,16 @@ async function writeOutcome(outcome) {
           durationSeconds: duration,
           scenarios: outcome.results,
           rankedLikelyCauses: result.ranked,
+          renderCauses: outcome.results.flatMap((scenario) => [
+            ...Object.entries(scenario.stateUpdateSources || {}).map(([source, value]) => ({ scenario: scenario.id, source, sourceType: 'state', ...value })),
+            ...Object.entries(scenario.subscriptionSources || {}).map(([source, value]) => ({ scenario: scenario.id, source, sourceType: 'subscription', ...value })),
+            ...Object.entries(scenario.rafSources || {}).map(([source, value]) => ({ scenario: scenario.id, source, sourceType: 'requestAnimationFrame', ...value })),
+          ]).sort((a, b) => b.calls - a.calls),
+          providerChanges: outcome.results.map((scenario) => ({ scenario: scenario.id, providers: scenario.providerChanges || {} })),
+          propChanges: outcome.results.map((scenario) => ({ scenario: scenario.id, components: scenario.propChanges || {} })),
+          stateUpdateSources: outcome.results.map((scenario) => ({ scenario: scenario.id, sources: scenario.stateUpdateSources || {} })),
+          subscriptionSources: outcome.results.map((scenario) => ({ scenario: scenario.id, sources: scenario.subscriptionSources || {} })),
+          rafSources: outcome.results.map((scenario) => ({ scenario: scenario.id, sources: scenario.rafSources || {} })),
         },
         null,
         2,
@@ -291,6 +323,7 @@ async function writeOutcome(outcome) {
           reason: outcome.reason,
           scenarios: [],
           rankedLikelyCauses: [],
+          renderCauses: [], providerChanges: [], propChanges: [], stateUpdateSources: [], subscriptionSources: [], rafSources: [],
         },
         null,
         2,
