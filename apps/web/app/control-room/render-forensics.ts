@@ -8,13 +8,11 @@ type ForensicsState = {
   stateWrites: Record<string, { total: number; semantic: number; noop: number; reference: number }>;
 };
 
-declare global {
-  interface Window { __UBOS_RENDER_FORENSICS__?: ForensicsState; __UBOS_RENDER_FORENSICS_FLAGS__?: Record<string, boolean>; __UBOS_CONTROL_ROOM_DIAGNOSTICS__?: ForensicsState; }
-}
+declare global { interface Window { __UBOS_RENDER_FORENSICS__?: ForensicsState; } }
 
 function getState(): ForensicsState | null {
   if (typeof window === 'undefined') return null;
-  const state = window.__UBOS_CONTROL_ROOM_DIAGNOSTICS__ ?? window.__UBOS_RENDER_FORENSICS__;
+  const state = (window.__UBOS_CONTROL_ROOM_DIAGNOSTICS__ as unknown as ForensicsState | undefined) ?? window.__UBOS_RENDER_FORENSICS__;
   if (!state?.enabled) return null;
   state.renders ??= {};
   state.stateWrites ??= {};
