@@ -23,6 +23,32 @@ import { emitRealtimeEvent } from './realtime-actions';
 const DEMO_WORKSPACE_ID = 'demo-workspace';
 const DEMO_BROADCAST_ID = 'demo-broadcast';
 
+/** A deliberately operator-safe error for expected infrastructure outages. */
+class ControlRoomDatabaseUnavailableError extends Error {
+  readonly code = 'DATABASE_UNAVAILABLE';
+  constructor() {
+    super('Saved broadcast data is temporarily unavailable. Retry after PostgreSQL recovers.');
+    this.name = 'ControlRoomDatabaseUnavailableError';
+  }
+}
+
+function isDatabaseInfrastructureError(error: unknown) {
+  if (!(error instanceof Error)) return false;
+  return /PrismaClientInitializationError|PrismaClientKnownRequestError|connect|connection|database|timeout/i.test(`${error.name} ${error.message}`);
+}
+
+async function databaseOperation<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isDatabaseInfrastructureError(error)) {
+      console.info(JSON.stringify({ event: 'control_room_database_unavailable', component: 'scene-actions' }));
+      throw new ControlRoomDatabaseUnavailableError();
+    }
+    throw error;
+  }
+}
+
 const typeToDb = (type: SceneType) => type.toUpperCase() as never;
 const dbToType = (type: string) => type.toLowerCase() as SceneType;
 
@@ -265,9 +291,9 @@ export async function ensureDemoBroadcast() {
 }
 
 async function assertWorkspaceAccess(broadcastId: string) {
-  const session = await prisma.broadcastSession.findFirst({
+  const session = await databaseOperation(() => prisma.broadcastSession.findFirst({
     where: { id: broadcastId, workspaceId: DEMO_WORKSPACE_ID },
-  });
+  }));
   if (!session) throw new Error('Broadcast not found in this workspace.');
 }
 

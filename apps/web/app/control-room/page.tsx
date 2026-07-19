@@ -3,6 +3,8 @@ import { listGuests, listInvites } from './guest-actions';
 import { loadMediaRoutes } from './media-route-actions';
 import type { Scene, Guest, GuestInvite, MediaRoute, ProductionSwitchingState } from '@ubos/shared';
 import { ControlRoomShell } from './shell/ControlRoomShell';
+import { RuntimeManagerScreen } from './runtime-manager';
+import { runtimeManager } from '../../lib/runtime/runtime-health';
 
 import {
   type AudioChannel,
@@ -218,31 +220,20 @@ const DEMO_MEDIA_ROUTES: MediaRoute[] = [];
 export const dynamic = 'force-dynamic';
 
 export default async function ControlRoomPage() {
+  const runtimeHealth = await runtimeManager.check();
+  if (runtimeHealth.status === 'blocked') {
+    return <RuntimeManagerScreen initialHealth={runtimeHealth} />;
+  }
+
   const persistenceDiagnostics = loadPersistenceDiagnostics();
 
-  // Attempt to load from database; fall back to demo data when the database
-  // is not available (local development without PostgreSQL).
-  let scenes: Scene[];
-  let productionState: ProductionSwitchingState;
-  let guests: Guest[];
-  let invites: GuestInvite[];
-  let mediaRoutes: MediaRoute[];
-
-  try {
-    [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
-      getScenes(),
-      getProductionState(),
-      listGuests(),
-      listInvites(),
-      loadMediaRoutes(),
-    ]);
-  } catch {
-    scenes = DEMO_SCENES;
-    productionState = DEMO_PRODUCTION_STATE;
-    guests = DEMO_GUESTS;
-    invites = DEMO_INVITES;
-    mediaRoutes = DEMO_MEDIA_ROUTES;
-  }
+  const [scenes, productionState, guests, invites, mediaRoutes] = await Promise.all([
+    getScenes(),
+    getProductionState(),
+    listGuests(),
+    listInvites(),
+    loadMediaRoutes(),
+  ]);
 
   return (
     <ControlRoomShell
