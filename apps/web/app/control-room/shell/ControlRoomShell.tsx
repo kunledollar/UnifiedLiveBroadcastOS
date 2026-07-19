@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { SceneWorkspace } from '../scene-workspace';
-import { useRenderForensics } from '../render-forensics';
+import { ControlRoomRenderForensicsMarker } from './ControlRoomRenderForensicsMarker';
 import type {
   AudioChannel,
   ChatMessage,
@@ -42,9 +42,9 @@ export const ControlRoomShell = memo(function ControlRoomShell({
   messages?: ChatMessage[];
   healthMetrics?: StreamHealthMetric[];
 }) {
-  useRenderForensics('ControlRoomShell');
   return (
     <main data-ubos-control-room-root="true" data-ubos-diagnostic-target="control-room-root" className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
+      <ControlRoomRenderForensicsMarker />
       <div data-ubos-scene-workspace="true" data-ubos-diagnostic-target="scene-workspace" className="h-full">
       <SceneWorkspace
         initialScenes={scenes}

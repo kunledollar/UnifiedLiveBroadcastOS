@@ -87,11 +87,11 @@ export function DiagnosticsConsole() {
       }
     }
   };
-  const payload = {
+  const exportPayload = () => ({
     applicationVersion: '1.0.0-rc.1',
     date: new Date().toISOString(),
     browserUserAgent: navigator.userAgent,
-    viewport: { width: innerWidth, height: innerHeight },
+    viewport: { width: window.innerWidth, height: window.innerHeight },
     scenarioDefinitions: scenarios,
     rawRunResults: runs,
     rankedSuspects: rankRuns(runs),
@@ -99,8 +99,16 @@ export function DiagnosticsConsole() {
       'Paint metrics and console interception are unavailable through standard browser APIs.',
     ],
     conclusionStatus: 'inconclusive',
+  });
+  const exportEvidence = (extension: 'json' | 'html') => {
+    const payload = exportPayload();
+    const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+    if (extension === 'json') {
+      download(`ubos-control-room-diagnostics-${stamp}.json`, JSON.stringify(payload, null, 2), 'application/json');
+      return;
+    }
+    download(`ubos-control-room-diagnostics-${stamp}.html`, `<h1>UBOS Control Room Diagnostics</h1><pre>${JSON.stringify(payload, null, 2).replace(/</g, '&lt;')}</pre>`, 'text/html');
   };
-  const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100">
       <h1 className="text-2xl font-bold">UBOS Control Room Diagnostics</h1>
@@ -166,25 +174,13 @@ export function DiagnosticsConsole() {
         <div className="rounded bg-slate-900 p-4">
           <h2>Export evidence</h2>
           <button
-            onClick={() =>
-              download(
-                `ubos-control-room-diagnostics-${stamp}.json`,
-                JSON.stringify(payload, null, 2),
-                'application/json',
-              )
-            }
+            onClick={() => exportEvidence('json')}
           >
             Export measurements.json
           </button>
           <button
             className="ml-2"
-            onClick={() =>
-              download(
-                `ubos-control-room-diagnostics-${stamp}.html`,
-                `<h1>UBOS Control Room Diagnostics</h1><pre>${JSON.stringify(payload, null, 2).replace(/</g, '&lt;')}</pre>`,
-                'text/html',
-              )
-            }
+            onClick={() => exportEvidence('html')}
           >
             Export report.html
           </button>
