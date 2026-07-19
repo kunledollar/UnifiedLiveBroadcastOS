@@ -3,6 +3,7 @@ import { listGuests, listInvites } from './guest-actions';
 import { loadMediaRoutes } from './media-route-actions';
 import type { Scene, Guest, GuestInvite, MediaRoute, ProductionSwitchingState } from '@ubos/shared';
 import { ControlRoomShell } from './shell/ControlRoomShell';
+import { DiagnosticRuntime } from './diagnostic-runtime';
 
 import {
   type AudioChannel,
@@ -217,10 +218,10 @@ const DEMO_MEDIA_ROUTES: MediaRoute[] = [];
 
 export const dynamic = 'force-dynamic';
 
-export default async function ControlRoomPage({ searchParams }: { searchParams: Promise<{ diagnostic?: string; disableAudio?: string; disableVideo?: string; disableScenes?: string; disableRecording?: string; disableRuntime?: string }> }) {
+export default async function ControlRoomPage({ searchParams }: { searchParams: Promise<{ diagnostic?: string; disableAudio?: string; disableVideo?: string; disableScenes?: string; disableRecording?: string; disableRuntime?: string; disableAnimations?: string; hideVideoCanvas?: string }> }) {
   const diagnostics = await searchParams;
   if (diagnostics.diagnostic === 'static') {
-    return <main data-ubos-control-room-root="true" className="ubos-workstation grid h-screen grid-cols-[14rem_1fr_18rem] grid-rows-[3rem_1fr_12rem] gap-2 overflow-hidden bg-ubos-carbon p-2 text-ubos-fg-primary"><header className="col-span-3 rounded bg-ubos-graphite" /><aside data-ubos-left-rail="true" className="rounded bg-ubos-graphite" /><section data-ubos-command-center-stage="true" className="grid grid-cols-2 gap-2 rounded bg-ubos-graphite p-2"><div data-ubos-program-monitor="true" className="rounded bg-black" /><div data-ubos-preview-monitor="true" className="rounded bg-black" /></section><aside data-ubos-right-rail="true" className="rounded bg-ubos-graphite" /><footer data-ubos-audio-panel="true" className="col-span-3 rounded bg-ubos-graphite" /></main>;
+    return <><DiagnosticRuntime scenario="static-shell" /><main data-ubos-control-room-root="true" className="ubos-workstation grid h-screen grid-cols-[14rem_1fr_18rem] grid-rows-[3rem_1fr_12rem] gap-2 overflow-hidden bg-ubos-carbon p-2 text-ubos-fg-primary"><header className="col-span-3 rounded bg-ubos-graphite" /><aside data-ubos-left-rail="true" className="rounded bg-ubos-graphite" /><section data-ubos-command-center-stage="true" className="grid grid-cols-2 gap-2 rounded bg-ubos-graphite p-2"><div data-ubos-program-monitor="true" className="rounded bg-black" /><div data-ubos-preview-monitor="true" className="rounded bg-black" /></section><aside data-ubos-right-rail="true" className="rounded bg-ubos-graphite" /><footer data-ubos-audio-panel="true" data-ubos-diagnostic-target="audio-panel" className="col-span-3 rounded bg-ubos-graphite" /></main></>;
   }
   const persistenceDiagnostics = loadPersistenceDiagnostics();
 
@@ -249,6 +250,8 @@ export default async function ControlRoomPage({ searchParams }: { searchParams: 
   }
 
   return (
+    <>
+      {diagnostics.diagnostic ? <DiagnosticRuntime scenario={diagnostics.diagnostic} /> : null}
     <ControlRoomShell
       scenes={scenes}
       productionState={productionState}
@@ -263,5 +266,6 @@ export default async function ControlRoomPage({ searchParams }: { searchParams: 
       messages={messages}
       healthMetrics={healthMetrics}
     />
+    </>
   );
 }
