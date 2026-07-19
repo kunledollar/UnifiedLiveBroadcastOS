@@ -3,6 +3,7 @@
 import type { RemoteCollaborationEvent } from '@ubos/shared';
 import { cn, ubosTypographyClasses } from '@ubos/ui';
 import { CollaborationEmptyState } from './CollaborationEmptyState';
+import { ClientTime } from '../_components/client-time';
 
 export function CollaborationTimeline({
   events,
@@ -37,7 +38,7 @@ export function CollaborationTimeline({
           </div>
           <p className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-muted')}>
             {event.operatorName ?? event.operatorId ?? 'system'} ·{' '}
-            {new Date(event.timestamp).toLocaleTimeString()}
+            <ClientTime iso={event.timestamp} />
           </p>
         </div>
       ))}

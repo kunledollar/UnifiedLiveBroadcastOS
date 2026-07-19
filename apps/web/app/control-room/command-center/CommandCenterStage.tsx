@@ -26,7 +26,7 @@
  * One Owner Rule (3.15C/D): Program and Preview have NO secondary homes.
  * Center Stage is their sole primary home; no other zone may host them.
  */
-import { useCallback, useEffect, type CSSProperties, type ReactNode } from 'react';
+import { memo, useCallback, useEffect, useMemo, type CSSProperties, type ReactNode } from 'react';
 import { openPopOutWindow } from '../pop-out/usePopOutWindow';
 import { cn } from '@ubos/ui';
 import type { WorkspaceCenterEmphasis } from '@ubos/shared';
@@ -74,7 +74,7 @@ function SafeAreaOverlay() {
   );
 }
 
-function StageMonitorCell({
+const StageMonitorCell = memo(function StageMonitorCell({
   role,
   monitor,
   overlay,
@@ -102,6 +102,7 @@ function StageMonitorCell({
 
   return (
     <div
+      data-ubos-command-center-stage="true"
       {...(role === 'program' ? { 'data-ubos-program-monitor': 'true' } : {})}
       {...(role === 'preview' ? { 'data-ubos-preview-monitor': 'true' } : {})}
       className={cn(
@@ -164,11 +165,7 @@ function StageMonitorCell({
             'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
             chrome.chip,
           )}
-          aria-label={
-            fullscreen
-              ? `Exit ${roleLabel} fullscreen`
-              : `Enter ${roleLabel} fullscreen`
-          }
+          aria-label={fullscreen ? `Exit ${roleLabel} fullscreen` : `Enter ${roleLabel} fullscreen`}
           title={fullscreen ? 'Exit fullscreen (Esc)' : 'Enter fullscreen'}
         >
           {fullscreen ? '⊠ Exit' : '⊡ Full'}
@@ -186,7 +183,7 @@ function StageMonitorCell({
       </div>
     </div>
   );
-}
+});
 
 // Height budget reserved for non-monitor chrome when stacked: switcher panel
 // (~184 px max-height via --ubos-switcher-height), monitor headers (2×32 px),
@@ -198,7 +195,7 @@ const STACKED_CHROME_RESERVE_PX = 200;
 const PROGRAM_MIN_HEIGHT_FLOOR_PX = 180;
 const PREVIEW_MIN_HEIGHT_FLOOR_PX = 108;
 
-export function CommandCenterStage({
+export const CommandCenterStage = memo(function CommandCenterStage({
   programMonitor,
   previewMonitor,
   programOverlay,
@@ -242,9 +239,21 @@ export function CommandCenterStage({
     return () => document.removeEventListener('keydown', handleKey);
   }, [fullscreenMonitor, onFullscreenChange]);
 
-  const toggleFullscreen = (role: MonitorRole) => {
-    onFullscreenChange(fullscreenMonitor === role ? null : role);
-  };
+  const toggleFullscreen = useCallback(
+    (role: MonitorRole) => {
+      onFullscreenChange(fullscreenMonitor === role ? null : role);
+    },
+    [fullscreenMonitor, onFullscreenChange],
+  );
+  const toggleProgramFullscreen = useCallback(
+    () => toggleFullscreen('program'),
+    [toggleFullscreen],
+  );
+  const togglePreviewFullscreen = useCallback(
+    () => toggleFullscreen('preview'),
+    [toggleFullscreen],
+  );
+  const closeFullscreen = useCallback(() => onFullscreenChange(null), [onFullscreenChange]);
 
   // Center Stage Layout Contract (3.15D-2 revised for zone-geometry restoration):
   //   Program: min 320×180; flex share = programShare(emphasis)
@@ -270,17 +279,38 @@ export function CommandCenterStage({
   let programMinH = 180;
   let previewMinH = 135;
   if (stacked && viewportHeight) {
-    const available = Math.max(STACKED_CHROME_RESERVE_PX, viewportHeight - STACKED_CHROME_RESERVE_PX);
-    programMinH = Math.max(PROGRAM_MIN_HEIGHT_FLOOR_PX, Math.min(180, Math.floor(available * share)));
-    previewMinH = Math.max(PREVIEW_MIN_HEIGHT_FLOOR_PX, Math.min(135, Math.floor(available * (1 - share))));
+    const available = Math.max(
+      STACKED_CHROME_RESERVE_PX,
+      viewportHeight - STACKED_CHROME_RESERVE_PX,
+    );
+    programMinH = Math.max(
+      PROGRAM_MIN_HEIGHT_FLOOR_PX,
+      Math.min(180, Math.floor(available * share)),
+    );
+    previewMinH = Math.max(
+      PREVIEW_MIN_HEIGHT_FLOOR_PX,
+      Math.min(135, Math.floor(available * (1 - share))),
+    );
   }
 
-  const programMinStyle: CSSProperties = stacked
-    ? { flex: `${share} 1 0%`, minHeight: programMinH }
-    : { flex: `${share} 1 0%`, minWidth: 320 };
-  const previewMinStyle: CSSProperties = stacked
-    ? { flex: `${1 - share} 1 0%`, minHeight: previewMinH }
-    : { flex: `${1 - share} 1 0%`, minWidth: 240 };
+  const programMinStyle: CSSProperties = useMemo(
+    () =>
+      stacked
+        ? { flex: `${share} 1 0%`, minHeight: programMinH }
+        : { flex: `${share} 1 0%`, minWidth: 320 },
+    [programMinH, share, stacked],
+  );
+  const previewMinStyle: CSSProperties = useMemo(
+    () =>
+      stacked
+        ? { flex: `${1 - share} 1 0%`, minHeight: previewMinH }
+        : { flex: `${1 - share} 1 0%`, minWidth: 240 },
+    [previewMinH, share, stacked],
+  );
+  const switcherMaxHeightStyle = useMemo<CSSProperties>(
+    () => ({ maxHeight: 'var(--ubos-switcher-height, 11.5rem)' }),
+    [],
+  );
 
   return (
     <section
@@ -293,7 +323,7 @@ export function CommandCenterStage({
         <div
           className="fixed inset-0 z-[75] bg-black/90 backdrop-blur-sm transition-opacity duration-[var(--ubos-duration-normal)]"
           aria-hidden="true"
-          onClick={() => onFullscreenChange(null)}
+          onClick={closeFullscreen}
         />
       ) : null}
 
@@ -315,7 +345,7 @@ export function CommandCenterStage({
           overlay={programOverlay}
           safeAreasVisible={safeAreasVisible}
           fullscreen={fullscreenMonitor === 'program'}
-          onToggleFullscreen={() => toggleFullscreen('program')}
+          onToggleFullscreen={toggleProgramFullscreen}
           style={programMinStyle}
           className={stacked ? '' : 'min-w-0'}
         />
@@ -325,7 +355,7 @@ export function CommandCenterStage({
           overlay={previewOverlay}
           safeAreasVisible={safeAreasVisible}
           fullscreen={fullscreenMonitor === 'preview'}
-          onToggleFullscreen={() => toggleFullscreen('preview')}
+          onToggleFullscreen={togglePreviewFullscreen}
           style={previewMinStyle}
           className={stacked ? '' : 'min-w-0'}
         />
@@ -341,11 +371,11 @@ export function CommandCenterStage({
             'shrink-0 overflow-hidden rounded-ubos-md border shadow-ubos-raised',
             broadcastSurfaces.panel,
           )}
-          style={{ maxHeight: 'var(--ubos-switcher-height, 11.5rem)' }}
+          style={switcherMaxHeightStyle}
         >
           {switcherContent}
         </div>
       ) : null}
     </section>
   );
-}
+});

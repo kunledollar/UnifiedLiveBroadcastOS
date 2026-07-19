@@ -16,6 +16,8 @@ export type RoutedSceneMedia<TStream extends LiveStreamLike> = {
   activationAction: 'start-camera' | 'start-screen' | null;
 };
 
+const routedSceneMediaCache = new Map<string, RoutedSceneMedia<LiveStreamLike>>();
+
 export function getVisibleLiveVideoSources(scene: Scene): SceneSource[] {
   return scene.sources
     .filter(
@@ -79,7 +81,7 @@ export function resolveSceneLiveMedia<TStream extends LiveStreamLike>(
       : sourceType === 'screen'
         ? 'start-screen'
         : null;
-  return {
+  const next: RoutedSceneMedia<TStream> = {
     sceneId: scene.id,
     sourceId: source?.id ?? null,
     sourceType,
@@ -88,7 +90,34 @@ export function resolveSceneLiveMedia<TStream extends LiveStreamLike>(
     warning,
     activationAction,
   };
+  const runtimeStatus = source?.settings?.runtimeStatus ?? null;
+  const runtimeMessage = source?.settings?.message ?? null;
+  const streamIdentity = next.stream?.id ?? null;
+  const cacheKey = `${scene.id}:${next.sourceId ?? 'none'}`;
+  const cached = routedSceneMediaCache.get(cacheKey) as RoutedSceneMedia<TStream> | undefined;
+  if (
+    cached !== undefined &&
+    cached.sceneId === next.sceneId &&
+    cached.sourceId === next.sourceId &&
+    cached.sourceType === next.sourceType &&
+    cached.stream === next.stream &&
+    (cached.stream?.id ?? null) === streamIdentity &&
+    cached.active === next.active &&
+    cached.warning === next.warning &&
+    cached.activationAction === next.activationAction &&
+    cachedRuntimeState.get(cached) === runtimeStatus &&
+    cachedRuntimeMessage.get(cached) === runtimeMessage
+  ) {
+    return cached;
+  }
+  cachedRuntimeState.set(next, runtimeStatus);
+  cachedRuntimeMessage.set(next, runtimeMessage);
+  routedSceneMediaCache.set(cacheKey, next);
+  return next;
 }
+
+const cachedRuntimeState = new WeakMap<RoutedSceneMedia<LiveStreamLike>, unknown>();
+const cachedRuntimeMessage = new WeakMap<RoutedSceneMedia<LiveStreamLike>, unknown>();
 
 export function createSceneRoutingEvidence<TStream extends LiveStreamLike>(input: {
   program: RoutedSceneMedia<TStream>;

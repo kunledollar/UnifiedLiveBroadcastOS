@@ -1,9 +1,10 @@
 'use client';
 
+import { memo } from 'react';
 import { cn, ubosTypographyClasses } from '@ubos/ui';
 import { switcherShortcuts } from './switcher-config';
 
-export function ShortcutStrip({ className }: { className?: string }) {
+export const ShortcutStrip = memo(function ShortcutStrip({ className }: { className?: string }) {
   return (
     <div className={cn('min-w-0', className)}>
       <span className={cn(ubosTypographyClasses.metadata, 'text-ubos-fg-muted')}>Shortcuts</span>
@@ -24,4 +25,4 @@ export function ShortcutStrip({ className }: { className?: string }) {
       </div>
     </div>
   );
-}
+});

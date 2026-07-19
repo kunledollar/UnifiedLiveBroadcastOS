@@ -22,11 +22,14 @@
  * PR-G: Move-to dropdown wired to every tab via DockablePanel header.
  * No layout, geometry, or content changes.
  */
-import type { ReactNode } from 'react';
+import { memo, useCallback, useMemo, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
 import type { WorkspaceZoneId } from '@ubos/shared';
 import type { SourceDockTabId } from '../shell/types';
-import { sourceDockTabs, sourceDockTabLabel } from '../broadcast-command-center/command-rail-constants';
+import {
+  sourceDockTabs,
+  sourceDockTabLabel,
+} from '../broadcast-command-center/command-rail-constants';
 import { DockablePanel, type MoveToOption } from './DockablePanel';
 import { panelGatingSourceTab } from './command-center-logic';
 
@@ -36,14 +39,14 @@ import { panelGatingSourceTab } from './command-center-logic';
  * bottom-workspace = Diagnostics.
  */
 const MOVE_DESTINATIONS: ReadonlyArray<{ key: string; label: string; zone: WorkspaceZoneId }> = [
-  { key: 'scenes',      label: 'Scenes',      zone: 'left-dock'        },
-  { key: 'sources',     label: 'Sources',     zone: 'left-dock'        },
-  { key: 'guests',      label: 'Guests',      zone: 'right-dock'       },
-  { key: 'media',       label: 'Media',       zone: 'left-dock'        },
+  { key: 'scenes', label: 'Scenes', zone: 'left-dock' },
+  { key: 'sources', label: 'Sources', zone: 'left-dock' },
+  { key: 'guests', label: 'Guests', zone: 'right-dock' },
+  { key: 'media', label: 'Media', zone: 'left-dock' },
   { key: 'diagnostics', label: 'Diagnostics', zone: 'bottom-workspace' },
 ];
 
-export function CommandCenterLeftDock({
+export const CommandCenterLeftDock = memo(function CommandCenterLeftDock({
   activeTab,
   onTabChange,
   isPanelVisible,
@@ -64,11 +67,15 @@ export function CommandCenterLeftDock({
   children: ReactNode;
   className?: string;
 }) {
-  const visibleTabs = sourceDockTabs.filter((tab) => {
-    if (tab.id === activeTab) return true;
-    const gatingPanel = panelGatingSourceTab(tab.id);
-    return gatingPanel === null || isPanelVisible(gatingPanel);
-  });
+  const visibleTabs = useMemo(
+    () =>
+      sourceDockTabs.filter((tab) => {
+        if (tab.id === activeTab) return true;
+        const gatingPanel = panelGatingSourceTab(tab.id);
+        return gatingPanel === null || isPanelVisible(gatingPanel);
+      }),
+    [activeTab, isPanelVisible],
+  );
 
   const activePanelId = panelGatingSourceTab(activeTab);
 
@@ -77,22 +84,32 @@ export function CommandCenterLeftDock({
   // When no panel is gated by the active tab (guests/diagnostics) or no
   // move handler is provided, the dropdown is omitted from the header.
   const currentZone = activePanelId ? getPanelZone?.(activePanelId) : undefined;
-  const moveToOptions: MoveToOption[] | undefined =
-    activePanelId && onMovePanel
-      ? MOVE_DESTINATIONS.map(({ key, label, zone }) => ({
-          key,
-          label,
-          disabled: zone === currentZone,
-        }))
-      : undefined;
+  const moveToOptions: MoveToOption[] | undefined = useMemo(
+    () =>
+      activePanelId && onMovePanel
+        ? MOVE_DESTINATIONS.map(({ key, label, zone }) => ({
+            key,
+            label,
+            disabled: zone === currentZone,
+          }))
+        : undefined,
+    [activePanelId, currentZone, onMovePanel],
+  );
 
-  const handleMoveTo =
-    activePanelId && onMovePanel
-      ? (key: string) => {
-          const dest = MOVE_DESTINATIONS.find((d) => d.key === key);
-          if (dest) onMovePanel(activePanelId, dest.zone);
-        }
-      : undefined;
+  const handleMoveTo = useMemo(
+    () =>
+      activePanelId && onMovePanel
+        ? (key: string) => {
+            const dest = MOVE_DESTINATIONS.find((d) => d.key === key);
+            if (dest) onMovePanel(activePanelId, dest.zone);
+          }
+        : undefined,
+    [activePanelId, onMovePanel],
+  );
+
+  const handleHideActivePanel = useCallback(() => {
+    if (activePanelId) onHidePanel(activePanelId);
+  }, [activePanelId, onHidePanel]);
 
   return (
     <DockablePanel
@@ -101,7 +118,7 @@ export function CommandCenterLeftDock({
       collapsed={false}
       collapsible={false}
       closable={activePanelId !== null}
-      {...(activePanelId !== null ? { onHide: () => onHidePanel(activePanelId) } : {})}
+      {...(activePanelId !== null ? { onHide: handleHideActivePanel } : {})}
       {...(moveToOptions && handleMoveTo ? { moveToOptions, onMoveTo: handleMoveTo } : {})}
       className={cn('h-full', className)}
       bodyClassName="flex min-w-0 flex-col overflow-hidden"
@@ -168,4 +185,4 @@ export function CommandCenterLeftDock({
       </div>
     </DockablePanel>
   );
-}
+});

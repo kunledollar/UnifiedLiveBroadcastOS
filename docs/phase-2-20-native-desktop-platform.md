@@ -11,11 +11,11 @@ UBOS now includes a native desktop shell that preserves the existing web-first C
 - **Auto-update abstraction:** Update state is modeled without binding UBOS to cloud sync or telemetry uploads.
 - **Installer configuration:** Tauri bundle targets include MSI/NSIS, DMG/App, Deb/RPM, and AppImage.
 - **Crash hooks:** Local breadcrumb hooks capture renderer/native context without uploading telemetry.
-- **Demo launch:** `pnpm --filter @ubos/desktop desktop:demo` launches the desktop Control Room shell.
+- **Demo launch:** `pnpm --filter @ubos/desktop desktop:demo` waits for the root development web server and then launches the desktop Control Room shell.
 
 ## Architecture
 
-The desktop shell uses Tauri as a thin native host. During development it starts the existing Next.js app and opens `http://localhost:3000/control-room`; production builds run the existing web build as the desktop frontend. Shared TypeScript contracts in `@ubos/shared` keep menus, settings, file dialog requests, updater status, and crash breadcrumb behavior testable outside the native runtime.
+The desktop shell uses Tauri as a thin native host. During development it reuses the root development Next.js app at `http://localhost:3000/control-room`; it does not start a second web server. Production builds continue to run the existing web build as the desktop frontend. Shared TypeScript contracts in `@ubos/shared` keep menus, settings, file dialog requests, updater status, and crash breadcrumb behavior testable outside the native runtime.
 
 ## Constraints
 

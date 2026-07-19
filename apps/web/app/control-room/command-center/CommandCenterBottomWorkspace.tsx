@@ -24,14 +24,14 @@
  *   the normal document flow with a capped height from Workspace Manager)
  * - No duplicate editors: children (the active editor node) renders once
  */
-import type { ReactNode } from 'react';
+import { memo, useCallback, useMemo, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
 import type { DockTabId } from '../shell/types';
 import { broadcastWorkspaceTabs, workspaceTabLabel } from '../broadcast-workspaces';
 import { broadcastDock, broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
 import { panelGatingBottomTab } from './command-center-logic';
 
-export function CommandCenterBottomWorkspace({
+export const CommandCenterBottomWorkspace = memo(function CommandCenterBottomWorkspace({
   activeTab,
   onTabChange,
   collapsed,
@@ -48,24 +48,31 @@ export function CommandCenterBottomWorkspace({
   children: ReactNode;
   className?: string;
 }) {
-  const visibleTabs = broadcastWorkspaceTabs.filter((tab) => {
-    if (tab.id === activeTab) return true;
-    const gatingPanel = panelGatingBottomTab(tab.id);
-    return gatingPanel === null || isPanelVisible(gatingPanel);
-  });
+  const visibleTabs = useMemo(
+    () =>
+      broadcastWorkspaceTabs.filter((tab) => {
+        if (tab.id === activeTab) return true;
+        const gatingPanel = panelGatingBottomTab(tab.id);
+        return gatingPanel === null || isPanelVisible(gatingPanel);
+      }),
+    [activeTab, isPanelVisible],
+  );
 
   const contentExpanded = !collapsed;
 
-  const handleTabClick = (tabId: DockTabId) => {
-    if (tabId === activeTab && contentExpanded && onToggleCollapse) {
-      onToggleCollapse();
-      return;
-    }
-    if (tabId !== activeTab) {
-      onTabChange(tabId);
-      if (collapsed && onToggleCollapse) onToggleCollapse();
-    }
-  };
+  const handleTabClick = useCallback(
+    (tabId: DockTabId) => {
+      if (tabId === activeTab && contentExpanded && onToggleCollapse) {
+        onToggleCollapse();
+        return;
+      }
+      if (tabId !== activeTab) {
+        onTabChange(tabId);
+        if (collapsed && onToggleCollapse) onToggleCollapse();
+      }
+    },
+    [activeTab, collapsed, contentExpanded, onTabChange, onToggleCollapse],
+  );
 
   return (
     <section
@@ -78,10 +85,7 @@ export function CommandCenterBottomWorkspace({
     >
       {/* ── Tab bar ──────────────────────────────────────────────────── */}
       <div
-        className={cn(
-          'flex shrink-0 items-end gap-1.5 border-b px-2 pt-1',
-          broadcastDock.tabBar,
-        )}
+        className={cn('flex shrink-0 items-end gap-1.5 border-b px-2 pt-1', broadcastDock.tabBar)}
         role="tablist"
         aria-label="Bottom workspace tabs"
         aria-orientation="horizontal"
@@ -202,4 +206,4 @@ export function CommandCenterBottomWorkspace({
       ) : null}
     </section>
   );
-}
+});

@@ -203,7 +203,12 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
       if (!entry) return;
       const { width, height } = entry.contentRect;
       if (width > 0 && height > 0) {
-        setViewport({ width: Math.round(width), height: Math.round(height) });
+        const nextViewport = { width: Math.round(width), height: Math.round(height) };
+        setViewport((current) =>
+          current.width === nextViewport.width && current.height === nextViewport.height
+            ? current
+            : nextViewport,
+        );
       }
     });
     observer.observe(node);
@@ -410,7 +415,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
           registry.restorePanelStates(
             saved.panelStates.map((s) => ({
               panelId: s.panelId,
-              zone: s.zone as import('@ubos/shared').WorkspaceZoneId,
+              zone: s.zone as WorkspaceZoneId,
               visible: s.visible,
               collapsed: s.collapsed,
             })),
@@ -647,7 +652,7 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
 
   const hasUserSavedLayout = activePresetId in savedLayoutsStore.presets;
 
-  return {
+  return useMemo(() => ({
     containerRef,
     hydrated,
     activePresetId,
@@ -678,5 +683,36 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     activatePanel,
     activateWorkspace,
     movePanelToZone,
-  };
+  }), [
+    containerRef,
+    hydrated,
+    activePresetId,
+    preset,
+    layout,
+    panels,
+    panelStates,
+    isPanelVisible,
+    isPanelCollapsed,
+    isZoneCollapsed,
+    activeBottomTab,
+    layoutLocked,
+    safeAreasVisible,
+    fullscreenMonitor,
+    hasUserSavedLayout,
+    applyPreset,
+    togglePanelVisibility,
+    setPanelVisible,
+    togglePanelCollapsed,
+    toggleZone,
+    setZoneSize,
+    setActiveBottomTab,
+    setLayoutLocked,
+    toggleSafeAreas,
+    setFullscreenMonitor,
+    saveLayout,
+    resetLayout,
+    activatePanel,
+    activateWorkspace,
+    movePanelToZone,
+  ]);
 }

@@ -1,14 +1,26 @@
 'use client';
 
-import { createMacroWorkspaceModel, completeMacroExecution, startMacroExecution } from '@ubos/shared';
+import {
+  createMacroWorkspaceModel,
+  completeMacroExecution,
+  startMacroExecution,
+} from '@ubos/shared';
 import { createSampleMacros, enrichRunOfShowWithSampleCues } from './automation-seed';
 import { AutomationPanel } from './AutomationPanel';
 import { createInitialAutomationState } from './automation-state';
 import { AutomationMacroEnginePanel } from './AutomationMacroEnginePanel';
 import { createDefaultRunOfShow } from '@ubos/shared';
 
+const automationPageHydrationTimestamp = '2026-07-01T00:00:00.000Z';
+
 export function AutomationPageContent() {
-  const runOfShow = enrichRunOfShowWithSampleCues(createDefaultRunOfShow());
+  const runOfShow = enrichRunOfShowWithSampleCues(
+    createDefaultRunOfShow('Show Rundown', {
+      id: 'ros-automation-page-hydration-safe',
+      updatedAt: automationPageHydrationTimestamp,
+    }),
+    automationPageHydrationTimestamp,
+  );
   const macros = createSampleMacros().map((macro, index) => ({
     ...macro,
     category: index === 0 ? 'Show Control' : 'Packages',
@@ -31,14 +43,38 @@ export function AutomationPageContent() {
         targetId: step.targetId,
       })) ?? [],
     ],
-    schedules: [{ id: 'schedule-open-show', macroId: 'macro-open-show', mode: 'manual', enabled: true }],
+    schedules: [
+      { id: 'schedule-open-show', macroId: 'macro-open-show', mode: 'manual', enabled: true },
+    ],
     hotkeys: [
-      { id: 'hotkey-open-show', macroId: 'macro-open-show', type: 'keyboard', binding: 'Shift+F1', enabled: true },
-      { id: 'toolbar-break', macroId: 'macro-break-package', type: 'toolbar', binding: 'Automation toolbar', enabled: true },
+      {
+        id: 'hotkey-open-show',
+        macroId: 'macro-open-show',
+        type: 'keyboard',
+        binding: 'Shift+F1',
+        enabled: true,
+      },
+      {
+        id: 'toolbar-break',
+        macroId: 'macro-break-package',
+        type: 'toolbar',
+        binding: 'Automation toolbar',
+        enabled: true,
+      },
     ],
     triggers: [
-      { id: 'trigger-manual-open', macroId: 'macro-open-show', type: 'manual_activation', enabled: true },
-      { id: 'trigger-replay-close', macroId: 'macro-close-show', type: 'replay_event', enabled: false },
+      {
+        id: 'trigger-manual-open',
+        macroId: 'macro-open-show',
+        type: 'manual_activation',
+        enabled: true,
+      },
+      {
+        id: 'trigger-replay-close',
+        macroId: 'macro-close-show',
+        type: 'replay_event',
+        enabled: false,
+      },
     ],
   });
   model = startMacroExecution(model, 'macro-open-show');
@@ -47,7 +83,10 @@ export function AutomationPageContent() {
   return (
     <main className="min-h-screen bg-ubos-graphite p-ubos-4 text-ubos-fg-primary">
       <div className="mx-auto flex max-w-ubos-wide flex-col gap-ubos-3">
-        <AutomationPanel state={createInitialAutomationState(runOfShow, macros)} dispatch={() => undefined} />
+        <AutomationPanel
+          state={createInitialAutomationState(runOfShow, macros)}
+          dispatch={() => undefined}
+        />
         <AutomationMacroEnginePanel model={model} selectedMacro={macros[0] ?? null} />
       </div>
     </main>

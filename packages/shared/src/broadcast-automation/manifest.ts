@@ -8,8 +8,11 @@ import type {
   ShowSegmentType,
 } from './types.js';
 
-export function createDefaultRunOfShow(name = 'Show Rundown'): RunOfShow {
-  const now = new Date().toISOString();
+export function createDefaultRunOfShow(
+  name = 'Show Rundown',
+  options: { id?: string; updatedAt?: string } = {},
+): RunOfShow {
+  const now = options.updatedAt ?? new Date().toISOString();
   const segmentDefs: Array<{ name: string; type: ShowSegmentType; durationMs: number }> = [
     { name: 'Opening', type: 'opening', durationMs: 30_000 },
     { name: 'Countdown', type: 'countdown', durationMs: 10_000 },
@@ -35,7 +38,7 @@ export function createDefaultRunOfShow(name = 'Show Rundown'): RunOfShow {
   const estimatedDurationMs = segments.reduce((sum, segment) => sum + segment.durationMs, 0);
 
   return {
-    id: `ros-${Date.now()}`,
+    id: options.id ?? `ros-${Date.now()}`,
     name,
     status: 'draft',
     segments,
