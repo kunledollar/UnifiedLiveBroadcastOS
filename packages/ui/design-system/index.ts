@@ -11,4 +11,4 @@ export * from './primitives/index.js';
 export { cn } from './utils/cn.js';
 
 /** Design system version identifier */
-export const UBOS_DESIGN_SYSTEM_VERSION = '1.0.0' as const;
+export const UBOS_DESIGN_SYSTEM_VERSION = '5.15.1' as const;

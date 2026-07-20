@@ -105,6 +105,39 @@ export type UbosSemanticToken =
   | 'success'
   | 'error';
 
+/**
+ * Operational names are deliberately separate from pigment names.  These are
+ * the only status values application surfaces should need to know about.
+ */
+export type UbosStatus =
+  | 'live'
+  | 'program'
+  | 'preview'
+  | 'ready'
+  | 'warning'
+  | 'critical'
+  | 'recording'
+  | 'streaming'
+  | 'offline'
+  | 'idle'
+  | 'disabled'
+  | 'selected'
+  | 'hover'
+  | 'focus'
+  | 'error'
+  | 'information'
+  | 'success'
+  | 'armed'
+  | 'blocked';
+
+export const ubosStatusToken: Record<UbosStatus, UbosSemanticToken | 'neutral'> = {
+  live: 'program', program: 'program', preview: 'preview', ready: 'success',
+  warning: 'warning', critical: 'error', recording: 'recording', streaming: 'selection',
+  offline: 'offline', idle: 'neutral', disabled: 'offline', selected: 'selection',
+  hover: 'selection', focus: 'selection', error: 'error', information: 'selection',
+  success: 'success', armed: 'preview', blocked: 'error',
+};
+
 /** CSS custom property names for runtime theming */
 export const ubosColorVars = {
   '--ubos-bg-carbon': ubosColors.background.carbon,

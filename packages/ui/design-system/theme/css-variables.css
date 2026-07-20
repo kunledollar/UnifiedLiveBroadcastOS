@@ -88,6 +88,11 @@
   --ubos-space-4: 1rem;
   --ubos-space-6: 1.5rem;
   --ubos-space-8: 2rem;
+  --ubos-space-panel-gap: 0.75rem;
+  --ubos-icon-sm: 0.875rem;
+  --ubos-icon-md: 1rem;
+  --ubos-icon-lg: 1.25rem;
+  --ubos-overlay-opacity: 0.78;
 
   /* Layout */
   --ubos-status-bar-height: 2rem;
