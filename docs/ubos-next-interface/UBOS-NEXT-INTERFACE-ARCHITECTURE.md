@@ -9,3 +9,7 @@ The Workspace Manager selects a serializable `WorkspaceDefinition`; the Layout E
 ## Future wiring
 
 Every command holds `status: unwired`, a future domain, command ID, safety classification, and permission. The next milestone may introduce adapters at this declared boundary, not inside presentation components.
+
+## Route isolation
+
+UBOS Next is an isolated **Presentation Lab** at `/control-room-next/:workspace`; it has not replaced the operational `/control-room` route. The operational route continues to mount the established `WorkspaceShell` and its runtime-backed hosts unchanged. The lab never mounts `ProductionRuntimeHost`, `WorkspaceHost`, `WorkspaceDockManager`, media elements, or a `MediaStream`.
