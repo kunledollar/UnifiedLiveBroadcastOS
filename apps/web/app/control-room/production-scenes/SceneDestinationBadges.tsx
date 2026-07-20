@@ -1,0 +1,2 @@
+import type { ProductionSceneCardMetadata } from './types';
+export function SceneDestinationBadges({ destinations }: { destinations: ProductionSceneCardMetadata['destinations'] }) { return <div className="ps-destinations" aria-label="Scene destinations">{destinations.map((destination) => <span key={destination.id} className={`ps-destination is-${destination.state}`} title={`${destination.label}: ${destination.state}`}>{destination.label}</span>)}</div>; }

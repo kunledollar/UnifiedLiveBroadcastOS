@@ -1,0 +1,3 @@
+import type { ProductionSceneCardMetadata } from './types';
+const format = (seconds?: number) => { const s = seconds ?? 0; return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`; };
+export function SceneTimingIndicator({ timing }: { timing: ProductionSceneCardMetadata['timing'] }) { const prefix = timing.mode === 'elapsed' ? 'ELAPSED' : timing.mode === 'countdown' ? 'COUNTDOWN' : timing.mode === 'scheduled' ? 'SCHEDULED' : timing.mode === 'planned' ? 'PLANNED' : 'TIMING'; return <span className="ps-timing" title={`${prefix}: ${timing.scheduledTime ?? format(timing.seconds)}`}>{prefix} {timing.scheduledTime ?? format(timing.seconds)}</span>; }
