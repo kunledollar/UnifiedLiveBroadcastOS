@@ -1,8 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { fixtures, workspaceById, type WorkspaceId } from './metadata';
-
-export const isPrototypeWorkspace=(value:string):value is WorkspaceId=>value in workspaceById;
 const scenes=[['Interview','PROGRAM','Host + Maya · 2 sources'],['Audience Q&A','PREVIEW','Questions queued · graphics ready'],['Sponsor break','STANDBY','00:30 · platform variants'],['Closing','READY','1 source · end card']];
 const channels=['Host','Maya','Music','Remote 2','Playback','Master'];
 const destinations=[['YouTube','16:9','Healthy'],['Facebook','16:9','Healthy'],['TikTok','9:16','Degraded'],['Instagram','9:16','Reconnecting'],['LinkedIn','16:9','Ready']];

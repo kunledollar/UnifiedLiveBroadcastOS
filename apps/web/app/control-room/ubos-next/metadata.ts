@@ -15,6 +15,8 @@ export const workspaces: WorkspaceDefinition[] = [
  {id:'compact',name:'Compact',role:'Mobile control',mission:'Keep essential confidence and preparation actions reachable on constrained displays.',layout:'compact dual confidence + essentials + tool drawer',panels:['preview','program','scene-quick-switcher','transition-essentials','audio-confidence','destination-health'],commands:[prototype('transition.take','TAKE','production-graph'),prototype('drawer.open','Open tools','presentation','reversible')],responsive:'Tools remain in an explicit drawer; essential status never hides.',accessibility:'Large targets and keyboard order prioritize confidence and warnings.',version:1}
 ];
 export const workspaceById=Object.fromEntries(workspaces.map(workspace=>[workspace.id,workspace])) as Record<WorkspaceId,WorkspaceDefinition>;
+/** Server-safe route validation for the isolated presentation lab. */
+export const isPrototypeWorkspace=(value:string):value is WorkspaceId=>value in workspaceById;
 export const fixtures=[
  {id:'healthy',label:'Healthy interview',note:'Demonstration data · Host + guest · outputs healthy',warning:''},
  {id:'destination-warning',label:'Destination warning',note:'Demonstration data · TikTok degraded · Instagram reconnecting',warning:'Destination attention: TikTok packet loss; Instagram reconnecting.'},

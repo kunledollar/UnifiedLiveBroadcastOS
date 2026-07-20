@@ -1,5 +1,6 @@
 import { notFound } from 'next/navigation';
-import { isPrototypeWorkspace, PrototypeWorkspaceView } from '../../control-room/ubos-next/PrototypeWorkspaceView';
+import { isPrototypeWorkspace } from '../../control-room/ubos-next/metadata';
+import { PrototypeWorkspaceView } from '../../control-room/ubos-next/PrototypeWorkspaceView';
 
 export function generateStaticParams() {
   return ['director', 'solo-streamer', 'technical-director', 'audio-engineer', 'graphics-operator', 'replay-operator', 'streaming-operator', 'monitor-wall', 'compact'].map(workspace => ({ workspace }));
