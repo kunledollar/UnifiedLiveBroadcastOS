@@ -28,6 +28,8 @@
     "app/control-room/workspace/scene-routing.test.ts",
     "app/control-room/scene-runtime-patching.ts",
     "app/control-room/scene-runtime-patching.test.ts",
-    "app/control-room/production-scenes/production-scenes.test.ts"
+    "app/control-room/production-scenes/production-scenes.test.ts",
+    "app/control-room/sources/source-metadata.ts",
+    "app/control-room/sources/source-metadata.test.ts"
   ]
 }
