@@ -707,3 +707,5 @@ export * from './rundown-runtime/index.js';
 
 export * from './automation-runtime/index.js';
 export * from './control-api/index.js';
+
+export * from './social-fabric/index.js';
