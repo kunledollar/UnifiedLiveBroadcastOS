@@ -32,6 +32,7 @@
     "app/control-room/sources/source-metadata.ts",
     "app/control-room/sources/source-metadata.test.ts",
     "app/control-room/social-fabric/social-metadata.ts",
-    "app/control-room/social-fabric/social-metadata.test.ts"
+    "app/control-room/social-fabric/social-metadata.test.ts",
+    "app/control-room/workspaces/workspace-catalog.test.ts"
   ]
 }
