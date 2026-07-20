@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
 import { cn } from '../utils/cn.js';
 import { ubosTypographyClasses } from '../tokens/typography.js';
-import type { UbosSemanticToken } from '../tokens/colors.js';
+import { ubosStatusToken, type UbosSemanticToken, type UbosStatus } from '../tokens/colors.js';
 
-type StatusBadgeVariant = UbosSemanticToken | 'neutral' | 'live' | 'rec';
+type StatusBadgeVariant = UbosSemanticToken | UbosStatus | 'neutral' | 'rec';
 
 const variantClasses: Record<StatusBadgeVariant, string> = {
   program: 'border-ubos-program-border bg-ubos-program-muted text-ubos-program-text',
@@ -17,6 +17,17 @@ const variantClasses: Record<StatusBadgeVariant, string> = {
   neutral: 'border-ubos-border bg-ubos-midnight text-ubos-fg-secondary',
   live: 'border-ubos-program-border bg-ubos-program text-white',
   rec: 'border-ubos-recording-border bg-ubos-recording text-white animate-ubos-recording-pulse',
+  ready: 'border-ubos-success-border bg-ubos-success-muted text-ubos-success-text',
+  critical: 'border-ubos-error-border bg-ubos-error-muted text-ubos-error-text',
+  streaming: 'border-ubos-selection-border bg-ubos-selection-muted text-ubos-selection-text',
+  idle: 'border-ubos-border bg-ubos-midnight text-ubos-fg-secondary',
+  disabled: 'border-ubos-offline-border bg-ubos-offline-muted text-ubos-offline-text',
+  selected: 'border-ubos-selection-border bg-ubos-selection-muted text-ubos-selection-text',
+  hover: 'border-ubos-selection-border bg-ubos-selection-muted text-ubos-selection-text',
+  focus: 'border-ubos-selection-border bg-ubos-selection-muted text-ubos-selection-text',
+  information: 'border-ubos-selection-border bg-ubos-selection-muted text-ubos-selection-text',
+  armed: 'border-ubos-preview-border bg-ubos-preview-muted text-ubos-preview-text',
+  blocked: 'border-ubos-error-border bg-ubos-error-muted text-ubos-error-text',
 };
 
 export function StatusBadge({
@@ -30,12 +41,13 @@ export function StatusBadge({
   dot?: boolean;
   className?: string;
 }) {
+  const semanticVariant = variant === 'rec' ? variant : (ubosStatusToken[variant as UbosStatus] ?? variant);
   return (
     <span
       className={cn(
         'inline-flex items-center gap-1 rounded-ubos-sm border px-1.5 py-0.5',
         ubosTypographyClasses.metadata,
-        variantClasses[variant],
+        variantClasses[semanticVariant],
         className,
       )}
     >
@@ -43,14 +55,14 @@ export function StatusBadge({
         <span
           className={cn(
             'h-1.5 w-1.5 rounded-full',
-            variant === 'program' || variant === 'live'
+            semanticVariant === 'program'
               ? 'bg-ubos-program'
-              : variant === 'preview'
+              : semanticVariant === 'preview'
                 ? 'bg-ubos-preview'
-                : variant === 'rec' || variant === 'recording'
+                : semanticVariant === 'rec' || semanticVariant === 'recording'
                   ? 'bg-ubos-recording'
                   : 'bg-ubos-fg-muted',
-            (variant === 'program' || variant === 'live' || variant === 'rec') &&
+            (semanticVariant === 'program' || semanticVariant === 'rec') &&
               'animate-ubos-tally-pulse',
           )}
         />

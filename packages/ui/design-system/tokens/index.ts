@@ -3,6 +3,8 @@ export {
   ubosColorVars,
   type UbosBackgroundToken,
   type UbosSemanticToken,
+  type UbosStatus,
+  ubosStatusToken,
 } from './colors.js';
 
 export {
