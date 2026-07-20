@@ -4,6 +4,7 @@
     "noEmit": false,
     "outDir": "dist-test",
     "rootDir": ".",
+    "jsx": "react-jsx",
     "paths": {
       "@ubos/shared": [
         "../../packages/shared/dist/index.js"
@@ -33,6 +34,11 @@
     "app/control-room/sources/source-metadata.test.ts",
     "app/control-room/social-fabric/social-metadata.ts",
     "app/control-room/social-fabric/social-metadata.test.ts",
-    "app/control-room/workspaces/workspace-catalog.test.ts"
+    "app/control-room/workspaces/workspace-catalog.test.ts",
+    "app/control-room/workspace-runtime/workspace-plugin.ts",
+    "app/control-room/workspace-runtime/generic-workspace-views.tsx",
+    "app/control-room/workspace-runtime/workspace-registry.ts",
+    "app/control-room/workspace-runtime/layout-persistence.ts",
+    "app/control-room/workspace-runtime/workspace-registry.test.ts"
   ]
 }
