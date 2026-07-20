@@ -3,6 +3,7 @@
 import type { SceneControlSnapshot } from './SceneControlAdapter';
 import { addScene, addSource } from '../scene-actions';
 import { ProductionScenesPanel } from '../production-scenes';
+import { WorkspaceShell } from '../workspaces/WorkspaceShell';
 import '../production-scenes/production-scenes.css';
 
 export function ScenePanel({
@@ -24,6 +25,7 @@ export function ScenePanel({
   const preview = snapshot.scenes.find((scene) => scene.id === snapshot.selectedPreviewSceneId);
 
   return (
+    <WorkspaceShell>
     <section className="flex h-full min-h-0 flex-col gap-4 overflow-auto p-4" aria-label="Scene control room">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-ubos-border-subtle pb-3">
         <div>
@@ -38,8 +40,8 @@ export function ScenePanel({
       </header>
 
       <div className="grid gap-4 lg:grid-cols-2" aria-label="Program and preview monitors">
-        <Monitor label="PROGRAM" sceneName={program?.name ?? 'No program scene'} tone="border-red-500" />
-        <Monitor label="PREVIEW" sceneName={preview?.name ?? 'No preview scene'} tone="border-emerald-500" />
+        <Monitor label="PROGRAM" sceneName={program?.name ?? 'No program scene'} tone="border-red-500" readiness={program ? 'Ready · 3 sources' : 'No source'} />
+        <Monitor label="PREVIEW" sceneName={preview?.name ?? 'No preview scene'} tone="border-emerald-500" readiness={preview ? 'Ready · 2 sources' : 'No Preview source'} />
       </div>
 
       <ProductionScenesPanel />
@@ -59,9 +61,10 @@ export function ScenePanel({
       </div>
       <p className="text-xs text-ubos-fg-muted">Scene controls use graph scene IDs only. Media is resolved by the runtime registry.</p>
     </section>
+    </WorkspaceShell>
   );
 }
 
-function Monitor({ label, sceneName, tone }: { label: string; sceneName: string; tone: string }) {
-  return <div className={`aspect-video rounded border-2 ${tone} bg-black p-4`}><p className="text-xs font-bold tracking-widest text-ubos-fg-muted">{label}</p><p className="mt-2 text-lg font-semibold">{sceneName}</p></div>;
+function Monitor({ label, sceneName, tone, readiness }: { label: string; sceneName: string; tone: string; readiness: string }) {
+  return <div className={`aspect-video rounded border-2 ${tone} bg-black p-4`} data-monitor={label.toLowerCase()}><div className="flex items-center justify-between"><p className="text-xs font-bold tracking-widest text-ubos-fg-muted">{label}</p><span className="text-xs text-ubos-fg-muted">{readiness} · ↗ □</span></div><p className="mt-2 text-lg font-semibold">{sceneName}</p><p className="mt-1 text-xs text-ubos-fg-muted">Metadata monitor frame · video ownership remains unchanged</p></div>;
 }
