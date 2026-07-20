@@ -66,3 +66,4 @@ body {
     opacity: 1;
   }
 }
+.ubos-role-panels{color:#dbeafe}.ubos-role-panels header{padding:10px 0}.ubos-role-panels h1{font-size:22px;font-weight:700}.ubos-role-panels p{font-size:12px;color:#9ab8d4}.ubos-role-grid{display:grid;grid-template-columns:2fr 1fr;gap:12px}.ubos-role-grid article{min-height:130px;padding:16px;border:1px solid #294763;border-radius:6px;background:#0d1b2b}.ubos-role-grid h2{font-weight:600}@media(max-width:800px){.ubos-role-grid{grid-template-columns:1fr}}
