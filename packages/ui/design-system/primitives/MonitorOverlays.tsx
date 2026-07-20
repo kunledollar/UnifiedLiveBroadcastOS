@@ -1,6 +1,15 @@
 import type { ReactNode } from 'react';
 import { cn } from '../utils/cn.js';
 import { ubosTypographyClasses } from '../tokens/typography.js';
+import { StatusBadge } from './StatusBadge.js';
+
+/** Presentation-only HUD. It receives metadata and never accesses monitor nodes. */
+export function ProgramPreviewOverlay({ mode, sceneTitle, layout, participants, outputs, recording, elapsed, readiness, transition }: { mode: 'program' | 'preview'; sceneTitle: string; layout?: string; participants?: number; outputs?: number; recording?: boolean; elapsed?: string; readiness?: string; transition?: string }) {
+  return <div className="pointer-events-none absolute inset-0 z-20 flex flex-col justify-between p-ubos-2" aria-label={`${mode} monitor details`}>
+    <div className="flex items-start justify-between gap-ubos-2"><StatusBadge variant={mode} dot>{mode === 'program' ? 'PROGRAM' : 'PREVIEW'}</StatusBadge>{recording ? <StatusBadge variant="recording" dot>RECORDING</StatusBadge> : null}</div>
+    <div className="flex items-end justify-between gap-ubos-2 rounded-ubos-sm bg-ubos-carbon/80 p-ubos-2 backdrop-blur-sm"><div><b className={ubosTypographyClasses.panel}>{sceneTitle}</b><div className={ubosTypographyClasses.metadata}>{layout ?? 'Layout'} · {participants ?? 0} participants · {outputs ?? 0} outputs</div></div><div className={cn(ubosTypographyClasses.metadata, 'text-right')}>{elapsed ? <div>{elapsed}</div> : null}<div>{readiness ?? 'Ready'}{transition ? ` · ${transition}` : ''}</div></div></div>
+  </div>;
+}
 
 export type SafeAreaVariant = 'horizontal' | 'vertical' | 'square';
 

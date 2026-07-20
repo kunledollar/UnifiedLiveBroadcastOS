@@ -47,6 +47,10 @@ body {
   background: rgba(100, 116, 139, 0.8);
 }
 
+.ubos-enterprise-workspace { color: var(--ubos-fg-primary); }
+.ubos-enterprise-workspace :is(button, input, select, textarea) { transition-duration: var(--ubos-duration-fast); transition-timing-function: var(--ubos-easing-default); }
+.ubos-enterprise-workspace button:disabled { cursor: not-allowed; color: var(--ubos-fg-disabled); }
+
 @keyframes broadcastScan {
   0%,
   100% {

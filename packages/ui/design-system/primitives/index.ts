@@ -31,3 +31,4 @@ export {
 } from './BroadcastButton.js';
 
 export { Dock, DockTab, AssetList, AssetRow } from './Dock.js';
+export { EnterpriseCard, EnterpriseListRow, EnterpriseTable, EmptyState, UbosIcon, ubosIcons, type UbosIconName } from './EnterprisePrimitives.js';

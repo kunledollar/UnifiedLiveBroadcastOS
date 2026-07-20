@@ -9,7 +9,13 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "tsc -p tsconfig.test.json && node --test dist-test/app/control-room/browsers/browser-workflows.test.js dist-test/app/control-room/command-center/command-center-logic.test.js dist-test/lib/native-runtime/ffmpeg-discovery.test.js dist-test/lib/native-runtime/ffmpeg-recording.test.js dist-test/lib/program-pipeline/program-ownership.test.js dist-test/app/control-room/workspace/scene-routing.test.js dist-test/app/control-room/scene-runtime-patching.test.js dist-test/app/control-room/production-scenes/production-scenes.test.js dist-test/app/control-room/workspaces/workspace-definition.test.js dist-test/app/control-room/director/director-metadata.test.js dist-test/app/control-room/sources/source-metadata.test.js dist-test/app/control-room/social-fabric/social-metadata.test.js dist-test/app/control-room/workspaces/workspace-catalog.test.js"
+    "test": "tsc -p tsconfig.test.json && node --test dist-test/app/control-room/browsers/browser-workflows.test.js dist-test/app/control-room/command-center/command-center-logic.test.js dist-test/lib/native-runtime/ffmpeg-discovery.test.js dist-test/lib/native-runtime/ffmpeg-recording.test.js dist-test/lib/program-pipeline/program-ownership.test.js dist-test/app/control-room/workspace/scene-routing.test.js dist-test/app/control-room/scene-runtime-patching.test.js dist-test/app/control-room/production-scenes/production-scenes.test.js dist-test/app/control-room/workspaces/workspace-definition.test.js dist-test/app/control-room/director/director-metadata.test.js dist-test/app/control-room/sources/source-metadata.test.js dist-test/app/control-room/social-fabric/social-metadata.test.js",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:report": "playwright show-report",
+    "test:e2e:stability": "playwright test e2e/stability"
   },
   "dependencies": {
     "@ubos/shared": "workspace:*",
@@ -27,6 +33,7 @@
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.17",
-    "rimraf": "^6.0.1"
+    "rimraf": "^6.0.1",
+    "@playwright/test": "^1.55.0"
   }
 }
