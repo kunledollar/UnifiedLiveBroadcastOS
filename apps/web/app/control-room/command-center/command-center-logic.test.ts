@@ -1348,53 +1348,24 @@ test('Native Recording panel is registered and exposed by production workspaces'
   );
 });
 
-test('Control Room live monitor playback is awaited and does not key-recreate video elements', async () => {
+test('Control Room uses the serializable scene-control adapter instead of the deprecated workspace', async () => {
   const { readFile } = await import('node:fs/promises');
-  const source = await readFile(
-    new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`),
+  const shell = await readFile(
+    new URL('app/control-room/shell/ControlRoomShell.tsx', `file://${process.cwd()}/`),
+    'utf8',
+  );
+  const adapter = await readFile(
+    new URL('app/control-room/scene-control/SceneControlAdapter.tsx', `file://${process.cwd()}/`),
     'utf8',
   );
 
-  assert.match(source, /function playVideoSafely[\s\S]*Promise<void>/);
-  assert.match(source, /return playPromise[\s\S]*\.catch/);
-  assert.match(source, /if \(nextStream\) void playVideoSafely\(video, details\);/);
-  assert.doesNotMatch(source, /key=\{`\$\{role\}:\$\{sourceId/);
-});
-
-test('local media runtime creates captureStream binding and revokes blob URLs only on cleanup', async () => {
-  const { readFile } = await import('node:fs/promises');
-  const source = await readFile(
-    new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`),
-    'utf8',
-  );
-
-  assert.match(source, /createLocalMediaElementStream/);
-  assert.match(source, /video\.onloadedmetadata = \(\) =>/);
-  assert.match(source, /video\.oncanplay = \(\) =>/);
-  assert.match(source, /await playVideoSafely[\s\S]*const stream = captureStream\(\)/);
-  assert.match(source, /retainLiveSourceStream\(source\.id, stream\)/);
-  assert.match(source, /URL\.revokeObjectURL\(url\)/);
-  assert.match(source, /Local media file must be relinked before playback\./);
-});
-
-test('local media runtime persists assets, relinks existing sources, and keeps active blob URLs', async () => {
-  const { readFile } = await import('node:fs/promises');
-  const workspace = await readFile(
-    new URL('app/control-room/scene-workspace.tsx', `file://${process.cwd()}/`),
-    'utf8',
-  );
-  const browser = await readFile(
-    new URL('app/control-room/browsers/SourceBrowser.tsx', `file://${process.cwd()}/`),
-    'utf8',
-  );
-
-  assert.match(workspace, /UBOS_MEDIA_DB_NAME = 'ubos-managed-media-assets'/);
-  assert.match(workspace, /writeManagedMediaAsset/);
-  assert.match(workspace, /readManagedMediaAsset/);
-  assert.match(workspace, /'relink_required'/);
-  assert.match(workspace, /replaceMediaRuntimeForSource\(source\.id, record\.file\)/);
-  assert.match(workspace, /mediaUrl = URL\.createObjectURL\(file\)/);
-  assert.match(workspace, /id === sourceId[\s\S]*mediaUrl[\s\S]*assetId/);
-  assert.match(browser, /label="Relink Media"/);
-  assert.doesNotMatch(browser, /URL\.revokeObjectURL\(mediaUrl\)/);
+  assert.match(shell, /SceneControlAdapter/);
+  assert.doesNotMatch(shell, /scene-workspace/);
+  assert.match(adapter, /selectedPreviewSceneId/);
+  assert.match(adapter, /currentProgramSceneId/);
+  assert.match(adapter, /sourceSummaries/);
+  assert.match(adapter, /cutToProgram/);
+  assert.match(adapter, /autoTransition/);
+  assert.match(adapter, /takePreview/);
+  assert.doesNotMatch(adapter, /MediaStream|ResizeObserver|localStorage|srcObject/);
 });

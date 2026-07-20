@@ -1,4 +1,4 @@
-import { SceneWorkspace } from '../scene-workspace';
+import { SceneControlAdapter } from '../scene-control/SceneControlAdapter';
 import type {
   AudioChannel,
   ChatMessage,
@@ -16,16 +16,9 @@ import type {
 export function ControlRoomShell({
   scenes,
   productionState,
-  layouts,
-  channels,
-  assets,
-  mediaRoutes,
-  guests,
-  invites,
-  persistenceDiagnostics,
-  destinations = [],
-  messages = [],
-  healthMetrics = [],
+  // These inputs remain part of the server shell contract while their dedicated
+  // routes own their runtime UIs.  The scene adapter deliberately receives only
+  // serializable scene-control data.
 }: {
   scenes: Scene[];
   productionState: ProductionSwitchingState;
@@ -42,22 +35,7 @@ export function ControlRoomShell({
 }) {
   return (
     <main className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
-      <SceneWorkspace
-        initialScenes={scenes}
-        initialProductionState={productionState}
-        layouts={layouts}
-        channels={channels}
-        assets={assets}
-        mediaRoutes={mediaRoutes}
-        guests={guests}
-        invites={invites}
-        destinations={destinations}
-        messages={messages}
-        streamHealthMetrics={healthMetrics}
-        persistenceDiagnostics={persistenceDiagnostics}
-        broadcastId="demo-broadcast"
-        workspaceId="demo-workspace"
-      />
+      <SceneControlAdapter scenes={scenes} productionState={productionState} />
     </main>
   );
 }
