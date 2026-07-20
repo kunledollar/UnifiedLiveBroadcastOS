@@ -1,0 +1,5 @@
+import type { SceneReadiness, SceneReadinessState } from './types';
+const labels: Record<keyof SceneReadiness, string> = { video:'Video',audio:'Audio',guests:'Guests',graphics:'Graphics',outputs:'Outputs',recording:'Recording',automation:'Automation',ai:'AI' };
+const mark: Record<SceneReadinessState,string> = { ready:'●',armed:'◐',warning:'▲',error:'!', 'not-configured':'—',inactive:'○' };
+export { readinessSummary } from './readiness';
+export function SceneReadinessStrip({ readiness, criticalOnly = false }: { readiness: SceneReadiness; criticalOnly?: boolean }) { const keys = (criticalOnly ? ['video','audio','outputs'] : Object.keys(labels)) as (keyof SceneReadiness)[]; return <div className="ps-readiness" aria-label="Production readiness">{keys.map((key) => <span key={key} className={`ps-readiness__item is-${readiness[key]}`} title={`${labels[key]}: ${readiness[key]}`} aria-label={`${labels[key]} ${readiness[key]}`}><b>{mark[readiness[key]]}</b><em>{labels[key]}</em></span>)}</div>; }
