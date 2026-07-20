@@ -13,3 +13,11 @@ apps/desktop/src-tauri/target/
 
 # Rust and Tauri build artifacts
 apps/desktop/src-tauri/target/
+
+# Playwright generated evidence (baseline snapshots remain trackable)
+playwright-report/
+test-results/
+apps/web/playwright-report/
+apps/web/test-results/
+*.zip
+*.webm

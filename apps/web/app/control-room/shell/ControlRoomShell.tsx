@@ -34,7 +34,7 @@ export function ControlRoomShell({
   healthMetrics?: StreamHealthMetric[];
 }) {
   return (
-    <main className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
+    <main data-testid="workspace-shell" className="ubos-workstation h-screen overflow-hidden bg-ubos-carbon text-ubos-fg-primary">
       <SceneControlAdapter scenes={scenes} productionState={productionState} />
     </main>
   );
