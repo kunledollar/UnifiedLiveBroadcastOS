@@ -1,0 +1,5 @@
+import assert from 'node:assert/strict'; import test from 'node:test';
+import {filterSources,sourceCollections,sourceHealthSummary,sourceLibrary} from './source-metadata.js';
+test('source metadata is serializable and free of runtime objects',()=>{const serialized=JSON.stringify(sourceLibrary);assert.ok(serialized);assert.doesNotMatch(serialized,/MediaStream|HTMLVideoElement|WebRTC|socket/i);assert.equal(new Set(sourceLibrary.map(s=>s.id)).size,sourceLibrary.length);});
+test('source library filters deterministically and collections resolve',()=>{assert.deepEqual(filterSources(sourceLibrary,'camera','all','all').map(s=>s.name),['Camera 1','Camera 2','Camera 3']);assert.equal(filterSources(sourceLibrary,'','camera-pool','all').length,3);assert.ok(sourceCollections.every(c=>c.sourceIds.every(id=>sourceLibrary.some(s=>s.id===id))));});
+test('health summary provides concise attention counts',()=>{const health=sourceHealthSummary(sourceLibrary);assert.equal(health.healthy,10);assert.equal(health.warnings,3);assert.equal(health.missing,1);});
