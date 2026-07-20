@@ -1,3 +1,12 @@
-import {notFound} from 'next/navigation'; import {isWorkspaceId,workspaceById} from '../workspaces/workspace-catalog';
-export function generateStaticParams(){return ['solo-streamer','technical-director','audio-engineer','graphics-operator','replay-operator','streaming-operator','monitor-wall','compact','scenes','director'].map(workspace=>({workspace}))}
-export default async function WorkspacePage({params}:{params:Promise<{workspace:string}>}){const {workspace:id}=await params;if(!isWorkspaceId(id)||id==='sources'||id==='social-fabric')notFound();const workspace=workspaceById[id];return <section className="ubos-role-panels"><header><p>ROLE WORKSPACE · v5.15.2</p><h1>{workspace.name}</h1><span>{workspace.mission} · presentation-only controls preserve media runtime ownership.</span></header><div className="ubos-role-grid"><article><h2>{id==='audio-engineer'?'Audio mixer & meters':id==='replay-operator'?'Clip timeline & replay queue':id==='graphics-operator'?'Graphics preparation':id==='scenes'?'Scene cards':id==='streaming-operator'?'Destination health':'Operational decision support'}</h2><p>Role-specific workbench surface. Selection, tabs, and operational status do not alter Program or Preview geometry.</p></article><article><h2>Next action</h2><p>Review readiness and prepare the next production action.</p></article></div></section>}
+import { notFound } from 'next/navigation';
+import { isPrototypeWorkspace, PrototypeWorkspaceView } from '../ubos-next/PrototypeWorkspaceView';
+
+export function generateStaticParams() {
+  return ['director', 'solo-streamer', 'technical-director', 'audio-engineer', 'graphics-operator', 'replay-operator', 'streaming-operator', 'monitor-wall', 'compact'].map(workspace => ({ workspace }));
+}
+
+export default async function WorkspacePage({ params }: { params: Promise<{ workspace: string }> }) {
+  const { workspace } = await params;
+  if (!isPrototypeWorkspace(workspace)) notFound();
+  return <PrototypeWorkspaceView workspaceId={workspace} />;
+}
