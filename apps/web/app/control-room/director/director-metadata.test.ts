@@ -1,0 +1,7 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { DIRECTOR_NOTES_STORAGE_KEY, directorGuests, directorIntelligence, directorProduction, directorRundown, directorTimeline, emergencyActions } from './director-metadata.js';
+const metadata={directorProduction,directorRundown,directorTimeline,directorGuests,directorIntelligence,emergencyActions};
+test('Director metadata is deterministic, serializable, and runtime free',()=>{const encoded=JSON.stringify(metadata);assert.doesNotThrow(()=>JSON.parse(encoded));assert.doesNotMatch(encoded,/MediaStream|HTML.*Element|function|ResizeObserver|WebRTC|session|timer/i);assert.equal(DIRECTOR_NOTES_STORAGE_KEY,'ubos.director-workspace.notes.v5.13.0');});
+test('Director rundown has one current item, at most one next item, and deterministic ordering',()=>{assert.equal(directorRundown.filter(x=>x.status==='current').length,1);assert.ok(directorRundown.filter(x=>x.status==='next').length<=1);assert.deepEqual(directorRundown.map(x=>x.order),[1,2,3,4,5,6,7,8,9,10]);});
+test('Director timeline and presentation controls are safe metadata',()=>{assert.deepEqual(directorTimeline.map(x=>x.relativePosition),[0,10,20,30,40,50,60,70,80,90]);assert.ok(emergencyActions.every(x=>x.presentationOnly));assert.ok(directorGuests.every(x=>typeof x.id==='string'));assert.ok(directorIntelligence.every(x=>typeof x.recommendedAction==='string'));});
