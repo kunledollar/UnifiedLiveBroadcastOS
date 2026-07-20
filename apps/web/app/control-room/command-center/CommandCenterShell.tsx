@@ -34,20 +34,9 @@
  *   <1200px:     secondary docks collapsed, Program/Preview side-by-side if ≥900px
  *   <900px:      compact mode — Program/Preview stacked, bottom workspace tab bar only
  */
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '@ubos/ui';
-import {
-  workspaceZoneDefinitions,
-  type WorkspacePresetId,
-  type WorkspaceZoneId,
-} from '@ubos/shared';
+import { workspaceZoneDefinitions, type WorkspacePresetId, type WorkspaceZoneId } from '@ubos/shared';
 import { ubosWorkspaceModes, type UbosWorkspaceModeId } from '../menu';
 import type { DockTabId, NavItemId, OperationsTabId, SourceDockTabId } from '../shell/types';
 import type { MonitorStatusInfo } from './monitor-status';
@@ -106,8 +95,7 @@ export type CommandCenterShellProps = {
   onCut?: (() => void) | undefined;
   onTake?: (() => void) | undefined;
   onAuto?: (() => void) | undefined;
-  onWorkspaceModeApplied?:
-    ((mode: UbosWorkspaceModeId, compactChrome?: boolean) => void) | undefined;
+  onWorkspaceModeApplied?: ((mode: UbosWorkspaceModeId, compactChrome?: boolean) => void) | undefined;
   onSaveWorkspace?: (() => void) | undefined;
   onRestoreWorkspace?: (() => void) | undefined;
   onResetWorkspace?: (() => void) | undefined;
@@ -208,13 +196,6 @@ export function CommandCenterShell({
     safeAreasVisible,
     fullscreenMonitor,
     hasUserSavedLayout,
-    layoutState,
-    customWorkspaces,
-    activeCustomWorkspaceId,
-    duplicateWorkspace,
-    applyCustomWorkspace,
-    renameCustomWorkspace,
-    deleteCustomWorkspace,
     activeBottomTab: workspaceActiveBottomTab,
     applyPreset,
     togglePanelVisibility,
@@ -413,14 +394,9 @@ export function CommandCenterShell({
 
   // Viewport width = center-stage + visible dock widths + rail.
   // Used exclusively for the forceBottomCollapsed policy below.
-  const viewportWidth =
-    layout.zones['center-stage'].rect.width +
-    (leftCollapsed
-      ? 0
-      : leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize) +
-    (rightCollapsed
-      ? 0
-      : rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize) +
+  const viewportWidth = layout.zones['center-stage'].rect.width +
+    (leftCollapsed ? 0 : (leftDockGeometry.rect.width || workspaceZoneDefinitions['left-dock'].defaultSize)) +
+    (rightCollapsed ? 0 : (rightDockGeometry.rect.width || workspaceZoneDefinitions['right-dock'].defaultSize)) +
     (layout.zones['left-rail'].rect.width || workspaceZoneDefinitions['left-rail'].defaultSize);
 
   // forceBottomCollapsed — operator-override policy (3.15D responsive):
@@ -556,13 +532,6 @@ export function CommandCenterShell({
           activePresetId={activePresetId}
           layoutLocked={layoutLocked}
           hasUserSavedLayout={hasUserSavedLayout}
-          layoutState={layoutState}
-          customWorkspaces={customWorkspaces}
-          activeCustomWorkspaceId={activeCustomWorkspaceId}
-          onDuplicateWorkspace={duplicateWorkspace}
-          onApplyCustomWorkspace={applyCustomWorkspace}
-          onRenameCustomWorkspace={renameCustomWorkspace}
-          onDeleteCustomWorkspace={deleteCustomWorkspace}
           isZoneCollapsed={isZoneToggleCollapsed}
           onSelectPreset={handleSelectPreset}
           onToggleZone={toggleZone}
@@ -572,7 +541,10 @@ export function CommandCenterShell({
         />
       </header>
 
-      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden p-1">
+      <div
+        ref={containerRef}
+        className="flex min-h-0 flex-1 flex-col overflow-hidden p-1"
+      >
         <div className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-hidden">
           <div className="shrink-0" style={{ width: railWidth }}>
             <CommandCenterLeftRail activeNav={activeNav} onSelectItem={handleRailItem} />
@@ -683,9 +655,7 @@ export function CommandCenterShell({
             onTabChange={handleBottomTabChange}
             collapsed={bottomCollapsed || forceBottomCollapsed}
             onToggleCollapse={
-              layoutLocked || forceBottomCollapsed
-                ? undefined
-                : () => toggleZone('bottom-workspace')
+              layoutLocked || forceBottomCollapsed ? undefined : () => toggleZone('bottom-workspace')
             }
             isPanelVisible={isPanelVisible}
             className="h-full"
