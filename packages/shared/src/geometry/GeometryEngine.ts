@@ -139,6 +139,9 @@ export class UbosGeometryEngine implements GeometryEngine {
 
     const geometryMap: GeometryMap = {};
 
+    // Ensure role adaptation is applied before zone computation
+    if (this.state?.role) this.adaptToRole(this.state.role);
+
     // Ensure aspect ratio adaptation is applied before zone computation
     this.adaptToAspectRatios(this.outputs);
 
@@ -178,7 +181,10 @@ export class UbosGeometryEngine implements GeometryEngine {
       // 6. Aspect ratio fine-tuning (dominant ratio scalar)
       rect = this.applyAspectRatio(zoneId, rect);
 
-      // 7. Adapt rect based on operator role
+      // 7. Apply role-specific geometry (Step 37)
+      rect = this.applyRoleGeometry(zoneId, rect);
+
+      // 7b. Fine-grained role adaptation (Step 34)
       rect = this.applyRoleAdaptation(zoneId, rect);
 
       // 8. Adapt rect based on production state (scene-centric geometry)
@@ -275,6 +281,57 @@ export class UbosGeometryEngine implements GeometryEngine {
       if (zoneId === 'output') {
         return { ...rect, width: Math.round(rect.width * 1.15) };
       }
+    }
+
+    return rect;
+  }
+
+  // ── Step 37: Role-specific geometry ───────────────────────────────────────
+
+  private applyRoleGeometry(zoneId: string, rect: Rect): Rect {
+    switch (this.role) {
+      case 'director':
+        if (zoneId === 'scene') return { ...rect, width:  Math.round(rect.width  * 1.15) };
+        if (zoneId === 'triad') return { ...rect, width:  Math.round(rect.width  * 1.10) };
+        break;
+
+      case 'technical-director':
+        if (zoneId === 'triad') return { ...rect, width:  Math.round(rect.width  * 1.20) };
+        if (zoneId === 'graph') return { ...rect, height: Math.round(rect.height * 0.90) };
+        break;
+
+      case 'graphics-operator':
+        if (zoneId === 'inspector') return { ...rect, width: Math.round(rect.width * 1.25) };
+        if (zoneId === 'dock')      return { ...rect, width: Math.round(rect.width * 1.10) };
+        break;
+
+      case 'replay-operator':
+        if (zoneId === 'graph')     return { ...rect, height: Math.round(rect.height * 0.85) };
+        if (zoneId === 'workbench') return { ...rect, height: Math.round(rect.height * 1.15) };
+        break;
+
+      case 'distribution-operator':
+        if (zoneId === 'output') return { ...rect, width:  Math.round(rect.width  * 1.30) };
+        if (zoneId === 'graph')  return { ...rect, height: Math.round(rect.height * 0.85) };
+        break;
+
+      case 'automation-operator':
+        if (zoneId === 'graph')     return { ...rect, width: Math.round(rect.width * 1.30) };
+        if (zoneId === 'inspector') return { ...rect, width: Math.round(rect.width * 1.10) };
+        break;
+
+      case 'social-fabric':
+        if (zoneId === 'dock')      return { ...rect, width:  Math.round(rect.width  * 1.20) };
+        if (zoneId === 'workbench') return { ...rect, height: Math.round(rect.height * 1.20) };
+        break;
+
+      case 'analytics':
+        if (zoneId === 'graph')  return { ...rect, width:  Math.round(rect.width  * 1.35) };
+        if (zoneId === 'output') return { ...rect, height: Math.round(rect.height * 0.90) };
+        break;
+
+      default:
+        break;
     }
 
     return rect;
