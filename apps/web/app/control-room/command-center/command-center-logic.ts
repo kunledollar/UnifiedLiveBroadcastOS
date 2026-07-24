@@ -215,14 +215,21 @@ export function workspaceModeForPreset(presetId: WorkspacePresetId): UbosWorkspa
     case 'replay-operator':
       return 'replay';
     case 'solo-streamer':
+    case 'streamer':
     case 'streaming-operator':
+    case 'distribution-operator':
       return 'streaming';
     case 'monitor-wall':
       return 'monitor-wall';
     case 'compact':
       return 'compact';
     case 'director':
+    case 'production':
     case 'technical-director':
+    case 'social-fabric':
+    case 'media-operator':
+    case 'automation-operator':
+    case 'analytics':
     default:
       return 'director';
   }
@@ -234,7 +241,16 @@ export function presetOperationsTab(presetId: WorkspacePresetId): OperationsTabI
     case 'monitor-wall':
       return 'monitoring';
     case 'streaming-operator':
+    case 'distribution-operator':
       return 'streaming';
+    case 'social-fabric':
+    case 'solo-streamer':
+    case 'streamer':
+      return 'logs';
+    case 'analytics':
+      return 'monitoring';
+    case 'automation-operator':
+      return 'inspector';
     default:
       return null;
   }
