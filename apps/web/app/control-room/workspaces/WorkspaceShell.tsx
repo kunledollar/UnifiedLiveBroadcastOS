@@ -1,14 +1,13 @@
 'use client';
-import { useRouter } from 'next/navigation';
-import { usePathname } from 'next/navigation';
-import type { CSSProperties, ReactNode } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
+import { useRouter, usePathname } from 'next/navigation';
+import type { CSSProperties } from 'react';
 import { workspaceById, workspaceCatalog, type WorkspaceId } from './workspace-catalog';
-import { ProductionRuntimeHost } from './ProductionRuntimeHost';
-import { WorkspaceHost } from './WorkspaceHost';
-import { WorkspaceDockManager } from './WorkspaceDockManager';
 import { UbosGlobalTopBar, UbosWorkspaceSidebar } from '../chrome';
 import type { ChromeToolAction } from '../chrome';
 import type { WorkspacePresetId } from '@ubos/shared';
+import { workspaceManager } from '../state/workspace-manager-instance';
+import { ControlRoomCanvas } from '../zones/ControlRoomCanvas';
 import './workspace-shell.css';
 
 const workspaceFromPath = (pathname: string): WorkspaceId => {
@@ -16,11 +15,6 @@ const workspaceFromPath = (pathname: string): WorkspaceId => {
   return value && value in workspaceById ? (value as WorkspaceId) : 'director';
 };
 
-/**
- * Map old workspace catalog IDs to the nearest WorkspacePresetId for the
- * new sidebar. Used only for sidebar active-highlight and tool group display;
- * navigation always goes to the real route.
- */
 const CATALOG_TO_PRESET: Record<string, WorkspacePresetId> = {
   director: 'director',
   'solo-streamer': 'solo-streamer',
@@ -41,10 +35,6 @@ const CATALOG_TO_PRESET: Record<string, WorkspacePresetId> = {
   'emergency-control': 'technical-director',
 };
 
-/**
- * Map a sidebar preset selection back to the best available route.
- * New presets without dedicated routes fall back to the closest existing one.
- */
 const PRESET_TO_ROUTE: Record<WorkspacePresetId, string> = {
   director: '/control-room/director',
   production: '/control-room/director',
@@ -64,22 +54,17 @@ const PRESET_TO_ROUTE: Record<WorkspacePresetId, string> = {
   'streaming-operator': '/control-room/streaming-operator',
 };
 
-export function WorkspaceShell({ children }: { children: ReactNode }) {
+export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const workspace = workspaceById[workspaceFromPath(pathname)];
   const g = workspace.geometry;
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const style = {
     '--ubos-program-weight': g.programWeight,
     '--ubos-preview-weight': g.previewWeight,
     '--ubos-center-stage-weight': g.centerStageWeight,
-    '--ubos-left-dock-weight': g.leftDockWeight,
-    '--ubos-right-dock-weight': g.rightDockWeight,
-    '--ubos-bottom-dock-weight': g.bottomDockWeight,
-    '--ubos-program-min-width': `${g.minProgramWidth}px`,
-    '--ubos-preview-min-width': `${g.minPreviewWidth}px`,
-    // Full grid-template-columns value set as a variable so fr units work reliably
     '--ubos-monitor-cols': g.orientation === 'horizontal-split'
       ? `minmax(${g.minProgramWidth}px, ${g.programWeight}fr) minmax(${g.minPreviewWidth}px, ${g.previewWeight}fr)`
       : '1fr',
@@ -91,22 +76,41 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
   const activePresetId: WorkspacePresetId =
     CATALOG_TO_PRESET[workspace.id] ?? 'director';
 
-  const handleSelectPreset = (presetId: WorkspacePresetId) => {
+  // Sync WorkspaceManager whenever the route changes
+  useEffect(() => {
+    workspaceManager.setWorkspace(activePresetId);
+  }, [activePresetId]);
+
+  // Sync WorkspaceManager viewport whenever the content area resizes
+  useEffect(() => {
+    const el = canvasRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r && r.width > 0 && r.height > 0) {
+        workspaceManager.setViewport(Math.round(r.width), Math.round(r.height));
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const handleSelectPreset = useCallback((presetId: WorkspacePresetId) => {
     const route = PRESET_TO_ROUTE[presetId] ?? '/control-room/director';
     router.push(route);
-  };
+  }, [router]);
 
-  const handleToolAction = (action: ChromeToolAction) => {
+  const handleToolAction = useCallback((action: ChromeToolAction) => {
     if (action.nav) router.push(`/control-room/${action.nav}`);
-  };
+  }, [router]);
 
   return (
     <div
-      className={`ubos-workspace-shell-v2 is-${g.orientation} is-${g.mode}`}
+      className="ubos-workspace-shell-v2 is-horizontal-split"
       style={style}
       data-workspace={workspace.id}
     >
-      {/* ── New unified top bar ──────────────────────────────────────────── */}
+      {/* ── New top bar ──────────────────────────────────────────────── */}
       <UbosGlobalTopBar
         activePresetId={activePresetId}
         isLive={false}
@@ -115,9 +119,8 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
         userRole={workspace.name}
       />
 
-      {/* ── Body: sidebar + content area ────────────────────────────────── */}
+      {/* ── Body: sidebar + geometry canvas ─────────────────────────── */}
       <div className="ubos-workspace-body">
-        {/* New workspace sidebar */}
         <UbosWorkspaceSidebar
           activePresetId={activePresetId}
           onSelectPreset={handleSelectPreset}
@@ -125,18 +128,19 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           onAddWorkspace={() => router.push('/control-room/director')}
         />
 
-        {/* Real content area — monitors (row 1) / content (row 2) / workbench (row 3) */}
+        {/* Geometry-driven canvas — fills all remaining space */}
         <div
-          className={`ubos-workspace-content-area is-${g.orientation} is-${g.mode}`}
-          style={style}
+          ref={canvasRef}
+          className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
         >
-          <ProductionRuntimeHost
-            programWeight={g.programWeight}
-            previewWeight={g.previewWeight}
-          />
-          <WorkspaceDockManager workspaceId={workspace.id}>
-            <WorkspaceHost workspaceId={workspace.id}>{children}</WorkspaceHost>
-          </WorkspaceDockManager>
+          <ControlRoomCanvas />
+
+          {/* Workspace-specific content sits behind the geometry zones
+              so existing panels (inspector, workbench, etc.) remain
+              accessible until geometry zones fully supersede them.    */}
+          <div className="ubos-workspace-content-area is-horizontal-split pointer-events-none absolute inset-0 opacity-0">
+            {children}
+          </div>
         </div>
       </div>
     </div>

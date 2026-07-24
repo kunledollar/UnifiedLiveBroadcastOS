@@ -115,6 +115,20 @@ export class WorkspaceManager {
     this.notify();
   }
 
+  // ── Viewport ───────────────────────────────────────────────────────────────
+
+  /** Update viewport dimensions and recompute geometry. */
+  setViewport(width: number, height: number): void {
+    if (
+      this.state.viewportWidth === width &&
+      this.state.viewportHeight === height
+    ) return;
+    this.state = { ...this.state, viewportWidth: width, viewportHeight: height };
+    this.geometry.updateState(this.state);
+    this.geometry.computeZones();
+    this.notify();
+  }
+
   // ── Listener registry ──────────────────────────────────────────────────────
 
   onGeometryChange(fn: (zones: GeometryMap) => void): void {
