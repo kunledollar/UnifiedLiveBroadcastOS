@@ -79,6 +79,13 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
     '--ubos-bottom-dock-weight': g.bottomDockWeight,
     '--ubos-program-min-width': `${g.minProgramWidth}px`,
     '--ubos-preview-min-width': `${g.minPreviewWidth}px`,
+    // Full grid-template-columns value set as a variable so fr units work reliably
+    '--ubos-monitor-cols': g.orientation === 'horizontal-split'
+      ? `minmax(${g.minProgramWidth}px, ${g.programWeight}fr) minmax(${g.minPreviewWidth}px, ${g.previewWeight}fr)`
+      : '1fr',
+    '--ubos-monitor-rows': g.orientation === 'vertical-stack'
+      ? `minmax(0, ${g.programWeight}fr) minmax(0, ${g.previewWeight}fr)`
+      : '1fr',
   } as CSSProperties;
 
   const activePresetId: WorkspacePresetId =
@@ -118,8 +125,11 @@ export function WorkspaceShell({ children }: { children: ReactNode }) {
           onAddWorkspace={() => router.push('/control-room/director')}
         />
 
-        {/* Real content area — ProductionRuntimeHost + WorkspaceDockManager + WorkspaceHost */}
-        <div className={`ubos-workspace-content-area is-${g.orientation}`}>
+        {/* Real content area — monitors (row 1) / content (row 2) / workbench (row 3) */}
+        <div
+          className={`ubos-workspace-content-area is-${g.orientation} is-${g.mode}`}
+          style={style}
+        >
           <ProductionRuntimeHost
             programWeight={g.programWeight}
             previewWeight={g.previewWeight}

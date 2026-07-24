@@ -1,46 +1,170 @@
-/* ── v2 shell: new chrome (top bar + sidebar) ──────────────────────── */
-.ubos-workspace-shell-v2{display:flex;flex-direction:column;min-height:100vh;height:100vh;background:#080c12;color:#dbeafe;overflow:hidden}
-.ubos-workspace-body{display:flex;flex:1;min-height:0;overflow:hidden}
-.ubos-workspace-content-area{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden}
+/* ── UBOS Workspace Shell v2 — new chrome + preserved content layout ── */
 
-/* ── Monitors ───────────────────────────────────────────────────────── */
-.ubos-monitor-host{display:grid;gap:10px;padding:10px 16px;min-height:0;flex-shrink:0;height:calc(var(--ubos-center-stage-weight,56)*1vh - 56px)}
-.is-horizontal-split .ubos-monitor-host{grid-template-columns:minmax(var(--ubos-program-min-width,280px),var(--ubos-program-weight,60)fr) minmax(var(--ubos-preview-min-width,240px),var(--ubos-preview-weight,40)fr);align-items:center}
-.is-vertical-stack .ubos-monitor-host{grid-template-rows:minmax(0,var(--ubos-program-weight,60)fr) minmax(0,var(--ubos-preview-weight,40)fr)}
-.is-grid .ubos-monitor-host{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
-.ubos-monitor{min-width:0;min-height:0;overflow:hidden;border:1px solid #1e3a5f;border-radius:8px;background:#0a1628;aspect-ratio:16/9;align-self:center;justify-self:stretch;display:flex;flex-direction:column}
-.ubos-monitor header{height:28px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:0 10px;font-size:10px;background:#0d1f38;border-bottom:1px solid #1e3a5f}
-.ubos-monitor-program header b{color:#f87171}
-.ubos-monitor-preview header b{color:#34d399}
-.ubos-monitor>div{display:grid;place-items:center;flex:1;background:linear-gradient(135deg,#0d1f38,#080c12)}
-.ubos-monitor strong{font-size:clamp(14px,2vw,28px);letter-spacing:.12em;color:#e2e8f0}
-.ubos-monitor small{font-size:10px;color:#475569}
-
-/* ── Content + docks ────────────────────────────────────────────────── */
-.ubos-workspace-content{flex:1;min-width:0;min-height:0;overflow:auto;padding:12px;padding-right:316px}
-.ubos-workspace-inspector{z-index:2;align-self:stretch;position:absolute;right:12px;top:56px;bottom:0;width:296px;padding:12px;overflow:auto;border-left:1px solid #1e2530;background:#080c12}
-.ubos-workspace-inspector.is-collapsed{width:auto;height:min-content;bottom:auto}
-.ubos-workspace-inspector button{margin-bottom:8px;color:#94a3b8;background:#0d1117;border:1px solid #1e2530;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer}
-.ubos-workspace-content-area{position:relative}
-.ubos-bottom-workbench{padding:10px 16px;border-top:1px solid #1e2530;font-size:11px;color:#64748b;background:#080c12;flex-shrink:0}
-.ubos-plugin-panel h2{margin:4px 0;font-size:13px;color:#94a3b8;font-weight:600}
-.ubos-plugin-panel p{font-size:11px;color:#475569;line-height:1.5}
-.ubos-bottom-workbench .ubos-plugin-panel{display:flex;gap:12px;align-items:baseline}
-.ubos-bottom-workbench h2{font-size:11px;margin:0;text-transform:uppercase}
-.ubos-bottom-workbench p{margin:0}
-.ubos-destination-confidence{border:1px solid #1e2530;border-radius:6px;padding:12px;color:#64748b;font-size:12px}
-
-/* ── Production clock ───────────────────────────────────────────────── */
-.ubos-production-clock{position:absolute;right:316px;bottom:12px;padding:3px 8px;border-radius:4px;background:#0d1117cc;color:#64748b;font:10px/1 monospace;border:1px solid #1e2530}
-
-/* ── Responsive ─────────────────────────────────────────────────────── */
-@media(max-width:900px){
-  .is-horizontal-split .ubos-monitor-host{grid-template-columns:1fr;grid-template-rows:minmax(0,var(--ubos-program-weight,60)fr) minmax(0,var(--ubos-preview-weight,40)fr)}
-  .ubos-workspace-content{padding-right:12px}
-  .ubos-workspace-inspector{display:none}
+/* Outer shell: top bar stacked above the body row */
+.ubos-workspace-shell-v2 {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  min-height: 0;
+  background: #080c12;
+  color: #dbeafe;
+  overflow: hidden;
 }
 
-/* ── Legacy v1 shell classes (kept for backward compat if any remain) ── */
-.ubos-workspace-shell{display:flex;flex-direction:column;min-height:100vh;background:#080c12;color:#dbeafe;overflow:hidden}
+/* Body row: sidebar + content column */
+.ubos-workspace-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
 
-/* legacy second block removed — rules merged into v2 above */
+/* Content column: grid with 3 rows — monitors / main / workbench */
+.ubos-workspace-content-area {
+  display: grid;
+  grid-template-rows:
+    minmax(180px, calc(var(--ubos-center-stage-weight, 56) * 1vh - 56px))
+    minmax(0, 1fr)
+    40px;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── Monitors (row 1) ──────────────────────────────────────────────── */
+.ubos-monitor-host {
+  display: grid;
+  gap: 10px;
+  padding: 10px 16px;
+  min-height: 0;
+  overflow: hidden;
+}
+.is-horizontal-split .ubos-monitor-host {
+  grid-template-columns: var(--ubos-monitor-cols, 60fr 40fr);
+  align-items: center;
+}
+.is-vertical-stack .ubos-monitor-host {
+  grid-template-rows: var(--ubos-monitor-rows, 60fr 40fr);
+}
+.is-grid .ubos-monitor-host {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+}
+
+.ubos-monitor {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid #1e3a5f;
+  border-radius: 8px;
+  background: #0a1628;
+  aspect-ratio: 16 / 9;
+  align-self: center;
+  justify-self: stretch;
+  display: flex;
+  flex-direction: column;
+}
+.ubos-monitor header {
+  height: 27px;
+  flex: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 10px;
+  background: #0d1f38;
+  border-bottom: 1px solid #1e3a5f;
+}
+.ubos-monitor-program header b { color: #f87171; }
+.ubos-monitor-preview header b { color: #34d399; }
+.ubos-monitor > div {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  background: linear-gradient(135deg, #0d1f38, #080c12);
+}
+.ubos-monitor strong { font-size: clamp(14px, 2vw, 28px); letter-spacing: .12em; color: #e2e8f0; }
+.ubos-monitor small  { font-size: 10px; color: #475569; }
+
+/* ── Main workspace content (row 2) ────────────────────────────────── */
+.ubos-workspace-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+  padding-right: 316px;
+}
+
+/* ── Right inspector (absolute overlay inside content-area) ─────────── */
+.ubos-workspace-inspector {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 40px;
+  width: 300px;
+  padding: 12px;
+  overflow: auto;
+  border-left: 1px solid #1e2530;
+  background: #080c12;
+  z-index: 2;
+}
+.ubos-workspace-inspector.is-collapsed { height: min-content; bottom: auto; }
+.ubos-workspace-inspector button {
+  margin-bottom: 8px;
+  color: #94a3b8;
+  background: #0d1117;
+  border: 1px solid #1e2530;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+/* ── Bottom workbench (row 3) ───────────────────────────────────────── */
+.ubos-bottom-workbench {
+  padding: 0 16px;
+  border-top: 1px solid #1e2530;
+  font-size: 11px;
+  color: #64748b;
+  background: #080c12;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  overflow: hidden;
+}
+.ubos-plugin-panel h2  { margin: 0; font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
+.ubos-plugin-panel p   { margin: 0; font-size: 11px; color: #475569; }
+.ubos-bottom-workbench .ubos-plugin-panel { display: flex; gap: 12px; align-items: center; }
+
+/* ── Production clock ───────────────────────────────────────────────── */
+.ubos-production-clock {
+  position: absolute;
+  right: 308px;
+  bottom: 48px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #0d1117cc;
+  color: #64748b;
+  font: 10px/1 monospace;
+  border: 1px solid #1e2530;
+}
+
+/* ── Misc ───────────────────────────────────────────────────────────── */
+.ubos-destination-confidence { border: 1px solid #1e2530; border-radius: 6px; padding: 12px; color: #64748b; font-size: 12px; }
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  .is-horizontal-split .ubos-monitor-host {
+    grid-template-columns: 1fr;
+    grid-template-rows:
+      minmax(0, var(--ubos-program-weight, 60)fr)
+      minmax(0, var(--ubos-preview-weight, 40)fr);
+  }
+  .ubos-workspace-content { padding-right: 12px; }
+  .ubos-workspace-inspector { display: none; }
+}
+
+/* ── Legacy fallback (keeps old ubos-workspace-shell class harmless) ── */
+.ubos-workspace-shell { display: flex; flex-direction: column; min-height: 100vh; background: #080c12; color: #dbeafe; overflow: hidden; }
