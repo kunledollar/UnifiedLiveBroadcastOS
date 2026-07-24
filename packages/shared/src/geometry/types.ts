@@ -153,6 +153,12 @@ export interface ProductionState {
   currentScene?: { id: string; status: string } | null;
   /** Preview source identifier — null when Preview is empty. */
   previewSource?: string | null;
+  /** Active workspace id — drives WorkspaceShellRegistry lookup. */
+  workspace?: string;
+  /** Connected monitor configurations — passed to adaptToMonitors(). */
+  monitors?: MonitorConfig[];
+  /** Active output profiles — passed to adaptToAspectRatios(). */
+  outputs?: OutputProfile[];
   /** True when the AI Crew module is active and injecting geometry. */
   aiCrewActive?: boolean;
   /** AI alert level — drives AI Insight Zone and Overlay sizing. */

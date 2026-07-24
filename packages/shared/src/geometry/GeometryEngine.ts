@@ -63,6 +63,12 @@ export interface GeometryEngine {
    * preview-dominant layouts; audio engineers get console-dominant.
    */
   adaptToRole(role: GeometryRole): void;
+  /** Replace the active workspace shell. Clears the monitor zone cache. */
+  setShell(shell: WorkspaceShell): void;
+  /** Update the bound production state. Call before computeZones(). */
+  updateState(state: ProductionState): void;
+  /** Return the geometry map from the last computeZones() call. */
+  getGeometryMap(): GeometryMap;
 }
 
 // ── Default implementation ────────────────────────────────────────────────────
@@ -80,6 +86,8 @@ export class UbosGeometryEngine implements GeometryEngine {
   private zoneRegistry: Map<string, ZoneDefinition> = new Map();
   /** Pre-computed zone→Rect cache invalidated on adaptToMonitors(). */
   private monitorZoneCache: MonitorZoneMap | null = null;
+  /** Last computed geometry map — returned by getGeometryMap(). */
+  private lastGeometryMap: GeometryMap = {};
   /** Pre-computed canvas rects for all outputs, keyed by output id. */
   private canvasRects: Record<string, import('./types.js').CanvasRect> = {};
   /** Dominant aspect ratio (width/height) across all active outputs. */
@@ -247,7 +255,42 @@ export class UbosGeometryEngine implements GeometryEngine {
       };
     }
 
+    this.lastGeometryMap = geometryMap;
     return geometryMap;
+  }
+
+  // ── Step 49: Workspace Manager integration helpers ────────────────────────
+
+  /**
+   * Replace the active workspace shell without a full re-initialize.
+   * Clears the monitor zone cache so the next computeZones() pass uses
+   * the new shell's zone definitions.
+   */
+  setShell(shell: WorkspaceShell): void {
+    this.workspace = shell;
+    this.zoneRegistry = new Map();
+    shell.zones.forEach((zone) => this.zoneRegistry.set(zone.id, zone));
+    // Invalidate monitor cache — new shell may have different zone ids
+    this.monitorZoneCache = null;
+    if (this.monitorManager && this.monitors.length > 0) {
+      this.monitorZoneCache = this.monitorManager.assignZones(this.monitors);
+    }
+  }
+
+  /**
+   * Update the bound production state without re-initializing.
+   * Call this before computeZones() when any state field changes.
+   */
+  updateState(state: ProductionState): void {
+    this.state = state;
+  }
+
+  /**
+   * Return the geometry map computed by the last computeZones() call.
+   * Returns an empty map if computeZones() has not been called yet.
+   */
+  getGeometryMap(): GeometryMap {
+    return this.lastGeometryMap;
   }
 
   // ── Adaptation methods ─────────────────────────────────────────────────────
