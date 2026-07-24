@@ -13,6 +13,7 @@ import type {
   GeometryMap,
   GeometryRole,
   MonitorConfig,
+  MonitorZoneMap,
   OutputProfile,
   ProductionState,
   Rect,
@@ -75,6 +76,8 @@ export class UbosGeometryEngine implements GeometryEngine {
   private canvasEngine: UbosAdaptiveCanvasEngine | null = null;
   private monitorManager: UbosMultiMonitorManager | null = null;
   private zoneRegistry: Map<string, ZoneDefinition> = new Map();
+  /** Pre-computed zone→Rect cache invalidated on adaptToMonitors(). */
+  private monitorZoneCache: MonitorZoneMap | null = null;
 
   // ── Step 33: initialize() ──────────────────────────────────────────────────
 
@@ -95,8 +98,9 @@ export class UbosGeometryEngine implements GeometryEngine {
       state.viewportHeight,
     );
 
-    // Prepare multi-monitor manager
-    this.monitorManager = new UbosMultiMonitorManager();
+    // Prepare multi-monitor manager and seed the zone cache
+    this.monitorManager = new UbosMultiMonitorManager(monitors);
+    this.monitorZoneCache = this.monitorManager.assignZones(monitors);
 
     // Prepare zone registry
     this.zoneRegistry = new Map<string, ZoneDefinition>();
@@ -130,7 +134,9 @@ export class UbosGeometryEngine implements GeometryEngine {
     const geometryMap: GeometryMap = {};
 
     // 1. Determine monitor layout (zone id → Rect on assigned monitor)
-    const monitorZoneMap = this.monitorManager!.assignZones(this.monitors);
+    //    Use pre-computed cache from adaptToMonitors() when available.
+    const monitorZoneMap =
+      this.monitorZoneCache ?? this.monitorManager!.assignZones(this.monitors);
 
     // 2. Determine aspect ratio behavior for Program / Preview
     const canvasRects = this.canvasEngine!.renderAll(this.outputs);
@@ -176,9 +182,16 @@ export class UbosGeometryEngine implements GeometryEngine {
 
   // ── Adaptation methods ─────────────────────────────────────────────────────
 
+  // ── Step 35: adaptToMonitors() ────────────────────────────────────────────
+
   adaptToMonitors(monitors: MonitorConfig[]): void {
     this.monitors = monitors;
-    this.monitorManager = new UbosMultiMonitorManager();
+
+    // Recompute monitor zone map
+    this.monitorManager = new UbosMultiMonitorManager(monitors);
+
+    // Precompute monitor rects for faster zone computation
+    this.monitorZoneCache = this.monitorManager.assignZones(monitors);
   }
 
   adaptToAspectRatios(outputs: OutputProfile[]): void {

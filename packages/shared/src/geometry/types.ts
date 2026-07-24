@@ -59,6 +59,10 @@ export interface ZoneDefinition {
 export interface MonitorConfig {
   id: string;
   label: string;
+  /** Horizontal screen coordinate of the monitor's top-left corner (px). */
+  x: number;
+  /** Vertical screen coordinate of the monitor's top-left corner (px). */
+  y: number;
   width: number;
   height: number;
   aspectRatio: string;
