@@ -78,6 +78,10 @@ export class UbosGeometryEngine implements GeometryEngine {
   private zoneRegistry: Map<string, ZoneDefinition> = new Map();
   /** Pre-computed zone→Rect cache invalidated on adaptToMonitors(). */
   private monitorZoneCache: MonitorZoneMap | null = null;
+  /** Pre-computed canvas rects for all outputs, keyed by output id. */
+  private canvasRects: Record<string, import('./types.js').CanvasRect> = {};
+  /** Dominant aspect ratio (width/height) across all active outputs. */
+  private dominantAspect: number | null = null;
 
   // ── Step 33: initialize() ──────────────────────────────────────────────────
 
@@ -133,13 +137,16 @@ export class UbosGeometryEngine implements GeometryEngine {
 
     const geometryMap: GeometryMap = {};
 
+    // Ensure aspect ratio adaptation is applied before zone computation
+    this.adaptToAspectRatios(this.outputs);
+
     // 1. Determine monitor layout (zone id → Rect on assigned monitor)
     //    Use pre-computed cache from adaptToMonitors() when available.
     const monitorZoneMap =
       this.monitorZoneCache ?? this.monitorManager!.assignZones(this.monitors);
 
-    // 2. Determine aspect ratio behavior for Program / Preview
-    const canvasRects = this.canvasEngine!.renderAll(this.outputs);
+    // 2. Use pre-computed canvas rects from adaptToAspectRatios()
+    const canvasRects = this.canvasRects;
 
     // 3. Iterate through workspace zones
     this.workspace!.zones.forEach((zoneDef) => {
@@ -163,13 +170,16 @@ export class UbosGeometryEngine implements GeometryEngine {
         rect = this.canvasEngine!.applyOutputAspect(rect, canvasRects);
       }
 
-      // 6. Adapt rect based on operator role
+      // 6. Apply aspect ratio adaptation (portrait vs landscape outputs)
+      rect = this.applyAspectRatio(zoneId, rect);
+
+      // 7. Adapt rect based on operator role
       rect = this.applyRoleAdaptation(zoneId, rect);
 
-      // 7. Adapt rect based on production state (scene-centric geometry)
+      // 8. Adapt rect based on production state (scene-centric geometry)
       rect = this.applySceneDrivenGeometry(zoneId, rect, this.state!);
 
-      // 8. Store final computed zone geometry
+      // 9. Store final computed zone geometry
       geometryMap[zoneId] = {
         id: zoneId,
         rect,
@@ -194,18 +204,62 @@ export class UbosGeometryEngine implements GeometryEngine {
     this.monitorZoneCache = this.monitorManager.assignZones(monitors);
   }
 
+  // ── Step 36: adaptToAspectRatios() ────────────────────────────────────────
+
   adaptToAspectRatios(outputs: OutputProfile[]): void {
     this.outputs = outputs;
-    if (this.state) {
-      this.canvasEngine = new UbosAdaptiveCanvasEngine(
-        this.state.viewportWidth,
-        this.state.viewportHeight,
-      );
+
+    // Recompute canvas rects for all outputs
+    this.canvasRects = this.canvasEngine?.renderAll(outputs) ?? {};
+
+    // Determine dominant aspect ratio from the first output
+    const first = Object.values(this.canvasRects)[0];
+    if (!first) {
+      this.dominantAspect = null;
+      return;
     }
+
+    this.dominantAspect = first.width / first.height;
   }
 
   adaptToRole(role: GeometryRole): void {
     this.role = role;
+  }
+
+  // ── Step 36: Aspect-ratio adaptive geometry ───────────────────────────────
+
+  private applyAspectRatio(zoneId: string, rect: Rect): Rect {
+    if (!this.dominantAspect) return rect;
+
+    // Portrait dominant (TikTok, IG Reels, Shorts — aspect < 1)
+    if (this.dominantAspect < 1) {
+      if (zoneId === 'triad') {
+        return {
+          ...rect,
+          height: Math.round(rect.height * 1.2),
+          width: Math.round(rect.width * 0.9),
+        };
+      }
+      if (zoneId === 'output') {
+        return { ...rect, height: Math.round(rect.height * 1.15) };
+      }
+    }
+
+    // Landscape dominant (YouTube, Twitch, Facebook — aspect ≥ 1)
+    if (this.dominantAspect >= 1) {
+      if (zoneId === 'triad') {
+        return {
+          ...rect,
+          width: Math.round(rect.width * 1.2),
+          height: Math.round(rect.height * 0.9),
+        };
+      }
+      if (zoneId === 'output') {
+        return { ...rect, width: Math.round(rect.width * 1.15) };
+      }
+    }
+
+    return rect;
   }
 
   // ── Step 34: Role-adaptive geometry ───────────────────────────────────────

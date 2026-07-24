@@ -13,6 +13,7 @@ export interface AdaptiveCanvasEngine {
   applyLetterboxing(): void;
   applyPillarboxing(): void;
   supportMultiAspect(): void;
+  blendAspects(canvases: Record<string, CanvasRect>): number;
   applyTriadAspect(rect: Rect, canvases: Record<string, CanvasRect>): Rect;
   applyOutputAspect(rect: Rect, canvases: Record<string, CanvasRect>): Rect;
 }
@@ -98,22 +99,39 @@ export class UbosAdaptiveCanvasEngine implements AdaptiveCanvasEngine {
   }
 
   /**
-   * Adjust a TriadZone rect based on the dominant output aspect ratio.
-   * Portrait outputs (aspect < 1) grow the zone height;
-   * landscape outputs grow the zone width.
+   * Compute the weighted average (blended) aspect ratio across all
+   * canvas rects. Used for multi-destination aspect blending.
+   */
+  blendAspects(canvases: Record<string, CanvasRect>): number {
+    const aspects = Object.values(canvases).map((c) => c.width / c.height);
+    if (aspects.length === 0) return 1;
+
+    const sum = aspects.reduce((a, b) => a + b, 0);
+    return sum / aspects.length;
+  }
+
+  /**
+   * Adjust a TriadZone rect based on the blended output aspect ratio.
+   * Portrait-dominant outputs grow zone height and shrink width;
+   * landscape-dominant outputs do the inverse.
    */
   applyTriadAspect(rect: Rect, canvases: Record<string, CanvasRect>): Rect {
-    const dominant = Object.values(canvases)[0];
-    if (!dominant) return rect;
+    const blended = this.blendAspects(canvases);
 
-    const aspect = dominant.width / dominant.height;
-
-    if (aspect < 1) {
-      // Portrait → taller triad zone
-      return { ...rect, height: Math.round(rect.height * 1.15) };
+    if (blended < 1) {
+      // Portrait-dominant (TikTok, IG Reels)
+      return {
+        ...rect,
+        height: Math.round(rect.height * 1.25),
+        width: Math.round(rect.width * 0.85),
+      };
     } else {
-      // Landscape → wider triad zone
-      return { ...rect, width: Math.round(rect.width * 1.15) };
+      // Landscape-dominant (YouTube, Twitch, Facebook)
+      return {
+        ...rect,
+        width: Math.round(rect.width * 1.25),
+        height: Math.round(rect.height * 0.85),
+      };
     }
   }
 
