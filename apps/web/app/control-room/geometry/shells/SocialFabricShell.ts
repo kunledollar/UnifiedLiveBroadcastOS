@@ -1,18 +1,19 @@
 /**
- * SocialFabricShell — Step 45
+ * SocialFabricShell — Step 45 (authoritative spec)
  *
- * Normalized viewport-fraction geometry for the Social Fabric / Community
- * Director workspace. Optimized for unified chat, moderation, audience
- * engagement, and platform health monitoring.
+ * Normalized viewport-fraction geometry for the Social Fabric Operator
+ * workspace. Prioritizes real-time chat moderation, engagement monitoring,
+ * AI-assisted moderation, and viewer interaction flow.
  *
- *  ┌──────────────────────────┬──────────────┬──────────────┐
- *  │   CHAT MODERATION (50%)  │  TRIAD       │ INSPECTOR    │
- *  │   Unified chat +         │  (25%)       │ (25%)        │
- *  │   moderation queue       │  70% height  │ 70% height   │
- *  │   full height            ├──────────────┼──────────────┤
- *  │                          │  WORKBENCH   │  OUTPUT      │
- *  │                          │  (25% · 30%) │  (25% · 30%) │
- *  └──────────────────────────┴──────────────┴──────────────┘
+ *  ┌──────────────┬──────────────────────────┬─────────────┐
+ *  │  ENGAGEMENT  │    UNIFIED CHAT (50%)    │ MODERATION  │
+ *  │  GRAPHS      │    All platforms unified  │ (25%)       │
+ *  │  (25%)       │    Chat timeline          │ 75% height  │
+ *  │  full height │    75% height             │             │
+ *  │              ├──────────────────────────┤             │
+ *  │              │  WORKBENCH (50% · 25%)   │             │
+ *  │              │  Logs · Notes · Automod  │             │
+ *  └──────────────┴──────────────────────────┴─────────────┘
  */
 import type { WorkspaceShell } from '@ubos/shared';
 
@@ -21,8 +22,18 @@ export const SocialFabricShell: WorkspaceShell = {
 
   zones: [
     {
-      id: 'chat-moderation',
-      rect: { x: 0, y: 0, width: 0.50, height: 1.0 },
+      id: 'engagement-graphs',
+      rect: { x: 0, y: 0, width: 0.25, height: 1.0 },
+      normalized: true,
+      minWidth: 200,
+      minHeight: 200,
+      collapsible: false,
+      resizable: true,
+    },
+
+    {
+      id: 'unified-chat',
+      rect: { x: 0.25, y: 0, width: 0.50, height: 0.75 },
       normalized: true,
       minWidth: 360,
       minHeight: 300,
@@ -31,18 +42,8 @@ export const SocialFabricShell: WorkspaceShell = {
     },
 
     {
-      id: 'triad',
-      rect: { x: 0.50, y: 0, width: 0.25, height: 0.70 },
-      normalized: true,
-      minWidth: 240,
-      minHeight: 135,
-      collapsible: false,
-      resizable: true,
-    },
-
-    {
-      id: 'inspector',
-      rect: { x: 0.75, y: 0, width: 0.25, height: 0.70 },
+      id: 'moderation',
+      rect: { x: 0.75, y: 0, width: 0.25, height: 0.75 },
       normalized: true,
       minWidth: 200,
       minHeight: 200,
@@ -52,20 +53,10 @@ export const SocialFabricShell: WorkspaceShell = {
 
     {
       id: 'workbench',
-      rect: { x: 0.50, y: 0.70, width: 0.25, height: 0.30 },
+      rect: { x: 0.25, y: 0.75, width: 0.50, height: 0.25 },
       normalized: true,
-      minWidth: 240,
+      minWidth: 360,
       minHeight: 40,
-      collapsible: true,
-      resizable: true,
-    },
-
-    {
-      id: 'output',
-      rect: { x: 0.75, y: 0.70, width: 0.25, height: 0.30 },
-      normalized: true,
-      minWidth: 200,
-      minHeight: 100,
       collapsible: true,
       resizable: true,
     },
