@@ -1,0 +1,133 @@
+/**
+ * UBOS Geometry Engine — Foundation types
+ *
+ * Pure TypeScript. No React, no DOM, no runtime media references.
+ * These types define the coordinate and layout contract for every
+ * zone, shell, canvas, and monitor in the UBOS production environment.
+ */
+/** Render output type — framework-agnostic in shared; web app constrains to ReactNode. */
+export type RenderOutput = unknown;
+
+// ── Coordinate primitives ────────────────────────────────────────────────────
+
+/** Axis-aligned rectangle in viewport pixels. */
+export interface Rect {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** A named, sized zone with an optional content renderer. */
+export interface Zone {
+  id: string;
+  rect: Rect;
+  render(): RenderOutput;
+}
+
+/** Map of zone id → computed Rect for a given layout pass. */
+export type GeometryMap = Record<string, Rect>;
+
+// ── Zone definitions ─────────────────────────────────────────────────────────
+
+/** Declarative description of a zone slot inside a workspace shell. */
+export interface ZoneDefinition {
+  id: string;
+  defaultRect: Rect;
+  /** Minimum allowed size in both axes. */
+  minWidth: number;
+  minHeight: number;
+  /** Whether the zone can be collapsed to zero size. */
+  collapsible: boolean;
+  /** Whether the zone can be manually resized by the operator. */
+  resizable: boolean;
+}
+
+// ── Monitor / output profiles ─────────────────────────────────────────────────
+
+/** Physical or virtual monitor connected to the production environment. */
+export interface MonitorConfig {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  aspectRatio: string;
+  /** True when this monitor is the primary confidence / program surface. */
+  isPrimary: boolean;
+  ppi?: number;
+}
+
+/** Output delivery profile (stream, record, or preview destination). */
+export interface OutputProfile {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  fps: number;
+  aspectRatio: string;
+  /** Codec hint for the delivery pipeline. */
+  codec?: string;
+  /** Bitrate in kbps. */
+  bitrateKbps?: number;
+}
+
+/** Computed canvas rectangle after letterboxing / pillarboxing is applied. */
+export interface CanvasRect extends Rect {
+  /** Horizontal offset of the active area within the full canvas. */
+  offsetX: number;
+  /** Vertical offset of the active area within the full canvas. */
+  offsetY: number;
+  /** Scale factor relative to the source resolution. */
+  scale: number;
+}
+
+// ── Monitor zone assignment ───────────────────────────────────────────────────
+
+/** Mapping of monitor id → list of zone ids displayed on that monitor. */
+export type MonitorZoneMap = Record<string, string[]>;
+
+// ── Operator roles ────────────────────────────────────────────────────────────
+
+export type GeometryRole =
+  | 'director'
+  | 'production'
+  | 'technical-director'
+  | 'audio-engineer'
+  | 'graphics-operator'
+  | 'replay-operator'
+  | 'streaming-operator'
+  | 'distribution-operator'
+  | 'automation-operator'
+  | 'analytics'
+  | 'social-fabric'
+  | 'monitor-wall'
+  | 'solo-streamer'
+  | 'streamer'
+  | 'compact';
+
+// ── Production state (geometry-layer view) ────────────────────────────────────
+
+/**
+ * Minimal production state snapshot consumed by the geometry engine.
+ * Only includes fields the geometry layer needs to compute zones —
+ * never contains runtime media objects, DOM nodes, or sockets.
+ */
+export interface ProductionState {
+  programSceneId: string | null;
+  previewSceneId: string | null;
+  isLive: boolean;
+  isRecording: boolean;
+  activeOutputCount: number;
+  connectedGuestCount: number;
+  viewportWidth: number;
+  viewportHeight: number;
+}
+
+// ── Workspace shell contract ──────────────────────────────────────────────────
+
+export type WorkspaceId = GeometryRole;
+
+export interface WorkspaceShell {
+  id: WorkspaceId;
+  zones: ZoneDefinition[];
+}
