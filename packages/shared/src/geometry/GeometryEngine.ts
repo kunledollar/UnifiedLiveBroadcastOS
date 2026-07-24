@@ -23,6 +23,7 @@ import type {
 import { UbosAdaptiveCanvasEngine } from './AdaptiveCanvasEngine.js';
 import { UbosMultiMonitorManager } from './MultiMonitorManager.js';
 import { AiInsightZone } from './zones/AiInsightZone.js';
+import { AiCrewOverlay } from './zones/AiCrewOverlay.js';
 
 export interface GeometryEngine {
   /**
@@ -229,6 +230,23 @@ export class UbosGeometryEngine implements GeometryEngine {
       };
     }
 
+    // ── Step 48: Inject AI Crew Overlay if active and enabled ─────────────
+    if (this.state!.aiCrewActive && this.state!.aiCrewOverlayEnabled) {
+      const vw = this.state!.viewportWidth;
+      const vh = this.state!.viewportHeight;
+      const overlayBaseRect: Rect = {
+        x:      Math.round(AiCrewOverlay.rect.x      * vw),
+        y:      Math.round(AiCrewOverlay.rect.y      * vh),
+        width:  Math.round(AiCrewOverlay.rect.width  * vw),
+        height: Math.round(AiCrewOverlay.rect.height * vh),
+      };
+      geometryMap['ai-crew-overlay'] = {
+        id: 'ai-crew-overlay',
+        rect: this.applyAiCrewOverlayGeometry(overlayBaseRect),
+        state: this.state!,
+      };
+    }
+
     return geometryMap;
   }
 
@@ -296,6 +314,64 @@ export class UbosGeometryEngine implements GeometryEngine {
 
     // Normal or undefined — default rect
     return rect;
+  }
+
+  // ── Step 48: AI Crew Overlay geometry ─────────────────────────────────────
+
+  private applyAiCrewOverlayGeometry(rect: Rect): Rect {
+    const vw = this.state?.viewportWidth ?? 1920;
+    const vh = this.state?.viewportHeight ?? 1080;
+    let overlay = { ...rect };
+
+    // Role-specific attachment points (normalized → pixel)
+    const role = this.state?.role ?? this.role;
+    switch (role) {
+      case 'director':
+        overlay = { ...overlay, x: Math.round(0.25 * vw), y: Math.round(0.10 * vh) };
+        break;
+      case 'technical-director':
+        overlay = { ...overlay, x: Math.round(0.30 * vw), y: Math.round(0.08 * vh) };
+        break;
+      case 'graphics-operator':
+        overlay = { ...overlay, x: Math.round(0.32 * vw), y: Math.round(0.12 * vh) };
+        break;
+      case 'replay-operator':
+        overlay = { ...overlay, x: Math.round(0.70 * vw), y: Math.round(0.10 * vh) };
+        break;
+      case 'distribution-operator':
+        overlay = { ...overlay, x: Math.round(0.30 * vw), y: Math.round(0.05 * vh) };
+        break;
+      case 'automation-operator':
+        overlay = { ...overlay, x: Math.round(0.28 * vw), y: Math.round(0.10 * vh) };
+        break;
+      case 'social-fabric':
+        overlay = { ...overlay, x: Math.round(0.35 * vw), y: Math.round(0.15 * vh) };
+        break;
+      case 'analytics':
+        overlay = { ...overlay, x: Math.round(0.30 * vw), y: Math.round(0.10 * vh) };
+        break;
+      default:
+        break;
+    }
+
+    // AI alert level scaling
+    if (this.state?.aiAlertLevel === 'high') {
+      overlay = {
+        ...overlay,
+        width:  Math.round(overlay.width  * 1.15),
+        height: Math.round(overlay.height * 1.15),
+      };
+    }
+
+    if (this.state?.aiAlertLevel === 'idle') {
+      overlay = {
+        ...overlay,
+        width:  Math.round(overlay.width  * 0.85),
+        height: Math.round(overlay.height * 0.85),
+      };
+    }
+
+    return overlay;
   }
 
   // ── Step 36: Aspect-ratio adaptive geometry ───────────────────────────────

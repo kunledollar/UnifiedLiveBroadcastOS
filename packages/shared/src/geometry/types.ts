@@ -155,8 +155,10 @@ export interface ProductionState {
   previewSource?: string | null;
   /** True when the AI Crew module is active and injecting geometry. */
   aiCrewActive?: boolean;
-  /** AI alert level — drives AI Insight Zone sizing in computeZones(). */
+  /** AI alert level — drives AI Insight Zone and Overlay sizing. */
   aiAlertLevel?: 'idle' | 'normal' | 'high';
+  /** True when the floating AI Crew Overlay should be injected into the geometry map. */
+  aiCrewOverlayEnabled?: boolean;
 }
 
 // ── Workspace shell contract ──────────────────────────────────────────────────

@@ -47,3 +47,4 @@ export type { OutputZone } from './zones/OutputZone.js';
 export { outputZoneDefinition } from './zones/OutputZone.js';
 
 export { AiInsightZone } from './zones/AiInsightZone.js';
+export { AiCrewOverlay } from './zones/AiCrewOverlay.js';
