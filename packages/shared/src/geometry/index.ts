@@ -3,6 +3,7 @@ export type {
   Rect,
   Zone,
   GeometryMap,
+  ComputedZoneGeometry,
   ZoneDefinition,
   MonitorConfig,
   OutputProfile,

@@ -36,11 +36,11 @@ export interface GeometryEngine {
   ): void;
 
   /**
-   * Run a full geometry pass given the current production state.
-   * Returns a GeometryMap: zone id → computed Rect.
-   * Deterministic — same inputs always produce the same output.
+   * Run a full geometry pass using the state bound in initialize().
+   * Returns a GeometryMap: zone id → ComputedZoneGeometry.
+   * Deterministic — same bound state always produces the same output.
    */
-  computeZones(state: ProductionState): GeometryMap;
+  computeZones(): GeometryMap;
 
   /**
    * Adapt zone geometry to the connected physical monitor layout.
@@ -120,19 +120,58 @@ export class UbosGeometryEngine implements GeometryEngine {
     this.initialized = true;
   }
 
-  // ── computeZones() ─────────────────────────────────────────────────────────
+  // ── Step 34: computeZones() ────────────────────────────────────────────────
 
-  computeZones(state: ProductionState): GeometryMap {
-    if (!this.initialized || !this.workspace) return {};
-
-    const map: GeometryMap = {};
-
-    for (const zone of this.workspace.zones) {
-      const rect = this.resolveZoneRect(zone.id, state);
-      if (rect) map[zone.id] = rect;
+  computeZones(): GeometryMap {
+    if (!this.initialized) {
+      throw new Error('GeometryEngine must be initialized before computing zones.');
     }
 
-    return map;
+    const geometryMap: GeometryMap = {};
+
+    // 1. Determine monitor layout (zone id → Rect on assigned monitor)
+    const monitorZoneMap = this.monitorManager!.assignZones(this.monitors);
+
+    // 2. Determine aspect ratio behavior for Program / Preview
+    const canvasRects = this.canvasEngine!.renderAll(this.outputs);
+
+    // 3. Iterate through workspace zones
+    this.workspace!.zones.forEach((zoneDef) => {
+      const zoneId = zoneDef.id;
+
+      // Base rect from workspace shell
+      let rect: Rect = { ...zoneDef.rect };
+
+      // 4. Adapt rect based on monitor assignment
+      const monitorRect = monitorZoneMap[zoneId];
+      if (monitorRect) {
+        rect = monitorRect;
+      }
+
+      // 5. Adapt rect based on aspect ratios (TriadZone + OutputZone)
+      if (zoneId === 'triad') {
+        rect = this.canvasEngine!.applyTriadAspect(rect, canvasRects);
+      }
+
+      if (zoneId === 'output') {
+        rect = this.canvasEngine!.applyOutputAspect(rect, canvasRects);
+      }
+
+      // 6. Adapt rect based on operator role
+      rect = this.applyRoleAdaptation(zoneId, rect);
+
+      // 7. Adapt rect based on production state (scene-centric geometry)
+      rect = this.applySceneDrivenGeometry(zoneId, rect, this.state!);
+
+      // 8. Store final computed zone geometry
+      geometryMap[zoneId] = {
+        id: zoneId,
+        rect,
+        state: this.state!,
+      };
+    });
+
+    return geometryMap;
   }
 
   // ── Adaptation methods ─────────────────────────────────────────────────────
@@ -156,82 +195,43 @@ export class UbosGeometryEngine implements GeometryEngine {
     this.role = role;
   }
 
-  // ── Internal zone resolution ───────────────────────────────────────────────
+  // ── Step 34: Role-adaptive geometry ───────────────────────────────────────
 
-  private resolveZoneRect(zoneId: string, state: ProductionState): Rect | null {
-    const zone = this.zoneRegistry.get(zoneId);
-    if (!zone) return null;
+  private applyRoleAdaptation(zoneId: string, rect: Rect): Rect {
+    const role = this.state?.role ?? this.role;
 
-    const vw = state.viewportWidth;
-    const vh = state.viewportHeight;
-
-    const sidebarWidth  = 210;
-    const topBarHeight  = 56;
-    const bottomHeight  = 40;
-    const rightPanelWidth = 300;
-
-    const contentWidth  = vw - sidebarWidth - rightPanelWidth;
-    const contentHeight = vh - topBarHeight - bottomHeight;
-
-    // Role-aware proportional layout
-    const programRatio = this.role === 'graphics-operator' ? 0.4
-      : this.role === 'replay-operator'                    ? 0.35
-      : this.role === 'audio-engineer'                     ? 0.55
-      : 0.6;
-
-    switch (zoneId) {
-      case 'scene':
-        return {
-          x: sidebarWidth,
-          y: topBarHeight,
-          width: Math.round(contentWidth * programRatio),
-          height: Math.round(contentHeight * 0.55),
-        };
-      case 'triad':
-        return {
-          x: sidebarWidth,
-          y: topBarHeight,
-          width: contentWidth,
-          height: Math.round(contentHeight * 0.55),
-        };
-      case 'inspector':
-        return {
-          x: vw - rightPanelWidth,
-          y: topBarHeight,
-          width: rightPanelWidth,
-          height: contentHeight,
-        };
-      case 'workbench':
-        return {
-          x: sidebarWidth,
-          y: vh - bottomHeight,
-          width: vw - sidebarWidth,
-          height: bottomHeight,
-        };
-      case 'dock':
-        return {
-          x: 0,
-          y: topBarHeight,
-          width: sidebarWidth,
-          height: contentHeight,
-        };
-      case 'graph':
-        return {
-          x: sidebarWidth,
-          y: topBarHeight + Math.round(contentHeight * 0.55),
-          width: contentWidth,
-          height: Math.round(contentHeight * 0.45),
-        };
-      case 'output':
-        return {
-          x: vw - rightPanelWidth,
-          y: topBarHeight,
-          width: rightPanelWidth,
-          height: Math.round(contentHeight * 0.5),
-        };
-      default:
-        return zone.rect;
+    // Directors get larger SceneZone + TriadZone
+    if (role === 'director') {
+      if (zoneId === 'scene') return { ...rect, width: Math.round(rect.width * 1.1) };
+      if (zoneId === 'triad') return { ...rect, width: Math.round(rect.width * 1.05) };
     }
+
+    // Graphics operators get a larger InspectorZone
+    if (role === 'graphics-operator') {
+      if (zoneId === 'inspector') return { ...rect, width: Math.round(rect.width * 1.2) };
+    }
+
+    return rect;
+  }
+
+  // ── Step 34: Scene-centric geometry ───────────────────────────────────────
+
+  private applySceneDrivenGeometry(
+    zoneId: string,
+    rect: Rect,
+    state: ProductionState,
+  ): Rect {
+    // If a scene is LIVE, expand SceneZone slightly
+    if (zoneId === 'scene' && state.currentScene?.status === 'LIVE') {
+      return { ...rect, height: Math.round(rect.height * 1.05) };
+    }
+
+    // If Preview is empty, shrink the triad zone slightly
+    if (zoneId === 'triad' && !state.previewSource) {
+      return { ...rect, height: Math.round(rect.height * 0.95) };
+    }
+
+    return rect;
   }
 
   // ── Accessors ──────────────────────────────────────────────────────────────

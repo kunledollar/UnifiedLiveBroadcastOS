@@ -5,32 +5,16 @@
  * differs from the production canvas, and supports simultaneous
  * multi-aspect output (e.g. 16:9 + 9:16 social vertical).
  */
-import type { CanvasRect, OutputProfile } from './types.js';
+import type { CanvasRect, OutputProfile, Rect } from './types.js';
 
 export interface AdaptiveCanvasEngine {
-  /**
-   * Compute the active canvas rectangle for a given output profile
-   * within the available render area.
-   */
   renderCanvas(profile: OutputProfile): CanvasRect;
-
-  /**
-   * Apply letterboxing (horizontal black bars) when the output is
-   * wider than the source canvas (e.g. source 4:3, output 16:9).
-   */
+  renderAll(outputs: OutputProfile[]): Record<string, CanvasRect>;
   applyLetterboxing(): void;
-
-  /**
-   * Apply pillarboxing (vertical black bars) when the output is
-   * taller than the source canvas (e.g. source 16:9, output 9:16).
-   */
   applyPillarboxing(): void;
-
-  /**
-   * Enable simultaneous multi-aspect output rendering so a single
-   * production can deliver 16:9, 1:1, and 9:16 concurrently.
-   */
   supportMultiAspect(): void;
+  applyTriadAspect(rect: Rect, canvases: Record<string, CanvasRect>): Rect;
+  applyOutputAspect(rect: Rect, canvases: Record<string, CanvasRect>): Rect;
 }
 
 // ── Default implementation ────────────────────────────────────────────────────
@@ -99,6 +83,49 @@ export class UbosAdaptiveCanvasEngine implements AdaptiveCanvasEngine {
 
   supportMultiAspect(): void {
     this.multiAspect = true;
+  }
+
+  /**
+   * Render canvas rects for every output profile in one pass.
+   * Returns a map of output id → CanvasRect.
+   */
+  renderAll(outputs: OutputProfile[]): Record<string, CanvasRect> {
+    const result: Record<string, CanvasRect> = {};
+    outputs.forEach((output) => {
+      result[output.id] = this.renderCanvas(output);
+    });
+    return result;
+  }
+
+  /**
+   * Adjust a TriadZone rect based on the dominant output aspect ratio.
+   * Portrait outputs (aspect < 1) grow the zone height;
+   * landscape outputs grow the zone width.
+   */
+  applyTriadAspect(rect: Rect, canvases: Record<string, CanvasRect>): Rect {
+    const dominant = Object.values(canvases)[0];
+    if (!dominant) return rect;
+
+    const aspect = dominant.width / dominant.height;
+
+    if (aspect < 1) {
+      // Portrait → taller triad zone
+      return { ...rect, height: Math.round(rect.height * 1.15) };
+    } else {
+      // Landscape → wider triad zone
+      return { ...rect, width: Math.round(rect.width * 1.15) };
+    }
+  }
+
+  /**
+   * Adjust an OutputZone rect when many simultaneous destinations exist.
+   * More than 3 outputs widens the zone to accommodate more status rows.
+   */
+  applyOutputAspect(rect: Rect, canvases: Record<string, CanvasRect>): Rect {
+    if (Object.keys(canvases).length > 3) {
+      return { ...rect, width: Math.round(rect.width * 1.2) };
+    }
+    return rect;
   }
 
   get isLetterboxed() { return this.letterboxed; }

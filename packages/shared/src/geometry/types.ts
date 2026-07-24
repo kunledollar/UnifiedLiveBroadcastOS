@@ -25,8 +25,18 @@ export interface Zone {
   render(): RenderOutput;
 }
 
-/** Map of zone id → computed Rect for a given layout pass. */
-export type GeometryMap = Record<string, Rect>;
+/**
+ * Fully computed zone geometry — zone id, rect, and the production state
+ * snapshot that was used to compute it.
+ */
+export interface ComputedZoneGeometry {
+  id: string;
+  rect: Rect;
+  state: ProductionState;
+}
+
+/** Map of zone id → computed zone geometry for a given layout pass. */
+export type GeometryMap = Record<string, ComputedZoneGeometry>;
 
 // ── Zone definitions ─────────────────────────────────────────────────────────
 
@@ -83,8 +93,13 @@ export interface CanvasRect extends Rect {
 
 // ── Monitor zone assignment ───────────────────────────────────────────────────
 
-/** Mapping of monitor id → list of zone ids displayed on that monitor. */
-export type MonitorZoneMap = Record<string, string[]>;
+/**
+ * Mapping of zone id → the Rect on the assigned monitor.
+ * Empty when a single monitor is in use (zones use workspace defaults).
+ * Populated for secondary/auxiliary monitors: the zone rect equals that
+ * monitor's full display area.
+ */
+export type MonitorZoneMap = Record<string, Rect>;
 
 // ── Operator roles ────────────────────────────────────────────────────────────
 
@@ -121,6 +136,12 @@ export interface ProductionState {
   connectedGuestCount: number;
   viewportWidth: number;
   viewportHeight: number;
+  /** Active operator role — drives role-adaptive zone sizing. */
+  role?: GeometryRole;
+  /** Current program scene metadata for scene-centric geometry. */
+  currentScene?: { id: string; status: string } | null;
+  /** Preview source identifier — null when Preview is empty. */
+  previewSource?: string | null;
 }
 
 // ── Workspace shell contract ──────────────────────────────────────────────────
