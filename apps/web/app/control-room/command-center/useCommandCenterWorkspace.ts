@@ -394,6 +394,22 @@ export function useCommandCenterWorkspace(): CommandCenterWorkspace {
     [viewport, preset, expandedZoneOverrides, collapsedZoneOverrides, zoneSizes],
   );
 
+  useEffect(() => {
+    console.log("UBOS Layout Debug", {
+      zones: Object.keys(layout.zones),
+      leftDock: layout.zones["left-dock"]?.rect,
+      rightDock: layout.zones["right-dock"]?.rect,
+      bottomWorkspace: layout.zones["bottom-workspace"]?.rect,
+      centerStage: layout.zones["center-stage"]?.rect,
+      stacked: layout.monitorsStacked,
+      persisted: {
+        left: localStorage.getItem("ubos-left-dock-width"),
+        right: localStorage.getItem("ubos-right-dock-width"),
+        bottom: localStorage.getItem("ubos-bottom-height"),
+      }
+    });
+  }, [layout]);
+
   const panels = useMemo(() => registry.getAllPanels(), [registry]);
 
   const panelStates = useMemo(() => {
