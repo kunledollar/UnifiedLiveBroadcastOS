@@ -1,20 +1,19 @@
 /**
- * DistributionShell — Step 42
+ * DistributionShell — Step 42 (authoritative spec)
  *
  * Normalized viewport-fraction geometry for the Distribution Operator
- * workspace. Optimized for monitoring all active streaming destinations,
- * protecting delivery health, and managing failover.
+ * workspace. Prioritizes routing controls, multi-destination previews,
+ * and output health monitoring.
  *
- *  ┌──────────┬──────────────────────────┬─────────────────┐
- *  │ SCENE    │      TRIAD (45%)         │ DESTINATION     │
- *  │ (15%)    │  Program · Preview       │ MONITOR (40%)   │
- *  │ full h   │  65% height              │ full height     │
- *  │          ├──────────────────────────┤                 │
- *  │          │  NETWORK GRAPH (45%)     │                 │
- *  │          │  20% height              │                 │
- *  │          ├──────────────────────────┤                 │
- *  │          │  WORKBENCH (45% · 15%)   │                 │
- *  └──────────┴──────────────────────────┴─────────────────┘
+ *  ┌─────────────┬──────────────────────────┬─────────────┐
+ *  │ ROUTING MAP │      OUTPUT (50%)         │ OUTPUT      │
+ *  │ (25%)       │  Multi-destination        │ HEALTH      │
+ *  │ full height │  previews                 │ (25%)       │
+ *  │             │  75% height               │ 75% height  │
+ *  │             ├──────────────────────────┤             │
+ *  │             │  WORKBENCH (50% · 25%)   │             │
+ *  │             │  Logs · Notes · Routing  │             │
+ *  └─────────────┴──────────────────────────┴─────────────┘
  */
 import type { WorkspaceShell } from '@ubos/shared';
 
@@ -23,18 +22,18 @@ export const DistributionShell: WorkspaceShell = {
 
   zones: [
     {
-      id: 'scene',
-      rect: { x: 0, y: 0, width: 0.15, height: 1.0 },
+      id: 'routing-map',
+      rect: { x: 0, y: 0, width: 0.25, height: 1.0 },
       normalized: true,
-      minWidth: 120,
+      minWidth: 200,
       minHeight: 200,
-      collapsible: true,
+      collapsible: false,
       resizable: true,
     },
 
     {
-      id: 'triad',
-      rect: { x: 0.15, y: 0, width: 0.45, height: 0.65 },
+      id: 'output',
+      rect: { x: 0.25, y: 0, width: 0.50, height: 0.75 },
       normalized: true,
       minWidth: 420,
       minHeight: 270,
@@ -43,28 +42,18 @@ export const DistributionShell: WorkspaceShell = {
     },
 
     {
-      id: 'destination-monitor',
-      rect: { x: 0.60, y: 0, width: 0.40, height: 1.0 },
+      id: 'output-health',
+      rect: { x: 0.75, y: 0, width: 0.25, height: 0.75 },
       normalized: true,
-      minWidth: 320,
+      minWidth: 200,
       minHeight: 200,
-      collapsible: false,
-      resizable: true,
-    },
-
-    {
-      id: 'graph',
-      rect: { x: 0.15, y: 0.65, width: 0.45, height: 0.20 },
-      normalized: true,
-      minWidth: 420,
-      minHeight: 80,
       collapsible: true,
       resizable: true,
     },
 
     {
       id: 'workbench',
-      rect: { x: 0.15, y: 0.85, width: 0.45, height: 0.15 },
+      rect: { x: 0.25, y: 0.75, width: 0.50, height: 0.25 },
       normalized: true,
       minWidth: 420,
       minHeight: 40,
