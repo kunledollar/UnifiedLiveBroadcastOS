@@ -207,6 +207,14 @@ export interface ProductionState {
   monitors?: MonitorConfig[];
   /** Active output profiles — passed to adaptToAspectRatios(). */
   outputs?: OutputProfile[];
+  /** Graphics state for the GraphicsComposerZone. */
+  graphics?: {
+    layers?: Array<{ id: string; type: string; name: string }>;
+    timeline?: Array<{ id: string; time: string; label: string }>;
+    preview?: { url: string } | null;
+    templates?: Array<{ id: string; name: string }>;
+    params?: Record<string, string>;
+  };
   /** AI Crew insight items surfaced in the AiInspector. */
   aiInsights?: Array<{ id: string; type: string; message: string }>;
   /** True when the AI Crew module is active and injecting geometry. */

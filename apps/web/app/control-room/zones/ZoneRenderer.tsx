@@ -9,24 +9,26 @@
  */
 import type { ProductionState } from '@ubos/shared';
 import type { ComponentType } from 'react';
-import { SceneZone }      from './SceneZone';
-import { TriadZone }      from './TriadZone';
-import { InspectorZone }  from './InspectorZone';
-import { WorkbenchZone }  from './WorkbenchZone';
-import { OutputZone }     from './OutputZone';
-import { AiInsightZone }  from './AiInsightZone';
-import { AiCrewOverlay }  from './AiCrewOverlay';
+import { SceneZone }              from './SceneZone';
+import { TriadZone }              from './TriadZone';
+import { InspectorZone }          from './InspectorZone';
+import { WorkbenchZone }          from './WorkbenchZone';
+import { OutputZone }             from './OutputZone';
+import { AiInsightZone }          from './AiInsightZone';
+import { AiCrewOverlay }          from './AiCrewOverlay';
+import { GraphicsComposerZone }   from './graphics-composer/GraphicsComposerZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
 const registry: Record<string, ComponentType<ZoneComponentProps>> = {
-  scene:             SceneZone,
-  triad:             TriadZone,
-  inspector:         InspectorZone,
-  workbench:         WorkbenchZone,
-  output:            OutputZone,
-  'ai-insight':      AiInsightZone,
-  'ai-crew-overlay': AiCrewOverlay,
+  scene:               SceneZone,
+  triad:               TriadZone,
+  inspector:           InspectorZone,
+  workbench:           WorkbenchZone,
+  output:              OutputZone,
+  'ai-insight':        AiInsightZone,
+  'ai-crew-overlay':   AiCrewOverlay,
+  'graphics-composer': GraphicsComposerZone,
 };
 
 export function ZoneRenderer({
