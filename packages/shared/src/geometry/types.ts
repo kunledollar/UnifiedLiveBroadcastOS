@@ -193,6 +193,14 @@ export interface ProductionState {
     preview?: string;
     program?: string;
   };
+  /** All available scenes in the production. */
+  scenes?: Array<{
+    id: string;
+    name: string;
+    layers?: Array<{ id: string; type: 'video' | 'image' | 'text' | 'graphics'; src?: string; text?: string }>;
+    outputs?: string[];
+    timeline?: Array<{ id: string; time: string; label: string }>;
+  }>;
   /** Active workspace id — drives WorkspaceShellRegistry lookup. */
   workspace?: string;
   /** Connected monitor configurations — passed to adaptToMonitors(). */
