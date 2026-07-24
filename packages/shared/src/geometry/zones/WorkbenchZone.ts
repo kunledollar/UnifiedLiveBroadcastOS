@@ -19,7 +19,7 @@ export interface WorkbenchZone extends Zone {
 
 export const workbenchZoneDefinition = {
   id: 'workbench',
-  defaultRect: { x: 210, y: 1040, width: 1710, height: 40 },
+  rect: { x: 210, y: 1040, width: 1710, height: 40 },
   minWidth: 480,
   minHeight: 40,
   collapsible: true,

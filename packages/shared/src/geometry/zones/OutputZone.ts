@@ -17,7 +17,7 @@ export interface OutputZone extends Zone {
 
 export const outputZoneDefinition = {
   id: 'output',
-  defaultRect: { x: 1620, y: 580, width: 300, height: 460 },
+  rect: { x: 1620, y: 580, width: 300, height: 460 },
   minWidth: 240,
   minHeight: 160,
   collapsible: true,

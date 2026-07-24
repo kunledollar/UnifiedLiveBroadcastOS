@@ -17,7 +17,7 @@ export interface TriadZone extends Zone {
 
 export const triadZoneDefinition = {
   id: 'triad',
-  defaultRect: { x: 210, y: 56, width: 1200, height: 500 },
+  rect: { x: 210, y: 56, width: 1200, height: 500 },
   minWidth: 720,
   minHeight: 270,
   collapsible: false,

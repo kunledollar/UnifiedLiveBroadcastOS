@@ -13,11 +13,11 @@ export const SocialFabricShell: WorkspaceShell = {
     { ...dockZoneDefinition },
     {
       ...sceneZoneDefinition,
-      defaultRect: { x: 210, y: 56, width: 900, height: 480 },
+      rect: { x: 210, y: 56, width: 900, height: 480 },
     },
     {
       ...inspectorZoneDefinition,
-      defaultRect: { x: 1620, y: 56, width: 300, height: 984 },
+      rect: { x: 1620, y: 56, width: 300, height: 984 },
     },
     { ...workbenchZoneDefinition },
   ],

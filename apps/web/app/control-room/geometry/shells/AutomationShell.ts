@@ -14,11 +14,11 @@ export const AutomationShell: WorkspaceShell = {
     { ...dockZoneDefinition },
     {
       ...sceneZoneDefinition,
-      defaultRect: { x: 210, y: 56, width: 900, height: 380 },
+      rect: { x: 210, y: 56, width: 900, height: 380 },
     },
     {
       ...graphZoneDefinition,
-      defaultRect: { x: 210, y: 436, width: 1110, height: 500 },
+      rect: { x: 210, y: 436, width: 1110, height: 500 },
     },
     { ...inspectorZoneDefinition },
     { ...workbenchZoneDefinition },

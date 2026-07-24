@@ -19,7 +19,7 @@ export interface InspectorZone extends Zone {
 
 export const inspectorZoneDefinition = {
   id: 'inspector',
-  defaultRect: { x: 1620, y: 56, width: 300, height: 984 },
+  rect: { x: 1620, y: 56, width: 300, height: 984 },
   minWidth: 240,
   minHeight: 200,
   collapsible: true,

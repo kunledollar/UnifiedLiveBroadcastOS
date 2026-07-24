@@ -13,11 +13,11 @@ export const ProductionShell: WorkspaceShell = {
     { ...dockZoneDefinition },
     {
       ...sceneZoneDefinition,
-      defaultRect: { x: 210, y: 56, width: 1110, height: 480 },
+      rect: { x: 210, y: 56, width: 1110, height: 480 },
     },
     {
       ...graphZoneDefinition,
-      defaultRect: { x: 210, y: 536, width: 1110, height: 300 },
+      rect: { x: 210, y: 536, width: 1110, height: 300 },
     },
     { ...inspectorZoneDefinition },
     { ...workbenchZoneDefinition },

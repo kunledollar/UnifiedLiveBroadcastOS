@@ -14,11 +14,11 @@ export const ReplayShell: WorkspaceShell = {
     { ...dockZoneDefinition },
     {
       ...sceneZoneDefinition,
-      defaultRect: { x: 210, y: 56, width: 1110, height: 400 },
+      rect: { x: 210, y: 56, width: 1110, height: 400 },
     },
     {
       ...graphZoneDefinition,
-      defaultRect: { x: 210, y: 456, width: 1110, height: 380 },
+      rect: { x: 210, y: 456, width: 1110, height: 380 },
     },
     { ...inspectorZoneDefinition },
     { ...workbenchZoneDefinition },

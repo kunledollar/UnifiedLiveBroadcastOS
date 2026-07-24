@@ -19,7 +19,7 @@ export interface SceneZone extends Zone {
 
 export const sceneZoneDefinition = {
   id: 'scene',
-  defaultRect: { x: 210, y: 56, width: 900, height: 500 },
+  rect: { x: 210, y: 56, width: 900, height: 500 },
   minWidth: 480,
   minHeight: 270,
   collapsible: false,

@@ -33,7 +33,7 @@ export type GeometryMap = Record<string, Rect>;
 /** Declarative description of a zone slot inside a workspace shell. */
 export interface ZoneDefinition {
   id: string;
-  defaultRect: Rect;
+  rect: Rect;
   /** Minimum allowed size in both axes. */
   minWidth: number;
   minHeight: number;

@@ -1,29 +1,39 @@
 /**
- * UBOS Geometry Engine — Root interface
+ * UBOS Geometry Engine — Root interface and implementation (Step 33)
  *
  * The GeometryEngine is the single authoritative source of zone geometry
  * for every UBOS workspace. It computes where each zone lives on screen,
  * adapts to monitor configurations, output aspect ratios, and operator
  * roles, and publishes a GeometryMap that the render layer consumes.
  *
- * Nothing in this interface touches runtime media, DOM nodes, or React.
+ * Nothing in this module touches runtime media, DOM nodes, or React.
  * It is a pure layout calculation contract.
  */
 import type {
   GeometryMap,
-  MonitorConfig,
   GeometryRole,
+  MonitorConfig,
   OutputProfile,
   ProductionState,
+  Rect,
   WorkspaceShell,
+  ZoneDefinition,
 } from './types.js';
+import { UbosAdaptiveCanvasEngine } from './AdaptiveCanvasEngine.js';
+import { UbosMultiMonitorManager } from './MultiMonitorManager.js';
 
 export interface GeometryEngine {
   /**
-   * Bind the engine to a workspace shell, registering its zone
-   * definitions as the geometry baseline for subsequent compute calls.
+   * Bind the engine to a workspace shell along with the current monitor
+   * configuration, output profiles, and initial production state.
+   * Must be called before computeZones().
    */
-  initialize(workspace: WorkspaceShell): void;
+  initialize(
+    workspace: WorkspaceShell,
+    monitors: MonitorConfig[],
+    outputs: OutputProfile[],
+    state: ProductionState,
+  ): void;
 
   /**
    * Run a full geometry pass given the current production state.
@@ -55,21 +65,69 @@ export interface GeometryEngine {
 // ── Default implementation ────────────────────────────────────────────────────
 
 export class UbosGeometryEngine implements GeometryEngine {
-  private shell: WorkspaceShell | null = null;
+  private workspace: WorkspaceShell | null = null;
   private monitors: MonitorConfig[] = [];
   private outputs: OutputProfile[] = [];
+  private state: ProductionState | null = null;
   private role: GeometryRole = 'director';
+  private initialized = false;
 
-  initialize(workspace: WorkspaceShell): void {
-    this.shell = workspace;
+  private canvasEngine: UbosAdaptiveCanvasEngine | null = null;
+  private monitorManager: UbosMultiMonitorManager | null = null;
+  private zoneRegistry: Map<string, ZoneDefinition> = new Map();
+
+  // ── Step 33: initialize() ──────────────────────────────────────────────────
+
+  initialize(
+    workspace: WorkspaceShell,
+    monitors: MonitorConfig[],
+    outputs: OutputProfile[],
+    state: ProductionState,
+  ): void {
+    this.workspace = workspace;
+    this.monitors = monitors;
+    this.outputs = outputs;
+    this.state = state;
+
+    // Prepare adaptive canvas engine
+    this.canvasEngine = new UbosAdaptiveCanvasEngine(
+      state.viewportWidth,
+      state.viewportHeight,
+    );
+
+    // Prepare multi-monitor manager
+    this.monitorManager = new UbosMultiMonitorManager();
+
+    // Prepare zone registry
+    this.zoneRegistry = new Map<string, ZoneDefinition>();
+    workspace.zones.forEach((zone) => {
+      this.zoneRegistry.set(zone.id, zone);
+    });
+
+    // Validate workspace shell
+    if (workspace.zones.length === 0) {
+      throw new Error('WorkspaceShell has no zones defined.');
+    }
+
+    // Validate zone definitions
+    workspace.zones.forEach((zone) => {
+      if (!zone.id || !zone.rect) {
+        throw new Error(`Invalid ZoneDefinition in workspace: ${zone.id}`);
+      }
+    });
+
+    // Initialization complete
+    this.initialized = true;
   }
 
+  // ── computeZones() ─────────────────────────────────────────────────────────
+
   computeZones(state: ProductionState): GeometryMap {
-    if (!this.shell) return {};
+    if (!this.initialized || !this.workspace) return {};
 
     const map: GeometryMap = {};
 
-    for (const zone of this.shell.zones) {
+    for (const zone of this.workspace.zones) {
       const rect = this.resolveZoneRect(zone.id, state);
       if (rect) map[zone.id] = rect;
     }
@@ -77,52 +135,64 @@ export class UbosGeometryEngine implements GeometryEngine {
     return map;
   }
 
+  // ── Adaptation methods ─────────────────────────────────────────────────────
+
   adaptToMonitors(monitors: MonitorConfig[]): void {
     this.monitors = monitors;
+    this.monitorManager = new UbosMultiMonitorManager();
   }
 
   adaptToAspectRatios(outputs: OutputProfile[]): void {
     this.outputs = outputs;
+    if (this.state) {
+      this.canvasEngine = new UbosAdaptiveCanvasEngine(
+        this.state.viewportWidth,
+        this.state.viewportHeight,
+      );
+    }
   }
 
   adaptToRole(role: GeometryRole): void {
     this.role = role;
   }
 
-  private resolveZoneRect(
-    zoneId: string,
-    state: ProductionState,
-  ): import('./types.js').Rect | null {
-    const zone = this.shell?.zones.find((z) => z.id === zoneId);
+  // ── Internal zone resolution ───────────────────────────────────────────────
+
+  private resolveZoneRect(zoneId: string, state: ProductionState): Rect | null {
+    const zone = this.zoneRegistry.get(zoneId);
     if (!zone) return null;
 
     const vw = state.viewportWidth;
     const vh = state.viewportHeight;
 
-    // Role-aware proportional layout
-    const sidebarWidth = 210;
-    const topBarHeight = 56;
-    const bottomBarHeight = 40;
+    const sidebarWidth  = 210;
+    const topBarHeight  = 56;
+    const bottomHeight  = 40;
     const rightPanelWidth = 300;
 
-    const contentWidth = vw - sidebarWidth - rightPanelWidth;
-    const contentHeight = vh - topBarHeight - bottomBarHeight;
+    const contentWidth  = vw - sidebarWidth - rightPanelWidth;
+    const contentHeight = vh - topBarHeight - bottomHeight;
 
-    // Resolve well-known zones
+    // Role-aware proportional layout
+    const programRatio = this.role === 'graphics-operator' ? 0.4
+      : this.role === 'replay-operator'                    ? 0.35
+      : this.role === 'audio-engineer'                     ? 0.55
+      : 0.6;
+
     switch (zoneId) {
       case 'scene':
         return {
           x: sidebarWidth,
           y: topBarHeight,
-          width: contentWidth * (this.role === 'graphics-operator' ? 0.4 : 0.6),
-          height: contentHeight * 0.55,
+          width: Math.round(contentWidth * programRatio),
+          height: Math.round(contentHeight * 0.55),
         };
       case 'triad':
         return {
           x: sidebarWidth,
           y: topBarHeight,
           width: contentWidth,
-          height: contentHeight * 0.55,
+          height: Math.round(contentHeight * 0.55),
         };
       case 'inspector':
         return {
@@ -134,9 +204,9 @@ export class UbosGeometryEngine implements GeometryEngine {
       case 'workbench':
         return {
           x: sidebarWidth,
-          y: vh - bottomBarHeight,
+          y: vh - bottomHeight,
           width: vw - sidebarWidth,
-          height: bottomBarHeight,
+          height: bottomHeight,
         };
       case 'dock':
         return {
@@ -148,19 +218,25 @@ export class UbosGeometryEngine implements GeometryEngine {
       case 'graph':
         return {
           x: sidebarWidth,
-          y: topBarHeight + contentHeight * 0.55,
+          y: topBarHeight + Math.round(contentHeight * 0.55),
           width: contentWidth,
-          height: contentHeight * 0.45,
+          height: Math.round(contentHeight * 0.45),
         };
       case 'output':
         return {
           x: vw - rightPanelWidth,
           y: topBarHeight,
           width: rightPanelWidth,
-          height: contentHeight * 0.5,
+          height: Math.round(contentHeight * 0.5),
         };
       default:
-        return zone.defaultRect;
+        return zone.rect;
     }
   }
+
+  // ── Accessors ──────────────────────────────────────────────────────────────
+
+  get isInitialized(): boolean { return this.initialized; }
+  get activeRole(): GeometryRole { return this.role; }
+  get registeredZoneIds(): string[] { return [...this.zoneRegistry.keys()]; }
 }

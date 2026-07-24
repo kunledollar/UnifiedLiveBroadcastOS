@@ -19,7 +19,7 @@ export interface DockZone extends Zone {
 
 export const dockZoneDefinition = {
   id: 'dock',
-  defaultRect: { x: 0, y: 56, width: 210, height: 984 },
+  rect: { x: 0, y: 56, width: 210, height: 984 },
   minWidth: 210,
   minHeight: 200,
   collapsible: false,

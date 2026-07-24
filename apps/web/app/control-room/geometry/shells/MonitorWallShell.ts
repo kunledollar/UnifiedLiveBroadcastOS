@@ -13,11 +13,11 @@ export const MonitorWallShell: WorkspaceShell = {
     { ...dockZoneDefinition },
     {
       ...triadZoneDefinition,
-      defaultRect: { x: 210, y: 56, width: 1110, height: 600 },
+      rect: { x: 210, y: 56, width: 1110, height: 600 },
     },
     {
       ...outputZoneDefinition,
-      defaultRect: { x: 1620, y: 56, width: 300, height: 600 },
+      rect: { x: 1620, y: 56, width: 300, height: 600 },
     },
     { ...workbenchZoneDefinition },
   ],

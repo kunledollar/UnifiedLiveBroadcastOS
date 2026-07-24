@@ -17,7 +17,7 @@ export interface GraphZone extends Zone {
 
 export const graphZoneDefinition = {
   id: 'graph',
-  defaultRect: { x: 210, y: 580, width: 1200, height: 420 },
+  rect: { x: 210, y: 580, width: 1200, height: 420 },
   minWidth: 400,
   minHeight: 200,
   collapsible: true,

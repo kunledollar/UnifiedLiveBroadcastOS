@@ -14,11 +14,11 @@ export const AnalyticsShell: WorkspaceShell = {
     { ...dockZoneDefinition },
     {
       ...sceneZoneDefinition,
-      defaultRect: { x: 210, y: 56, width: 700, height: 380 },
+      rect: { x: 210, y: 56, width: 700, height: 380 },
     },
     {
       ...graphZoneDefinition,
-      defaultRect: { x: 210, y: 436, width: 1110, height: 540 },
+      rect: { x: 210, y: 436, width: 1110, height: 540 },
     },
     { ...inspectorZoneDefinition },
     { ...workbenchZoneDefinition },

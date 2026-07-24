@@ -12,7 +12,7 @@ export const DirectorShell: WorkspaceShell = {
     { ...dockZoneDefinition },
     {
       ...sceneZoneDefinition,
-      defaultRect: { x: 210, y: 56, width: 1110, height: 520 },
+      rect: { x: 210, y: 56, width: 1110, height: 520 },
     },
     { ...inspectorZoneDefinition },
     { ...workbenchZoneDefinition },
