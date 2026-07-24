@@ -1,18 +1,19 @@
 /**
- * MonitorWallShell — Step 46
+ * MonitorWallShell — Step 46 (authoritative spec)
  *
  * Normalized viewport-fraction geometry for the Monitor Wall workspace.
- * Optimized for full-confidence monitoring of every stream, output,
- * and source simultaneously — production health at a glance.
+ * Optimized for maximum visibility — camera feeds, program/preview,
+ * remote guests, destinations, and system health at a glance.
  *
- *  ┌──────────────────────────────────────────┬──────────────┐
- *  │        MONITOR GRID (75%)                │ SYSTEM       │
- *  │        Program · Preview · Destinations  │ STATUS       │
- *  │        85% height                        │ (25%)        │
- *  │                                          │ full height  │
- *  ├──────────────────────────────────────────┤              │
- *  │        WORKBENCH (75% · 15%)             │              │
- *  └──────────────────────────────────────────┴──────────────┘
+ *  ┌────────────────────────────────────────────────────────┐
+ *  │               MULTI-FEED GRID (100% × 80%)            │
+ *  │  Cameras · Program · Preview · Guests · Destinations  │
+ *  │  Replay feeds · Graphics feeds                        │
+ *  ├────────────────────────────────────────┬──────────────┤
+ *  │  OUTPUT (75% × 20%)                    │ SYSTEM       │
+ *  │  Multi-destination previews            │ HEALTH       │
+ *  │  Output health · Distribution          │ (25% × 20%) │
+ *  └────────────────────────────────────────┴──────────────┘
  */
 import type { WorkspaceShell } from '@ubos/shared';
 
@@ -21,31 +22,31 @@ export const MonitorWallShell: WorkspaceShell = {
 
   zones: [
     {
-      id: 'triad',
-      rect: { x: 0, y: 0, width: 0.75, height: 0.85 },
+      id: 'multi-feed-grid',
+      rect: { x: 0, y: 0, width: 1.0, height: 0.80 },
       normalized: true,
       minWidth: 720,
       minHeight: 405,
       collapsible: false,
-      resizable: true,
+      resizable: false,
     },
 
     {
       id: 'output',
-      rect: { x: 0.75, y: 0, width: 0.25, height: 1.0 },
+      rect: { x: 0, y: 0.80, width: 0.75, height: 0.20 },
       normalized: true,
-      minWidth: 240,
-      minHeight: 200,
-      collapsible: false,
+      minWidth: 480,
+      minHeight: 80,
+      collapsible: true,
       resizable: true,
     },
 
     {
-      id: 'workbench',
-      rect: { x: 0, y: 0.85, width: 0.75, height: 0.15 },
+      id: 'system-health',
+      rect: { x: 0.75, y: 0.80, width: 0.25, height: 0.20 },
       normalized: true,
-      minWidth: 720,
-      minHeight: 40,
+      minWidth: 200,
+      minHeight: 80,
       collapsible: true,
       resizable: true,
     },
