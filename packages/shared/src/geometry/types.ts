@@ -207,6 +207,8 @@ export interface ProductionState {
   monitors?: MonitorConfig[];
   /** Active output profiles — passed to adaptToAspectRatios(). */
   outputs?: OutputProfile[];
+  /** AI Crew insight items surfaced in the AiInspector. */
+  aiInsights?: Array<{ id: string; type: string; message: string }>;
   /** True when the AI Crew module is active and injecting geometry. */
   aiCrewActive?: boolean;
   /** AI alert level — drives AI Insight Zone and Overlay sizing. */
