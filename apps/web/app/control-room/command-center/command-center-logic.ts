@@ -108,6 +108,10 @@ const PANEL_TO_BOTTOM_TAB: Record<string, DockTabId> = {
   [P.monitorWall]: 'system-status',
   [P.telemetry]: 'system-status',
   [P.chat]: 'logs',
+  [P.streaming]: 'system-status',
+  [P.outputs]: 'system-status',
+  [P.recording]: 'system-status',
+  [P.inspector]: 'layers',
 };
 
 /** Bottom tab -> panel id whose visibility gates the tab (null = always shown). */

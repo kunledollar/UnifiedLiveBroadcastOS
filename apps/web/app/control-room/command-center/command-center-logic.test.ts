@@ -275,18 +275,25 @@ test('command center prefs migrate v1 and clamp valid zone sizes', () => {
 // These tests guard against the regression where selecting a workspace preset
 // did not visibly reconfigure the Control Room layout.
 
-test('all 9 presets are present and resolve', () => {
-  assert.equal(workspacePresetList.length, 9, 'must have exactly 9 presets');
+test('all 16 presets are present and resolve', () => {
+  assert.equal(workspacePresetList.length, 16, 'must have exactly 16 presets');
   const expectedIds = [
     'director',
-    'solo-streamer',
+    'production',
+    'social-fabric',
+    'graphics-operator',
+    'media-operator',
+    'replay-operator',
+    'distribution-operator',
+    'automation-operator',
+    'analytics',
     'technical-director',
     'audio-engineer',
-    'graphics-operator',
-    'replay-operator',
-    'streaming-operator',
     'monitor-wall',
     'compact',
+    'solo-streamer',
+    'streamer',
+    'streaming-operator',
   ];
   for (const id of expectedIds) {
     const preset = workspacePresetList.find((p) => p.id === id);
@@ -471,7 +478,7 @@ test('applying a preset after save/load does not restore the old preset panels',
   }
 });
 
-test('Program and Preview remain visible in all 9 presets', () => {
+test('Program and Preview remain visible in all 16 presets', () => {
   const registry = createRegistry();
   const monitors = [WORKSPACE_PANEL_IDS.programMonitor, WORKSPACE_PANEL_IDS.previewMonitor];
   for (const preset of workspacePresetList) {
@@ -799,7 +806,7 @@ test('switching workspace changes visible tabs in the bottom dock (preset active
 
 test('locking layout must not affect workspaceModeForPreset mapping', () => {
   // workspaceModeForPreset is a pure function — lock state is a UI concern only.
-  // This test confirms the mapping is stable and covers all 9 presets.
+  // This test confirms the mapping is stable and covers all 16 presets.
   const expectedMappings: Array<[string, string]> = [
     ['director', 'director'],
     ['solo-streamer', 'streaming'],
