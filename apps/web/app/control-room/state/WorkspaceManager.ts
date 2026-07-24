@@ -124,6 +124,11 @@ export class WorkspaceManager {
     this.listeners = this.listeners.filter((l) => l !== fn);
   }
 
+  /** Alias for offGeometryChange — matches the hook API used in Step 50. */
+  removeGeometryListener(fn: (zones: GeometryMap) => void): void {
+    this.offGeometryChange(fn);
+  }
+
   // ── Accessors ──────────────────────────────────────────────────────────────
 
   getState(): Readonly<ProductionState> {
