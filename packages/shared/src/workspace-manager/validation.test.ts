@@ -194,11 +194,11 @@ assertThrows(
 );
 
 // ── Preset catalog (3A) ─────────────────────────────────────────────────────
-assertEqual(WORKSPACE_PRESET_IDS.length, 9);
+assertEqual(WORKSPACE_PRESET_IDS.length, 16);
 assertEqual(validateWorkspacePresetCatalog().length, 0, 'built-in presets must all validate');
 assertEqual(
   Object.keys(workspaceDefinitions).length,
-  9,
+  16,
   'all operational workspace contracts are present',
 );
 for (const definition of Object.values(workspaceDefinitions)) {

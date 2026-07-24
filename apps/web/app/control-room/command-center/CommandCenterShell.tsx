@@ -56,11 +56,8 @@ import { broadcastSurfaces } from '../broadcast-command-center/broadcast-theme';
 import { DockResizeHandle } from './DockResizeHandle';
 import { CommandCenterBottomWorkspace } from './CommandCenterBottomWorkspace';
 import { CommandCenterLeftDock } from './CommandCenterLeftDock';
-import { CommandCenterLeftRail } from './CommandCenterLeftRail';
 import { CommandCenterRightDock } from './CommandCenterRightDock';
 import { CommandCenterStage } from './CommandCenterStage';
-import { CommandCenterTopMenu } from './CommandCenterTopMenu';
-import { CommandCenterTopRibbon } from './CommandCenterTopRibbon';
 import { CommandPalette } from './CommandPalette';
 import type { MonitorOverlayData } from './MonitorOverlay';
 import { useWorkspaceKeyboard } from './useWorkspaceKeyboard';
@@ -72,13 +69,14 @@ import {
   presetBottomTab,
   presetOperationsTab,
   workspaceModeForPreset,
-  type CommandCenterRailItem,
 } from './command-center-logic';
 import { sourceDockTabs } from '../broadcast-command-center/command-rail-constants';
 import {
   useCommandCenterWorkspace,
   type CommandCenterZoneToggleId,
 } from './useCommandCenterWorkspace';
+import { UbosGlobalTopBar, UbosWorkspaceSidebar } from '../chrome';
+import type { ChromeToolAction } from '../chrome';
 
 export type CommandCenterShellProps = {
   statusBar: ReactNode;
@@ -114,6 +112,14 @@ export type CommandCenterShellProps = {
   onSeedDemo?: (() => void) | undefined;
   onSimulateDemo?: (() => void) | undefined;
   onResetDemo?: (() => void) | undefined;
+  /** Production context shown in the top bar. */
+  isLive?: boolean;
+  showTitle?: string;
+  resolution?: string;
+  bitrate?: string;
+  viewerCount?: number;
+  userName?: string;
+  userRole?: string;
 };
 
 /**
@@ -193,6 +199,13 @@ export function CommandCenterShell({
   onSeedDemo,
   onSimulateDemo,
   onResetDemo,
+  isLive = false,
+  showTitle,
+  resolution,
+  bitrate,
+  viewerCount,
+  userName,
+  userRole,
 }: CommandCenterShellProps) {
   const workspace = useCommandCenterWorkspace();
   const {
@@ -371,19 +384,22 @@ export function CommandCenterShell({
     if (isPanelCollapsed(panelId)) togglePanelCollapsed(panelId);
   }, [activeOperationsTab, setPanelVisible, isPanelCollapsed, togglePanelCollapsed]);
 
-  // ----- left rail ----------------------------------------------------------
-  const handleRailItem = useCallback(
-    (item: CommandCenterRailItem) => {
-      if (item.preset) {
-        handleSelectPreset(item.preset);
-        return;
-      }
-      if (item.nav) onNavChange(item.nav);
-      if (item.sourceTab) handleActivateSourceTab(item.sourceTab);
-      if (item.bottomTab) handleActivateBottomTab(item.bottomTab);
+  // ----- sidebar tool actions -----------------------------------------------
+  const handleSidebarToolAction = useCallback(
+    (action: ChromeToolAction) => {
+      if (action.nav) onNavChange(action.nav);
+      if (action.sourceTab) handleActivateSourceTab(action.sourceTab);
+      if (action.bottomTab) handleActivateBottomTab(action.bottomTab);
+      if (action.operationsTab) onOperationsTabChange(action.operationsTab);
     },
-    [handleSelectPreset, onNavChange, handleActivateSourceTab, handleActivateBottomTab],
+    [onNavChange, handleActivateSourceTab, handleActivateBottomTab, onOperationsTabChange],
   );
+
+  // ----- add workspace ------------------------------------------------------
+  const handleAddWorkspace = useCallback(() => {
+    // Opens command palette so operator can browse and duplicate a workspace.
+    setCommandPaletteOpen(true);
+  }, []);
 
   // ----- overlays -----------------------------------------------------------
   const programOverlayData: MonitorOverlayData = {
@@ -490,8 +506,8 @@ export function CommandCenterShell({
         broadcastSurfaces.app,
       )}
       style={layoutStyle}
-      data-ubos-command-center="3.15d-3"
-      data-ubos-version="3.15d-3"
+      data-ubos-command-center="4.0"
+      data-ubos-version="4.0"
     >
       {/* Command Palette — rendered at root so it overlays everything */}
       <CommandPalette
@@ -512,71 +528,32 @@ export function CommandCenterShell({
         onFullscreenPreview={() => setFullscreenMonitor('preview')}
       />
 
-      <header
-        className={cn(
-          'flex shrink-0 flex-col border-b',
-          broadcastSurfaces.header,
-          'shadow-[var(--ubos-elevation-rail)]',
-        )}
-      >
-        {statusBar}
-        <CommandCenterTopMenu
-          activePresetId={activePresetId}
-          layoutLocked={layoutLocked}
-          safeAreasVisible={safeAreasVisible}
-          hasUserSavedLayout={hasUserSavedLayout}
-          dockPanels={panels}
-          isPanelVisible={isPanelVisible}
-          isZoneCollapsed={isZoneToggleCollapsed}
-          onSelectPreset={handleSelectPreset}
-          onTogglePanel={togglePanelVisibility}
-          onToggleZone={toggleZone}
-          onResetLayout={resetLayout}
-          onToggleLayoutLock={() => setLayoutLocked(!layoutLocked)}
-          onSaveLayout={saveLayout}
-          onFullscreenProgram={() => setFullscreenMonitor('program')}
-          onFullscreenPreview={() => setFullscreenMonitor('preview')}
-          onToggleSafeAreas={toggleSafeAreas}
-          onActivateBottomTab={handleActivateBottomTab}
-          onActivateSourceTab={handleActivateSourceTab}
-          onActivateOperationsPanel={handleActivateOperationsPanel}
-          onNavChange={onNavChange}
-          onOpenCommandPalette={openCommandPalette}
-          onCut={onCut}
-          onTake={onTake}
-          onAuto={onAuto}
-          onSaveWorkspace={onSaveWorkspace}
-          onRestoreWorkspace={onRestoreWorkspace}
-          onResetWorkspace={onResetWorkspace}
-          onSeedDemo={onSeedDemo}
-          onSimulateDemo={onSimulateDemo}
-          onResetDemo={onResetDemo}
-        />
-        <CommandCenterTopRibbon
-          activePresetId={activePresetId}
-          layoutLocked={layoutLocked}
-          hasUserSavedLayout={hasUserSavedLayout}
-          layoutState={layoutState}
-          customWorkspaces={customWorkspaces}
-          activeCustomWorkspaceId={activeCustomWorkspaceId}
-          onDuplicateWorkspace={duplicateWorkspace}
-          onApplyCustomWorkspace={applyCustomWorkspace}
-          onRenameCustomWorkspace={renameCustomWorkspace}
-          onDeleteCustomWorkspace={deleteCustomWorkspace}
-          isZoneCollapsed={isZoneToggleCollapsed}
-          onSelectPreset={handleSelectPreset}
-          onToggleZone={toggleZone}
-          onToggleLayoutLock={() => setLayoutLocked(!layoutLocked)}
-          onSaveLayout={saveLayout}
-          onResetLayout={resetLayout}
-        />
-      </header>
+      {/* ── New next-gen top bar ─────────────────────────────────────────── */}
+      <UbosGlobalTopBar
+        activePresetId={activePresetId}
+        isLive={isLive}
+        {...(showTitle !== undefined ? { showTitle } : {})}
+        {...(resolution !== undefined ? { resolution } : {})}
+        {...(bitrate !== undefined ? { bitrate } : {})}
+        {...(viewerCount !== undefined ? { viewerCount } : {})}
+        {...(userName !== undefined ? { userName } : {})}
+        {...(userRole !== undefined ? { userRole } : {})}
+        onOpenCommandPalette={openCommandPalette}
+        statusSlot={statusBar}
+      />
 
-      <div ref={containerRef} className="flex min-h-0 flex-1 flex-col overflow-hidden p-1">
+      <div ref={containerRef} className="flex min-h-0 flex-1 overflow-hidden">
+        {/* ── New workspace sidebar ─────────────────────────────────────── */}
+        <UbosWorkspaceSidebar
+          activePresetId={activePresetId}
+          onSelectPreset={handleSelectPreset}
+          onToolAction={handleSidebarToolAction}
+          onAddWorkspace={handleAddWorkspace}
+        />
+
+        {/* ── Content area (left dock + center stage + right dock) ─────── */}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-1">
         <div className="flex min-h-0 min-w-0 flex-1 gap-1 overflow-hidden">
-          <div className="shrink-0" style={{ width: railWidth }}>
-            <CommandCenterLeftRail activeNav={activeNav} onSelectItem={handleRailItem} />
-          </div>
 
           {leftCollapsed ? (
             <CollapsedZoneStrip
@@ -693,7 +670,8 @@ export function CommandCenterShell({
             {bottomWorkspaceContent}
           </CommandCenterBottomWorkspace>
         </div>
-      </div>
+        </div>{/* end content column */}
+      </div>{/* end sidebar + content row */}
     </div>
   );
 }

@@ -1,3 +1,46 @@
-.ubos-workspace-shell{--ubos-program-weight:60;--ubos-preview-weight:40;display:grid;grid-template-columns:184px minmax(0,1fr);grid-template-rows:42px 52px minmax(220px,calc(var(--ubos-center-stage-weight)*1vh)) minmax(0,1fr) 42px;min-height:100vh;background:#07111f;color:#dbeafe;overflow:hidden}.ubos-production-bar{grid-column:1/-1;display:flex;align-items:center;gap:24px;padding:0 16px;background:#0d1b2b;border-bottom:1px solid #25405c;font-size:12px}.ubos-production-bar span{color:#56e6a5}.ubos-production-bar label{margin-left:auto}.ubos-production-bar select{margin-left:8px;background:#12243a;color:inherit;border:1px solid #35516d;border-radius:4px;padding:3px}.ubos-workspace-nav{grid-row:2/5;padding:8px;border-right:1px solid #25405c;overflow:auto}.ubos-workspace-nav a{display:flex;gap:9px;align-items:center;padding:8px;margin-bottom:2px;border-radius:5px;color:#a9bfd5;font-size:12px}.ubos-workspace-nav a.active,.ubos-workspace-nav a:hover{background:#123350;color:#fff}.ubos-workspace-nav i{font-style:normal;width:16px;text-align:center}.ubos-workspace-identity{grid-column:2;padding:9px 16px;display:flex;gap:12px;align-items:baseline;min-width:0;border-bottom:1px solid #25405c}.ubos-workspace-identity b{font-size:16px}.ubos-workspace-identity span{font-size:12px;color:#8fa9c3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ubos-monitor-host{grid-column:2;display:grid;gap:10px;padding:10px 16px;min-height:0;overflow:hidden}.is-vertical-stack .ubos-monitor-host{grid-template-rows:minmax(0,var(--ubos-program-weight)fr) minmax(0,var(--ubos-preview-weight)fr)}.is-horizontal-split .ubos-monitor-host{grid-template-columns:minmax(var(--ubos-program-min-width),var(--ubos-program-weight)fr) minmax(var(--ubos-preview-min-width),var(--ubos-preview-weight)fr);align-items:center}.is-grid .ubos-monitor-host{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}.ubos-monitor{min-width:0;min-height:0;overflow:hidden;border:1px solid #35516d;border-radius:6px;background:#101e31;aspect-ratio:16 / 9;align-self:center;justify-self:stretch;display:flex;flex-direction:column}.ubos-monitor header{height:27px;flex:none;display:flex;justify-content:space-between;padding:6px 9px;font-size:10px;background:#172a42}.ubos-monitor-program header b{color:#ff6b6b}.ubos-monitor-preview header b{color:#6ee7b7}.ubos-monitor>div{display:grid;place-items:center;flex:1;background:linear-gradient(135deg,#10253a,#07111f)}.ubos-monitor strong{font-size:clamp(15px,2vw,30px);letter-spacing:.14em}.ubos-monitor small{font-size:10px;color:#8fa9c3}.ubos-destination-confidence{border:1px solid #35516d;border-radius:6px;padding:12px;color:#9ab8d4;font-size:12px}.ubos-workspace-content{grid-column:2;min-width:0;min-height:0;overflow:auto;padding:12px}.ubos-bottom-workbench{grid-column:2;padding:12px 16px;border-top:1px solid #25405c;font-size:11px;color:#8fa9c3;background:#0d1b2b}@media(max-width:900px){.ubos-workspace-shell{grid-template-columns:56px minmax(0,1fr)}.ubos-workspace-nav span{display:none}.ubos-workspace-nav a{justify-content:center}.is-horizontal-split .ubos-monitor-host{grid-template-columns:1fr;grid-template-rows:minmax(0,var(--ubos-program-weight)fr) minmax(0,var(--ubos-preview-weight)fr)}.ubos-workspace-identity span{display:none}}@media(max-width:620px){.ubos-workspace-shell{grid-template-rows:42px 44px minmax(180px,40vh) minmax(0,1fr) 36px}.ubos-production-bar span{display:none}.ubos-production-bar select{max-width:130px}}
+/* ── v2 shell: new chrome (top bar + sidebar) ──────────────────────── */
+.ubos-workspace-shell-v2{display:flex;flex-direction:column;min-height:100vh;height:100vh;background:#080c12;color:#dbeafe;overflow:hidden}
+.ubos-workspace-body{display:flex;flex:1;min-height:0;overflow:hidden}
+.ubos-workspace-content-area{display:flex;flex-direction:column;flex:1;min-width:0;min-height:0;overflow:hidden}
 
-.ubos-production-clock{position:absolute;right:28px;bottom:18px;padding:3px 6px;border-radius:3px;background:#07111fbb;color:#9ab8d4;font:10px monospace}.ubos-workspace-content{padding-right:324px}.ubos-workspace-inspector{grid-column:2;grid-row:4;z-index:2;align-self:stretch;justify-self:end;width:300px;margin:12px;padding:10px;overflow:auto;border:1px solid #35516d;border-radius:6px;background:#0d1b2bf2}.ubos-workspace-inspector.is-collapsed{width:auto;height:min-content}.ubos-workspace-inspector button{margin-bottom:8px;color:#a9bfd5;background:#12243a;border:1px solid #35516d;border-radius:4px;padding:4px 7px;font-size:11px}.ubos-plugin-panel h2{margin:4px 0;font-size:14px}.ubos-plugin-panel p{font-size:12px;color:#9ab8d4;line-height:1.4}.ubos-bottom-workbench .ubos-plugin-panel{display:flex;gap:12px;align-items:baseline}.ubos-bottom-workbench h2{font-size:11px;margin:0;text-transform:uppercase}.ubos-bottom-workbench p{margin:0}@media(max-width:900px){.ubos-workspace-content{padding-right:12px}.ubos-workspace-inspector{display:none}}
+/* ── Monitors ───────────────────────────────────────────────────────── */
+.ubos-monitor-host{display:grid;gap:10px;padding:10px 16px;min-height:0;flex-shrink:0;height:calc(var(--ubos-center-stage-weight,56)*1vh - 56px)}
+.is-horizontal-split .ubos-monitor-host{grid-template-columns:minmax(var(--ubos-program-min-width,280px),var(--ubos-program-weight,60)fr) minmax(var(--ubos-preview-min-width,240px),var(--ubos-preview-weight,40)fr);align-items:center}
+.is-vertical-stack .ubos-monitor-host{grid-template-rows:minmax(0,var(--ubos-program-weight,60)fr) minmax(0,var(--ubos-preview-weight,40)fr)}
+.is-grid .ubos-monitor-host{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}
+.ubos-monitor{min-width:0;min-height:0;overflow:hidden;border:1px solid #1e3a5f;border-radius:8px;background:#0a1628;aspect-ratio:16/9;align-self:center;justify-self:stretch;display:flex;flex-direction:column}
+.ubos-monitor header{height:28px;flex:none;display:flex;justify-content:space-between;align-items:center;padding:0 10px;font-size:10px;background:#0d1f38;border-bottom:1px solid #1e3a5f}
+.ubos-monitor-program header b{color:#f87171}
+.ubos-monitor-preview header b{color:#34d399}
+.ubos-monitor>div{display:grid;place-items:center;flex:1;background:linear-gradient(135deg,#0d1f38,#080c12)}
+.ubos-monitor strong{font-size:clamp(14px,2vw,28px);letter-spacing:.12em;color:#e2e8f0}
+.ubos-monitor small{font-size:10px;color:#475569}
+
+/* ── Content + docks ────────────────────────────────────────────────── */
+.ubos-workspace-content{flex:1;min-width:0;min-height:0;overflow:auto;padding:12px;padding-right:316px}
+.ubos-workspace-inspector{z-index:2;align-self:stretch;position:absolute;right:12px;top:56px;bottom:0;width:296px;padding:12px;overflow:auto;border-left:1px solid #1e2530;background:#080c12}
+.ubos-workspace-inspector.is-collapsed{width:auto;height:min-content;bottom:auto}
+.ubos-workspace-inspector button{margin-bottom:8px;color:#94a3b8;background:#0d1117;border:1px solid #1e2530;border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer}
+.ubos-workspace-content-area{position:relative}
+.ubos-bottom-workbench{padding:10px 16px;border-top:1px solid #1e2530;font-size:11px;color:#64748b;background:#080c12;flex-shrink:0}
+.ubos-plugin-panel h2{margin:4px 0;font-size:13px;color:#94a3b8;font-weight:600}
+.ubos-plugin-panel p{font-size:11px;color:#475569;line-height:1.5}
+.ubos-bottom-workbench .ubos-plugin-panel{display:flex;gap:12px;align-items:baseline}
+.ubos-bottom-workbench h2{font-size:11px;margin:0;text-transform:uppercase}
+.ubos-bottom-workbench p{margin:0}
+.ubos-destination-confidence{border:1px solid #1e2530;border-radius:6px;padding:12px;color:#64748b;font-size:12px}
+
+/* ── Production clock ───────────────────────────────────────────────── */
+.ubos-production-clock{position:absolute;right:316px;bottom:12px;padding:3px 8px;border-radius:4px;background:#0d1117cc;color:#64748b;font:10px/1 monospace;border:1px solid #1e2530}
+
+/* ── Responsive ─────────────────────────────────────────────────────── */
+@media(max-width:900px){
+  .is-horizontal-split .ubos-monitor-host{grid-template-columns:1fr;grid-template-rows:minmax(0,var(--ubos-program-weight,60)fr) minmax(0,var(--ubos-preview-weight,40)fr)}
+  .ubos-workspace-content{padding-right:12px}
+  .ubos-workspace-inspector{display:none}
+}
+
+/* ── Legacy v1 shell classes (kept for backward compat if any remain) ── */
+.ubos-workspace-shell{display:flex;flex-direction:column;min-height:100vh;background:#080c12;color:#dbeafe;overflow:hidden}
+
+/* legacy second block removed — rules merged into v2 above */

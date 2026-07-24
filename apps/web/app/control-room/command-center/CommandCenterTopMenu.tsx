@@ -270,7 +270,7 @@ export function CommandCenterTopMenu({
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
   const openMenu = useCallback((id: string) => setOpenMenuId(id), []);
 
-  // ── Workspace menu: all 9 presets, current one highlighted ────────────────
+  // ── Workspace menu: all presets, current one highlighted ─────────────────
   // Preset switching is always allowed; lock only prevents drag-resize.
   const workspaceItems: MenuItem[] = workspacePresetList.map((preset) => ({
     label: preset.name,

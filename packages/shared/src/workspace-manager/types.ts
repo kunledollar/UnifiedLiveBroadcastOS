@@ -79,14 +79,21 @@ export interface WorkspaceZoneDefinition {
 
 export type WorkspacePresetId =
   | 'director'
-  | 'solo-streamer'
+  | 'production'
+  | 'social-fabric'
+  | 'graphics-operator'
+  | 'media-operator'
+  | 'replay-operator'
+  | 'distribution-operator'
+  | 'automation-operator'
+  | 'analytics'
   | 'technical-director'
   | 'audio-engineer'
-  | 'graphics-operator'
-  | 'replay-operator'
-  | 'streaming-operator'
   | 'monitor-wall'
-  | 'compact';
+  | 'compact'
+  | 'solo-streamer'
+  | 'streamer'
+  | 'streaming-operator';
 
 /** Which center-stage monitor gets visual emphasis under a preset. */
 export type WorkspaceCenterEmphasis = 'program' | 'preview' | 'balanced';
@@ -226,12 +233,19 @@ export const WORKSPACE_PANEL_KINDS: readonly WorkspacePanelKind[] = [
 
 export const WORKSPACE_PRESET_IDS: readonly WorkspacePresetId[] = [
   'director',
-  'solo-streamer',
+  'production',
+  'social-fabric',
+  'graphics-operator',
+  'media-operator',
+  'replay-operator',
+  'distribution-operator',
+  'automation-operator',
+  'analytics',
   'technical-director',
   'audio-engineer',
-  'graphics-operator',
-  'replay-operator',
-  'streaming-operator',
   'monitor-wall',
   'compact',
+  'solo-streamer',
+  'streamer',
+  'streaming-operator',
 ] as const;
