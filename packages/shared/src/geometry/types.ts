@@ -149,10 +149,50 @@ export interface ProductionState {
   viewportHeight: number;
   /** Active operator role — drives role-adaptive zone sizing. */
   role?: GeometryRole;
-  /** Current program scene metadata for scene-centric geometry. */
-  currentScene?: { id: string; status: string } | null;
+  /** Minimal geometry hint from Step 34 — superseded by programScene below. */
+  _sceneCentricHint?: { id: string; status: string } | null;
   /** Preview source identifier — null when Preview is empty. */
   previewSource?: string | null;
+  /** Individual layer within a scene (video, image, text, graphics). */
+  currentScene?: {
+    id: string;
+    status: string;
+    name?: string;
+    layers?: Array<{
+      id: string;
+      type: 'video' | 'image' | 'text' | 'graphics';
+      src?: string;
+      text?: string;
+    }>;
+  } | null;
+  /** Scene currently loaded into Preview. */
+  previewScene?: {
+    id: string;
+    name?: string;
+    layers?: Array<{
+      id: string;
+      type: 'video' | 'image' | 'text' | 'graphics';
+      src?: string;
+      text?: string;
+    }>;
+  } | null;
+  /** Scene currently on Program output. */
+  programScene?: {
+    id: string;
+    name?: string;
+    layers?: Array<{
+      id: string;
+      type: 'video' | 'image' | 'text' | 'graphics';
+      src?: string;
+      text?: string;
+    }>;
+  } | null;
+  /** Aspect ratios for each Triad canvas panel. */
+  aspectRatios?: {
+    scene?: string;
+    preview?: string;
+    program?: string;
+  };
   /** Active workspace id — drives WorkspaceShellRegistry lookup. */
   workspace?: string;
   /** Connected monitor configurations — passed to adaptToMonitors(). */

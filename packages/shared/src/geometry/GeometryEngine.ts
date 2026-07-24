@@ -567,7 +567,7 @@ export class UbosGeometryEngine implements GeometryEngine {
     state: ProductionState,
   ): Rect {
     // If a scene is LIVE, expand SceneZone slightly
-    if (zoneId === 'scene' && state.currentScene?.status === 'LIVE') {
+    if (zoneId === 'scene' && (state.currentScene?.status === 'LIVE' || state.isLive)) {
       return { ...rect, height: Math.round(rect.height * 1.05) };
     }
 

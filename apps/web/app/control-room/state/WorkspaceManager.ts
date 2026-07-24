@@ -73,7 +73,8 @@ export class WorkspaceManager {
     this.state = {
       ...this.state,
       programSceneId: sceneId,
-      currentScene: { id: sceneId, status: 'LIVE' },
+      programScene: { id: sceneId, name: sceneId },
+      isLive: true,
     };
     this.geometry.updateState(this.state);
     this.geometry.computeZones();
