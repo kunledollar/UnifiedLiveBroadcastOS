@@ -45,3 +45,5 @@ export { graphZoneDefinition } from './zones/GraphZone.js';
 
 export type { OutputZone } from './zones/OutputZone.js';
 export { outputZoneDefinition } from './zones/OutputZone.js';
+
+export { AiInsightZone } from './zones/AiInsightZone.js';

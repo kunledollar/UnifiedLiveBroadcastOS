@@ -153,6 +153,10 @@ export interface ProductionState {
   currentScene?: { id: string; status: string } | null;
   /** Preview source identifier — null when Preview is empty. */
   previewSource?: string | null;
+  /** True when the AI Crew module is active and injecting geometry. */
+  aiCrewActive?: boolean;
+  /** AI alert level — drives AI Insight Zone sizing in computeZones(). */
+  aiAlertLevel?: 'idle' | 'normal' | 'high';
 }
 
 // ── Workspace shell contract ──────────────────────────────────────────────────

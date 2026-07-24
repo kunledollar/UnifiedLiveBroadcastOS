@@ -22,6 +22,7 @@ import type {
 } from './types.js';
 import { UbosAdaptiveCanvasEngine } from './AdaptiveCanvasEngine.js';
 import { UbosMultiMonitorManager } from './MultiMonitorManager.js';
+import { AiInsightZone } from './zones/AiInsightZone.js';
 
 export interface GeometryEngine {
   /**
@@ -211,6 +212,23 @@ export class UbosGeometryEngine implements GeometryEngine {
       };
     });
 
+    // ── Step 47: Inject AI Insight Zone if AI Crew is active ──────────────
+    if (this.state!.aiCrewActive) {
+      const vw = this.state!.viewportWidth;
+      const vh = this.state!.viewportHeight;
+      const aiBaseRect: Rect = {
+        x:      Math.round(AiInsightZone.rect.x      * vw),
+        y:      Math.round(AiInsightZone.rect.y      * vh),
+        width:  Math.round(AiInsightZone.rect.width  * vw),
+        height: Math.round(AiInsightZone.rect.height * vh),
+      };
+      geometryMap['ai-insight'] = {
+        id: 'ai-insight',
+        rect: this.applyAiInsightGeometry(aiBaseRect),
+        state: this.state!,
+      };
+    }
+
     return geometryMap;
   }
 
@@ -261,6 +279,23 @@ export class UbosGeometryEngine implements GeometryEngine {
 
   adaptToRole(role: GeometryRole): void {
     this.role = role;
+  }
+
+  // ── Step 47: AI Insight Zone geometry ─────────────────────────────────────
+
+  private applyAiInsightGeometry(rect: Rect): Rect {
+    // Expand when AI is in high-alert mode — more surface for risk indicators
+    if (this.state?.aiAlertLevel === 'high') {
+      return { ...rect, height: Math.round(rect.height * 1.2) };
+    }
+
+    // Shrink when AI is idle — minimal footprint
+    if (this.state?.aiAlertLevel === 'idle') {
+      return { ...rect, height: Math.round(rect.height * 0.8) };
+    }
+
+    // Normal or undefined — default rect
+    return rect;
   }
 
   // ── Step 36: Aspect-ratio adaptive geometry ───────────────────────────────
