@@ -51,6 +51,13 @@ export interface ZoneDefinition {
   collapsible: boolean;
   /** Whether the zone can be manually resized by the operator. */
   resizable: boolean;
+  /**
+   * When true, rect values are viewport fractions (0.0–1.0).
+   * The geometry engine multiplies them by viewportWidth/Height at
+   * compute time to produce pixel-accurate zone rects.
+   * When false or absent, rect values are absolute pixel coordinates.
+   */
+  normalized?: boolean;
 }
 
 // ── Monitor / output profiles ─────────────────────────────────────────────────

@@ -157,8 +157,21 @@ export class UbosGeometryEngine implements GeometryEngine {
     this.workspace!.zones.forEach((zoneDef) => {
       const zoneId = zoneDef.id;
 
-      // Base rect from workspace shell
-      let rect: Rect = { ...zoneDef.rect };
+      // Base rect from workspace shell.
+      // If the zone uses normalized (0.0–1.0) fractions, scale to pixels.
+      let rect: Rect;
+      if (zoneDef.normalized) {
+        const vw = this.state!.viewportWidth;
+        const vh = this.state!.viewportHeight;
+        rect = {
+          x:      Math.round(zoneDef.rect.x      * vw),
+          y:      Math.round(zoneDef.rect.y      * vh),
+          width:  Math.round(zoneDef.rect.width  * vw),
+          height: Math.round(zoneDef.rect.height * vh),
+        };
+      } else {
+        rect = { ...zoneDef.rect };
+      }
 
       // 4. Adapt rect based on monitor assignment
       const monitorRect = monitorZoneMap[zoneId];
