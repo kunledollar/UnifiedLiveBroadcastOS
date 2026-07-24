@@ -82,6 +82,8 @@ export class UbosGeometryEngine implements GeometryEngine {
   private canvasRects: Record<string, import('./types.js').CanvasRect> = {};
   /** Dominant aspect ratio (width/height) across all active outputs. */
   private dominantAspect: number | null = null;
+  /** Categorised aspect mode — drives applyAspectCategory() switch. */
+  private aspectCategory: 'landscape' | 'portrait' | 'square' | 'mixed' | null = null;
 
   // ── Step 33: initialize() ──────────────────────────────────────────────────
 
@@ -170,7 +172,10 @@ export class UbosGeometryEngine implements GeometryEngine {
         rect = this.canvasEngine!.applyOutputAspect(rect, canvasRects);
       }
 
-      // 6. Apply aspect ratio adaptation (portrait vs landscape outputs)
+      // 5b. Aspect category global adjustment (landscape/portrait/square/mixed)
+      rect = this.applyAspectCategory(zoneId, rect);
+
+      // 6. Aspect ratio fine-tuning (dominant ratio scalar)
       rect = this.applyAspectRatio(zoneId, rect);
 
       // 7. Adapt rect based on operator role
@@ -216,10 +221,23 @@ export class UbosGeometryEngine implements GeometryEngine {
     const first = Object.values(this.canvasRects)[0];
     if (!first) {
       this.dominantAspect = null;
+      this.aspectCategory = null;
       return;
     }
 
-    this.dominantAspect = first.width / first.height;
+    const aspect = first.width / first.height;
+    this.dominantAspect = aspect;
+
+    // Store aspect category for use in applyAspectCategory()
+    if (aspect > 1.7) {
+      this.aspectCategory = 'landscape';          // 16:9, 21:9
+    } else if (aspect < 0.8) {
+      this.aspectCategory = 'portrait';           // 9:16
+    } else if (aspect >= 0.95 && aspect <= 1.05) {
+      this.aspectCategory = 'square';             // 1:1
+    } else {
+      this.aspectCategory = 'mixed';              // multi-output or 4:5
+    }
   }
 
   adaptToRole(role: GeometryRole): void {
@@ -257,6 +275,42 @@ export class UbosGeometryEngine implements GeometryEngine {
       if (zoneId === 'output') {
         return { ...rect, width: Math.round(rect.width * 1.15) };
       }
+    }
+
+    return rect;
+  }
+
+  // ── Step 36b: Aspect-category global adjustment ───────────────────────────
+
+  private applyAspectCategory(zoneId: string, rect: Rect): Rect {
+    if (!this.aspectCategory) return rect;
+
+    switch (this.aspectCategory) {
+      case 'landscape':
+        if (zoneId === 'triad')  rect = { ...rect, width: Math.round(rect.width  * 1.1)  };
+        if (zoneId === 'output') rect = { ...rect, width: Math.round(rect.width  * 1.15) };
+        break;
+
+      case 'portrait':
+        if (zoneId === 'triad')  rect = { ...rect, height: Math.round(rect.height * 1.2)  };
+        if (zoneId === 'output') rect = { ...rect, height: Math.round(rect.height * 1.25) };
+        break;
+
+      case 'square':
+        if (zoneId === 'triad') {
+          rect = {
+            ...rect,
+            width:  Math.round(rect.width  * 1.05),
+            height: Math.round(rect.height * 1.05),
+          };
+        }
+        break;
+
+      case 'mixed':
+        // Multi-destination → widen OutputZone and TriadZone
+        if (zoneId === 'output') rect = { ...rect, width: Math.round(rect.width * 1.2)  };
+        if (zoneId === 'triad')  rect = { ...rect, width: Math.round(rect.width * 1.1)  };
+        break;
     }
 
     return rect;
