@@ -1,19 +1,19 @@
 /**
- * AnalyticsShell — Step 44
+ * AnalyticsShell — Step 44 (authoritative spec)
  *
- * Normalized viewport-fraction geometry for the Analytics Director
- * workspace. Optimized for metrics dashboards, audience data, and
- * performance monitoring across all platforms.
+ * Normalized viewport-fraction geometry for the Analytics Operator
+ * workspace. Prioritizes real-time metrics, audience analytics,
+ * engagement data, and graph-based visualizations.
  *
- *  ┌──────────┬──────────────────────────────┬──────────────┐
- *  │ SCENE    │    METRICS GRAPH (55%)       │ INSPECTOR    │
- *  │ (15%)    │    Charts + audience data    │ (30%)        │
- *  │ full h   │    70% height                │ 70% height   │
- *  │          ├──────────────────────────────┼──────────────┤
- *  │          │    TRIAD (55% · 20%)         │ OUTPUT       │
- *  │          ├──────────────────────────────┤ (30% · 30%)  │
- *  │          │    WORKBENCH (55% · 10%)     │              │
- *  └──────────┴──────────────────────────────┴──────────────┘
+ *  ┌────────────────────────────────┬─────────────────────┐
+ *  │   ANALYTICS PANELS (65%)       │   GRAPH (35%)       │
+ *  │   Real-time metrics            │   Visualizations    │
+ *  │   Audience · Engagement        │   Trend analysis    │
+ *  │   75% height                   │   75% height        │
+ *  ├────────────────────────────────┼─────────────────────┤
+ *  │   WORKBENCH (65% · 25%)        │   OUTPUT (35% · 25%)│
+ *  │   Logs · Notes · Automation    │   Output health     │
+ *  └────────────────────────────────┴─────────────────────┘
  */
 import type { WorkspaceShell } from '@ubos/shared';
 
@@ -22,18 +22,8 @@ export const AnalyticsShell: WorkspaceShell = {
 
   zones: [
     {
-      id: 'scene',
-      rect: { x: 0, y: 0, width: 0.15, height: 1.0 },
-      normalized: true,
-      minWidth: 120,
-      minHeight: 200,
-      collapsible: true,
-      resizable: true,
-    },
-
-    {
-      id: 'graph',
-      rect: { x: 0.15, y: 0, width: 0.55, height: 0.70 },
+      id: 'analytics-panels',
+      rect: { x: 0, y: 0, width: 0.65, height: 0.75 },
       normalized: true,
       minWidth: 480,
       minHeight: 300,
@@ -42,41 +32,31 @@ export const AnalyticsShell: WorkspaceShell = {
     },
 
     {
-      id: 'inspector',
-      rect: { x: 0.70, y: 0, width: 0.30, height: 0.70 },
+      id: 'graph',
+      rect: { x: 0.65, y: 0, width: 0.35, height: 0.75 },
       normalized: true,
-      minWidth: 240,
+      minWidth: 280,
       minHeight: 200,
       collapsible: true,
       resizable: true,
     },
 
     {
-      id: 'triad',
-      rect: { x: 0.15, y: 0.70, width: 0.55, height: 0.20 },
+      id: 'workbench',
+      rect: { x: 0, y: 0.75, width: 0.65, height: 0.25 },
       normalized: true,
       minWidth: 480,
-      minHeight: 100,
-      collapsible: false,
-      resizable: true,
-    },
-
-    {
-      id: 'output',
-      rect: { x: 0.70, y: 0.70, width: 0.30, height: 0.30 },
-      normalized: true,
-      minWidth: 240,
-      minHeight: 100,
+      minHeight: 40,
       collapsible: true,
       resizable: true,
     },
 
     {
-      id: 'workbench',
-      rect: { x: 0.15, y: 0.90, width: 0.55, height: 0.10 },
+      id: 'output',
+      rect: { x: 0.65, y: 0.75, width: 0.35, height: 0.25 },
       normalized: true,
-      minWidth: 480,
-      minHeight: 40,
+      minWidth: 280,
+      minHeight: 100,
       collapsible: true,
       resizable: true,
     },
