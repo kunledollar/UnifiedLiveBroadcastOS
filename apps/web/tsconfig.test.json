@@ -39,6 +39,8 @@
     "app/control-room/intelligence-graph/uigEventNormalizer.ts",
     "app/control-room/intelligence-graph/uigEventNormalizer.test.ts",
     "app/control-room/intelligence-graph/uigInferenceEngine.ts",
-    "app/control-room/intelligence-graph/uigInferenceEngine.test.ts"
+    "app/control-room/intelligence-graph/uigInferenceEngine.test.ts",
+    "app/control-room/intelligence-graph/confidenceScoringEngine.ts",
+    "app/control-room/intelligence-graph/confidenceScoringEngine.test.ts"
   ]
 }

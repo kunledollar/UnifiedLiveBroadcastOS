@@ -68,6 +68,12 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-[#334155]">{snapshot.insightCount} insights</span>
         <span className="text-sky-500/80">{snapshot.highlightCount} highlights</span>
         <span className="text-amber-500/80">{snapshot.emphasisCount} emphasis</span>
+        <span className="text-emerald-500/80">
+          conf {(snapshot.avgConfidence * 100).toFixed(0)}%
+        </span>
+        <span className="text-[#7c6af7]/80">
+          stab {(snapshot.stability * 100).toFixed(0)}%
+        </span>
       </div>
 
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Normalized events</p>

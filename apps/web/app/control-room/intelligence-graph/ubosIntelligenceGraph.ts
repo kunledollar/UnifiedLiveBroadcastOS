@@ -7,6 +7,7 @@
  * Step 81: graph foundation (nodes, edges, ingest)
  * Step 82: UIG Event Normalization Layer (UENL)
  * Step 83: UIG Inference Engine (UIE) Phase 1 — rule-based reasoning
+ * Step 84: Confidence Scoring Engine (CSE) — belief strength across the graph
  *
  * Later steps expand:
  *   - deeper inference rules / ML scoring
@@ -27,6 +28,7 @@ import {
   type InferenceResult,
   type InferenceRunResult,
 } from './uigInferenceEngine.js';
+import { ConfidenceScoringEngine } from './confidenceScoringEngine.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -74,6 +76,8 @@ export type UigEdge = {
   type: UigEdgeType;
   weight: number;
   timestamp: number;
+  /** CSE-propagated edge confidence (Step 84). */
+  confidence?: number;
 };
 
 /** Raw engine event accepted by ingest (normalized via UENL). */
@@ -108,6 +112,8 @@ export type UigSnapshot = {
   eventCount: number;
   highlightCount: number;
   emphasisCount: number;
+  avgConfidence: number;
+  stability: number;
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
@@ -119,6 +125,7 @@ export class UBOSIntelligenceGraph {
   readonly edges = new Map<string, UigEdge>();
   readonly normalizer = new UIGEventNormalizer();
   readonly inferenceEngine = new UIGInferenceEngine(this);
+  readonly confidenceEngine = new ConfidenceScoringEngine(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -150,16 +157,8 @@ export class UBOSIntelligenceGraph {
   }
 
   ingest(event: UigEvent): UigNode {
-    const canonical = this.normalizer.normalize(event);
-    this.rememberEvent(canonical);
-    const node = this.nodeFromCanonical(canonical);
-    this.addNode(node);
-
-    const derivedEdges = this.deriveEdges(node);
-    for (const edge of derivedEdges) {
-      this.addEdge(edge);
-    }
-
+    const node = this.materialize(event);
+    this.reweightAllEdges();
     this.runInference();
     return node;
   }
@@ -167,15 +166,36 @@ export class UBOSIntelligenceGraph {
   /** Ingest many engine signals in one pass; inference runs once at the end. */
   ingestBatch(events: UigEvent[]): void {
     for (const event of events) {
-      const canonical = this.normalizer.normalize(event);
-      this.rememberEvent(canonical);
-      const node = this.nodeFromCanonical(canonical);
-      this.addNode(node);
-      for (const edge of this.deriveEdges(node)) {
-        this.addEdge(edge);
-      }
+      this.materialize(event);
     }
+    this.reweightAllEdges();
     this.runInference();
+  }
+
+  /**
+   * Normalize → CSE score → node/edges with propagated confidence.
+   * Shared by ingest / ingestBatch.
+   */
+  private materialize(event: UigEvent): UigNode {
+    const normalized = this.normalizer.normalize(event);
+    const canonical = this.confidenceEngine.applyToEvent(normalized);
+    this.rememberEvent(canonical);
+
+    let node = this.nodeFromCanonical(canonical);
+    node = this.confidenceEngine.applyToNode(node, canonical.confidence);
+    this.addNode(node);
+
+    const derivedEdges = this.deriveEdges(node);
+    for (const edge of derivedEdges) {
+      this.addEdge(this.confidenceEngine.applyToEdge(edge));
+    }
+    return node;
+  }
+
+  private reweightAllEdges(): void {
+    for (const [key, edge] of this.edges) {
+      this.edges.set(key, this.confidenceEngine.applyToEdge(edge));
+    }
   }
 
   // ── Normalization (Step 82 — delegates to UENL) ───────────────────────────
@@ -354,18 +374,49 @@ export class UBOSIntelligenceGraph {
 
   runInference(): InferenceRunResult {
     const run = this.inferenceEngine.run();
-    this.lastInsights = run.results;
-    this.lastInferenceRun = run;
 
-    const byId = new Map<string, UigInsight>();
-    for (const insight of run.insights) {
-      byId.set(insight.id, insight);
+    // CSE refinement + noise filter on inference outputs
+    const refinedResults: InferenceResult[] = [];
+    for (const result of run.results) {
+      const refined = this.confidenceEngine.refineInsight(result);
+      if (refined) refinedResults.push(refined);
     }
-    this.insights = [...byId.values()]
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, this.MAX_INSIGHTS);
+    refinedResults.sort((a, b) => b.confidence - a.confidence || b.timestamp - a.timestamp);
 
-    return run;
+    const refinedInsights: UigInsight[] = [];
+    for (const result of refinedResults) {
+      let kind: UigInsightKind | null = null;
+      if (result.kind === 'warning') kind = 'warning';
+      else if (result.kind === 'prediction') kind = 'prediction';
+      else if (result.kind === 'guidance') kind = 'guidance';
+      else if (result.kind === 'recommendation' || result.kind === 'insight') kind = 'recommendation';
+      if (!kind) continue;
+      const insight: UigInsight = {
+        id: result.id,
+        kind,
+        message: result.message,
+        confidence: result.confidence,
+        relatedNodeIds: result.relatedNodeIds,
+        timestamp: result.timestamp,
+        rule: result.rule,
+      };
+      if (result.emphasis) insight.emphasis = result.emphasis;
+      refinedInsights.push(insight);
+    }
+
+    const refinedRun: InferenceRunResult = {
+      results: refinedResults,
+      insights: refinedInsights,
+      highlights: refinedResults.filter((r) => r.kind === 'workspace_highlight'),
+      emphasis: refinedResults.filter((r) => r.kind === 'ui_emphasis'),
+      automationTriggers: refinedResults.filter((r) => r.kind === 'automation_trigger'),
+    };
+
+    this.lastInsights = refinedRun.results;
+    this.lastInferenceRun = refinedRun;
+    this.insights = refinedInsights.slice(0, this.MAX_INSIGHTS);
+
+    return refinedRun;
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────
@@ -420,10 +471,13 @@ export class UBOSIntelligenceGraph {
 
   getSnapshot(): UigSnapshot {
     const nodesByType: Partial<Record<UigNodeType, number>> = {};
+    let confidenceSum = 0;
     for (const node of this.nodes.values()) {
       nodesByType[node.type] = (nodesByType[node.type] ?? 0) + 1;
+      confidenceSum += node.confidence;
     }
     const highlightedNodeIds = this.getHighlightedNodeIds();
+    const avgConfidence = this.nodes.size > 0 ? confidenceSum / this.nodes.size : 0;
     return {
       nodeCount: this.nodes.size,
       edgeCount: this.edges.size,
@@ -431,6 +485,8 @@ export class UBOSIntelligenceGraph {
       eventCount: this.recentEvents.length,
       highlightCount: this.lastInferenceRun?.highlights.length ?? 0,
       emphasisCount: this.lastInferenceRun?.emphasis.length ?? 0,
+      avgConfidence,
+      stability: this.confidenceEngine.stabilityScore(),
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
@@ -445,6 +501,7 @@ export class UBOSIntelligenceGraph {
     this.recentEvents = [];
     this.lastInsights = [];
     this.lastInferenceRun = null;
+    this.confidenceEngine.reset();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────
