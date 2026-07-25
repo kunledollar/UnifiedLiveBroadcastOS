@@ -15,12 +15,14 @@ import {
 import { ReplayEngine, type ReplayFrame } from '../replay-engine/replayEngine';
 import { RoutingEngine, type RouteSignalType } from '../routing-engine/routingEngine';
 import { AudioEngine, type AudioSource, type AudioLayer } from '../audio-engine/audioEngine';
+import { AutomationEngine, type TriggerRegistration, type AutomationContext } from '../automation-engine/automationEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
   replayEngine:   new ReplayEngine(),
   routingEngine:  new RoutingEngine(),
-  audioEngine:    new AudioEngine(),
+  audioEngine:       new AudioEngine(),
+  automationEngine:  new AutomationEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -71,5 +73,16 @@ export const workspaceState = {
 
   setAudioLayers(layers: AudioLayer[]): void {
     this.audioEngine.setLayers(layers);
+  },
+
+  // ── Automation Engine ──────────────────────────────────────────────────────
+
+  registerAutomationTrigger(registration: TriggerRegistration) {
+    return this.automationEngine.registerTrigger(registration);
+  },
+
+  /** Evaluate all automation triggers against the current workspace context. */
+  evaluateAutomation(): void {
+    this.automationEngine.evaluate(this as unknown as AutomationContext);
   },
 };
