@@ -29,6 +29,7 @@ import { CloudEngine } from '../cloud-engine/cloudEngine';
 import { VirtualizationEngine } from '../virtualization-engine/virtualizationEngine';
 import { ContainerEngine } from '../container-engine/containerEngine';
 import { FederationEngine } from '../federation-engine/federationEngine';
+import { UBOSIntelligenceGraph, type UigEvent } from '../intelligence-graph/ubosIntelligenceGraph';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -49,6 +50,7 @@ export const workspaceState = {
   virtualizationEngine:    new VirtualizationEngine(),
   containerEngine:         new ContainerEngine(),
   federationEngine:        new FederationEngine(),
+  intelligenceGraph:       new UBOSIntelligenceGraph(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -319,9 +321,114 @@ export const workspaceState = {
       securityEngine:    this.securityEngine,
       multiUserEngine:   this.multiUserEngine,
       cloudEngine:       this.cloudEngine,
+      intelligenceGraph: this.intelligenceGraph,
       automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
     });
     this.orchestrationEngine.start();
+  },
+
+  // ── Intelligence Graph (UIG) ───────────────────────────────────────────────
+
+  /** Push a raw engine signal into the live knowledge graph. */
+  ingestIntelligence(event: UigEvent) {
+    return this.intelligenceGraph.ingest(event);
+  },
+
+  /**
+   * Snapshot all active engines into UIG nodes/edges and run inference.
+   * Called from the orchestration tick and Intelligence Graph zone.
+   */
+  refreshIntelligenceGraph(): void {
+    const scene = this.sceneGraph.getCurrentScene();
+    const routes = this.routingEngine.getActiveRoutes();
+    const clips = this.replayEngine.getClips();
+    const audioHealth = this.audioEngine.monitor();
+    const outputHealth = this.outputEngine.health();
+    const health = this.healthEngine.getHealth();
+    const triggers = this.automationEngine.getTriggers();
+    const graphicsLayers = (scene?.layers ?? []).filter((l) => l.type === 'graphics');
+
+    const events: UigEvent[] = [
+      {
+        id: 'scene:current',
+        type: 'SceneNode',
+        source: 'scene-graph',
+        payload: {
+          name: scene?.name ?? null,
+          missing: !scene,
+          program: true,
+          layerIds: (scene?.layers ?? []).map((l) => l.id),
+        },
+      },
+      {
+        id: 'output:program',
+        type: 'OutputNode',
+        source: 'output-engine',
+        payload: {
+          droppedFrames: outputHealth.droppedFrames ?? 0,
+          latency: outputHealth.latency ?? 0,
+        },
+      },
+      ...graphicsLayers.map((layer): UigEvent => ({
+        id: `graphics:${layer.id}`,
+        type: 'GraphicsNode',
+        source: 'scene-graph',
+        payload: {
+          name: layer.name ?? layer.id,
+          sceneId: scene?.id,
+          visible: true,
+        },
+      })),
+      ...audioHealth.slice(0, 8).map((ch): UigEvent => ({
+        id: `audio:${ch.id}`,
+        type: 'AudioNode',
+        source: 'audio-engine',
+        payload: {
+          peak: ch.peak,
+          rms: ch.rms,
+          health: ch.health,
+        },
+      })),
+      ...[...clips].slice(-6).map((clip): UigEvent => ({
+        id: `replay:${clip.id}`,
+        type: 'ReplayNode',
+        source: 'replay-engine',
+        payload: {
+          cameraId: clip.cameraId,
+          start: clip.start,
+          end: clip.end,
+        },
+      })),
+      ...[...routes].slice(0, 12).map((route): UigEvent => ({
+        id: `routing:${route.id}`,
+        type: 'RoutingNode',
+        source: 'routing-engine',
+        payload: {
+          source: route.source,
+          destination: route.destination,
+          active: route.active,
+          broken: route.active === false,
+        },
+      })),
+      ...triggers.slice(0, 8).map((trigger): UigEvent => ({
+        id: `automation:${trigger.id}`,
+        type: 'AutomationNode',
+        source: 'automation-engine',
+        payload: {
+          name: trigger.name,
+          enabled: trigger.enabled,
+          runCount: trigger.runCount,
+        },
+      })),
+      ...Object.entries(health).map(([subsystem, status]): UigEvent => ({
+        id: `health:${subsystem}`,
+        type: 'HealthNode',
+        source: 'health-engine',
+        payload: { subsystem, status },
+      })),
+    ];
+
+    this.intelligenceGraph.ingestBatch(events);
   },
 
   stopOrchestration(): void {
