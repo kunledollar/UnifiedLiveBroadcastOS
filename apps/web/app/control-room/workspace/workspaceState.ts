@@ -27,6 +27,7 @@ import { SecurityEngine } from '../security-engine/securityEngine';
 import { NetworkEngine } from '../network-engine/networkEngine';
 import { CloudEngine } from '../cloud-engine/cloudEngine';
 import { VirtualizationEngine } from '../virtualization-engine/virtualizationEngine';
+import { ContainerEngine } from '../container-engine/containerEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -45,6 +46,7 @@ export const workspaceState = {
   networkEngine:        new NetworkEngine(),
   cloudEngine:             new CloudEngine(),
   virtualizationEngine:    new VirtualizationEngine(),
+  containerEngine:         new ContainerEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -218,6 +220,30 @@ export const workspaceState = {
     // Sync to cloud
     this.cloudEngine.upload('virtual_envs', this.virtualizationEngine.listEnvironments());
     return env;
+  },
+
+  // ── Container Engine ───────────────────────────────────────────────────────
+
+  createContainer(name: string) {
+    const engines = {
+      scenes:  [...this.sceneGraph.getScenes()],
+      routing: [...this.routingEngine.getRoutes()],
+      audio:   [...this.audioEngine.layers],
+      replay:  [...this.replayEngine.getClips()],
+      health:  this.healthEngine.getMetrics(),
+    };
+    const container = this.containerEngine.createContainer(name, engines);
+    this.cloudEngine.upload('containers', this.containerEngine.listContainers());
+    return container;
+  },
+
+  stopContainer(id: number): void {
+    this.containerEngine.stopContainer(id);
+  },
+
+  deleteContainer(id: number): void {
+    this.containerEngine.deleteContainer(id);
+    this.cloudEngine.upload('containers', this.containerEngine.listContainers());
   },
 
   deleteVirtualWorkspace(id: number): void {
