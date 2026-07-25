@@ -25,6 +25,7 @@ import { DistributionEngine } from '../distribution-engine/distributionEngine';
 import { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
 import { SecurityEngine } from '../security-engine/securityEngine';
 import { NetworkEngine } from '../network-engine/networkEngine';
+import { CloudEngine } from '../cloud-engine/cloudEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -41,6 +42,7 @@ export const workspaceState = {
   multiUserEngine:      new MultiUserEngine(),
   securityEngine:       new SecurityEngine(),
   networkEngine:        new NetworkEngine(),
+  cloudEngine:          new CloudEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -187,6 +189,25 @@ export const workspaceState = {
     this.networkEngine.disconnect();
   },
 
+  // ── Cloud Engine ──────────────────────────────────────────────────────────
+
+  uploadToCloud(): void {
+    this.cloudEngine.upload('scenes',     [...this.sceneGraph.getScenes()]);
+    this.cloudEngine.upload('routing',    [...this.routingEngine.getRoutes()]);
+    this.cloudEngine.upload('audio',      [...this.audioEngine.layers]);
+    this.cloudEngine.upload('replay',     [...this.replayEngine.getClips()]);
+    this.cloudEngine.upload('ai',         [...this.aiCrewEngine.getInsights()]);
+    this.cloudEngine.upload('health',     this.healthEngine.getMetrics());
+    this.cloudEngine.upload('users',      [...this.multiUserEngine.getUsers()]);
+  },
+
+  downloadFromCloud(): void {
+    const scenes = this.cloudEngine.download('scenes');
+    if (scenes) this.sceneGraph.setScenes(scenes as Parameters<typeof this.sceneGraph.setScenes>[0]);
+    const audio = this.cloudEngine.download('audio');
+    if (audio) this.audioEngine.setLayers(audio as Parameters<typeof this.audioEngine.setLayers>[0]);
+  },
+
   /** Check whether the operator with the given id can perform the action. */
   authorize(userId: string, permission: import('../security-engine/securityEngine').Permission | string): boolean {
     const user = this.multiUserEngine.getUsers().find((u) => u.id === userId);
@@ -230,6 +251,7 @@ export const workspaceState = {
       persistenceEngine: this.persistenceEngine,
       securityEngine:    this.securityEngine,
       multiUserEngine:   this.multiUserEngine,
+      cloudEngine:       this.cloudEngine,
       automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
     });
     this.orchestrationEngine.start();

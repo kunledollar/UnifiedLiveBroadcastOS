@@ -35,6 +35,7 @@ import type { HealthEngine } from '../health-engine/healthEngine';
 import type { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 import type { SecurityEngine } from '../security-engine/securityEngine';
 import type { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
+import type { CloudEngine } from '../cloud-engine/cloudEngine';
 
 export type OrchestrationEngines = {
   sceneGraph:       SceneGraphEngine;
@@ -48,6 +49,7 @@ export type OrchestrationEngines = {
   persistenceEngine:   PersistenceEngine;
   securityEngine:      SecurityEngine;
   multiUserEngine:     MultiUserEngine;
+  cloudEngine:         CloudEngine;
   /** Loose context passed to automation (the full workspaceState). */
   automationContext: AutomationContext;
 };
@@ -159,6 +161,16 @@ export class OrchestrationEngine {
       // 10. Security — heartbeat check for all active operators
       for (const user of this.engines.multiUserEngine.getUsers()) {
         this.engines.securityEngine.authorize({ name: user.name, role: user.role }, 'heartbeat');
+      }
+
+      // 11. Cloud sync — every 10 ticks (approx 1 Hz) to limit serialization cost
+      if (this.tickCount % 10 === 0) {
+        this.engines.cloudEngine.syncAll({
+          scenes:  [...sceneGraph.getScenes()],
+          routing: [...routes],
+          audio:   [...audioMix],
+          health:  healthEngine.getMetrics(),
+        });
       }
 
     } catch (err) {
