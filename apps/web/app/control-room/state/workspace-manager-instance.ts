@@ -9,6 +9,10 @@ import { WorkspaceManager } from './WorkspaceManager';
 
 import { workspaceState } from '../workspace/workspaceState';
 
+// Seed example operators at startup
+workspaceState.addOperator({ id: 'op-1', name: 'Operator', role: 'director',          workspace: 'director' });
+workspaceState.addOperator({ id: 'op-2', name: 'TD',       role: 'technical-director', workspace: 'technical-director' });
+
 // Seed example distribution destinations at startup
 workspaceState.registerDestination({ id: 'yt',    name: 'YouTube Live',   type: 'rtmp',  endpoint: 'rtmp://youtube.com/live' });
 workspaceState.registerDestination({ id: 'fb',    name: 'Facebook Live',  type: 'rtmp',  endpoint: 'rtmp://facebook.com/live' });

@@ -22,6 +22,7 @@ import { OrchestrationEngine } from '../orchestration-engine/orchestrationEngine
 import { HealthEngine } from '../health-engine/healthEngine';
 import { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 import { DistributionEngine } from '../distribution-engine/distributionEngine';
+import { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -35,6 +36,7 @@ export const workspaceState = {
   healthEngine:         new HealthEngine(),
   persistenceEngine:    new PersistenceEngine(),
   distributionEngine:   new DistributionEngine(),
+  multiUserEngine:      new MultiUserEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -136,6 +138,20 @@ export const workspaceState = {
     if (p.has('audio')) {
       this.audioEngine.setLayers((p.load('audio') as Parameters<typeof this.audioEngine.setLayers>[0]) ?? []);
     }
+  },
+
+  // ── Multi-User Engine ─────────────────────────────────────────────────────
+
+  addOperator(user: Parameters<typeof this.multiUserEngine.addUser>[0]) {
+    return this.multiUserEngine.addUser(user);
+  },
+
+  removeOperator(id: string): void {
+    this.multiUserEngine.removeUser(id);
+  },
+
+  switchOperatorWorkspace(id: string, workspace: string): void {
+    this.multiUserEngine.setWorkspace(id, workspace);
   },
 
   // ── Distribution Engine ───────────────────────────────────────────────────
