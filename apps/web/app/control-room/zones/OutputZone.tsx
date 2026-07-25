@@ -1,6 +1,7 @@
 'use client';
 import type { ProductionState } from '@ubos/shared';
 import { workspaceState } from '../workspace/workspaceState';
+// OutputZone uses workspaceState for routing path display
 
 export function OutputZone({ state }: { state: ProductionState }) {
   // Prefer outputs from current scene via SceneGraphEngine
@@ -35,7 +36,13 @@ export function OutputZone({ state }: { state: ProductionState }) {
                 <div key={dest.id} className="mb-1 flex items-center gap-2 rounded bg-[#0d1117] px-2 py-1.5">
                   <span className={`h-1.5 w-1.5 rounded-full ${isLive ? 'bg-emerald-400' : 'bg-amber-400'}`} />
                   <span className="flex-1 truncate text-[10px] text-[#475569]">{dest.name}</span>
-                  <span className="max-w-[80px] truncate text-[9px] text-[#334155]">{'destination' in dest ? (dest as { destination: string }).destination : ''}</span>
+                  {/* Show routing destinations if any */}
+              {(() => {
+                const routedTo = workspaceState.routingEngine.getDestinationsForSource(dest.id);
+                return routedTo.length > 0
+                  ? <span className="max-w-[80px] truncate text-[9px] text-[#7c6af7]">→ {routedTo[0]}</span>
+                  : <span className="max-w-[80px] truncate text-[9px] text-[#334155]">{'destination' in dest ? (dest as { destination: string }).destination : ''}</span>;
+              })()}
                   <span className={`text-[9px] ${isLive ? 'text-emerald-400' : 'text-amber-400'}`}>
                     {dest.status ?? 'ready'}
                   </span>

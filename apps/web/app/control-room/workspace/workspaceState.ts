@@ -13,10 +13,12 @@ import {
   type Scene,
 } from '../scene-graph/sceneGraphEngine';
 import { ReplayEngine, type ReplayFrame } from '../replay-engine/replayEngine';
+import { RoutingEngine, type RouteSignalType } from '../routing-engine/routingEngine';
 
 export const workspaceState = {
-  sceneGraph:   new SceneGraphEngine(),
-  replayEngine: new ReplayEngine(),
+  sceneGraph:     new SceneGraphEngine(),
+  replayEngine:   new ReplayEngine(),
+  routingEngine:  new RoutingEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -47,5 +49,15 @@ export const workspaceState = {
 
   createReplayClip(cameraId: string, start: number, end: number) {
     return this.replayEngine.createClip(cameraId, start, end);
+  },
+
+  // ── Routing Engine ─────────────────────────────────────────────────────────
+
+  addRoute(source: string, destination: string, signalType?: RouteSignalType) {
+    return this.routingEngine.addRoute(source, destination, signalType);
+  },
+
+  removeRoute(id: number): void {
+    this.routingEngine.removeRoute(id);
   },
 };

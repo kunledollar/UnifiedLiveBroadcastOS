@@ -23,6 +23,7 @@ import { UnifiedChatZone }        from './unified-chat/UnifiedChatZone';
 import { EngagementGraphsZone }   from './engagement-graphs/EngagementGraphsZone';
 import { ModerationZone }         from './moderation/ModerationZone';
 import { ReplayZone }             from './replay/ReplayZone';
+import { RoutingZone }            from './routing/RoutingZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -41,6 +42,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'engagement-graphs': EngagementGraphsZone,
   'moderation':        ModerationZone,
   'replay-monitor':    ReplayZone,
+  'routing-map':       RoutingZone,
 };
 
 export function ZoneRenderer({
