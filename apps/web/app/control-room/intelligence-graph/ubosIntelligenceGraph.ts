@@ -13,9 +13,10 @@
  * Step 87: Insight Fusion Engine (IFE) — unified operator guidance
  * Step 88: Operator Guidance Engine (OGE) — role-aware actionable instructions
  * Step 89: Workspace Intelligence Engine (WIE) — UI highlight/dim/warn signals
+ * Step 90: UI Intelligence Integration Layer (UIIL) — apply signals to real UI
  *
  * Later steps expand:
- *   - operator HUD surfaces / Triad 2.0 wiring
+ *   - UBOS Design System / Triad 2.0 theming
  */
 
 import {
@@ -51,6 +52,10 @@ import {
   type UiPanelId,
   type WorkspaceUiSignal,
 } from './workspaceIntelligenceEngine.js';
+import {
+  UIIntegrationLayer,
+  type UiIntelligenceState,
+} from './uiIntelligenceIntegrationLayer.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -163,6 +168,8 @@ export type UigSnapshot = {
   guidanceRole: GuidanceRole | null;
   workspaceSignalCount: number;
   latestWorkspaceSignals: readonly WorkspaceUiSignal[];
+  uiIntelligenceSignalCount: number;
+  uiIntelligenceLastApply: number;
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
@@ -180,6 +187,7 @@ export class UBOSIntelligenceGraph {
   readonly fusionEngine = new InsightFusionEngine(this);
   readonly guidanceEngine = new OperatorGuidanceEngine(this);
   readonly workspaceIntelligence = new WorkspaceIntelligenceEngine(this);
+  readonly uiIntegration = new UIIntegrationLayer();
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -189,6 +197,8 @@ export class UBOSIntelligenceGraph {
   operatorGuidance: GuidanceAction[] = [];
   /** Latest UI intelligence signals from WIE (Step 89). */
   workspaceSignals: WorkspaceUiSignal[] = [];
+  /** Latest applied panel UI state from UIIL (Step 90). */
+  uiIntelligence: UiIntelligenceState = this.uiIntegration.getState();
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
@@ -495,6 +505,9 @@ export class UBOSIntelligenceGraph {
     // Workspace Intelligence Engine — UI highlight/dim/warn/pulse signals
     this.workspaceSignals = this.workspaceIntelligence.compute();
 
+    // UI Intelligence Integration Layer — apply signals to panel UI state
+    this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
+
     return refinedRun;
   }
 
@@ -569,6 +582,7 @@ export class UBOSIntelligenceGraph {
   generateOperatorGuidance(role?: string | null, workspace?: string | null): GuidanceAction[] {
     this.operatorGuidance = this.guidanceEngine.generate(role, workspace);
     this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
+    this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
     return this.operatorGuidance;
   }
 
@@ -580,9 +594,10 @@ export class UBOSIntelligenceGraph {
     return this.guidanceEngine.getTopGuidance(limit);
   }
 
-  /** Compute / refresh UI intelligence signals (Step 89). */
+  /** Compute / refresh UI intelligence signals (Step 89) and apply via UIIL (Step 90). */
   computeWorkspaceSignals(role?: string | null, workspace?: string | null): WorkspaceUiSignal[] {
     this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
+    this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
     return this.workspaceSignals;
   }
 
@@ -591,7 +606,22 @@ export class UBOSIntelligenceGraph {
   }
 
   getPanelUiAction(panel: UiPanelId) {
-    return this.workspaceIntelligence.getPanelAction(panel);
+    return this.uiIntegration.getPanelAction(panel) ?? this.workspaceIntelligence.getPanelAction(panel);
+  }
+
+  /** Applied panel UI state from UIIL (Step 90). */
+  getUiIntelligence(): UiIntelligenceState {
+    return this.uiIntelligence;
+  }
+
+  /** CSS class string for a geometry zone wrapper. */
+  getZoneUiClassName(zoneId: string): string {
+    return this.uiIntegration.classNameForZone(zoneId);
+  }
+
+  /** CSS class string for a WIE panel id. */
+  getPanelUiClassName(panel: UiPanelId): string {
+    return this.uiIntegration.classNameForPanel(panel);
   }
 
   getSnapshot(): UigSnapshot {
@@ -622,6 +652,8 @@ export class UBOSIntelligenceGraph {
       guidanceRole: this.guidanceEngine.getContext().role,
       workspaceSignalCount: this.workspaceSignals.length,
       latestWorkspaceSignals: this.workspaceSignals.slice(0, 10),
+      uiIntelligenceSignalCount: this.uiIntelligence.signalCount,
+      uiIntelligenceLastApply: this.uiIntelligence.lastApply,
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
@@ -645,6 +677,8 @@ export class UBOSIntelligenceGraph {
     this.fusionEngine.reset();
     this.guidanceEngine.reset();
     this.workspaceIntelligence.reset();
+    this.uiIntegration.reset();
+    this.uiIntelligence = this.uiIntegration.getState();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────

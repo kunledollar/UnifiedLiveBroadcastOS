@@ -1,0 +1,64 @@
+/**
+ * UI Intelligence Integration Layer — visual signal styles (Step 90)
+ *
+ * Applied on Control Room zone wrappers and workspace shell.
+ * Intentionally subtle so geometry layout stays intact.
+ */
+
+.ubos-highlight {
+  outline: 1px solid rgba(248, 113, 113, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.25), 0 0 18px rgba(248, 113, 113, 0.12);
+  background-color: rgba(248, 113, 113, 0.04);
+  z-index: 3;
+}
+
+.ubos-warn {
+  outline: 1px solid rgba(251, 191, 36, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.2), 0 0 14px rgba(251, 191, 36, 0.1);
+  background-color: rgba(251, 191, 36, 0.04);
+  z-index: 2;
+}
+
+.ubos-pulse {
+  outline: 1px solid rgba(232, 121, 249, 0.45);
+  animation: ubos-ui-pulse 1.4s ease-in-out infinite;
+  z-index: 2;
+}
+
+.ubos-prepare {
+  outline: 1px dashed rgba(56, 189, 248, 0.55);
+  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.15);
+  background-color: rgba(56, 189, 248, 0.04);
+}
+
+.ubos-elevated {
+  outline: 1px solid rgba(52, 211, 153, 0.4);
+  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.12), 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 1;
+}
+
+.ubos-dim {
+  opacity: 0.42;
+  filter: saturate(0.7);
+}
+
+.ubos-suppress {
+  opacity: 0.22;
+  filter: grayscale(0.35) saturate(0.5);
+}
+
+@keyframes ubos-ui-pulse {
+  0%,
+  100% {
+    box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.15), 0 0 0 rgba(232, 121, 249, 0);
+  }
+  50% {
+    box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.45), 0 0 16px rgba(232, 121, 249, 0.22);
+  }
+}
+
+/* Shell-level elevation — keep chrome readable */
+.ubos-workspace-shell-v2.ubos-elevated {
+  outline: none;
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.18);
+}
