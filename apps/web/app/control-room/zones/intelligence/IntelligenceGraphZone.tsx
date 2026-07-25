@@ -5,6 +5,7 @@ import type { ProductionState } from '@ubos/shared';
 import { workspaceState } from '../../workspace/workspaceState';
 import type { UigInsightKind, UigNodeType } from '../../intelligence-graph/ubosIntelligenceGraph';
 import type { FusionSeverity } from '../../intelligence-graph/insightFusionEngine';
+import type { GuidanceActionType } from '../../intelligence-graph/operatorGuidanceEngine';
 
 const kindColor: Record<UigInsightKind, string> = {
   warning:        'text-red-400',
@@ -25,6 +26,13 @@ const fusedBadge: Record<FusionSeverity, string> = {
   warning:    'bg-amber-500/15 text-amber-400',
   prediction: 'bg-sky-500/15 text-sky-400',
   info:       'bg-[#1e2530] text-[#64748b]',
+};
+
+const actionBadge: Record<GuidanceActionType, string> = {
+  'Critical Action': 'bg-red-500/20 text-red-400',
+  'Warning Action':  'bg-amber-500/15 text-amber-400',
+  'Prepare Action':  'bg-sky-500/15 text-sky-400',
+  Monitor:           'bg-[#1e2530] text-[#64748b]',
 };
 
 const TYPE_ORDER: UigNodeType[] = [
@@ -76,6 +84,7 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-[#334155]">{snapshot.insightCount} insights</span>
         <span className="text-fuchsia-400/80">{snapshot.predictionCount} forecasts</span>
         <span className="text-emerald-400/80">{snapshot.fusedCount} fused</span>
+        <span className="text-lime-400/80">{snapshot.guidanceCount} actions</span>
         <span className="text-sky-500/80">{snapshot.highlightCount} highlights</span>
         <span className="text-amber-500/80">{snapshot.emphasisCount} emphasis</span>
         <span className="text-emerald-500/80">
@@ -92,9 +101,32 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
       </div>
 
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">
-        Operator guidance
+        Do this now{snapshot.guidanceRole ? ` · ${snapshot.guidanceRole}` : ''}
       </p>
       <div className="mb-3 flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: '150px' }}>
+        {snapshot.latestOperatorGuidance.map((action) => (
+          <div key={action.id} className="rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5">
+            <div className="mb-0.5 flex items-center gap-1.5">
+              <span className={`rounded px-1 py-0.5 text-[7px] font-bold uppercase ${actionBadge[action.severity]}`}>
+                {action.severity}
+              </span>
+              <span className="font-mono text-[7px] uppercase text-[#334155]">{action.cluster}</span>
+              <span className="ml-auto text-[8px] text-[#334155]">
+                {(action.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+            <p className="text-[10px] leading-snug text-emerald-300">{action.message}</p>
+          </div>
+        ))}
+        {snapshot.latestOperatorGuidance.length === 0 && (
+          <p className="text-[10px] text-[#334155]">No operator actions yet</p>
+        )}
+      </div>
+
+      <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">
+        Fused intelligence
+      </p>
+      <div className="mb-3 flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: '100px' }}>
         {snapshot.latestFusedInsights.map((fused) => (
           <div key={fused.id} className="rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5">
             <div className="mb-0.5 flex items-center gap-1.5">
@@ -108,7 +140,6 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
               </span>
             </div>
             <p className="text-[10px] leading-snug text-[#94a3b8]">{fused.message}</p>
-            <p className="mt-0.5 text-[9px] text-emerald-400/90">→ {fused.recommendedAction}</p>
           </div>
         ))}
         {snapshot.latestFusedInsights.length === 0 && (

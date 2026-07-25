@@ -349,13 +349,17 @@ export const workspaceState = {
     const graphicsLayers = (scene?.layers ?? []).filter((l) => l.type === 'graphics');
     const operator = this.multiUserEngine.getUsers()[0];
 
-    // UENL context — workspace/operator lineage for every normalized event
-    const workspaceId = 'production';
+    // UENL + OGE context — workspace/operator/role lineage for intelligence
+    const workspaceId = operator?.workspace || 'production';
     this.intelligenceGraph.setContext({
       workspace: workspaceId,
       operator: operator?.name ?? null,
       system: 'ubos-control-room',
     });
+    this.intelligenceGraph.guidanceEngine.setContext(
+      operator?.role ?? 'director',
+      workspaceId,
+    );
 
     const dropped = outputHealth.droppedFrames ?? 0;
     const events: UigEvent[] = [

@@ -11,6 +11,7 @@
  * Step 85: Temporal Pattern Engine (TPE) — trends, spikes, anomalies over time
  * Step 86: Predictive Engine (PE) Phase 1 — forecasting future states
  * Step 87: Insight Fusion Engine (IFE) — unified operator guidance
+ * Step 88: Operator Guidance Engine (OGE) — role-aware actionable instructions
  *
  * Later steps expand:
  *   - operator HUD / UI emphasis surfaces
@@ -40,6 +41,11 @@ import {
   InsightFusionEngine,
   type FusedInsight,
 } from './insightFusionEngine.js';
+import {
+  OperatorGuidanceEngine,
+  type GuidanceAction,
+  type GuidanceRole,
+} from './operatorGuidanceEngine.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -147,6 +153,9 @@ export type UigSnapshot = {
   latestPredictions: readonly Prediction[];
   fusedCount: number;
   latestFusedInsights: readonly FusedInsight[];
+  guidanceCount: number;
+  latestOperatorGuidance: readonly GuidanceAction[];
+  guidanceRole: GuidanceRole | null;
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
@@ -162,11 +171,14 @@ export class UBOSIntelligenceGraph {
   readonly temporalEngine = new TemporalPatternEngine(this);
   readonly predictiveEngine = new PredictiveEngine(this);
   readonly fusionEngine = new InsightFusionEngine(this);
+  readonly guidanceEngine = new OperatorGuidanceEngine(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
   /** Latest fused operator guidance from IFE (Step 87). */
   fusedInsights: FusedInsight[] = [];
+  /** Latest role-aware actions from OGE (Step 88). */
+  operatorGuidance: GuidanceAction[] = [];
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
@@ -467,6 +479,9 @@ export class UBOSIntelligenceGraph {
       this.predictiveEngine.getPredictions() as Prediction[],
     );
 
+    // Operator Guidance Engine — role/workspace-specific actions
+    this.operatorGuidance = this.guidanceEngine.generate();
+
     return refinedRun;
   }
 
@@ -537,6 +552,20 @@ export class UBOSIntelligenceGraph {
     return this.fusionEngine.getTopInsights(limit);
   }
 
+  /** Generate / refresh role-aware operator guidance (Step 88). */
+  generateOperatorGuidance(role?: string | null, workspace?: string | null): GuidanceAction[] {
+    this.operatorGuidance = this.guidanceEngine.generate(role, workspace);
+    return this.operatorGuidance;
+  }
+
+  getOperatorGuidance(): readonly GuidanceAction[] {
+    return this.operatorGuidance;
+  }
+
+  getTopOperatorGuidance(limit = 3): readonly GuidanceAction[] {
+    return this.guidanceEngine.getTopGuidance(limit);
+  }
+
   getSnapshot(): UigSnapshot {
     const nodesByType: Partial<Record<UigNodeType, number>> = {};
     let confidenceSum = 0;
@@ -560,6 +589,9 @@ export class UBOSIntelligenceGraph {
       latestPredictions: this.predictiveEngine.getPredictions().slice(0, 8),
       fusedCount: this.fusedInsights.length,
       latestFusedInsights: this.fusedInsights.slice(0, 5),
+      guidanceCount: this.operatorGuidance.length,
+      latestOperatorGuidance: this.operatorGuidance.slice(0, 5),
+      guidanceRole: this.guidanceEngine.getContext().role,
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
@@ -575,10 +607,12 @@ export class UBOSIntelligenceGraph {
     this.lastInsights = [];
     this.lastInferenceRun = null;
     this.fusedInsights = [];
+    this.operatorGuidance = [];
     this.confidenceEngine.reset();
     this.temporalEngine.reset();
     this.predictiveEngine.reset();
     this.fusionEngine.reset();
+    this.guidanceEngine.reset();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────
