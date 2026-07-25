@@ -27,6 +27,8 @@ import {
   ubosRhythm,
   ubosGrid,
   ubosWorkspaceGridTemplates,
+  ubosWorkspaceTemplates,
+  ubosWorkspaceTemplateNames,
   ubdsTypographyRoles,
   ubosTypographyClasses,
   type UbosBroadcastHue,
@@ -38,6 +40,7 @@ import {
   type UbosPaddingLevel,
   type UbosDensityMode,
   type UbosWorkspaceGridTemplateName,
+  type UbosWorkspaceAccent,
 } from '@ubos/ui';
 
 const hueLabels: Record<UbosBroadcastHue, string> = {
@@ -101,6 +104,19 @@ const workspaceGridLabels: Record<UbosWorkspaceGridTemplateName, string> = {
   inspector: 'Inspector 2.0 Grid',
   programOutput: 'Program Output 2.0 Grid',
 };
+
+const accentSwatchClass: Record<UbosWorkspaceAccent, string> = {
+  program: 'bg-ubos-program',
+  preview: 'bg-ubos-preview',
+  selection: 'bg-ubos-selection',
+  automation: 'bg-ubos-automation',
+  graphics: 'bg-ubos-graphics',
+  replay: 'bg-ubos-replay',
+  warning: 'bg-ubos-warning',
+  neutral: 'bg-ubos-slate',
+};
+
+const regionOrder = ['top', 'left', 'center', 'right', 'bottom'] as const;
 
 const motionCurveDemos: Array<{ curve: UbosMotionCurve; label: string; description: string }> = [
   { curve: 'highlight', label: 'Highlight', description: 'Fast-in / slow-out' },
@@ -166,7 +182,7 @@ export default function DesignSystemShowcasePage() {
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Steps 91–98
+          UBOS Design System · Steps 91–99
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
@@ -175,11 +191,12 @@ export default function DesignSystemShowcasePage() {
           Broadcast color language, the complete typography hierarchy, the elevation model
           (shadow/gradient/border per level), the gradient system, the complete motion system
           (six primitives + timing curves), the complete spacing system (six-level scale, padding
-          hierarchy, density modes), and the broadcast rhythm grid (12-column grid, workspace grid
-          templates). This route is a read-only showcase — Control Room surfaces are only updated
-          by the color (Step 92), typography (Step 93), elevation (Step 94), depth/gradient
-          (Step 95), motion (Step 96), spacing (Step 97), and grid (Step 98) application work
-          itself, not by this page.
+          hierarchy, density modes), the broadcast rhythm grid (12-column grid, workspace grid
+          templates), and the eight canonical workspace templates that assemble all of the above.
+          This route is a read-only showcase — Control Room surfaces are only updated by the color
+          (Step 92), typography (Step 93), elevation (Step 94), depth/gradient (Step 95), motion
+          (Step 96), spacing (Step 97), grid (Step 98), and workspace template (Step 99)
+          application work itself, not by this page.
         </p>
       </header>
 
@@ -508,6 +525,50 @@ export default function DesignSystemShowcasePage() {
                       </span>
                     </div>
                   ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <SectionHeading>Workspace Templates</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          The eight canonical workspace templates (Step 99) — the assembly step. Each combines a
+          layout (named regions, reusing the Step 98 grid vocabulary), a density mode (Step 97),
+          and accent hues (Step 92) into one named recipe. Elevation, motion, spacing, and grid
+          rules are not re-specified per workspace — every workspace uses the same underlying
+          systems; only layout, density, and accent emphasis vary.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {ubosWorkspaceTemplateNames.map((name) => {
+            const template = ubosWorkspaceTemplates[name];
+            return (
+              <div key={name} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-ubos-fg-primary">{template.label}</p>
+                  <div className="flex gap-1">
+                    {template.accents.map((accent) => (
+                      <span key={accent} className={`h-2.5 w-2.5 rounded-full ${accentSwatchClass[accent]}`} title={accent} />
+                    ))}
+                  </div>
+                </div>
+                <p className="mb-2 text-[0.625rem] text-ubos-fg-muted">{template.purpose}</p>
+                <div className="space-y-1">
+                  {regionOrder
+                    .filter((region) => template.layout[region])
+                    .map((region) => (
+                      <div key={region} className="flex items-center justify-between rounded-ubos-sm bg-ubos-midnight px-2 py-1">
+                        <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{region}</span>
+                        <span className="text-[0.5625rem] text-ubos-fg-secondary">{template.layout[region]}</span>
+                      </div>
+                    ))}
+                </div>
+                <div className="mt-2 flex items-center justify-between text-[0.5625rem] uppercase tracking-wide text-ubos-fg-muted">
+                  <span>density: {template.density}</span>
+                  {template.collapsiblePanels ? <span>collapsible</span> : null}
+                  {template.floatingHud ? <span>floating HUD</span> : null}
                 </div>
               </div>
             );

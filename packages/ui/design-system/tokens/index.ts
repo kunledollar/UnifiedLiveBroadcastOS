@@ -77,3 +77,12 @@ export {
   type UbosWorkspaceGridTemplateName,
   type UbosGridAction,
 } from './grid.js';
+
+export {
+  ubosWorkspaceTemplates,
+  ubosWorkspaceTemplateNames,
+  type UbosWorkspaceTemplate,
+  type UbosWorkspaceTemplateName,
+  type UbosWorkspaceAccent,
+  type UbosWorkspaceRegion,
+} from './workspaces.js';
