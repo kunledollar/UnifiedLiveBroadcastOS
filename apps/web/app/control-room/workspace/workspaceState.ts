@@ -28,6 +28,7 @@ import { NetworkEngine } from '../network-engine/networkEngine';
 import { CloudEngine } from '../cloud-engine/cloudEngine';
 import { VirtualizationEngine } from '../virtualization-engine/virtualizationEngine';
 import { ContainerEngine } from '../container-engine/containerEngine';
+import { FederationEngine } from '../federation-engine/federationEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -47,6 +48,7 @@ export const workspaceState = {
   cloudEngine:             new CloudEngine(),
   virtualizationEngine:    new VirtualizationEngine(),
   containerEngine:         new ContainerEngine(),
+  federationEngine:        new FederationEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -244,6 +246,21 @@ export const workspaceState = {
   deleteContainer(id: number): void {
     this.containerEngine.deleteContainer(id);
     this.cloudEngine.upload('containers', this.containerEngine.listContainers());
+  },
+
+  // ── Federation Engine ──────────────────────────────────────────────────────
+
+  registerCluster(cluster: Parameters<typeof this.federationEngine.registerCluster>[0]) {
+    const c = this.federationEngine.registerCluster(cluster);
+    this.cloudEngine.upload('federation', {
+      clusters: this.federationEngine.getClusters(),
+      links:    this.federationEngine.getLinks(),
+    });
+    return c;
+  },
+
+  linkClusters(from: string | number, to: string | number, latencyMs?: number) {
+    return this.federationEngine.linkClusters(from, to, latencyMs);
   },
 
   deleteVirtualWorkspace(id: number): void {

@@ -9,6 +9,11 @@ import { WorkspaceManager } from './WorkspaceManager';
 
 import { workspaceState } from '../workspace/workspaceState';
 
+// Seed example federation clusters at startup
+workspaceState.registerCluster({ id: 'cluster-us', name: 'US East',    region: 'us-east-1', containers: [] });
+workspaceState.registerCluster({ id: 'cluster-eu', name: 'EU West',    region: 'eu-west-1', containers: [] });
+workspaceState.linkClusters('cluster-us', 'cluster-eu', 42);
+
 // Seed example operators at startup
 workspaceState.addOperator({ id: 'op-1', name: 'Operator', role: 'director',          workspace: 'director' });
 workspaceState.addOperator({ id: 'op-2', name: 'TD',       role: 'technical-director', workspace: 'technical-director' });

@@ -35,6 +35,7 @@ import { NetworkZone }            from './network/NetworkZone';
 import { CloudZone }              from './cloud/CloudZone';
 import { VirtualizationZone }     from './virtualization/VirtualizationZone';
 import { ContainerZone }          from './container/ContainerZone';
+import { FederationZone }         from './federation/FederationZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -67,6 +68,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'cloud':               CloudZone,
   'virtualization':      VirtualizationZone,
   'container':           ContainerZone,
+  'federation':          FederationZone,
 };
 
 export function ZoneRenderer({
