@@ -10,11 +10,20 @@
  * This component is the bridge between the GeometryEngine and the UI.
  * Every geometry recompute instantly repositions all zone divs.
  */
+import { useEffect } from 'react';
 import { useGeometry } from '../hooks/useGeometry';
 import { ZoneRenderer } from './ZoneRenderer';
+import { workspaceState } from '../workspace/workspaceState';
 
 export function ControlRoomCanvas() {
   const zones = useGeometry();
+
+  // Start the global orchestration tick loop on canvas mount.
+  // Stops cleanly on unmount to prevent memory leaks.
+  useEffect(() => {
+    workspaceState.initializeOrchestration();
+    return () => workspaceState.stopOrchestration();
+  }, []);
 
   return (
     <div

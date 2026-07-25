@@ -18,6 +18,7 @@ import { AudioEngine, type AudioSource, type AudioLayer } from '../audio-engine/
 import { AutomationEngine, type TriggerRegistration, type AutomationContext } from '../automation-engine/automationEngine';
 import { OutputEngine } from '../output-engine/outputEngine';
 import { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
+import { OrchestrationEngine } from '../orchestration-engine/orchestrationEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -26,7 +27,8 @@ export const workspaceState = {
   audioEngine:       new AudioEngine(),
   automationEngine:  new AutomationEngine(),
   outputEngine:      new OutputEngine(),
-  aiCrewEngine:      new AiCrewEngine(),
+  aiCrewEngine:         new AiCrewEngine(),
+  orchestrationEngine:  null as OrchestrationEngine | null,
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -83,6 +85,31 @@ export const workspaceState = {
 
   registerAutomationTrigger(registration: TriggerRegistration) {
     return this.automationEngine.registerTrigger(registration);
+  },
+
+  // ── Orchestration Engine ───────────────────────────────────────────────────
+
+  /**
+   * Create and start the global tick loop.
+   * Safe to call multiple times — won't double-start.
+   */
+  initializeOrchestration(): void {
+    if (this.orchestrationEngine?.isRunning) return;
+    this.orchestrationEngine = new OrchestrationEngine({
+      sceneGraph:       this.sceneGraph,
+      replayEngine:     this.replayEngine,
+      routingEngine:    this.routingEngine,
+      audioEngine:      this.audioEngine,
+      automationEngine: this.automationEngine,
+      outputEngine:     this.outputEngine,
+      aiCrewEngine:     this.aiCrewEngine,
+      automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
+    });
+    this.orchestrationEngine.start();
+  },
+
+  stopOrchestration(): void {
+    this.orchestrationEngine?.stop();
   },
 
   // ── AI Crew Engine ─────────────────────────────────────────────────────────
