@@ -27,6 +27,7 @@ import { RoutingZone }            from './routing/RoutingZone';
 import { AudioMixerZone }         from './audio-mixer/AudioMixerZone';
 import { AutomationZone }         from './automation/AutomationZone';
 import { HealthZone }             from './health/HealthZone';
+import { PersistenceZone }        from './persistence/PersistenceZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -50,6 +51,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'automation-graph':  AutomationZone,
   'rule-list':         AutomationZone,
   'system-health':     HealthZone,
+  'persistence':       PersistenceZone,
 };
 
 export function ZoneRenderer({

@@ -32,6 +32,7 @@ import type { AutomationEngine, AutomationContext } from '../automation-engine/a
 import type { OutputEngine } from '../output-engine/outputEngine';
 import type { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 import type { HealthEngine } from '../health-engine/healthEngine';
+import type { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 
 export type OrchestrationEngines = {
   sceneGraph:       SceneGraphEngine;
@@ -41,7 +42,8 @@ export type OrchestrationEngines = {
   automationEngine: AutomationEngine;
   outputEngine:     OutputEngine;
   aiCrewEngine:     AiCrewEngine;
-  healthEngine:     HealthEngine;
+  healthEngine:        HealthEngine;
+  persistenceEngine:   PersistenceEngine;
   /** Loose context passed to automation (the full workspaceState). */
   automationContext: AutomationContext;
 };
@@ -146,6 +148,9 @@ export class OrchestrationEngine {
       healthEngine.updateMetric('automation', { warning: false, error: false });
       healthEngine.updateMetric('ai',         { warning: aiCrewEngine.insightCount === 0, error: false });
       healthEngine.updateMetric('graphics',   { warning: graphicsFrames.length === 0, error: false });
+
+      // 9. Autosave health metrics to persistence store
+      this.engines.persistenceEngine.save('health', healthEngine.getMetrics());
 
     } catch (err) {
       console.warn('[OrchestrationEngine] tick error:', err);

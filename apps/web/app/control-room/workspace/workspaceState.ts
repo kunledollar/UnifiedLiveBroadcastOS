@@ -20,6 +20,7 @@ import { OutputEngine } from '../output-engine/outputEngine';
 import { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 import { OrchestrationEngine } from '../orchestration-engine/orchestrationEngine';
 import { HealthEngine } from '../health-engine/healthEngine';
+import { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -31,6 +32,7 @@ export const workspaceState = {
   aiCrewEngine:         new AiCrewEngine(),
   orchestrationEngine:  null as OrchestrationEngine | null,
   healthEngine:         new HealthEngine(),
+  persistenceEngine:    new PersistenceEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -89,6 +91,51 @@ export const workspaceState = {
     return this.automationEngine.registerTrigger(registration);
   },
 
+  // ── Persistence Engine ────────────────────────────────────────────────────
+
+  /** Snapshot all engine states into the persistence store. */
+  saveState(): void {
+    const p = this.persistenceEngine;
+    p.save('scenes',     this.sceneGraph.getScenes());
+    p.save('routing',    this.routingEngine.getRoutes());
+    p.save('audio',      this.audioEngine.layers);
+    p.save('replay',     this.replayEngine.getClips());
+    p.save('ai',         this.aiCrewEngine.getInsights());
+    p.save('health',     this.healthEngine.getMetrics());
+    p.save('automation', this.automationEngine.getTriggers().map((t) => ({
+      id:   t.id,
+      name: t.name,
+      enabled:  t.enabled,
+      runCount: t.runCount,
+    })));
+    this.persistenceEngine.snapshot('manual-save');
+    this.aiCrewEngine['push' in this.aiCrewEngine
+      ? 'push' as never
+      : 'analyzeScene' as never];
+    // Notify AI Crew that state was saved
+    this.aiCrewEngine.analyzeScene({ name: 'State saved', layers: [] });
+  },
+
+  /** Restore engine states from the persistence store. */
+  loadState(): void {
+    const p = this.persistenceEngine;
+    if (p.has('scenes')) {
+      this.sceneGraph.setScenes((p.load('scenes') as Parameters<typeof this.sceneGraph.setScenes>[0]) ?? []);
+    }
+    if (p.has('routing')) {
+      // Routes are read-only via getRoutes(); re-add them
+      const saved = p.load('routing') as Array<{ source: string; destination: string }> ?? [];
+      saved.forEach((r) => {
+        if (!this.routingEngine.hasRoute(r.source, r.destination)) {
+          this.routingEngine.addRoute(r.source, r.destination);
+        }
+      });
+    }
+    if (p.has('audio')) {
+      this.audioEngine.setLayers((p.load('audio') as Parameters<typeof this.audioEngine.setLayers>[0]) ?? []);
+    }
+  },
+
   // ── Orchestration Engine ───────────────────────────────────────────────────
 
   /**
@@ -105,7 +152,8 @@ export const workspaceState = {
       automationEngine: this.automationEngine,
       outputEngine:     this.outputEngine,
       aiCrewEngine:     this.aiCrewEngine,
-      healthEngine:     this.healthEngine,
+      healthEngine:      this.healthEngine,
+      persistenceEngine: this.persistenceEngine,
       automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
     });
     this.orchestrationEngine.start();
