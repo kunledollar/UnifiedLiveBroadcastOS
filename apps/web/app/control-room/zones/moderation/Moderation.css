@@ -1,0 +1,28 @@
+.moderation-zone {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  height: 100%;
+  padding: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #080c12;
+  scrollbar-width: thin;
+}
+
+.mod-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #334155;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.mod-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

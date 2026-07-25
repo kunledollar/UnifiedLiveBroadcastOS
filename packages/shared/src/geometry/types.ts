@@ -207,6 +207,16 @@ export interface ProductionState {
   monitors?: MonitorConfig[];
   /** Active output profiles — passed to adaptToAspectRatios(). */
   outputs?: OutputProfile[];
+  /** Items queued for operator moderation review. */
+  moderationQueue?: Array<{
+    id: string;
+    user: string;
+    platform: string;
+    time: string;
+    text: string;
+    velocity?: number;
+    avatar?: string;
+  }>;
   /** Engagement analytics for EngagementGraphsZone (Social Fabric). */
   engagement?: {
     timeline?: Array<{ time: string; value: number }>;

@@ -21,6 +21,7 @@ import { CameraGridZone }         from './camera-grid/CameraGridZone';
 import { MultiFeedGridZone }      from './multi-feed-grid/MultiFeedGridZone';
 import { UnifiedChatZone }        from './unified-chat/UnifiedChatZone';
 import { EngagementGraphsZone }   from './engagement-graphs/EngagementGraphsZone';
+import { ModerationZone }         from './moderation/ModerationZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -37,6 +38,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'multi-feed-grid':   MultiFeedGridZone,
   'unified-chat':      UnifiedChatZone,
   'engagement-graphs': EngagementGraphsZone,
+  'moderation':        ModerationZone,
 };
 
 export function ZoneRenderer({
