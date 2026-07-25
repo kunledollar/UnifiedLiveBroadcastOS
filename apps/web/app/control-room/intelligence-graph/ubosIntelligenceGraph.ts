@@ -12,10 +12,10 @@
  * Step 86: Predictive Engine (PE) Phase 1 — forecasting future states
  * Step 87: Insight Fusion Engine (IFE) — unified operator guidance
  * Step 88: Operator Guidance Engine (OGE) — role-aware actionable instructions
+ * Step 89: Workspace Intelligence Engine (WIE) — UI highlight/dim/warn signals
  *
  * Later steps expand:
- *   - operator HUD / UI emphasis surfaces
- *   - deeper workspace intelligence
+ *   - operator HUD surfaces / Triad 2.0 wiring
  */
 
 import {
@@ -46,6 +46,11 @@ import {
   type GuidanceAction,
   type GuidanceRole,
 } from './operatorGuidanceEngine.js';
+import {
+  WorkspaceIntelligenceEngine,
+  type UiPanelId,
+  type WorkspaceUiSignal,
+} from './workspaceIntelligenceEngine.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -156,6 +161,8 @@ export type UigSnapshot = {
   guidanceCount: number;
   latestOperatorGuidance: readonly GuidanceAction[];
   guidanceRole: GuidanceRole | null;
+  workspaceSignalCount: number;
+  latestWorkspaceSignals: readonly WorkspaceUiSignal[];
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
@@ -172,6 +179,7 @@ export class UBOSIntelligenceGraph {
   readonly predictiveEngine = new PredictiveEngine(this);
   readonly fusionEngine = new InsightFusionEngine(this);
   readonly guidanceEngine = new OperatorGuidanceEngine(this);
+  readonly workspaceIntelligence = new WorkspaceIntelligenceEngine(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -179,6 +187,8 @@ export class UBOSIntelligenceGraph {
   fusedInsights: FusedInsight[] = [];
   /** Latest role-aware actions from OGE (Step 88). */
   operatorGuidance: GuidanceAction[] = [];
+  /** Latest UI intelligence signals from WIE (Step 89). */
+  workspaceSignals: WorkspaceUiSignal[] = [];
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
@@ -482,6 +492,9 @@ export class UBOSIntelligenceGraph {
     // Operator Guidance Engine — role/workspace-specific actions
     this.operatorGuidance = this.guidanceEngine.generate();
 
+    // Workspace Intelligence Engine — UI highlight/dim/warn/pulse signals
+    this.workspaceSignals = this.workspaceIntelligence.compute();
+
     return refinedRun;
   }
 
@@ -555,6 +568,7 @@ export class UBOSIntelligenceGraph {
   /** Generate / refresh role-aware operator guidance (Step 88). */
   generateOperatorGuidance(role?: string | null, workspace?: string | null): GuidanceAction[] {
     this.operatorGuidance = this.guidanceEngine.generate(role, workspace);
+    this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
     return this.operatorGuidance;
   }
 
@@ -564,6 +578,20 @@ export class UBOSIntelligenceGraph {
 
   getTopOperatorGuidance(limit = 3): readonly GuidanceAction[] {
     return this.guidanceEngine.getTopGuidance(limit);
+  }
+
+  /** Compute / refresh UI intelligence signals (Step 89). */
+  computeWorkspaceSignals(role?: string | null, workspace?: string | null): WorkspaceUiSignal[] {
+    this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
+    return this.workspaceSignals;
+  }
+
+  getWorkspaceSignals(): readonly WorkspaceUiSignal[] {
+    return this.workspaceSignals;
+  }
+
+  getPanelUiAction(panel: UiPanelId) {
+    return this.workspaceIntelligence.getPanelAction(panel);
   }
 
   getSnapshot(): UigSnapshot {
@@ -592,6 +620,8 @@ export class UBOSIntelligenceGraph {
       guidanceCount: this.operatorGuidance.length,
       latestOperatorGuidance: this.operatorGuidance.slice(0, 5),
       guidanceRole: this.guidanceEngine.getContext().role,
+      workspaceSignalCount: this.workspaceSignals.length,
+      latestWorkspaceSignals: this.workspaceSignals.slice(0, 10),
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
@@ -608,11 +638,13 @@ export class UBOSIntelligenceGraph {
     this.lastInferenceRun = null;
     this.fusedInsights = [];
     this.operatorGuidance = [];
+    this.workspaceSignals = [];
     this.confidenceEngine.reset();
     this.temporalEngine.reset();
     this.predictiveEngine.reset();
     this.fusionEngine.reset();
     this.guidanceEngine.reset();
+    this.workspaceIntelligence.reset();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────

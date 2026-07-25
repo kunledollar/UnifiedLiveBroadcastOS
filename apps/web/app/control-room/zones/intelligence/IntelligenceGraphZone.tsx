@@ -6,6 +6,7 @@ import { workspaceState } from '../../workspace/workspaceState';
 import type { UigInsightKind, UigNodeType } from '../../intelligence-graph/ubosIntelligenceGraph';
 import type { FusionSeverity } from '../../intelligence-graph/insightFusionEngine';
 import type { GuidanceActionType } from '../../intelligence-graph/operatorGuidanceEngine';
+import type { UiSignalAction } from '../../intelligence-graph/workspaceIntelligenceEngine';
 
 const kindColor: Record<UigInsightKind, string> = {
   warning:        'text-red-400',
@@ -33,6 +34,26 @@ const actionBadge: Record<GuidanceActionType, string> = {
   'Warning Action':  'bg-amber-500/15 text-amber-400',
   'Prepare Action':  'bg-sky-500/15 text-sky-400',
   Monitor:           'bg-[#1e2530] text-[#64748b]',
+};
+
+const uiActionBadge: Record<UiSignalAction, string> = {
+  highlight: 'bg-red-500/20 text-red-300',
+  warn:      'bg-amber-500/20 text-amber-300',
+  pulse:     'bg-fuchsia-500/20 text-fuchsia-300',
+  prepare:   'bg-sky-500/20 text-sky-300',
+  elevate:   'bg-emerald-500/20 text-emerald-300',
+  dim:       'bg-[#1e2530] text-[#475569]',
+  suppress:  'bg-[#0d1117] text-[#334155]',
+};
+
+const uiActionClass: Record<UiSignalAction, string> = {
+  highlight: 'border-red-500/40 bg-red-500/10',
+  warn:      'border-amber-500/40 bg-amber-500/10',
+  pulse:     'border-fuchsia-500/40 bg-fuchsia-500/10 animate-pulse',
+  prepare:   'border-sky-500/40 bg-sky-500/10',
+  elevate:   'border-emerald-500/40 bg-emerald-500/10',
+  dim:       'opacity-40',
+  suppress:  'opacity-20',
 };
 
 const TYPE_ORDER: UigNodeType[] = [
@@ -85,6 +106,7 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-fuchsia-400/80">{snapshot.predictionCount} forecasts</span>
         <span className="text-emerald-400/80">{snapshot.fusedCount} fused</span>
         <span className="text-lime-400/80">{snapshot.guidanceCount} actions</span>
+        <span className="text-orange-400/80">{snapshot.workspaceSignalCount} ui</span>
         <span className="text-sky-500/80">{snapshot.highlightCount} highlights</span>
         <span className="text-amber-500/80">{snapshot.emphasisCount} emphasis</span>
         <span className="text-emerald-500/80">
@@ -101,23 +123,71 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
       </div>
 
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">
+        UI intelligence
+      </p>
+      <div className="mb-3 flex flex-wrap gap-1">
+        {snapshot.latestWorkspaceSignals
+          .filter((s) => s.action !== 'dim' && s.action !== 'suppress')
+          .slice(0, 8)
+          .map((signal) => (
+            <span
+              key={signal.id}
+              className={`rounded border px-1.5 py-0.5 font-mono text-[8px] ${uiActionBadge[signal.action]} ${uiActionClass[signal.action]}`}
+              title={signal.reason}
+            >
+              {signal.action}:{signal.panel.replace('Panel', '')}
+            </span>
+          ))}
+        {snapshot.latestWorkspaceSignals.length === 0 && (
+          <span className="text-[10px] text-[#334155]">No UI signals yet</span>
+        )}
+      </div>
+
+      <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">
         Do this now{snapshot.guidanceRole ? ` · ${snapshot.guidanceRole}` : ''}
       </p>
-      <div className="mb-3 flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: '150px' }}>
-        {snapshot.latestOperatorGuidance.map((action) => (
-          <div key={action.id} className="rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5">
-            <div className="mb-0.5 flex items-center gap-1.5">
-              <span className={`rounded px-1 py-0.5 text-[7px] font-bold uppercase ${actionBadge[action.severity]}`}>
-                {action.severity}
-              </span>
-              <span className="font-mono text-[7px] uppercase text-[#334155]">{action.cluster}</span>
-              <span className="ml-auto text-[8px] text-[#334155]">
-                {(action.confidence * 100).toFixed(0)}%
-              </span>
+      <div
+        className={`mb-3 flex flex-col gap-1.5 overflow-y-auto ${
+          graph.getPanelUiAction('guidancePanel') === 'elevate'
+            ? 'rounded border border-emerald-500/30 p-1'
+            : ''
+        }`}
+        style={{ maxHeight: '150px' }}
+      >
+        {snapshot.latestOperatorGuidance.map((action) => {
+          const panelAction = graph.getPanelUiAction(
+            action.cluster === 'output'
+              ? 'programOutputPanel'
+              : action.cluster === 'scene'
+                ? 'scenePanel'
+                : action.cluster === 'graphics'
+                  ? 'graphicsPanel'
+                  : action.cluster === 'audio'
+                    ? 'audioPanel'
+                    : action.cluster === 'routing'
+                      ? 'routingPanel'
+                      : 'guidancePanel',
+          );
+          return (
+            <div
+              key={action.id}
+              className={`rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5 ${
+                panelAction ? uiActionClass[panelAction] : ''
+              }`}
+            >
+              <div className="mb-0.5 flex items-center gap-1.5">
+                <span className={`rounded px-1 py-0.5 text-[7px] font-bold uppercase ${actionBadge[action.severity]}`}>
+                  {action.severity}
+                </span>
+                <span className="font-mono text-[7px] uppercase text-[#334155]">{action.cluster}</span>
+                <span className="ml-auto text-[8px] text-[#334155]">
+                  {(action.confidence * 100).toFixed(0)}%
+                </span>
+              </div>
+              <p className="text-[10px] leading-snug text-emerald-300">{action.message}</p>
             </div>
-            <p className="text-[10px] leading-snug text-emerald-300">{action.message}</p>
-          </div>
-        ))}
+          );
+        })}
         {snapshot.latestOperatorGuidance.length === 0 && (
           <p className="text-[10px] text-[#334155]">No operator actions yet</p>
         )}

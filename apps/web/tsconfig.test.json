@@ -49,6 +49,8 @@
     "app/control-room/intelligence-graph/insightFusionEngine.ts",
     "app/control-room/intelligence-graph/insightFusionEngine.test.ts",
     "app/control-room/intelligence-graph/operatorGuidanceEngine.ts",
-    "app/control-room/intelligence-graph/operatorGuidanceEngine.test.ts"
+    "app/control-room/intelligence-graph/operatorGuidanceEngine.test.ts",
+    "app/control-room/intelligence-graph/workspaceIntelligenceEngine.ts",
+    "app/control-room/intelligence-graph/workspaceIntelligenceEngine.test.ts"
   ]
 }
