@@ -26,6 +26,7 @@ import { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
 import { SecurityEngine } from '../security-engine/securityEngine';
 import { NetworkEngine } from '../network-engine/networkEngine';
 import { CloudEngine } from '../cloud-engine/cloudEngine';
+import { VirtualizationEngine } from '../virtualization-engine/virtualizationEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -42,7 +43,8 @@ export const workspaceState = {
   multiUserEngine:      new MultiUserEngine(),
   securityEngine:       new SecurityEngine(),
   networkEngine:        new NetworkEngine(),
-  cloudEngine:          new CloudEngine(),
+  cloudEngine:             new CloudEngine(),
+  virtualizationEngine:    new VirtualizationEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -199,6 +201,28 @@ export const workspaceState = {
     this.cloudEngine.upload('ai',         [...this.aiCrewEngine.getInsights()]);
     this.cloudEngine.upload('health',     this.healthEngine.getMetrics());
     this.cloudEngine.upload('users',      [...this.multiUserEngine.getUsers()]);
+  },
+
+  // ── Virtualization Engine ──────────────────────────────────────────────────
+
+  createVirtualWorkspace(name: string) {
+    const template = {
+      scenes:    [...this.sceneGraph.getScenes()],
+      routing:   [...this.routingEngine.getRoutes()],
+      audio:     [...this.audioEngine.layers],
+      replay:    [...this.replayEngine.getClips()],
+      ai:        [...this.aiCrewEngine.getInsights()],
+      health:    this.healthEngine.getMetrics(),
+    };
+    const env = this.virtualizationEngine.createEnvironment(name, template);
+    // Sync to cloud
+    this.cloudEngine.upload('virtual_envs', this.virtualizationEngine.listEnvironments());
+    return env;
+  },
+
+  deleteVirtualWorkspace(id: number): void {
+    this.virtualizationEngine.deleteEnvironment(id);
+    this.cloudEngine.upload('virtual_envs', this.virtualizationEngine.listEnvironments());
   },
 
   downloadFromCloud(): void {
