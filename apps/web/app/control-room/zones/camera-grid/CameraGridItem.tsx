@@ -1,5 +1,7 @@
 'use client';
 
+import { workspaceState } from '../../workspace/workspaceState';
+
 type Camera = {
   id: string;
   name: string;
@@ -53,17 +55,29 @@ export function CameraGridItem({ camera }: { camera: Camera }) {
         )}
       </div>
 
-      {/* Controls */}
+      {/* Controls — wired to ReplayEngine */}
       <div className="cg-controls flex gap-1">
-        {['Replay', 'Mark', 'Focus'].map((action) => (
-          <button
-            key={action}
-            type="button"
-            className="flex-1 rounded bg-[#0a1628] px-1.5 py-1 text-[9px] font-medium text-[#475569] transition-colors hover:bg-[#7c6af7]/15 hover:text-[#7c6af7]"
-          >
-            {action}
-          </button>
-        ))}
+        <button
+          type="button"
+          onClick={() => workspaceState.addReplayMarker(camera.id, Date.now())}
+          className="flex-1 rounded bg-[#0a1628] px-1.5 py-1 text-[9px] font-medium text-[#475569] transition-colors hover:bg-amber-500/15 hover:text-amber-400"
+        >
+          Mark
+        </button>
+        <button
+          type="button"
+          onClick={() => workspaceState.createReplayClip(camera.id, 0, 60)}
+          className="flex-1 rounded bg-[#0a1628] px-1.5 py-1 text-[9px] font-medium text-[#475569] transition-colors hover:bg-[#7c6af7]/15 hover:text-[#7c6af7]"
+        >
+          Clip
+        </button>
+        <button
+          type="button"
+          onClick={() => workspaceState.replayEngine.slowMotion(camera.id, 0, 60, 0.5)}
+          className="flex-1 rounded bg-[#0a1628] px-1.5 py-1 text-[9px] font-medium text-[#475569] transition-colors hover:bg-emerald-500/15 hover:text-emerald-400"
+        >
+          Slow
+        </button>
       </div>
     </div>
   );

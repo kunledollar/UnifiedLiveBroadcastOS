@@ -12,9 +12,13 @@ import {
   SceneGraphEngine,
   type Scene,
 } from '../scene-graph/sceneGraphEngine';
+import { ReplayEngine, type ReplayFrame } from '../replay-engine/replayEngine';
 
 export const workspaceState = {
-  sceneGraph: new SceneGraphEngine(),
+  sceneGraph:   new SceneGraphEngine(),
+  replayEngine: new ReplayEngine(),
+
+  // ── Scene Graph ────────────────────────────────────────────────────────────
 
   /** Called by WorkspaceManager when scenes are updated. */
   setScenes(scenes: Scene[]): void {
@@ -29,5 +33,19 @@ export const workspaceState = {
   /** Called by WorkspaceManager when the preview scene changes. */
   setPreviewScene(id: string | null): void {
     this.sceneGraph.setPreviewScene(id);
+  },
+
+  // ── Replay Engine ──────────────────────────────────────────────────────────
+
+  addReplayFrame(cameraId: string, frame: ReplayFrame): void {
+    this.replayEngine.addFrame(cameraId, frame);
+  },
+
+  addReplayMarker(cameraId: string, time: number, label?: string) {
+    return this.replayEngine.addMarker(cameraId, time, label);
+  },
+
+  createReplayClip(cameraId: string, start: number, end: number) {
+    return this.replayEngine.createClip(cameraId, start, end);
   },
 };

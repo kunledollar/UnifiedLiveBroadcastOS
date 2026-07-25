@@ -22,6 +22,7 @@ import { MultiFeedGridZone }      from './multi-feed-grid/MultiFeedGridZone';
 import { UnifiedChatZone }        from './unified-chat/UnifiedChatZone';
 import { EngagementGraphsZone }   from './engagement-graphs/EngagementGraphsZone';
 import { ModerationZone }         from './moderation/ModerationZone';
+import { ReplayZone }             from './replay/ReplayZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -39,6 +40,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'unified-chat':      UnifiedChatZone,
   'engagement-graphs': EngagementGraphsZone,
   'moderation':        ModerationZone,
+  'replay-monitor':    ReplayZone,
 };
 
 export function ZoneRenderer({
