@@ -21,6 +21,7 @@ import {
   type ProductionState,
 } from '@ubos/shared';
 import { WorkspaceShellRegistry } from '../geometry/shells/WorkspaceShellRegistry';
+import { workspaceState } from '../workspace/workspaceState';
 
 export class WorkspaceManager {
   private state: ProductionState;
@@ -76,6 +77,19 @@ export class WorkspaceManager {
       programScene: { id: sceneId, name: sceneId },
       isLive: true,
     };
+    // Keep Scene Graph Engine in sync
+    workspaceState.setCurrentScene(sceneId);
+    // Feed scenes array to engine if available in state
+    if (this.state.scenes) {
+      workspaceState.setScenes(
+        this.state.scenes.map((s) => ({
+          id:       s.id,
+          name:     s.name,
+          ...(s.layers   ? { layers:   s.layers   as import('../scene-graph/sceneGraphEngine').SceneLayer[] } : {}),
+          ...(s.timeline ? { timeline: s.timeline } : {}),
+        })),
+      );
+    }
     this.geometry.updateState(this.state);
     this.geometry.computeZones();
     this.notify();
