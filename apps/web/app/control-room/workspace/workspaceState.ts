@@ -14,11 +14,13 @@ import {
 } from '../scene-graph/sceneGraphEngine';
 import { ReplayEngine, type ReplayFrame } from '../replay-engine/replayEngine';
 import { RoutingEngine, type RouteSignalType } from '../routing-engine/routingEngine';
+import { AudioEngine, type AudioSource, type AudioLayer } from '../audio-engine/audioEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
   replayEngine:   new ReplayEngine(),
   routingEngine:  new RoutingEngine(),
+  audioEngine:    new AudioEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -59,5 +61,15 @@ export const workspaceState = {
 
   removeRoute(id: number): void {
     this.routingEngine.removeRoute(id);
+  },
+
+  // ── Audio Engine ───────────────────────────────────────────────────────────
+
+  registerAudioSource(id: string, source: AudioSource): void {
+    this.audioEngine.registerSource(id, source);
+  },
+
+  setAudioLayers(layers: AudioLayer[]): void {
+    this.audioEngine.setLayers(layers);
   },
 };

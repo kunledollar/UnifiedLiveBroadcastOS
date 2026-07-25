@@ -24,6 +24,7 @@ import { EngagementGraphsZone }   from './engagement-graphs/EngagementGraphsZone
 import { ModerationZone }         from './moderation/ModerationZone';
 import { ReplayZone }             from './replay/ReplayZone';
 import { RoutingZone }            from './routing/RoutingZone';
+import { AudioMixerZone }         from './audio-mixer/AudioMixerZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -43,6 +44,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'moderation':        ModerationZone,
   'replay-monitor':    ReplayZone,
   'routing-map':       RoutingZone,
+  'audio-mixer':       AudioMixerZone,
 };
 
 export function ZoneRenderer({
