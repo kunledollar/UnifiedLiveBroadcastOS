@@ -20,6 +20,14 @@ export const ubosShadows = {
   previewGlow: '0 0 16px var(--ubos-preview-glow)',
   /** Selection focus ring shadow */
   selectionGlow: '0 0 0 2px var(--ubos-selection-border), 0 0 12px var(--ubos-selection-muted)',
+  /**
+   * UBDS elevation shadow progression (Step 94) — soft/medium/strong/hard,
+   * used by `ubosElevation` levels 1-4 respectively.
+   */
+  soft: '0 1px 2px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.04)',
+  medium: '0 2px 4px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+  strong: '0 4px 8px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+  hard: '0 6px 12px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05)',
 } as const;
 
 export type UbosShadowToken = keyof typeof ubosShadows;

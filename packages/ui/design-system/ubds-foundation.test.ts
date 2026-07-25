@@ -6,8 +6,11 @@ import {
   ubosColorRampStates,
   ubosElevation,
   ubosElevationLevels,
+  ubosElevationClasses,
+  ubosIntelligenceElevationMap,
   ubosMotionSystem,
   ubosRhythm,
+  ubosShadows,
   ubosTypographyClasses,
   ubdsTypographyRoles,
   UBOS_DESIGN_SYSTEM_VERSION,
@@ -102,7 +105,47 @@ test('UBDS: Intelligence Text is medium weight, distinct from Body and HUD Text'
   assert.notEqual(ubosTypographyClasses.intelligence, ubosTypographyClasses.hud);
 });
 
+test('UBDS: only Level 4 (Critical Panel) uses a thick 2px border (Step 94)', () => {
+  for (const level of ubosElevationLevels) {
+    assert.equal(ubosElevation[level].borderWidth, level === 4 ? 2 : 1, `level ${level} border width`);
+  }
+  assert.match(ubosElevationClasses[4], /border-2\b/);
+  for (const level of [0, 1, 2, 3] as const) {
+    assert.doesNotMatch(ubosElevationClasses[level], /border-2\b/);
+  }
+});
+
+test('UBDS: Level 0/1 are flat (no gradient), Level 2-4 have an increasingly directional gradient (Step 94)', () => {
+  assert.equal(ubosElevation[0].gradient, undefined);
+  assert.equal(ubosElevation[1].gradient, undefined);
+  for (const level of [2, 3, 4] as const) {
+    assert.ok(
+      typeof ubosElevation[level].gradient === 'string' && ubosElevation[level].gradient!.includes('linear-gradient'),
+      `level ${level} should have a gradient`,
+    );
+  }
+});
+
+test('UBDS: shadow strength follows the soft/medium/strong/hard progression (Step 94)', () => {
+  assert.equal(ubosElevation[1].shadow, ubosShadows.soft);
+  assert.match(ubosElevation[2].shadow, new RegExp(ubosShadows.medium.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(ubosElevation[3].shadow, new RegExp(ubosShadows.strong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.match(ubosElevation[4].shadow, new RegExp(ubosShadows.hard.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+});
+
+test('UBDS: elevation + intelligence integration maps all seven WIE signals to their spec-defined level (Step 94)', () => {
+  assert.deepEqual(ubosIntelligenceElevationMap, {
+    highlight: 3,
+    warn: 4,
+    pulse: 3,
+    prepare: 2,
+    dim: 1,
+    suppress: 0,
+    elevate: 3,
+  });
+});
+
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 93);
+  assert.equal(UBDS_FOUNDATION_STEP, 94);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });

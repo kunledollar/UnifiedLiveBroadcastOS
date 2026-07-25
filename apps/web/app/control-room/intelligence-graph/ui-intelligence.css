@@ -2,6 +2,7 @@
  * UI Intelligence Integration Layer — visual signal styles (Step 90)
  * UBDS color semantics applied (Step 92).
  * UBDS typography + intelligence integration applied (Step 93).
+ * UBDS elevation + intelligence integration applied (Step 94).
  *
  * Applied on Control Room zone wrappers and workspace shell.
  * Intentionally subtle so geometry layout stays intact.
@@ -9,89 +10,107 @@
  * Signal → UBDS mapping rationale (see workspaceIntelligenceEngine.ts):
  *   highlight — emitted only for `severity === 'critical'` fused insights and
  *               "Critical Action" guidance → Program Red (danger, irreversible)
- *               + bold text (Step 93: highlight → bold + color shift).
+ *               + bold text (Step 93) + Level 3 depth, Highlighted Panel
+ *               (Step 94: highlight → Level 3).
  *   warn      — general operator-facing warning → Warning Yellow + bold text
- *               (Step 93: warn → yellow + bold).
+ *               + Level 4 depth, Critical Panel, thick outline (Step 94:
+ *               warn → Level 4 — this codebase's `warn` covers exactly the
+ *               Level 4 use cases: degraded output, audio clipping, routing
+ *               failures).
  *   pulse     — emitted only for predicted graphics activation and predicted
  *               audio clipping → Warning Yellow (predicted risk), same hue as
  *               `prepare`; the animated glow (box-shadow AND text-shadow) is
  *               what distinguishes an active prediction from a standing one
- *               (Step 93: pulse → slight animated glow). Motion communicates
- *               the state change, color communicates the meaning (UBDS core
- *               principle 4 — Motion as intelligence).
+ *               (Step 93) + Level 3 depth with animation (Step 94: pulse →
+ *               Level 3 with animation). Motion communicates the state
+ *               change, color communicates the meaning (UBDS principle 4).
  *   prepare   — emitted only for predicted scene transitions and predicted
  *               routing failures → Warning Yellow (predicted risk) + italic
- *               text (Step 93: prepare → italic + subtle color shift); the
+ *               text (Step 93) + Level 2 depth with a subtle gradient
+ *               (Step 94: prepare → Level 2 with subtle gradient); the
  *               dashed outline is the "not yet confirmed" texture.
  *   elevated  — panels raised for guidance/attention (workspace shell,
- *               guidance panel) → kept on the existing success tone already
- *               used for a "healthy, actionable" elevation, distinct from
- *               Preview Green (reversible output state) and Active Blue
- *               (operator selection).
- *   dim       — reduced opacity only (Step 93: dim → reduced opacity).
- *   suppress  — opacity/desaturation plus a size step down toward
- *               micro-text, per Step 93 ("suppress → micro-text or hidden").
+ *               guidance panel) → kept on the existing success tone (a
+ *               "healthy, actionable" elevation, distinct from Preview
+ *               Green and Active Blue) + Level 3 depth (Step 94: elevate →
+ *               Level 3).
+ *   dim       — reduced opacity only (Step 93) + Level 1 depth, Standard
+ *               Panel (Step 94: dim → Level 1 — a de-emphasized but still
+ *               present panel).
+ *   suppress  — opacity/desaturation + micro-text sizing (Step 93) +
+ *               Level 0 depth, Background Layer (Step 94: suppress →
+ *               Level 0 — recedes to the background, no shadow at all).
  *
  * Text properties (font-weight/font-style/text-shadow) are inheritable, so
- * they cascade to child text automatically. An element's own explicit
- * typography class (e.g. `font-semibold`) still wins over the inherited
- * wrapper value — this is a subtle default, not an override.
+ * they cascade to child text automatically. Background/gradient properties
+ * on these wrapper elements are layered underneath the zone's own opaque
+ * content in the current geometry-zone architecture and are included for
+ * forward compatibility with zones that don't fill 100% opaque — the
+ * visible depth signal today comes from the outer (non-inset) box-shadow,
+ * outline, and z-index, which always render past the child's edges.
  */
 
 .ubos-highlight {
   outline: 1px solid var(--ubos-program-border);
-  box-shadow: inset 0 0 0 1px var(--ubos-program-dimmed), 0 0 18px var(--ubos-program-dimmed);
+  box-shadow: var(--ubos-depth-3), inset 0 0 0 1px var(--ubos-program-dimmed), 0 0 18px var(--ubos-program-dimmed);
   background-color: var(--ubos-program-dimmed);
   font-weight: 700;
   z-index: 3;
 }
 
 .ubos-warn {
-  outline: 1px solid var(--ubos-warning-border);
-  box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 14px var(--ubos-warning-dimmed);
+  outline: 2px solid var(--ubos-warning-border);
+  box-shadow: var(--ubos-depth-4), inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 14px var(--ubos-warning-dimmed);
   background-color: var(--ubos-warning-dimmed);
   font-weight: 700;
-  z-index: 2;
+  z-index: 4;
 }
 
 .ubos-pulse {
   outline: 1px solid var(--ubos-warning-border);
+  box-shadow: var(--ubos-depth-3);
   animation: ubos-ui-pulse 1.4s ease-in-out infinite;
-  z-index: 2;
+  z-index: 3;
 }
 
 .ubos-prepare {
   outline: 1px dashed var(--ubos-warning-border);
-  box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed);
+  box-shadow: var(--ubos-depth-2), inset 0 0 0 1px var(--ubos-warning-dimmed);
   background-color: var(--ubos-warning-dimmed);
+  background-image: var(--ubos-elevation-gradient-2);
   font-style: italic;
+  z-index: 2;
 }
 
 .ubos-elevated {
   outline: 1px solid var(--ubos-success-border);
-  box-shadow: 0 0 0 1px var(--ubos-success-muted), 0 8px 24px rgba(0, 0, 0, 0.25);
-  z-index: 1;
+  box-shadow: var(--ubos-depth-3), 0 0 0 1px var(--ubos-success-muted), 0 8px 24px rgba(0, 0, 0, 0.25);
+  z-index: 3;
 }
 
 .ubos-dim {
   opacity: 0.42;
   filter: saturate(0.7);
+  box-shadow: var(--ubos-depth-1);
+  z-index: 1;
 }
 
 .ubos-suppress {
   opacity: 0.22;
   filter: grayscale(0.35) saturate(0.5);
   font-size: 0.85em;
+  box-shadow: none;
+  z-index: 0;
 }
 
 @keyframes ubos-ui-pulse {
   0%,
   100% {
-    box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 0 rgba(0, 0, 0, 0);
+    box-shadow: var(--ubos-depth-3), inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 0 rgba(0, 0, 0, 0);
     text-shadow: none;
   }
   50% {
-    box-shadow: inset 0 0 0 1px var(--ubos-warning-elevated), 0 0 16px var(--ubos-warning-elevated);
+    box-shadow: var(--ubos-depth-3), inset 0 0 0 1px var(--ubos-warning-elevated), 0 0 16px var(--ubos-warning-elevated);
     text-shadow: 0 0 6px var(--ubos-warning-elevated);
   }
 }
