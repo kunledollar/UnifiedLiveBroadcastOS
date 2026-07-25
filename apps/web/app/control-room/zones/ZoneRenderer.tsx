@@ -36,6 +36,7 @@ import { CloudZone }              from './cloud/CloudZone';
 import { VirtualizationZone }     from './virtualization/VirtualizationZone';
 import { ContainerZone }          from './container/ContainerZone';
 import { FederationZone }         from './federation/FederationZone';
+import { IntelligenceGraphZone }  from './intelligence/IntelligenceGraphZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -69,6 +70,9 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'virtualization':      VirtualizationZone,
   'container':           ContainerZone,
   'federation':          FederationZone,
+  /** Analytics shell `graph` zone + dedicated UIG zone id */
+  'graph':               IntelligenceGraphZone,
+  'intelligence-graph':  IntelligenceGraphZone,
 };
 
 export function ZoneRenderer({
