@@ -71,7 +71,10 @@ const PANEL_IDS: UiPanelId[] = [
  * Inspector (Step 101) maps to every domain it diagnoses — scene, graphics,
  * audio, routing, and output — plus operator/guidance, since Inspector 2.0
  * is explicitly the cross-domain "diagnostic heart" of UBOS, not scoped to
- * one surface the way Triad or a single composer zone is.
+ * one surface the way Triad or a single composer zone is. Output (Step 102)
+ * maps to program output, scene (its Preview region), routing (its Routing
+ * & Destination region), and guidance (its Intelligence Timeline region),
+ * since Program Output 2.0 now surfaces all four in one zone.
  */
 export const ZONE_TO_PANELS: Readonly<Record<string, readonly UiPanelId[]>> = {
   scene: ['scenePanel'],
@@ -85,7 +88,7 @@ export const ZONE_TO_PANELS: Readonly<Record<string, readonly UiPanelId[]>> = {
     'routingPanel',
     'programOutputPanel',
   ],
-  output: ['programOutputPanel'],
+  output: ['programOutputPanel', 'scenePanel', 'routingPanel', 'guidancePanel'],
   'graphics-composer': ['graphicsPanel'],
   'audio-mixer': ['audioPanel'],
   'routing-map': ['routingPanel'],
