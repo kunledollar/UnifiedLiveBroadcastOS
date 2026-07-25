@@ -33,7 +33,6 @@ export type WorkspaceChromeDef = {
   toolGroups: ChromeToolGroup[];
 };
 
-/* eslint-disable @typescript-eslint/consistent-type-assertions */
 const TOOL_GROUPS: {
   sceneTools: ChromeToolGroup;
   productionTools: ChromeToolGroup;

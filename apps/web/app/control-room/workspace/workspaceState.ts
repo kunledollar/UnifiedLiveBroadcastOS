@@ -16,14 +16,14 @@ import { ReplayEngine, type ReplayFrame } from '../replay-engine/replayEngine';
 import { RoutingEngine, type RouteSignalType } from '../routing-engine/routingEngine';
 import { AudioEngine, type AudioSource, type AudioLayer } from '../audio-engine/audioEngine';
 import { AutomationEngine, type TriggerRegistration, type AutomationContext } from '../automation-engine/automationEngine';
-import { OutputEngine } from '../output-engine/outputEngine';
+import { OutputEngine, type VideoSource } from '../output-engine/outputEngine';
 import { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 import { OrchestrationEngine } from '../orchestration-engine/orchestrationEngine';
 import { HealthEngine } from '../health-engine/healthEngine';
 import { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 import { DistributionEngine } from '../distribution-engine/distributionEngine';
 import { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
-import { SecurityEngine } from '../security-engine/securityEngine';
+import { SecurityEngine, type Permission } from '../security-engine/securityEngine';
 import { NetworkEngine } from '../network-engine/networkEngine';
 import { CloudEngine } from '../cloud-engine/cloudEngine';
 import { VirtualizationEngine } from '../virtualization-engine/virtualizationEngine';
@@ -278,7 +278,7 @@ export const workspaceState = {
   },
 
   /** Check whether the operator with the given id can perform the action. */
-  authorize(userId: string, permission: import('../security-engine/securityEngine').Permission | string): boolean {
+  authorize(userId: string, permission: Permission | string): boolean {
     const user = this.multiUserEngine.getUsers().find((u) => u.id === userId);
     if (!user) return false;
     return this.securityEngine.authorize({ name: user.name, role: user.role }, permission);
@@ -322,7 +322,7 @@ export const workspaceState = {
       multiUserEngine:   this.multiUserEngine,
       cloudEngine:       this.cloudEngine,
       intelligenceGraph: this.intelligenceGraph,
-      automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
+      automationContext: this as unknown as AutomationContext,
     });
     this.orchestrationEngine.start();
   },
@@ -582,7 +582,7 @@ export const workspaceState = {
     const scene = this.sceneGraph.getCurrentScene();
 
     // Video sources from current scene
-    const videoSources: Record<string, import('../output-engine/outputEngine').VideoSource> = {};
+    const videoSources: Record<string, VideoSource> = {};
     if (scene) {
       videoSources[scene.id] = { id: scene.id, name: scene.name, type: 'scene' };
     }

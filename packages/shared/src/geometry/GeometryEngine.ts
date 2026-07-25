@@ -10,6 +10,7 @@
  * It is a pure layout calculation contract.
  */
 import type {
+  CanvasRect,
   GeometryMap,
   GeometryRole,
   MonitorConfig,
@@ -89,7 +90,7 @@ export class UbosGeometryEngine implements GeometryEngine {
   /** Last computed geometry map — returned by getGeometryMap(). */
   private lastGeometryMap: GeometryMap = {};
   /** Pre-computed canvas rects for all outputs, keyed by output id. */
-  private canvasRects: Record<string, import('./types.js').CanvasRect> = {};
+  private canvasRects: Record<string, CanvasRect> = {};
   /** Dominant aspect ratio (width/height) across all active outputs. */
   private dominantAspect: number | null = null;
   /** Categorised aspect mode — drives applyAspectCategory() switch. */

@@ -50,7 +50,6 @@ function useTimer(running: boolean) {
       setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
     }, 1000);
     return () => clearInterval(id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [running]);
 
   const h = Math.floor(elapsed / 3600);

@@ -32,7 +32,6 @@ export function CameraGridItem({ camera }: { camera: Camera }) {
       {/* Video thumbnail */}
       <div className="cg-video relative h-[120px] w-full overflow-hidden rounded border border-[#1e3a5f] bg-black">
         {camera.thumbnail ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
           <img src={camera.thumbnail} alt={camera.name} className="h-full w-full object-cover" />
         ) : (
           <div className="cg-video-empty flex h-full w-full items-center justify-center text-[10px] uppercase tracking-widest text-[#1e3a5f]">
