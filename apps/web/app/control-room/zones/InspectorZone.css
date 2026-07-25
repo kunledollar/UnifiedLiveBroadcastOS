@@ -1,9 +1,25 @@
+/*
+ * Step 101: opaque background (previously unset/transparent). The geometry
+ * engine's stacked role/aspect-ratio width multipliers (GeometryEngine.ts —
+ * a pre-existing system this PR does not modify) can legitimately grow the
+ * Triad zone's box wider than its nominal share of the canvas without
+ * checking for overlap with fixed-position neighbors — under the Director
+ * role at a landscape aspect ratio this can widen Triad by roughly 1.5x,
+ * enough to visually reach into Inspector's column. Since Inspector's own
+ * wrapper had no background, Triad's (legitimately positioned, opaque)
+ * content showed through Inspector's transparent gaps rather than being
+ * cleanly occluded. Inspector already paints after Triad in DOM order
+ * (it comes later in every shell's zone list), so an opaque background
+ * here is sufficient to fully resolve the visual symptom without touching
+ * geometry computation.
+ */
 .inspector-zone {
   display: flex;
   flex-direction: column;
   gap: 12px;
   padding: 8px;
   height: 100%;
+  background: var(--ubos-bg-carbon);
   overflow-y: auto;
   scrollbar-width: thin;
 }

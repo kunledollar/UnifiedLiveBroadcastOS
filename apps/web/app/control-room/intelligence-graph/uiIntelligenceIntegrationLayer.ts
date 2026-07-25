@@ -68,11 +68,23 @@ const PANEL_IDS: UiPanelId[] = [
 /**
  * Geometry zone id → WIE panel candidates (highest-priority action wins).
  * Triad maps to both program output and scene because it hosts both surfaces.
+ * Inspector (Step 101) maps to every domain it diagnoses — scene, graphics,
+ * audio, routing, and output — plus operator/guidance, since Inspector 2.0
+ * is explicitly the cross-domain "diagnostic heart" of UBOS, not scoped to
+ * one surface the way Triad or a single composer zone is.
  */
 export const ZONE_TO_PANELS: Readonly<Record<string, readonly UiPanelId[]>> = {
   scene: ['scenePanel'],
   triad: ['programOutputPanel', 'scenePanel'],
-  inspector: ['operatorPanel', 'guidancePanel'],
+  inspector: [
+    'operatorPanel',
+    'guidancePanel',
+    'scenePanel',
+    'graphicsPanel',
+    'audioPanel',
+    'routingPanel',
+    'programOutputPanel',
+  ],
   output: ['programOutputPanel'],
   'graphics-composer': ['graphicsPanel'],
   'audio-mixer': ['audioPanel'],

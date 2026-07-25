@@ -17,7 +17,9 @@ export function SceneInspector({ scene }: { scene: Scene | undefined }) {
   }
 
   return (
-    <div className="scene-inspector rounded-lg border border-ubos-border-subtle bg-ubos-graphite p-3">
+    // Inspector Body region — Level 2 elevation (Step 101), one step above
+    // the Level 1 Navigation region below it.
+    <div className="scene-inspector rounded-lg border border-ubos-border bg-ubos-slate shadow-ubos-elevation-2 p-3">
       <h4 className="mb-2 text-[9px] font-black uppercase tracking-[0.18em] text-ubos-fg-muted">Scene Details</h4>
 
       <div className="scene-meta mb-3 space-y-1 text-[10px]">
