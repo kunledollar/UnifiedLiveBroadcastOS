@@ -19,6 +19,21 @@ export const ubosSpacing = {
 
 export type UbosSpacingToken = keyof typeof ubosSpacing;
 
+/**
+ * UBDS Spacing Rhythm (Step 91) — named aliases for the 4/8/12/16/24px scale.
+ * Use these names when documenting or reasoning about rhythm; the numeric
+ * `ubosSpacing` scale remains the source of truth for values.
+ */
+export const ubosRhythm = {
+  micro: ubosSpacing[1], // 4px
+  small: ubosSpacing[2], // 8px
+  medium: ubosSpacing[3], // 12px
+  large: ubosSpacing[4], // 16px
+  xlarge: ubosSpacing[6], // 24px
+} as const;
+
+export type UbosRhythmToken = keyof typeof ubosRhythm;
+
 /** Common layout gaps used across Control Room panels */
 export const ubosLayoutSpacing = {
   panelPadding: ubosSpacing[3],

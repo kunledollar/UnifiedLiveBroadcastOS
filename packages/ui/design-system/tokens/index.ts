@@ -1,8 +1,12 @@
 export {
   ubosColors,
   ubosColorVars,
+  ubosBroadcastHues,
+  ubosColorRampStates,
   type UbosBackgroundToken,
   type UbosSemanticToken,
+  type UbosBroadcastHue,
+  type UbosColorRampState,
   type UbosStatus,
   ubosStatusToken,
 } from './colors.js';
@@ -11,20 +15,38 @@ export {
   ubosFontFamily,
   ubosFontSize,
   ubosTypographyClasses,
+  ubdsTypographyRoles,
   type UbosTypographyRole,
+  type UbdsTypographyRole,
 } from './typography.js';
 
-export { ubosSpacing, ubosLayoutSpacing, type UbosSpacingToken } from './spacing.js';
+export {
+  ubosSpacing,
+  ubosLayoutSpacing,
+  ubosRhythm,
+  type UbosSpacingToken,
+  type UbosRhythmToken,
+} from './spacing.js';
 
 export { ubosRadii, ubosRadiusClasses, type UbosRadiusToken } from './radii.js';
 
 export { ubosShadows, type UbosShadowToken } from './shadows.js';
 
 export {
+  ubosElevation,
+  ubosElevationClasses,
+  ubosElevationLevels,
+  type UbosElevationLevel,
+  type UbosElevationToken,
+} from './elevation.js';
+
+export {
   ubosDuration,
   ubosEasing,
   ubosTransition,
   ubosAnimations,
+  ubosMotionSystem,
   type UbosDurationToken,
   type UbosAnimationToken,
+  type UbosMotionPrimitive,
 } from './motion.js';

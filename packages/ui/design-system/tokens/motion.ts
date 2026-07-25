@@ -1,7 +1,15 @@
 /**
- * UBOS Design System v1.0 — Motion Tokens
+ * UBOS Design System (UBDS) — Motion Tokens
  *
  * Micro interactions only. No excessive animation.
+ *
+ * ── UBDS Motion System (Step 91) ─────────────────────────────────────────
+ * Motion communicates state changes, never decoration:
+ *   pulse — predicted activation / recording tally
+ *   glow  — active selection / focus
+ *   slide — transitions between states
+ *   fade  — dimming / de-emphasis
+ *   shake — warnings requiring immediate attention
  */
 
 export const ubosDuration = {
@@ -33,7 +41,19 @@ export const ubosAnimations = {
   recordingPulse: 'ubos-recording-pulse 1.2s ease-in-out infinite',
   fadeIn: 'ubos-fade-in 180ms ease-out forwards',
   slideUp: 'ubos-slide-up 180ms ease-out forwards',
+  shake: 'ubos-shake 400ms ease-in-out',
 } as const;
+
+export type UbosMotionPrimitive = 'pulse' | 'glow' | 'slide' | 'fade' | 'shake';
+
+/** The five UBDS motion primitives, mapped to their canonical animation/transition token. */
+export const ubosMotionSystem: Record<UbosMotionPrimitive, string> = {
+  pulse: ubosAnimations.tallyPulse,
+  glow: ubosTransition.glow,
+  slide: ubosTransition.slide,
+  fade: ubosTransition.fade,
+  shake: ubosAnimations.shake,
+};
 
 export type UbosDurationToken = keyof typeof ubosDuration;
 export type UbosAnimationToken = keyof typeof ubosAnimations;

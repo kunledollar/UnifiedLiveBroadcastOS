@@ -24,29 +24,78 @@
   --ubos-border-strong: rgba(255, 255, 255, 0.16);
   --ubos-border-focus: rgba(59, 130, 246, 0.55);
 
-  /* Program — Broadcast Red */
+  /* Program — Broadcast Red (Program Red) */
   --ubos-program: #dc2626;
+  --ubos-program-hover: #ef4444;
+  --ubos-program-active: #b91c1c;
+  --ubos-program-elevated: rgba(220, 38, 38, 0.22);
+  --ubos-program-dimmed: rgba(220, 38, 38, 0.08);
   --ubos-program-muted: rgba(220, 38, 38, 0.12);
   --ubos-program-border: rgba(248, 113, 113, 0.55);
   --ubos-program-text: #fecaca;
   --ubos-program-glow: rgba(220, 38, 38, 0.22);
 
-  /* Preview — Broadcast Green */
+  /* Preview — Broadcast Green (Preview Green) */
   --ubos-preview: #22c55e;
+  --ubos-preview-hover: #4ade80;
+  --ubos-preview-active: #16a34a;
+  --ubos-preview-elevated: rgba(34, 197, 94, 0.20);
+  --ubos-preview-dimmed: rgba(34, 197, 94, 0.08);
   --ubos-preview-muted: rgba(34, 197, 94, 0.12);
   --ubos-preview-border: rgba(74, 222, 128, 0.50);
   --ubos-preview-text: #bbf7d0;
   --ubos-preview-glow: rgba(34, 197, 94, 0.18);
 
-  /* Selection — Electric Blue */
+  /* Selection — Electric Blue (Active Blue) */
   --ubos-selection: #3b82f6;
+  --ubos-selection-hover: #60a5fa;
+  --ubos-selection-active: #2563eb;
+  --ubos-selection-elevated: rgba(59, 130, 246, 0.22);
+  --ubos-selection-dimmed: rgba(59, 130, 246, 0.08);
   --ubos-selection-muted: rgba(59, 130, 246, 0.12);
   --ubos-selection-border: rgba(96, 165, 250, 0.55);
   --ubos-selection-text: #bfdbfe;
   --ubos-selection-glow: rgba(59, 130, 246, 0.20);
 
-  /* Warning — Amber */
+  /* Automation — Purple (Automation Purple) */
+  --ubos-automation: #a855f7;
+  --ubos-automation-hover: #c084fc;
+  --ubos-automation-active: #9333ea;
+  --ubos-automation-elevated: rgba(168, 85, 247, 0.22);
+  --ubos-automation-dimmed: rgba(168, 85, 247, 0.08);
+  --ubos-automation-muted: rgba(168, 85, 247, 0.12);
+  --ubos-automation-border: rgba(192, 132, 252, 0.50);
+  --ubos-automation-text: #e9d5ff;
+  --ubos-automation-glow: rgba(168, 85, 247, 0.20);
+
+  /* Graphics — Cyan (Graphics Cyan) */
+  --ubos-graphics: #06b6d4;
+  --ubos-graphics-hover: #22d3ee;
+  --ubos-graphics-active: #0891b2;
+  --ubos-graphics-elevated: rgba(6, 182, 212, 0.22);
+  --ubos-graphics-dimmed: rgba(6, 182, 212, 0.08);
+  --ubos-graphics-muted: rgba(6, 182, 212, 0.12);
+  --ubos-graphics-border: rgba(34, 211, 238, 0.50);
+  --ubos-graphics-text: #a5f3fc;
+  --ubos-graphics-glow: rgba(6, 182, 212, 0.20);
+
+  /* Replay — Orange (Replay Orange) */
+  --ubos-replay: #f97316;
+  --ubos-replay-hover: #fb923c;
+  --ubos-replay-active: #ea580c;
+  --ubos-replay-elevated: rgba(249, 115, 22, 0.22);
+  --ubos-replay-dimmed: rgba(249, 115, 22, 0.08);
+  --ubos-replay-muted: rgba(249, 115, 22, 0.12);
+  --ubos-replay-border: rgba(251, 146, 60, 0.50);
+  --ubos-replay-text: #fed7aa;
+  --ubos-replay-glow: rgba(249, 115, 22, 0.20);
+
+  /* Warning — Amber (universal override tone) */
   --ubos-warning: #f59e0b;
+  --ubos-warning-hover: #fbbf24;
+  --ubos-warning-active: #d97706;
+  --ubos-warning-elevated: rgba(245, 158, 11, 0.22);
+  --ubos-warning-dimmed: rgba(245, 158, 11, 0.08);
   --ubos-warning-muted: rgba(245, 158, 11, 0.12);
   --ubos-warning-border: rgba(251, 191, 36, 0.45);
   --ubos-warning-text: #fde68a;
@@ -132,6 +181,12 @@
   --ubos-elevation-panel: 0 1px 2px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
   --ubos-elevation-header: 0 1px 0 rgba(255,255,255,0.04);
 
+  /* UBDS Elevation Levels 0-4 (Step 91) — background is Level 0, no shadow. */
+  --ubos-elevation-1: 0 1px 2px rgba(0,0,0,0.35), 0 0 0 1px rgba(255,255,255,0.04);
+  --ubos-elevation-2: 0 2px 8px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05);
+  --ubos-elevation-3: 0 2px 8px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05), 0 0 0 2px var(--ubos-selection-border), 0 0 12px var(--ubos-selection-muted);
+  --ubos-elevation-4: 0 2px 8px rgba(0,0,0,0.45), 0 0 0 1px var(--ubos-error-border), 0 0 20px var(--ubos-error-muted);
+
   /* Status tones — 3.15C compact badges */
   --ubos-status-live: var(--ubos-program);
   --ubos-status-ready: var(--ubos-preview);
@@ -213,6 +268,15 @@
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+/* UBDS motion primitive — shake, for warnings requiring immediate attention */
+@keyframes ubos-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
 }
 
 /* Base broadcast workstation surface */
@@ -305,4 +369,36 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* UBDS motion primitive — apply to trigger a warning shake once */
+.ubos-shake {
+  animation: ubos-shake 400ms ease-in-out;
+}
+
+/* UBDS elevation levels 0-4 — background + shadow + border per level */
+.ubos-elevation-0 {
+  background-color: var(--ubos-bg-carbon);
+  box-shadow: none;
+  border-color: transparent;
+}
+.ubos-elevation-1 {
+  background-color: var(--ubos-bg-graphite);
+  box-shadow: var(--ubos-elevation-1);
+  border-color: var(--ubos-border-subtle);
+}
+.ubos-elevation-2 {
+  background-color: var(--ubos-bg-slate);
+  box-shadow: var(--ubos-elevation-2);
+  border-color: var(--ubos-border-default);
+}
+.ubos-elevation-3 {
+  background-color: var(--ubos-bg-midnight);
+  box-shadow: var(--ubos-elevation-3);
+  border-color: var(--ubos-selection-border);
+}
+.ubos-elevation-4 {
+  background-color: var(--ubos-bg-midnight);
+  box-shadow: var(--ubos-elevation-4);
+  border-color: var(--ubos-error-border);
 }
