@@ -31,14 +31,30 @@ Import `@ubos/ui/design-system` for token maps and import `@ubos/ui/design-syste
 
 ## Typography Hierarchy
 
-Canonical UBDS roles (`ubosTypographyClasses`):
+Canonical UBDS roles (`ubosTypographyClasses`, `ubdsTypographyRoles`):
 
 - **Title** (`title`) — uppercase, medium weight. Panel/workspace-level headings.
 - **Section Label** (`sectionLabel`) — uppercase, small caps. Groups related controls.
-- **Body** (`body`) — light weight, high readability. Primary reading text.
-- **Micro-text** (`microText`) — for indicators, timestamps, and inline telemetry.
+- **Body** (`body`) — readable weight, neutral color. Primary reading text.
+- **Micro-text** (`microText`) — minimal weight, for indicators, timestamps, and inline telemetry.
+- **HUD Text** (`hud`) — bold, uppercase, with a legibility drop shadow for text rendered over live video (operator HUD overlays, monitor tallies). Deliberately has no baked-in color — it is color-semantic aware, so pair it with the relevant hue's `-text` class (e.g. `text-ubos-program-text`) at the call site.
+- **Intelligence Text** (`intelligence`) — medium weight, for fused insights, operator guidance, and predictive hints. Pairs with the UI Intelligence Integration Layer's signal classes (below) for the warning-is-bold / prediction-is-italic treatments rather than baking a single fixed style.
 
 The existing roles `display`, `section`, `panel`, `caption`, `metadata`, `mono`, and `broadcastLabel` remain available for incremental migration. Use `broadcastLabel` only for operational labels such as PROGRAM, PREVIEW, LIVE, and REC.
+
+### Typography + Intelligence Integration
+
+`apps/web/app/control-room/intelligence-graph/ui-intelligence.css` maps each UI Intelligence Integration Layer signal (Step 90) to both a color treatment (Step 92) and a text treatment (Step 93), since these classes are applied to zone wrapper elements and `font-weight`/`font-style`/`text-shadow` are inheritable:
+
+- **highlight** → Program Red + bold text (critical severity).
+- **warn** → Warning Yellow + bold text.
+- **pulse** → Warning Yellow + an animated glow that includes a `text-shadow` pulse, not just the box glow.
+- **prepare** → Warning Yellow + italic text (a standing prediction, not yet confirmed).
+- **elevated** → the existing success tone (no text treatment — elevation is chrome-level, not a text state).
+- **dim** → reduced opacity only.
+- **suppress** → reduced opacity/desaturation plus a size step toward micro-text, per "suppress → micro-text or hidden".
+
+An element's own explicit typography class (e.g. `font-semibold` on a heading) still wins over the inherited wrapper value — this is a subtle default, not an override.
 
 ## Elevation System
 
@@ -80,4 +96,4 @@ Use CSS variables or design-system utility classes rather than new literal visua
 
 ## Foundation vs. application
 
-Step 91 established the UBDS foundation described above. Applying UBDS to Triad 2.0, Inspector 2.0, Program Output 2.0, Workspace Themes, and the Operator HUD is scoped to later steps (92–100) — this package intentionally does not re-skin existing Control Room surfaces.
+Step 91 established the UBDS token foundation (color, elevation, motion, spacing, and the first four typography roles). Step 92 applied the broadcast color language to the Triad, Inspector, Program Output, Graphics, Audio, Routing, Replay, Workspace Shell, and Operator HUD surfaces. Step 93 completed the typography hierarchy (HUD Text, Intelligence Text) and wired the intelligence-signal text treatments above. Applying UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 (the next-generation redesigns) is scoped to later steps — this package intentionally does not re-skin existing Control Room surfaces beyond the color/typography semantics already applied.

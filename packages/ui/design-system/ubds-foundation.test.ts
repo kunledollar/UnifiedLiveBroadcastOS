@@ -77,7 +77,9 @@ test('UBDS: spacing rhythm matches the 4/8/12/16/24px scale', () => {
   assert.equal(ubosRhythm.xlarge, '1.5rem');
 });
 
-test('UBDS: typography hierarchy exposes Title, Section Label, Body, and Micro-text', () => {
+test('UBDS: typography hierarchy exposes all six canonical roles (Step 93)', () => {
+  const required = ['title', 'sectionLabel', 'body', 'microText', 'hud', 'intelligence'];
+  assert.deepEqual([...ubdsTypographyRoles].sort(), [...required].sort());
   for (const role of ubdsTypographyRoles) {
     assert.ok(
       typeof ubosTypographyClasses[role] === 'string' && ubosTypographyClasses[role].length > 0,
@@ -88,7 +90,19 @@ test('UBDS: typography hierarchy exposes Title, Section Label, Body, and Micro-t
   assert.match(ubosTypographyClasses.sectionLabel, /uppercase/);
 });
 
+test('UBDS: HUD Text is bold with a legibility shadow and no baked-in color', () => {
+  assert.match(ubosTypographyClasses.hud, /font-bold/);
+  assert.match(ubosTypographyClasses.hud, /text-shadow/);
+  assert.doesNotMatch(ubosTypographyClasses.hud, /text-ubos-fg-/);
+});
+
+test('UBDS: Intelligence Text is medium weight, distinct from Body and HUD Text', () => {
+  assert.match(ubosTypographyClasses.intelligence, /font-medium/);
+  assert.notEqual(ubosTypographyClasses.intelligence, ubosTypographyClasses.body);
+  assert.notEqual(ubosTypographyClasses.intelligence, ubosTypographyClasses.hud);
+});
+
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 91);
+  assert.equal(UBDS_FOUNDATION_STEP, 93);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });

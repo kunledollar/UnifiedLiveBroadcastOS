@@ -1,21 +1,24 @@
 'use client';
 
 /**
- * UBDS Foundation Showcase — Step 91.
+ * UBDS Foundation Showcase — Steps 91-93.
  *
  * Standalone, isolated demo route (no database, no Control Room chrome)
  * that renders the UBOS Design System foundation tokens so the broadcast
- * color language, typography hierarchy, elevation model, motion system,
- * and spacing rhythm can be visually verified. This route intentionally
- * does not modify any existing Control Room surface — application of UBDS
- * to live workspaces happens in later steps (92-100).
+ * color language, the complete typography hierarchy (including HUD Text
+ * and Intelligence Text, Step 93), elevation model, motion system, and
+ * spacing rhythm can be visually verified. This route intentionally does
+ * not modify any existing Control Room surface — application of UBDS to
+ * live workspaces happens in Step 92 (color) and later steps.
  */
 import { useState } from 'react';
+import '../control-room/intelligence-graph/ui-intelligence.css';
 import {
   ubosBroadcastHues,
   ubosColorRampStates,
   ubosElevationLevels,
   ubdsTypographyRoles,
+  ubosTypographyClasses,
   type UbosBroadcastHue,
   type UbosColorRampState,
   type UbosElevationLevel,
@@ -42,12 +45,31 @@ const rampSwatchClass: Record<UbosBroadcastHue, Record<UbosColorRampState, strin
   warning: { base: 'bg-ubos-warning', hover: 'bg-ubos-warning-hover', active: 'bg-ubos-warning-active', elevated: 'bg-ubos-warning-elevated', dimmed: 'bg-ubos-warning-dimmed' },
 };
 
-const typographySamples: Record<UbdsTypographyRole, { className: string; sample: string }> = {
-  title: { className: 'text-[1rem] font-medium uppercase tracking-[0.04em] leading-tight text-ubos-fg-primary', sample: 'Program Output 2.0' },
-  sectionLabel: { className: 'text-[0.6875rem] font-semibold uppercase tracking-[0.08em] leading-snug text-ubos-fg-secondary', sample: 'Section Label' },
-  body: { className: 'text-[0.8125rem] font-normal leading-normal text-ubos-fg-primary', sample: 'Body text uses a light weight for high readability across long operator sessions.' },
-  microText: { className: 'text-[0.625rem] font-normal leading-tight text-ubos-fg-muted', sample: '00:12:47 · 3 viewers · CPU 24%' },
+// Sample copy per role. The className always comes straight from
+// `ubosTypographyClasses` (the single source of truth) so this page can
+// never drift from the actual tokens.
+const typographySamples: Record<UbdsTypographyRole, { sample: string; wrapperClassName?: string }> = {
+  title: { sample: 'Program Output 2.0' },
+  sectionLabel: { sample: 'Section Label' },
+  body: { sample: 'Body text uses a readable weight for long operator sessions.' },
+  microText: { sample: '00:12:47 · 3 viewers · CPU 24%' },
+  // HUD Text has no baked-in color (color-semantic aware) — composed here
+  // with the Program Red tally color and a dark "video" backdrop so the
+  // drop shadow's legibility purpose is visible.
+  hud: { sample: 'PROGRAM · LIVE', wrapperClassName: 'text-ubos-program-text' },
+  intelligence: { sample: 'Predicted scene transition in ~4s' },
 };
+
+// UIIL signals (Step 90) drive the intelligence-text treatments described
+// in Step 93: highlight/warn are bold, prepare is italic, pulse glows.
+const intelligenceSignalSamples: Array<{ signal: string; className: string; sample: string }> = [
+  { signal: 'highlight', className: 'ubos-highlight', sample: 'Critical: audio dropout on Guest Mic 2' },
+  { signal: 'warn', className: 'ubos-warn', sample: 'Output bitrate trending toward degradation' },
+  { signal: 'pulse', className: 'ubos-pulse', sample: 'Predicted audio clipping in 2s' },
+  { signal: 'prepare', className: 'ubos-prepare', sample: 'Predicted scene transition in ~4s' },
+  { signal: 'dim', className: 'ubos-dim', sample: 'Non-relevant panel for this role' },
+  { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight' },
+];
 
 const elevationSwatchClass: Record<UbosElevationLevel, string> = {
   0: 'bg-ubos-carbon border-transparent',
@@ -88,14 +110,16 @@ export default function DesignSystemShowcasePage() {
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Step 91
+          UBOS Design System · Steps 91–93
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
         </h1>
         <p className="mt-1 max-w-2xl text-[0.8125rem] text-ubos-fg-secondary">
-          Broadcast color language, typography hierarchy, elevation model, motion system, and
-          spacing rhythm. Foundation-only — no Control Room surfaces are modified by this page.
+          Broadcast color language, the complete typography hierarchy, elevation model, motion
+          system, and spacing rhythm. This route is a read-only showcase — Control Room surfaces
+          are only updated by the color (Step 92) and typography (Step 93) application work
+          itself, not by this page.
         </p>
       </header>
 
@@ -121,10 +145,37 @@ export default function DesignSystemShowcasePage() {
       <section className="mb-10">
         <SectionHeading>Typography Hierarchy</SectionHeading>
         <div className="space-y-3 rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-4 shadow-ubos-panel">
-          {ubdsTypographyRoles.map((role) => (
-            <div key={role} className="border-b border-ubos-border-subtle pb-3 last:border-b-0 last:pb-0">
-              <span className="mb-1 block text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{role}</span>
-              <p className={typographySamples[role].className}>{typographySamples[role].sample}</p>
+          {ubdsTypographyRoles.map((role) => {
+            const { sample, wrapperClassName } = typographySamples[role];
+            return (
+              <div key={role} className="border-b border-ubos-border-subtle pb-3 last:border-b-0 last:pb-0">
+                <span className="mb-1 block text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{role}</span>
+                {role === 'hud' ? (
+                  <div className="rounded-ubos-sm bg-[radial-gradient(circle_at_30%_30%,#1e293b,#020617)] p-3">
+                    <p className={`${ubosTypographyClasses.hud} ${wrapperClassName ?? ''}`}>{sample}</p>
+                  </div>
+                ) : (
+                  <p className={`${ubosTypographyClasses[role]} ${wrapperClassName ?? ''}`}>{sample}</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <SectionHeading>Typography + Intelligence Integration</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          Intelligence Text combined with each UIIL signal class (Step 90) — the same
+          classes applied to live Control Room zone wrappers in Step 92/93.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {intelligenceSignalSamples.map(({ signal, className, sample }) => (
+            <div key={signal} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+              <span className="mb-2 block text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{signal}</span>
+              <div className={`rounded-ubos-sm p-2 ${className}`}>
+                <p className={ubosTypographyClasses.intelligence}>{sample}</p>
+              </div>
             </div>
           ))}
         </div>
