@@ -21,6 +21,7 @@ import { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 import { OrchestrationEngine } from '../orchestration-engine/orchestrationEngine';
 import { HealthEngine } from '../health-engine/healthEngine';
 import { PersistenceEngine } from '../persistence-engine/persistenceEngine';
+import { DistributionEngine } from '../distribution-engine/distributionEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -33,6 +34,7 @@ export const workspaceState = {
   orchestrationEngine:  null as OrchestrationEngine | null,
   healthEngine:         new HealthEngine(),
   persistenceEngine:    new PersistenceEngine(),
+  distributionEngine:   new DistributionEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -134,6 +136,22 @@ export const workspaceState = {
     if (p.has('audio')) {
       this.audioEngine.setLayers((p.load('audio') as Parameters<typeof this.audioEngine.setLayers>[0]) ?? []);
     }
+  },
+
+  // ── Distribution Engine ───────────────────────────────────────────────────
+
+  registerDestination(dest: Parameters<typeof this.distributionEngine.registerDestination>[0]) {
+    return this.distributionEngine.registerDestination(dest);
+  },
+
+  distributeOutput() {
+    const frame = this.outputEngine.composeFrame();
+    const results = this.distributionEngine.distribute(frame);
+    // Notify AI Crew of distribution activity
+    if (results.some((r) => r.status === 'sent')) {
+      this.aiCrewEngine.analyzeRouting([...this.routingEngine.getActiveRoutes()]);
+    }
+    return results;
   },
 
   // ── Orchestration Engine ───────────────────────────────────────────────────

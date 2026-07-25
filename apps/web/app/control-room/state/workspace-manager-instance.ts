@@ -7,6 +7,13 @@
  */
 import { WorkspaceManager } from './WorkspaceManager';
 
+import { workspaceState } from '../workspace/workspaceState';
+
+// Seed example distribution destinations at startup
+workspaceState.registerDestination({ id: 'yt',    name: 'YouTube Live',   type: 'rtmp',  endpoint: 'rtmp://youtube.com/live' });
+workspaceState.registerDestination({ id: 'fb',    name: 'Facebook Live',  type: 'rtmp',  endpoint: 'rtmp://facebook.com/live' });
+workspaceState.registerDestination({ id: 'local', name: 'Local Recorder', type: 'file',  endpoint: '/recordings/program.mp4' });
+
 export const workspaceManager = new WorkspaceManager({
   programSceneId:  null,
   previewSceneId:  null,
