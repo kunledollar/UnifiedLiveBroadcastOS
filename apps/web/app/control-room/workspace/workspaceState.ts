@@ -17,6 +17,7 @@ import { RoutingEngine, type RouteSignalType } from '../routing-engine/routingEn
 import { AudioEngine, type AudioSource, type AudioLayer } from '../audio-engine/audioEngine';
 import { AutomationEngine, type TriggerRegistration, type AutomationContext } from '../automation-engine/automationEngine';
 import { OutputEngine } from '../output-engine/outputEngine';
+import { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -25,6 +26,7 @@ export const workspaceState = {
   audioEngine:       new AudioEngine(),
   automationEngine:  new AutomationEngine(),
   outputEngine:      new OutputEngine(),
+  aiCrewEngine:      new AiCrewEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -81,6 +83,31 @@ export const workspaceState = {
 
   registerAutomationTrigger(registration: TriggerRegistration) {
     return this.automationEngine.registerTrigger(registration);
+  },
+
+  // ── AI Crew Engine ─────────────────────────────────────────────────────────
+
+  /**
+   * Run a full AI Crew analysis pass over all active engines.
+   * Produces insights that surface in AiInspector + AI zones.
+   */
+  updateAiCrew(): void {
+    const scene        = this.sceneGraph.getCurrentScene();
+    const clips        = this.replayEngine.getClips();
+    const audioHealth  = this.audioEngine.monitor();
+    const routes       = this.routingEngine.getActiveRoutes();
+    const outputHealth = this.outputEngine.health();
+    const modQueue     = (this as unknown as { moderationQueue?: unknown[] }).moderationQueue;
+
+    this.aiCrewEngine.analyzeScene(scene);
+    this.aiCrewEngine.analyzeGraphics(scene?.layers?.filter((l) => l.type === 'graphics') ?? []);
+    this.aiCrewEngine.analyzeReplay([...clips]);
+    this.aiCrewEngine.analyzeAudio(audioHealth[0] ?? null);
+    this.aiCrewEngine.analyzeRouting([...routes]);
+    this.aiCrewEngine.analyzeOutput(outputHealth);
+    if (modQueue && modQueue.length > 0) {
+      this.aiCrewEngine.analyzeModeration(modQueue.length);
+    }
   },
 
   /** Evaluate all automation triggers against the current workspace context. */
