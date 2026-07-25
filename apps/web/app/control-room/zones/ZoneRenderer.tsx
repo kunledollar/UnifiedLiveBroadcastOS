@@ -18,6 +18,7 @@ import { AiInsightZone }          from './AiInsightZone';
 import { AiCrewOverlay }          from './AiCrewOverlay';
 import { GraphicsComposerZone }   from './graphics-composer/GraphicsComposerZone';
 import { CameraGridZone }         from './camera-grid/CameraGridZone';
+import { MultiFeedGridZone }      from './multi-feed-grid/MultiFeedGridZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -31,6 +32,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'ai-crew-overlay':   AiCrewOverlay,
   'graphics-composer': GraphicsComposerZone,
   'camera-grid':       CameraGridZone,
+  'multi-feed-grid':   MultiFeedGridZone,
 };
 
 export function ZoneRenderer({

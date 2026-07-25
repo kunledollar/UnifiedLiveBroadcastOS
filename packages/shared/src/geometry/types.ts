@@ -207,6 +207,15 @@ export interface ProductionState {
   monitors?: MonitorConfig[];
   /** Active output profiles — passed to adaptToAspectRatios(). */
   outputs?: OutputProfile[];
+  /** Multi-feed tiles for MultiFeedGridZone (Monitor Wall, Distribution). */
+  feeds?: Array<{
+    id: string;
+    name: string;
+    thumbnail?: string;
+    source?: string;
+    health?: 'healthy' | 'degraded' | 'offline';
+    droppedFrames?: number;
+  }>;
   /** Camera feeds for CameraGridZone (Replay Operator, Monitor Wall). */
   cameras?: Array<{
     id: string;
