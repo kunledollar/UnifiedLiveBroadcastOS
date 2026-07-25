@@ -10,11 +10,11 @@
  * Step 84: Confidence Scoring Engine (CSE) — belief strength across the graph
  * Step 85: Temporal Pattern Engine (TPE) — trends, spikes, anomalies over time
  * Step 86: Predictive Engine (PE) Phase 1 — forecasting future states
+ * Step 87: Insight Fusion Engine (IFE) — unified operator guidance
  *
  * Later steps expand:
- *   - deeper inference rules / ML scoring
- *   - operator guidance surfaces
- *   - UI emphasis / workspace intelligence
+ *   - operator HUD / UI emphasis surfaces
+ *   - deeper workspace intelligence
  */
 
 import {
@@ -36,6 +36,10 @@ import {
   type TemporalTrend,
 } from './temporalPatternEngine.js';
 import { PredictiveEngine, type Prediction } from './predictiveEngine.js';
+import {
+  InsightFusionEngine,
+  type FusedInsight,
+} from './insightFusionEngine.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -141,6 +145,8 @@ export type UigSnapshot = {
   };
   predictionCount: number;
   latestPredictions: readonly Prediction[];
+  fusedCount: number;
+  latestFusedInsights: readonly FusedInsight[];
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
@@ -155,9 +161,12 @@ export class UBOSIntelligenceGraph {
   readonly confidenceEngine = new ConfidenceScoringEngine(this);
   readonly temporalEngine = new TemporalPatternEngine(this);
   readonly predictiveEngine = new PredictiveEngine(this);
+  readonly fusionEngine = new InsightFusionEngine(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
+  /** Latest fused operator guidance from IFE (Step 87). */
+  fusedInsights: FusedInsight[] = [];
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
@@ -452,6 +461,12 @@ export class UBOSIntelligenceGraph {
     this.lastInferenceRun = refinedRun;
     this.insights = refinedInsights.slice(0, this.MAX_INSIGHTS);
 
+    // Insight Fusion Engine — unify into operator-facing guidance
+    this.fusedInsights = this.fusionEngine.fuse(
+      refinedRun.results,
+      this.predictiveEngine.getPredictions() as Prediction[],
+    );
+
     return refinedRun;
   }
 
@@ -509,6 +524,19 @@ export class UBOSIntelligenceGraph {
     return this.predictiveEngine.getPredictions();
   }
 
+  /** Alias used by IFE skeleton / external callers. */
+  get lastPredictions(): readonly Prediction[] {
+    return this.predictiveEngine.getPredictions();
+  }
+
+  getFusedInsights(): readonly FusedInsight[] {
+    return this.fusedInsights;
+  }
+
+  getTopFusedInsights(limit = 3): readonly FusedInsight[] {
+    return this.fusionEngine.getTopInsights(limit);
+  }
+
   getSnapshot(): UigSnapshot {
     const nodesByType: Partial<Record<UigNodeType, number>> = {};
     let confidenceSum = 0;
@@ -530,6 +558,8 @@ export class UBOSIntelligenceGraph {
       temporal: this.temporalEngine.getSummary(),
       predictionCount: this.predictiveEngine.getPredictions().length,
       latestPredictions: this.predictiveEngine.getPredictions().slice(0, 8),
+      fusedCount: this.fusedInsights.length,
+      latestFusedInsights: this.fusedInsights.slice(0, 5),
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
@@ -544,9 +574,11 @@ export class UBOSIntelligenceGraph {
     this.recentEvents = [];
     this.lastInsights = [];
     this.lastInferenceRun = null;
+    this.fusedInsights = [];
     this.confidenceEngine.reset();
     this.temporalEngine.reset();
     this.predictiveEngine.reset();
+    this.fusionEngine.reset();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────

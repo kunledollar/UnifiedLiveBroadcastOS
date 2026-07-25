@@ -45,6 +45,8 @@
     "app/control-room/intelligence-graph/temporalPatternEngine.ts",
     "app/control-room/intelligence-graph/temporalPatternEngine.test.ts",
     "app/control-room/intelligence-graph/predictiveEngine.ts",
-    "app/control-room/intelligence-graph/predictiveEngine.test.ts"
+    "app/control-room/intelligence-graph/predictiveEngine.test.ts",
+    "app/control-room/intelligence-graph/insightFusionEngine.ts",
+    "app/control-room/intelligence-graph/insightFusionEngine.test.ts"
   ]
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import type { ProductionState } from '@ubos/shared';
 import { workspaceState } from '../../workspace/workspaceState';
 import type { UigInsightKind, UigNodeType } from '../../intelligence-graph/ubosIntelligenceGraph';
+import type { FusionSeverity } from '../../intelligence-graph/insightFusionEngine';
 
 const kindColor: Record<UigInsightKind, string> = {
   warning:        'text-red-400',
@@ -17,6 +18,13 @@ const kindBadge: Record<UigInsightKind, string> = {
   prediction:     'bg-sky-500/15 text-sky-400',
   recommendation: 'bg-amber-500/15 text-amber-400',
   guidance:       'bg-emerald-500/15 text-emerald-400',
+};
+
+const fusedBadge: Record<FusionSeverity, string> = {
+  critical:   'bg-red-500/20 text-red-400',
+  warning:    'bg-amber-500/15 text-amber-400',
+  prediction: 'bg-sky-500/15 text-sky-400',
+  info:       'bg-[#1e2530] text-[#64748b]',
 };
 
 const TYPE_ORDER: UigNodeType[] = [
@@ -67,6 +75,7 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-[#64748b]">{snapshot.eventCount} events</span>
         <span className="text-[#334155]">{snapshot.insightCount} insights</span>
         <span className="text-fuchsia-400/80">{snapshot.predictionCount} forecasts</span>
+        <span className="text-emerald-400/80">{snapshot.fusedCount} fused</span>
         <span className="text-sky-500/80">{snapshot.highlightCount} highlights</span>
         <span className="text-amber-500/80">{snapshot.emphasisCount} emphasis</span>
         <span className="text-emerald-500/80">
@@ -79,6 +88,31 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
           <span className="text-red-400/80">
             tpe {snapshot.temporal.spikes}↑ {snapshot.temporal.drops}↓ {snapshot.temporal.anomalies}!
           </span>
+        )}
+      </div>
+
+      <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">
+        Operator guidance
+      </p>
+      <div className="mb-3 flex flex-col gap-1.5 overflow-y-auto" style={{ maxHeight: '150px' }}>
+        {snapshot.latestFusedInsights.map((fused) => (
+          <div key={fused.id} className="rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5">
+            <div className="mb-0.5 flex items-center gap-1.5">
+              <span className={`rounded px-1 py-0.5 text-[7px] font-bold uppercase ${fusedBadge[fused.severity]}`}>
+                {fused.severity}
+              </span>
+              <span className="font-mono text-[7px] uppercase text-[#334155]">{fused.cluster}</span>
+              <span className="text-[8px] text-[#475569]">{fused.sourceCount} signals</span>
+              <span className="ml-auto text-[8px] text-[#334155]">
+                {(fused.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+            <p className="text-[10px] leading-snug text-[#94a3b8]">{fused.message}</p>
+            <p className="mt-0.5 text-[9px] text-emerald-400/90">→ {fused.recommendedAction}</p>
+          </div>
+        ))}
+        {snapshot.latestFusedInsights.length === 0 && (
+          <p className="text-[10px] text-[#334155]">No fused guidance yet</p>
         )}
       </div>
 
