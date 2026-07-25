@@ -347,11 +347,20 @@ export const workspaceState = {
     const health = this.healthEngine.getHealth();
     const triggers = this.automationEngine.getTriggers();
     const graphicsLayers = (scene?.layers ?? []).filter((l) => l.type === 'graphics');
+    const operator = this.multiUserEngine.getUsers()[0];
 
+    // UENL context — workspace/operator lineage for every normalized event
+    this.intelligenceGraph.setContext({
+      workspace: null,
+      operator: operator?.name ?? null,
+      system: 'ubos-control-room',
+    });
+
+    const dropped = outputHealth.droppedFrames ?? 0;
     const events: UigEvent[] = [
       {
         id: 'scene:current',
-        type: 'SceneNode',
+        type: !scene ? 'scene.missing_source' : 'scene.active',
         source: 'scene-graph',
         payload: {
           name: scene?.name ?? null,
@@ -362,16 +371,16 @@ export const workspaceState = {
       },
       {
         id: 'output:program',
-        type: 'OutputNode',
+        type: dropped > 0 ? 'output.frame_drop' : 'output.health_update',
         source: 'output-engine',
         payload: {
-          droppedFrames: outputHealth.droppedFrames ?? 0,
+          droppedFrames: dropped,
           latency: outputHealth.latency ?? 0,
         },
       },
       ...graphicsLayers.map((layer): UigEvent => ({
         id: `graphics:${layer.id}`,
-        type: 'GraphicsNode',
+        type: 'graphics.active',
         source: 'scene-graph',
         payload: {
           name: layer.name ?? layer.id,
@@ -381,7 +390,7 @@ export const workspaceState = {
       })),
       ...audioHealth.slice(0, 8).map((ch): UigEvent => ({
         id: `audio:${ch.id}`,
-        type: 'AudioNode',
+        type: 'audio.level',
         source: 'audio-engine',
         payload: {
           peak: ch.peak,
@@ -391,7 +400,7 @@ export const workspaceState = {
       })),
       ...[...clips].slice(-6).map((clip): UigEvent => ({
         id: `replay:${clip.id}`,
-        type: 'ReplayNode',
+        type: 'replay.clip_created',
         source: 'replay-engine',
         payload: {
           cameraId: clip.cameraId,
@@ -401,7 +410,7 @@ export const workspaceState = {
       })),
       ...[...routes].slice(0, 12).map((route): UigEvent => ({
         id: `routing:${route.id}`,
-        type: 'RoutingNode',
+        type: route.active === false ? 'routing.destination_error' : 'routing.path_change',
         source: 'routing-engine',
         payload: {
           source: route.source,
@@ -412,7 +421,7 @@ export const workspaceState = {
       })),
       ...triggers.slice(0, 8).map((trigger): UigEvent => ({
         id: `automation:${trigger.id}`,
-        type: 'AutomationNode',
+        type: 'automation.trigger_fired',
         source: 'automation-engine',
         payload: {
           name: trigger.name,
@@ -422,9 +431,24 @@ export const workspaceState = {
       })),
       ...Object.entries(health).map(([subsystem, status]): UigEvent => ({
         id: `health:${subsystem}`,
-        type: 'HealthNode',
+        type:
+          status === 'ok' ? 'system.healthy' :
+          status === 'unknown' ? 'system.unknown' :
+          'system.degraded',
         source: 'health-engine',
         payload: { subsystem, status },
+      })),
+      ...this.aiCrewEngine.getInsights().slice(-5).map((insight): UigEvent => ({
+        id: `ai:${insight.id}`,
+        type: 'ai.insight',
+        source: 'ai-crew',
+        payload: {
+          message: insight.message,
+          severity: insight.severity,
+          insight_type: insight.type,
+          suggestion: insight.suggestion,
+        },
+        confidence: insight.severity === 'critical' ? 0.95 : insight.severity === 'warning' ? 0.8 : 0.7,
       })),
     ];
 

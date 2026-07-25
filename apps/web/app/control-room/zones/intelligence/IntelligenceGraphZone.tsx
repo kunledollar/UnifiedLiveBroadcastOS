@@ -64,7 +64,26 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
       <div className="mb-3 flex flex-wrap gap-3 text-[9px]">
         <span className="text-[#94a3b8]">{snapshot.nodeCount} nodes</span>
         <span className="text-[#475569]">{snapshot.edgeCount} edges</span>
+        <span className="text-[#64748b]">{snapshot.eventCount} events</span>
         <span className="text-[#334155]">{snapshot.insightCount} insights</span>
+      </div>
+
+      <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Normalized events</p>
+      <div className="mb-3 flex flex-col gap-0.5 overflow-y-auto" style={{ maxHeight: '88px' }}>
+        {snapshot.latestEvents.map((event) => (
+          <div key={`${event.id}-${event.timestamp}`} className="flex items-center gap-1.5 px-1 py-0.5 text-[8px]">
+            <span className="shrink-0 rounded bg-[#0d1117] px-1 py-0.5 font-mono text-[#7c6af7]">
+              {event.type}
+            </span>
+            <span className="truncate text-[#475569]">{event.source}</span>
+            <span className="ml-auto shrink-0 text-[#1e2530]">
+              {(event.confidence * 100).toFixed(0)}%
+            </span>
+          </div>
+        ))}
+        {snapshot.latestEvents.length === 0 && (
+          <span className="text-[10px] text-[#334155]">Awaiting normalized events…</span>
+        )}
       </div>
 
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Node types</p>
@@ -111,7 +130,7 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         {nodes.map((node) => (
           <div key={node.id} className="flex items-center gap-2 px-1 py-0.5 text-[9px]">
             <span className="w-20 shrink-0 truncate font-mono text-[#475569]">
-              {node.type.replace('Node', '')}
+              {node.eventType ?? node.type.replace('Node', '')}
             </span>
             <span className="flex-1 truncate text-[#94a3b8]">{node.id}</span>
           </div>
