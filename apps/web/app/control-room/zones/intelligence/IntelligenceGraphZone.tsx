@@ -74,6 +74,11 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-[#7c6af7]/80">
           stab {(snapshot.stability * 100).toFixed(0)}%
         </span>
+        {(snapshot.temporal.spikes > 0 || snapshot.temporal.anomalies > 0) && (
+          <span className="text-red-400/80">
+            tpe {snapshot.temporal.spikes}↑ {snapshot.temporal.drops}↓ {snapshot.temporal.anomalies}!
+          </span>
+        )}
       </div>
 
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Normalized events</p>
@@ -153,6 +158,11 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
               <span className={`flex-1 truncate ${highlighted ? 'text-sky-300' : 'text-[#94a3b8]'}`}>
                 {node.id}
               </span>
+              {node.trend && node.trend !== 'stable' && (
+                <span className="shrink-0 font-mono text-[7px] text-[#64748b]">{node.trend}</span>
+              )}
+              {node.spike && <span className="shrink-0 text-[7px] text-red-400">spike</span>}
+              {node.anomaly && <span className="shrink-0 text-[7px] text-amber-400">anom</span>}
             </div>
           );
         })}

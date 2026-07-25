@@ -423,6 +423,95 @@ export class UIGInferenceEngine {
       }
     }
 
+    // Temporal Pattern Engine signals (Step 85)
+    results.push(...this.applyTemporalRules(now));
+
+    return results;
+  }
+
+  private applyTemporalRules(now: number): InferenceResult[] {
+    const results: InferenceResult[] = [];
+
+    for (const node of this.graph.nodes.values()) {
+      if (node.spike) {
+        results.push({
+          id: `tpe-spike-${node.id}-${this.generation}`,
+          rule: 'rule.temporal_spike',
+          kind: 'warning',
+          message: `Temporal spike detected on ${node.id}`,
+          confidence: 0.82,
+          nodeId: node.id,
+          relatedNodeIds: [node.id],
+          emphasis: 'warning',
+          timestamp: now,
+        });
+      }
+      if (node.drop) {
+        results.push({
+          id: `tpe-drop-${node.id}-${this.generation}`,
+          rule: 'rule.temporal_drop',
+          kind: 'warning',
+          message: `Temporal drop detected on ${node.id}`,
+          confidence: 0.8,
+          nodeId: node.id,
+          relatedNodeIds: [node.id],
+          emphasis: 'warning',
+          timestamp: now,
+        });
+      }
+      if (node.anomaly) {
+        results.push({
+          id: `tpe-anomaly-${node.id}-${this.generation}`,
+          rule: 'rule.temporal_anomaly',
+          kind: 'warning',
+          message: `Temporal anomaly detected on ${node.id}`,
+          confidence: 0.85,
+          nodeId: node.id,
+          relatedNodeIds: [node.id],
+          emphasis: 'critical',
+          timestamp: now,
+        });
+      }
+      if (node.trend === 'rising' && node.type === 'AudioNode') {
+        results.push({
+          id: `tpe-predict-audio-${node.id}-${this.generation}`,
+          rule: 'rule.temporal_predict_audio_clip',
+          kind: 'prediction',
+          message: 'Predictive audio clipping risk — levels rising',
+          confidence: 0.76,
+          nodeId: node.id,
+          relatedNodeIds: [node.id],
+          emphasis: 'info',
+          timestamp: now,
+        });
+      }
+      if (node.trend === 'rising' && node.type === 'OutputNode') {
+        results.push({
+          id: `tpe-predict-output-${node.id}-${this.generation}`,
+          rule: 'rule.temporal_predict_output_degradation',
+          kind: 'prediction',
+          message: 'Predictive output degradation — metrics rising',
+          confidence: 0.74,
+          nodeId: node.id,
+          relatedNodeIds: [node.id],
+          emphasis: 'info',
+          timestamp: now,
+        });
+      }
+      if (node.cycle) {
+        results.push({
+          id: `tpe-cycle-${node.id}-${this.generation}`,
+          rule: 'rule.temporal_cycle',
+          kind: 'insight',
+          message: `Repeating temporal cycle on ${node.id}`,
+          confidence: 0.7,
+          nodeId: node.id,
+          relatedNodeIds: [node.id],
+          timestamp: now,
+        });
+      }
+    }
+
     return results;
   }
 

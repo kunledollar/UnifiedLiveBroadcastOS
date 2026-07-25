@@ -1,5 +1,5 @@
 /**
- * UBOS Intelligence Graph (UIG) — Steps 81–83
+ * UBOS Intelligence Graph (UIG) — Steps 81–85
  *
  * Live, in-memory, event-driven knowledge graph that connects every engine,
  * workspace, operator action, and system state into a single semantic model.
@@ -8,6 +8,7 @@
  * Step 82: UIG Event Normalization Layer (UENL)
  * Step 83: UIG Inference Engine (UIE) Phase 1 — rule-based reasoning
  * Step 84: Confidence Scoring Engine (CSE) — belief strength across the graph
+ * Step 85: Temporal Pattern Engine (TPE) — trends, spikes, anomalies over time
  *
  * Later steps expand:
  *   - deeper inference rules / ML scoring
@@ -29,6 +30,11 @@ import {
   type InferenceRunResult,
 } from './uigInferenceEngine.js';
 import { ConfidenceScoringEngine } from './confidenceScoringEngine.js';
+import {
+  TemporalPatternEngine,
+  type TemporalSample,
+  type TemporalTrend,
+} from './temporalPatternEngine.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -67,6 +73,15 @@ export type UigNode = {
   workspace?: string | null;
   operator?: string | null;
   lineage?: string[];
+  /** Temporal Pattern Engine fields (Step 85). */
+  history?: TemporalSample[];
+  trend?: TemporalTrend;
+  anomaly?: boolean;
+  cycle?: boolean;
+  spike?: boolean;
+  drop?: boolean;
+  smoothedConfidence?: number;
+  velocity?: number;
 };
 
 export type UigEdge = {
@@ -114,6 +129,15 @@ export type UigSnapshot = {
   emphasisCount: number;
   avgConfidence: number;
   stability: number;
+  temporal: {
+    rising: number;
+    falling: number;
+    volatile: number;
+    spikes: number;
+    drops: number;
+    anomalies: number;
+    cycles: number;
+  };
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
@@ -126,6 +150,7 @@ export class UBOSIntelligenceGraph {
   readonly normalizer = new UIGEventNormalizer();
   readonly inferenceEngine = new UIGInferenceEngine(this);
   readonly confidenceEngine = new ConfidenceScoringEngine(this);
+  readonly temporalEngine = new TemporalPatternEngine(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -173,7 +198,7 @@ export class UBOSIntelligenceGraph {
   }
 
   /**
-   * Normalize → CSE score → node/edges with propagated confidence.
+   * Normalize → CSE score → TPE history/patterns → node/edges.
    * Shared by ingest / ingestBatch.
    */
   private materialize(event: UigEvent): UigNode {
@@ -183,6 +208,8 @@ export class UBOSIntelligenceGraph {
 
     let node = this.nodeFromCanonical(canonical);
     node = this.confidenceEngine.applyToNode(node, canonical.confidence);
+    // Preserve prior history via TPE.update (reads existing node before replace)
+    node = this.temporalEngine.update(node);
     this.addNode(node);
 
     const derivedEdges = this.deriveEdges(node);
@@ -487,6 +514,7 @@ export class UBOSIntelligenceGraph {
       emphasisCount: this.lastInferenceRun?.emphasis.length ?? 0,
       avgConfidence,
       stability: this.confidenceEngine.stabilityScore(),
+      temporal: this.temporalEngine.getSummary(),
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
@@ -502,6 +530,7 @@ export class UBOSIntelligenceGraph {
     this.lastInsights = [];
     this.lastInferenceRun = null;
     this.confidenceEngine.reset();
+    this.temporalEngine.reset();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────

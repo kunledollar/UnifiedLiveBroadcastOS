@@ -233,8 +233,21 @@ export class ConfidenceScoringEngine {
       result.kind === 'warning' || result.kind === 'guidance' ? 1.05 :
       result.kind === 'prediction' ? 0.95 :
       1;
+    // Temporal Pattern Engine boosts (Step 85)
+    const temporalBoost =
+      node?.anomaly || node?.spike ? 1.08 :
+      node?.drop ? 1.05 :
+      node?.trend === 'volatile' ? 0.95 :
+      node?.trend === 'stable' ? 1.02 :
+      1;
 
-    const refined = clamp(result.confidence * (0.55 + 0.45 * nodeConfidence) * (0.7 + 0.3 * stability) * kindBoost);
+    const refined = clamp(
+      result.confidence *
+        (0.55 + 0.45 * nodeConfidence) *
+        (0.7 + 0.3 * stability) *
+        kindBoost *
+        temporalBoost,
+    );
 
     // Drop only weak predictions that were already low-confidence before refine
     if (
