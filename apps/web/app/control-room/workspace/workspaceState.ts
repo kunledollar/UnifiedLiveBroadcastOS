@@ -23,6 +23,7 @@ import { HealthEngine } from '../health-engine/healthEngine';
 import { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 import { DistributionEngine } from '../distribution-engine/distributionEngine';
 import { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
+import { SecurityEngine } from '../security-engine/securityEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -37,6 +38,7 @@ export const workspaceState = {
   persistenceEngine:    new PersistenceEngine(),
   distributionEngine:   new DistributionEngine(),
   multiUserEngine:      new MultiUserEngine(),
+  securityEngine:       new SecurityEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -154,6 +156,13 @@ export const workspaceState = {
     this.multiUserEngine.setWorkspace(id, workspace);
   },
 
+  /** Check whether the operator with the given id can perform the action. */
+  authorize(userId: string, permission: import('../security-engine/securityEngine').Permission | string): boolean {
+    const user = this.multiUserEngine.getUsers().find((u) => u.id === userId);
+    if (!user) return false;
+    return this.securityEngine.authorize({ name: user.name, role: user.role }, permission);
+  },
+
   // ── Distribution Engine ───────────────────────────────────────────────────
 
   registerDestination(dest: Parameters<typeof this.distributionEngine.registerDestination>[0]) {
@@ -188,6 +197,8 @@ export const workspaceState = {
       aiCrewEngine:     this.aiCrewEngine,
       healthEngine:      this.healthEngine,
       persistenceEngine: this.persistenceEngine,
+      securityEngine:    this.securityEngine,
+      multiUserEngine:   this.multiUserEngine,
       automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
     });
     this.orchestrationEngine.start();

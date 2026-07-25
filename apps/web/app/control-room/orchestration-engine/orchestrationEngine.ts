@@ -33,6 +33,8 @@ import type { OutputEngine } from '../output-engine/outputEngine';
 import type { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 import type { HealthEngine } from '../health-engine/healthEngine';
 import type { PersistenceEngine } from '../persistence-engine/persistenceEngine';
+import type { SecurityEngine } from '../security-engine/securityEngine';
+import type { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
 
 export type OrchestrationEngines = {
   sceneGraph:       SceneGraphEngine;
@@ -44,6 +46,8 @@ export type OrchestrationEngines = {
   aiCrewEngine:     AiCrewEngine;
   healthEngine:        HealthEngine;
   persistenceEngine:   PersistenceEngine;
+  securityEngine:      SecurityEngine;
+  multiUserEngine:     MultiUserEngine;
   /** Loose context passed to automation (the full workspaceState). */
   automationContext: AutomationContext;
 };
@@ -151,6 +155,11 @@ export class OrchestrationEngine {
 
       // 9. Autosave health metrics to persistence store
       this.engines.persistenceEngine.save('health', healthEngine.getMetrics());
+
+      // 10. Security — heartbeat check for all active operators
+      for (const user of this.engines.multiUserEngine.getUsers()) {
+        this.engines.securityEngine.authorize({ name: user.name, role: user.role }, 'heartbeat');
+      }
 
     } catch (err) {
       console.warn('[OrchestrationEngine] tick error:', err);
