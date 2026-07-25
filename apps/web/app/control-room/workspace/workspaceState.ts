@@ -16,6 +16,7 @@ import { ReplayEngine, type ReplayFrame } from '../replay-engine/replayEngine';
 import { RoutingEngine, type RouteSignalType } from '../routing-engine/routingEngine';
 import { AudioEngine, type AudioSource, type AudioLayer } from '../audio-engine/audioEngine';
 import { AutomationEngine, type TriggerRegistration, type AutomationContext } from '../automation-engine/automationEngine';
+import { OutputEngine } from '../output-engine/outputEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -23,6 +24,7 @@ export const workspaceState = {
   routingEngine:  new RoutingEngine(),
   audioEngine:       new AudioEngine(),
   automationEngine:  new AutomationEngine(),
+  outputEngine:      new OutputEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -84,5 +86,33 @@ export const workspaceState = {
   /** Evaluate all automation triggers against the current workspace context. */
   evaluateAutomation(): void {
     this.automationEngine.evaluate(this as unknown as AutomationContext);
+  },
+
+  // ── Output Engine ──────────────────────────────────────────────────────────
+
+  /**
+   * Compose a new program output frame by pulling the current state from
+   * all engines and pushing it into the Output Engine.
+   */
+  updateOutput(): void {
+    const scene = this.sceneGraph.getCurrentScene();
+
+    // Video sources from current scene
+    const videoSources: Record<string, import('../output-engine/outputEngine').VideoSource> = {};
+    if (scene) {
+      videoSources[scene.id] = { id: scene.id, name: scene.name, type: 'scene' };
+    }
+
+    // Graphics frames from active scene layers (graphics type)
+    const graphicsFrames = (scene?.layers ?? [])
+      .filter((l) => l.type === 'graphics')
+      .map((l) => ({ id: l.id, type: l.type, name: l.name ?? l.id, visible: true }));
+
+    // Audio mix from Audio Engine
+    const audioMix = this.audioEngine.mix();
+
+    this.outputEngine.setVideoSources(videoSources);
+    this.outputEngine.setGraphicsFrames(graphicsFrames);
+    this.outputEngine.setAudioMix(audioMix);
   },
 };
