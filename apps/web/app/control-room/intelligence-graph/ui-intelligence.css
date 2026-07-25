@@ -1,39 +1,60 @@
 /**
  * UI Intelligence Integration Layer — visual signal styles (Step 90)
+ * UBDS color semantics applied (Step 92).
  *
  * Applied on Control Room zone wrappers and workspace shell.
  * Intentionally subtle so geometry layout stays intact.
+ *
+ * Signal → UBDS mapping rationale (see workspaceIntelligenceEngine.ts):
+ *   highlight — emitted only for `severity === 'critical'` fused insights and
+ *               "Critical Action" guidance → Program Red (danger, irreversible).
+ *   warn      — general operator-facing warning → Warning Yellow.
+ *   pulse     — emitted only for predicted graphics activation and predicted
+ *               audio clipping → Warning Yellow (predicted risk), same hue as
+ *               `prepare`; the animated glow (not color) is what distinguishes
+ *               an active prediction from a standing one. Motion communicates
+ *               the state change, color communicates the meaning (UBDS core
+ *               principle 4 — Motion as intelligence).
+ *   prepare   — emitted only for predicted scene transitions and predicted
+ *               routing failures → Warning Yellow (predicted risk); the
+ *               dashed outline is the "not yet confirmed" texture.
+ *   elevated  — panels raised for guidance/attention (workspace shell,
+ *               guidance panel) → kept on the existing success tone already
+ *               used for a "healthy, actionable" elevation, distinct from
+ *               Preview Green (reversible output state) and Active Blue
+ *               (operator selection).
+ *   dim / suppress — de-emphasis only; no hue, opacity/desaturation alone.
  */
 
 .ubos-highlight {
-  outline: 1px solid rgba(248, 113, 113, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(248, 113, 113, 0.25), 0 0 18px rgba(248, 113, 113, 0.12);
-  background-color: rgba(248, 113, 113, 0.04);
+  outline: 1px solid var(--ubos-program-border);
+  box-shadow: inset 0 0 0 1px var(--ubos-program-dimmed), 0 0 18px var(--ubos-program-dimmed);
+  background-color: var(--ubos-program-dimmed);
   z-index: 3;
 }
 
 .ubos-warn {
-  outline: 1px solid rgba(251, 191, 36, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(251, 191, 36, 0.2), 0 0 14px rgba(251, 191, 36, 0.1);
-  background-color: rgba(251, 191, 36, 0.04);
+  outline: 1px solid var(--ubos-warning-border);
+  box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 14px var(--ubos-warning-dimmed);
+  background-color: var(--ubos-warning-dimmed);
   z-index: 2;
 }
 
 .ubos-pulse {
-  outline: 1px solid rgba(232, 121, 249, 0.45);
+  outline: 1px solid var(--ubos-warning-border);
   animation: ubos-ui-pulse 1.4s ease-in-out infinite;
   z-index: 2;
 }
 
 .ubos-prepare {
-  outline: 1px dashed rgba(56, 189, 248, 0.55);
-  box-shadow: inset 0 0 0 1px rgba(56, 189, 248, 0.15);
-  background-color: rgba(56, 189, 248, 0.04);
+  outline: 1px dashed var(--ubos-warning-border);
+  box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed);
+  background-color: var(--ubos-warning-dimmed);
 }
 
 .ubos-elevated {
-  outline: 1px solid rgba(52, 211, 153, 0.4);
-  box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.12), 0 8px 24px rgba(0, 0, 0, 0.25);
+  outline: 1px solid var(--ubos-success-border);
+  box-shadow: 0 0 0 1px var(--ubos-success-muted), 0 8px 24px rgba(0, 0, 0, 0.25);
   z-index: 1;
 }
 
@@ -50,15 +71,15 @@
 @keyframes ubos-ui-pulse {
   0%,
   100% {
-    box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.15), 0 0 0 rgba(232, 121, 249, 0);
+    box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 0 rgba(0, 0, 0, 0);
   }
   50% {
-    box-shadow: inset 0 0 0 1px rgba(232, 121, 249, 0.45), 0 0 16px rgba(232, 121, 249, 0.22);
+    box-shadow: inset 0 0 0 1px var(--ubos-warning-elevated), 0 0 16px var(--ubos-warning-elevated);
   }
 }
 
 /* Shell-level elevation — keep chrome readable */
 .ubos-workspace-shell-v2.ubos-elevated {
   outline: none;
-  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.18);
+  box-shadow: inset 0 0 0 1px var(--ubos-success-border);
 }

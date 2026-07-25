@@ -6,8 +6,8 @@
   flex-direction: column;
   height: 100vh;
   min-height: 0;
-  background: #080c12;
-  color: #dbeafe;
+  background: var(--ubos-bg-carbon);
+  color: var(--ubos-fg-primary);
   overflow: hidden;
 }
 
@@ -53,13 +53,20 @@
   grid-template-rows: 1fr 1fr;
 }
 
+/*
+ * UBDS color semantics (Step 92): the Program monitor uses Program Red
+ * (live/irreversible) and the Preview monitor uses Preview Green
+ * (safe/reversible) for both their border and header label — the header
+ * color previously carried the semantic alone, the frame border now
+ * matches it so the role is legible even without reading the label.
+ */
 .ubos-monitor {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid #1e3a5f;
+  border: 1px solid var(--ubos-border-default);
   border-radius: 8px;
-  background: #0a1628;
+  background: var(--ubos-bg-midnight);
   aspect-ratio: 16 / 9;
   align-self: center;
   justify-self: stretch;
@@ -74,19 +81,23 @@
   align-items: center;
   padding: 0 10px;
   font-size: 10px;
-  background: #0d1f38;
-  border-bottom: 1px solid #1e3a5f;
+  background: var(--ubos-bg-midnight);
+  border-bottom: 1px solid var(--ubos-border-default);
 }
-.ubos-monitor-program header b { color: #f87171; }
-.ubos-monitor-preview header b { color: #34d399; }
+.ubos-monitor-program { border-color: var(--ubos-program-border); }
+.ubos-monitor-preview { border-color: var(--ubos-preview-border); }
+.ubos-monitor-program header { border-bottom-color: var(--ubos-program-border); }
+.ubos-monitor-preview header { border-bottom-color: var(--ubos-preview-border); }
+.ubos-monitor-program header b { color: var(--ubos-program-text); }
+.ubos-monitor-preview header b { color: var(--ubos-preview-text); }
 .ubos-monitor > div {
   display: grid;
   place-items: center;
   flex: 1;
-  background: linear-gradient(135deg, #0d1f38, #080c12);
+  background: linear-gradient(135deg, var(--ubos-bg-midnight), var(--ubos-bg-carbon));
 }
-.ubos-monitor strong { font-size: clamp(14px, 2vw, 28px); letter-spacing: .12em; color: #e2e8f0; }
-.ubos-monitor small  { font-size: 10px; color: #475569; }
+.ubos-monitor strong { font-size: clamp(14px, 2vw, 28px); letter-spacing: .12em; color: var(--ubos-fg-primary); }
+.ubos-monitor small  { font-size: 10px; color: var(--ubos-fg-muted); }
 
 /* ── Main workspace content (row 2) ────────────────────────────────── */
 .ubos-workspace-content {
@@ -106,16 +117,16 @@
   width: 300px;
   padding: 12px;
   overflow: auto;
-  border-left: 1px solid #1e2530;
-  background: #080c12;
+  border-left: 1px solid var(--ubos-border-subtle);
+  background: var(--ubos-bg-carbon);
   z-index: 2;
 }
 .ubos-workspace-inspector.is-collapsed { height: min-content; bottom: auto; }
 .ubos-workspace-inspector button {
   margin-bottom: 8px;
-  color: #94a3b8;
-  background: #0d1117;
-  border: 1px solid #1e2530;
+  color: var(--ubos-fg-secondary);
+  background: var(--ubos-bg-graphite);
+  border: 1px solid var(--ubos-border-subtle);
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 11px;
@@ -125,17 +136,17 @@
 /* ── Bottom workbench (row 3) ───────────────────────────────────────── */
 .ubos-bottom-workbench {
   padding: 0 16px;
-  border-top: 1px solid #1e2530;
+  border-top: 1px solid var(--ubos-border-subtle);
   font-size: 11px;
-  color: #64748b;
-  background: #080c12;
+  color: var(--ubos-fg-muted);
+  background: var(--ubos-bg-carbon);
   display: flex;
   align-items: center;
   gap: 16px;
   overflow: hidden;
 }
-.ubos-plugin-panel h2  { margin: 0; font-size: 11px; color: #94a3b8; font-weight: 600; text-transform: uppercase; }
-.ubos-plugin-panel p   { margin: 0; font-size: 11px; color: #475569; }
+.ubos-plugin-panel h2  { margin: 0; font-size: 11px; color: var(--ubos-fg-secondary); font-weight: 600; text-transform: uppercase; }
+.ubos-plugin-panel p   { margin: 0; font-size: 11px; color: var(--ubos-fg-muted); }
 .ubos-bottom-workbench .ubos-plugin-panel { display: flex; gap: 12px; align-items: center; }
 
 /* ── Production clock ───────────────────────────────────────────────── */
@@ -145,14 +156,14 @@
   bottom: 48px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: #0d1117cc;
-  color: #64748b;
+  background: rgba(17, 19, 24, 0.8);
+  color: var(--ubos-fg-muted);
   font: 10px/1 monospace;
-  border: 1px solid #1e2530;
+  border: 1px solid var(--ubos-border-subtle);
 }
 
 /* ── Misc ───────────────────────────────────────────────────────────── */
-.ubos-destination-confidence { border: 1px solid #1e2530; border-radius: 6px; padding: 12px; color: #64748b; font-size: 12px; }
+.ubos-destination-confidence { border: 1px solid var(--ubos-border-subtle); border-radius: 6px; padding: 12px; color: var(--ubos-fg-muted); font-size: 12px; }
 
 /* ── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
@@ -167,4 +178,4 @@
 }
 
 /* ── Legacy fallback (keeps old ubos-workspace-shell class harmless) ── */
-.ubos-workspace-shell { display: flex; flex-direction: column; min-height: 100vh; background: #080c12; color: #dbeafe; overflow: hidden; }
+.ubos-workspace-shell { display: flex; flex-direction: column; min-height: 100vh; background: var(--ubos-bg-carbon); color: var(--ubos-fg-primary); overflow: hidden; }

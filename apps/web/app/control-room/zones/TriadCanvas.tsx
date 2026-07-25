@@ -22,16 +22,19 @@ type TriadCanvasProps = {
   state: ProductionState;
 };
 
+// UBDS color semantics (Step 92): Program = Program Red (irreversible/live),
+// Preview = Preview Green (reversible/staged), Scene = Active Blue (operator
+// focus — staged for editing, not yet on Preview or Program).
 const borderColor: Record<TriadCanvasProps['id'], string> = {
-  scene:   'border-t-2 border-[#1e3a5f]',
-  preview: 'border-t-2 border-emerald-500/60',
-  program: 'border-t-2 border-red-500/60',
+  scene:   'border-t-2 border-ubos-selection-border',
+  preview: 'border-t-2 border-ubos-preview-border',
+  program: 'border-t-2 border-ubos-program-border',
 };
 
 const labelColor: Record<TriadCanvasProps['id'], string> = {
-  scene:   'bg-[#0d1117] text-[#334155]',
-  preview: 'bg-emerald-500/10 text-emerald-400',
-  program: 'bg-red-500/15 text-red-400',
+  scene:   'bg-ubos-carbon text-ubos-fg-muted',
+  preview: 'bg-ubos-preview-muted text-ubos-preview-text',
+  program: 'bg-ubos-program-muted text-ubos-program-text',
 };
 
 export function TriadCanvas({ id, scene, aspect, state }: TriadCanvasProps) {
@@ -46,7 +49,7 @@ export function TriadCanvas({ id, scene, aspect, state }: TriadCanvasProps) {
         <div className={`px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${labelColor[id]}`}>
           {label}
         </div>
-        <div className="flex flex-1 items-center justify-center bg-black text-[10px] font-bold uppercase tracking-widest text-[#1e3a5f]">
+        <div className="flex flex-1 items-center justify-center bg-ubos-carbon text-[10px] font-bold uppercase tracking-widest text-ubos-fg-disabled">
           {label} — Empty
         </div>
       </div>
