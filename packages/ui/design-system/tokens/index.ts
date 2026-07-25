@@ -24,8 +24,15 @@ export {
   ubosSpacing,
   ubosLayoutSpacing,
   ubosRhythm,
+  ubosPadding,
+  ubosDensity,
+  ubosScaleSpacing,
+  ubosIntelligenceSpacingMap,
   type UbosSpacingToken,
   type UbosRhythmToken,
+  type UbosPaddingLevel,
+  type UbosDensityMode,
+  type UbosIntelligenceSpacingAction,
 } from './spacing.js';
 
 export { ubosRadii, ubosRadiusClasses, type UbosRadiusToken } from './radii.js';

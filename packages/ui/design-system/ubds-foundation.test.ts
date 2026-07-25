@@ -15,6 +15,10 @@ import {
   ubosIntelligenceMotionMap,
   ubosEasing,
   ubosRhythm,
+  ubosPadding,
+  ubosDensity,
+  ubosScaleSpacing,
+  ubosIntelligenceSpacingMap,
   ubosShadows,
   ubosTypographyClasses,
   ubdsTypographyRoles,
@@ -116,12 +120,49 @@ test('UBDS: motion + intelligence integration maps all seven WIE signals to thei
   }
 });
 
-test('UBDS: spacing rhythm matches the 4/8/12/16/24px scale', () => {
+test('UBDS: spacing scale matches the 4/8/12/16/24/32px six-level grid (Step 97 adds xxlarge)', () => {
   assert.equal(ubosRhythm.micro, '0.25rem');
   assert.equal(ubosRhythm.small, '0.5rem');
   assert.equal(ubosRhythm.medium, '0.75rem');
   assert.equal(ubosRhythm.large, '1rem');
   assert.equal(ubosRhythm.xlarge, '1.5rem');
+  assert.equal(ubosRhythm.xxlarge, '2rem');
+  assert.deepEqual(Object.keys(ubosRhythm), ['micro', 'small', 'medium', 'large', 'xlarge', 'xxlarge']);
+});
+
+test('UBDS: padding hierarchy exposes the four canonical tiers, most-to-least tight (Step 97)', () => {
+  assert.deepEqual(Object.keys(ubosPadding), ['tight', 'standard', 'spacious', 'cinematic']);
+  assert.equal(ubosPadding.tight, ubosRhythm.small);
+  assert.equal(ubosPadding.standard, ubosRhythm.medium);
+  assert.equal(ubosPadding.spacious, ubosRhythm.large);
+  assert.equal(ubosPadding.cinematic, ubosRhythm.xlarge);
+  const order = ['tight', 'standard', 'spacious', 'cinematic'] as const;
+  for (let i = 1; i < order.length; i += 1) {
+    const prev = parseFloat(ubosPadding[order[i - 1]!]);
+    const current = parseFloat(ubosPadding[order[i]!]);
+    assert.ok(current > prev, `${order[i]} (${current}rem) should be larger than ${order[i - 1]} (${prev}rem)`);
+  }
+});
+
+test('UBDS: density modes are multipliers on the same scale, not a second parallel scale (Step 97)', () => {
+  assert.deepEqual(ubosDensity, { compact: 0.75, standard: 1, director: 1.2 });
+  assert.equal(ubosScaleSpacing(ubosRhythm.large, 'compact'), '0.75rem'); // 16px * 0.75 = 12px
+  assert.equal(ubosScaleSpacing(ubosRhythm.large, 'standard'), '1rem');
+  assert.equal(ubosScaleSpacing(ubosRhythm.large, 'director'), '1.2rem'); // 16px * 1.2 = 19.2px
+});
+
+test('UBDS: spacing + intelligence integration maps signals to their spec-defined padding tier (Step 97)', () => {
+  assert.deepEqual(ubosIntelligenceSpacingMap, {
+    highlight: ubosPadding.spacious,
+    warn: ubosPadding.cinematic,
+    prepare: ubosRhythm.medium,
+    dim: ubosRhythm.small,
+    suppress: ubosRhythm.micro,
+    elevate: ubosRhythm.large,
+  });
+  // highlight and elevate are both Level 3 in the elevation map, and both land
+  // on the same 16px value here too — spacing and elevation agree.
+  assert.equal(ubosIntelligenceSpacingMap.highlight, ubosIntelligenceSpacingMap.elevate);
 });
 
 test('UBDS: typography hierarchy exposes all six canonical roles (Step 93)', () => {
@@ -222,6 +263,6 @@ test('UBDS: elevation + intelligence integration maps all seven WIE signals to t
 });
 
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 96);
+  assert.equal(UBDS_FOUNDATION_STEP, 97);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });

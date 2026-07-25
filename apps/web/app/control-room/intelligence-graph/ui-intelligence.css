@@ -5,6 +5,7 @@
  * UBDS elevation + intelligence integration applied (Step 94).
  * UBDS depth + gradient system applied (Step 95).
  * UBDS motion + intelligence integration applied (Step 96).
+ * UBDS spacing + intelligence integration applied (Step 97).
  *
  * Applied on Control Room zone wrappers and workspace shell.
  * Intentionally subtle so geometry layout stays intact.
@@ -15,13 +16,16 @@
  *               + bold text (Step 93) + Level 3 depth, Highlighted Panel,
  *               Radial Highlight Gradient (Step 94/95) + glow-in transition
  *               and a one-shot elevate rise (Step 96: highlight → glow +
- *               elevate).
+ *               elevate) + spacious padding (Step 97: highlight → spacious
+ *               padding).
  *   warn      — general operator-facing warning → Warning Yellow + bold text
  *               + Level 4 depth, Critical Panel, thick outline, Critical
  *               Gradient (Step 94/95) + a one-shot shake to demand attention
  *               (Step 96: warn → shake + critical depth — this codebase's
  *               `warn` covers exactly the Level 4 use cases: degraded
- *               output, audio clipping, routing failures).
+ *               output, audio clipping, routing failures) + cinematic
+ *               padding, the most spacious tier (Step 97: warn → cinematic
+ *               spacing).
  *   pulse     — emitted only for predicted graphics activation and predicted
  *               audio clipping → Warning Yellow (predicted risk), same hue as
  *               `prepare`; the animated glow (box-shadow AND text-shadow) is
@@ -29,28 +33,37 @@
  *               (Step 93) + Level 3 depth with animation, Radial Highlight
  *               Gradient (Step 94/95), on an elastic-overshoot timing curve
  *               (Step 96: pulse → pulse animation, on the "elastic" curve
- *               reserved for pulses). Motion communicates the state change,
- *               color communicates the meaning (UBDS principle 4).
+ *               reserved for pulses) + a slight padding expansion synced to
+ *               the same animation, breathing rather than snapping to a
+ *               fixed tier (Step 97: pulse → slight spacing expansion).
+ *               Motion communicates the state change, color communicates
+ *               the meaning (UBDS principle 4).
  *   prepare   — emitted only for predicted scene transitions and predicted
  *               routing failures → Warning Yellow (predicted risk) + italic
  *               text (Step 93) + Level 2 depth, Linear Depth Gradient
  *               (Step 94/95) + a subtle (quicker, less pronounced than
  *               highlight's) glow-in transition (Step 96: prepare → subtle
- *               glow); the dashed outline is the "not yet confirmed" texture.
+ *               glow) + standard/medium padding (Step 97: prepare → medium
+ *               spacing); the dashed outline is the "not yet confirmed"
+ *               texture.
  *   elevated  — panels raised for guidance/attention (workspace shell,
  *               guidance panel) → kept on the existing success tone (a
  *               "healthy, actionable" elevation, distinct from Preview
  *               Green and Active Blue) + Level 3 depth, Radial Highlight
  *               Gradient (Step 94/95) + the one-shot elevate rise
- *               (Step 96: elevate → elevate motion).
+ *               (Step 96: elevate → elevate motion) + large padding
+ *               (Step 97: elevate → large spacing).
  *   dim       — reduced opacity only (Step 93) + Level 1 depth, Standard
  *               Panel, flat (Step 94), transitioning in on a linear curve —
  *               fades should feel mechanical, not eased (Step 96: dim →
- *               fadeOut).
+ *               fadeOut) + tight/small padding (Step 97: dim → small
+ *               spacing — a de-emphasized panel also takes up less room).
  *   suppress  — opacity/desaturation + micro-text sizing (Step 93) +
  *               Level 0 depth, Background Layer, flat (Step 94), same
  *               linear fade-in transition as `dim` (Step 96: suppress →
- *               fadeOut + depth0 — it recedes to the background).
+ *               fadeOut + depth0 — it recedes to the background) + micro
+ *               padding, the tightest tier (Step 97: suppress → micro
+ *               spacing).
  *
  * Text properties (font-weight/font-style/text-shadow) are inheritable, so
  * they cascade to child text automatically. Background/gradient properties
@@ -59,6 +72,12 @@
  * forward compatibility with zones that don't fill 100% opaque — the
  * visible depth signal today comes from the outer (non-inset) box-shadow,
  * outline, and z-index, which always render past the child's edges.
+ *
+ * `padding` on these wrapper elements insets the zone's content within the
+ * geometry-computed rect (the global Tailwind reset applies `box-sizing:
+ * border-box`, so this is a well-behaved inset, not an overflow) — a
+ * highlighted/critical/elevated panel visibly gets more breathing room, a
+ * dimmed/suppressed one visibly gets less.
  *
  * The `animation` properties below play once, the moment a signal class is
  * newly applied to an element (browsers (re)play a CSS animation whenever
@@ -75,7 +94,8 @@
   background-color: var(--ubos-program-dimmed);
   background-image: var(--ubos-gradient-radial-highlight);
   font-weight: 700;
-  transition: box-shadow var(--ubos-duration-slow) var(--ubos-easing-out), background-color var(--ubos-duration-slow) var(--ubos-easing-out);
+  padding: var(--ubos-padding-spacious);
+  transition: box-shadow var(--ubos-duration-slow) var(--ubos-easing-out), background-color var(--ubos-duration-slow) var(--ubos-easing-out), padding var(--ubos-duration-slow) var(--ubos-easing-out);
   animation: ubos-elevate 300ms var(--ubos-easing-default) forwards;
   z-index: 3;
 }
@@ -86,6 +106,8 @@
   background-color: var(--ubos-warning-dimmed);
   background-image: var(--ubos-gradient-critical);
   font-weight: 700;
+  padding: var(--ubos-padding-cinematic);
+  transition: padding var(--ubos-duration-slow) var(--ubos-easing-in);
   animation: ubos-shake 400ms ease-in-out;
   z-index: 4;
 }
@@ -94,6 +116,7 @@
   outline: 1px solid var(--ubos-warning-border);
   box-shadow: var(--ubos-depth-3);
   background-image: var(--ubos-gradient-radial-highlight);
+  padding: var(--ubos-padding-standard);
   animation: ubos-ui-pulse 1.4s var(--ubos-easing-spring) infinite;
   z-index: 3;
 }
@@ -104,8 +127,9 @@
   background-color: var(--ubos-warning-dimmed);
   background-image: var(--ubos-gradient-linear);
   font-style: italic;
+  padding: var(--ubos-padding-standard);
   /* Subtle glow-in — quicker and less pronounced than highlight's. */
-  transition: box-shadow var(--ubos-duration-normal) var(--ubos-easing-out);
+  transition: box-shadow var(--ubos-duration-normal) var(--ubos-easing-out), padding var(--ubos-duration-normal) var(--ubos-easing-out);
   z-index: 2;
 }
 
@@ -113,6 +137,8 @@
   outline: 1px solid var(--ubos-success-border);
   box-shadow: var(--ubos-depth-3), 0 0 0 1px var(--ubos-success-muted), 0 8px 24px rgba(0, 0, 0, 0.25);
   background-image: var(--ubos-gradient-radial-highlight);
+  padding: var(--ubos-padding-spacious);
+  transition: padding var(--ubos-duration-slow) var(--ubos-easing-default);
   animation: ubos-elevate 300ms var(--ubos-easing-default) forwards;
   z-index: 3;
 }
@@ -121,7 +147,8 @@
   opacity: 0.42;
   filter: saturate(0.7);
   box-shadow: var(--ubos-depth-1);
-  transition: opacity var(--ubos-duration-normal) linear, filter var(--ubos-duration-normal) linear;
+  padding: var(--ubos-padding-tight);
+  transition: opacity var(--ubos-duration-normal) linear, filter var(--ubos-duration-normal) linear, padding var(--ubos-duration-normal) linear;
   z-index: 1;
 }
 
@@ -130,7 +157,8 @@
   filter: grayscale(0.35) saturate(0.5);
   font-size: 0.85em;
   box-shadow: none;
-  transition: opacity var(--ubos-duration-normal) linear, filter var(--ubos-duration-normal) linear;
+  padding: var(--ubos-space-1);
+  transition: opacity var(--ubos-duration-normal) linear, filter var(--ubos-duration-normal) linear, padding var(--ubos-duration-normal) linear;
   z-index: 0;
 }
 
@@ -139,10 +167,12 @@
   100% {
     box-shadow: var(--ubos-depth-3), inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 0 rgba(0, 0, 0, 0);
     text-shadow: none;
+    padding: var(--ubos-padding-standard);
   }
   50% {
     box-shadow: var(--ubos-depth-3), inset 0 0 0 1px var(--ubos-warning-elevated), 0 0 16px var(--ubos-warning-elevated);
     text-shadow: 0 0 6px var(--ubos-warning-elevated);
+    padding: calc(var(--ubos-padding-standard) + 2px);
   }
 }
 
