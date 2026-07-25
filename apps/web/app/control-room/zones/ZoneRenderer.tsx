@@ -20,6 +20,7 @@ import { GraphicsComposerZone }   from './graphics-composer/GraphicsComposerZone
 import { CameraGridZone }         from './camera-grid/CameraGridZone';
 import { MultiFeedGridZone }      from './multi-feed-grid/MultiFeedGridZone';
 import { UnifiedChatZone }        from './unified-chat/UnifiedChatZone';
+import { EngagementGraphsZone }   from './engagement-graphs/EngagementGraphsZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -35,6 +36,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'camera-grid':       CameraGridZone,
   'multi-feed-grid':   MultiFeedGridZone,
   'unified-chat':      UnifiedChatZone,
+  'engagement-graphs': EngagementGraphsZone,
 };
 
 export function ZoneRenderer({

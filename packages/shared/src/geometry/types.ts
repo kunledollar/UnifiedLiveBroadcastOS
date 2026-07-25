@@ -207,6 +207,12 @@ export interface ProductionState {
   monitors?: MonitorConfig[];
   /** Active output profiles — passed to adaptToAspectRatios(). */
   outputs?: OutputProfile[];
+  /** Engagement analytics for EngagementGraphsZone (Social Fabric). */
+  engagement?: {
+    timeline?: Array<{ time: string; value: number }>;
+    platforms?: Array<{ name: string; value: number }>;
+    reactions?: Array<{ count: number; color: string }>;
+  };
   /** Unified chat messages for UnifiedChatZone (Social Fabric). */
   chat?: Array<{
     id: string;
