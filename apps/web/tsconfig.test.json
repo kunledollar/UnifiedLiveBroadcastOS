@@ -43,6 +43,8 @@
     "app/control-room/intelligence-graph/confidenceScoringEngine.ts",
     "app/control-room/intelligence-graph/confidenceScoringEngine.test.ts",
     "app/control-room/intelligence-graph/temporalPatternEngine.ts",
-    "app/control-room/intelligence-graph/temporalPatternEngine.test.ts"
+    "app/control-room/intelligence-graph/temporalPatternEngine.test.ts",
+    "app/control-room/intelligence-graph/predictiveEngine.ts",
+    "app/control-room/intelligence-graph/predictiveEngine.test.ts"
   ]
 }

@@ -9,10 +9,10 @@
  * Step 83: UIG Inference Engine (UIE) Phase 1 — rule-based reasoning
  * Step 84: Confidence Scoring Engine (CSE) — belief strength across the graph
  * Step 85: Temporal Pattern Engine (TPE) — trends, spikes, anomalies over time
+ * Step 86: Predictive Engine (PE) Phase 1 — forecasting future states
  *
  * Later steps expand:
  *   - deeper inference rules / ML scoring
- *   - prediction engine
  *   - operator guidance surfaces
  *   - UI emphasis / workspace intelligence
  */
@@ -35,6 +35,7 @@ import {
   type TemporalSample,
   type TemporalTrend,
 } from './temporalPatternEngine.js';
+import { PredictiveEngine, type Prediction } from './predictiveEngine.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -138,6 +139,8 @@ export type UigSnapshot = {
     anomalies: number;
     cycles: number;
   };
+  predictionCount: number;
+  latestPredictions: readonly Prediction[];
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
@@ -151,6 +154,7 @@ export class UBOSIntelligenceGraph {
   readonly inferenceEngine = new UIGInferenceEngine(this);
   readonly confidenceEngine = new ConfidenceScoringEngine(this);
   readonly temporalEngine = new TemporalPatternEngine(this);
+  readonly predictiveEngine = new PredictiveEngine(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -397,14 +401,19 @@ export class UBOSIntelligenceGraph {
     return edges;
   }
 
-  // ── Inference (Step 83 — UIE Phase 1) ─────────────────────────────────────
+  // ── Inference + Prediction (Steps 83–86) ──────────────────────────────────
 
   runInference(): InferenceRunResult {
     const run = this.inferenceEngine.run();
 
-    // CSE refinement + noise filter on inference outputs
+    // Predictive Engine Phase 1 — forecast future states
+    const predictions = this.predictiveEngine.run();
+    const predictionResults = this.predictiveEngine.toInferenceResults(predictions);
+
+    // Merge UIE + PE, then CSE refinement + noise filter
+    const merged = [...run.results, ...predictionResults];
     const refinedResults: InferenceResult[] = [];
-    for (const result of run.results) {
+    for (const result of merged) {
       const refined = this.confidenceEngine.refineInsight(result);
       if (refined) refinedResults.push(refined);
     }
@@ -496,6 +505,10 @@ export class UBOSIntelligenceGraph {
     return this.lastInferenceRun?.automationTriggers ?? [];
   }
 
+  getPredictions(): readonly Prediction[] {
+    return this.predictiveEngine.getPredictions();
+  }
+
   getSnapshot(): UigSnapshot {
     const nodesByType: Partial<Record<UigNodeType, number>> = {};
     let confidenceSum = 0;
@@ -515,6 +528,8 @@ export class UBOSIntelligenceGraph {
       avgConfidence,
       stability: this.confidenceEngine.stabilityScore(),
       temporal: this.temporalEngine.getSummary(),
+      predictionCount: this.predictiveEngine.getPredictions().length,
+      latestPredictions: this.predictiveEngine.getPredictions().slice(0, 8),
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
@@ -531,6 +546,7 @@ export class UBOSIntelligenceGraph {
     this.lastInferenceRun = null;
     this.confidenceEngine.reset();
     this.temporalEngine.reset();
+    this.predictiveEngine.reset();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────

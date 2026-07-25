@@ -66,6 +66,7 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-[#475569]">{snapshot.edgeCount} edges</span>
         <span className="text-[#64748b]">{snapshot.eventCount} events</span>
         <span className="text-[#334155]">{snapshot.insightCount} insights</span>
+        <span className="text-fuchsia-400/80">{snapshot.predictionCount} forecasts</span>
         <span className="text-sky-500/80">{snapshot.highlightCount} highlights</span>
         <span className="text-amber-500/80">{snapshot.emphasisCount} emphasis</span>
         <span className="text-emerald-500/80">
@@ -118,8 +119,28 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         )}
       </div>
 
+      <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Forecasts</p>
+      <div className="mb-3 flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: '88px' }}>
+        {snapshot.latestPredictions.map((prediction) => (
+          <div key={prediction.id} className="rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5">
+            <div className="mb-0.5 flex items-center gap-1.5">
+              <span className="rounded bg-sky-500/15 px-1 py-0.5 text-[7px] font-bold uppercase text-sky-400">
+                {prediction.category.replace(/_/g, ' ')}
+              </span>
+              <span className="ml-auto text-[8px] text-[#334155]">
+                {(prediction.confidence * 100).toFixed(0)}%
+              </span>
+            </div>
+            <p className="text-[10px] leading-snug text-sky-300">{prediction.message}</p>
+          </div>
+        ))}
+        {snapshot.latestPredictions.length === 0 && (
+          <p className="text-[10px] text-[#334155]">No forecasts yet</p>
+        )}
+      </div>
+
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Inference</p>
-      <div className="mb-3 flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: '140px' }}>
+      <div className="mb-3 flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: '120px' }}>
         {insights.map((insight) => (
           <div key={insight.id} className="rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5">
             <div className="mb-0.5 flex items-center gap-1.5">
