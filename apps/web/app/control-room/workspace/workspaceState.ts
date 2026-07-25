@@ -19,6 +19,7 @@ import { AutomationEngine, type TriggerRegistration, type AutomationContext } fr
 import { OutputEngine } from '../output-engine/outputEngine';
 import { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 import { OrchestrationEngine } from '../orchestration-engine/orchestrationEngine';
+import { HealthEngine } from '../health-engine/healthEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -29,6 +30,7 @@ export const workspaceState = {
   outputEngine:      new OutputEngine(),
   aiCrewEngine:         new AiCrewEngine(),
   orchestrationEngine:  null as OrchestrationEngine | null,
+  healthEngine:         new HealthEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -103,6 +105,7 @@ export const workspaceState = {
       automationEngine: this.automationEngine,
       outputEngine:     this.outputEngine,
       aiCrewEngine:     this.aiCrewEngine,
+      healthEngine:     this.healthEngine,
       automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
     });
     this.orchestrationEngine.start();
@@ -110,6 +113,64 @@ export const workspaceState = {
 
   stopOrchestration(): void {
     this.orchestrationEngine?.stop();
+  },
+
+  // ── Health Engine ──────────────────────────────────────────────────────────
+
+  updateHealth(): void {
+    const outputHealth = this.outputEngine.health();
+    const audioHealth  = this.audioEngine.monitor()[0];
+    const routes       = this.routingEngine.getRoutes();
+    const clips        = this.replayEngine.getClips();
+    const scene        = this.sceneGraph.getCurrentScene();
+
+    this.healthEngine.updateMetric('output', {
+      warning: (outputHealth.droppedFrames ?? 0) > 1,
+      error:   (outputHealth.latency ?? 0) > 30,
+      value:   `${(outputHealth.latency ?? 0).toFixed(1)} ms · ${outputHealth.droppedFrames ?? 0} dropped`,
+    });
+
+    this.healthEngine.updateMetric('audio', {
+      warning: (audioHealth?.peak ?? 0) > 0.8,
+      error:   (audioHealth?.peak ?? 0) > 0.95,
+      value:   audioHealth ? `peak ${audioHealth.peak.toFixed(2)}` : 'no sources',
+    });
+
+    this.healthEngine.updateMetric('routing', {
+      warning: routes.length === 0,
+      error:   false,
+      value:   `${routes.length} route${routes.length !== 1 ? 's' : ''}`,
+    });
+
+    this.healthEngine.updateMetric('replay', {
+      warning: clips.length > 10,
+      error:   false,
+      value:   `${clips.length} clip${clips.length !== 1 ? 's' : ''}`,
+    });
+
+    this.healthEngine.updateMetric('graphics', {
+      warning: !scene,
+      error:   false,
+      value:   scene ? `${(scene.layers?.filter((l) => l.type === 'graphics').length ?? 0)} graphics layers` : 'no scene',
+    });
+
+    this.healthEngine.updateMetric('scene', {
+      warning: !scene,
+      error:   false,
+      value:   scene ? scene.name : 'none',
+    });
+
+    this.healthEngine.updateMetric('automation', {
+      warning: this.automationEngine.getTriggers().length === 0,
+      error:   false,
+      value:   `${this.automationEngine.enabledTriggerCount} active triggers`,
+    });
+
+    this.healthEngine.updateMetric('ai', {
+      warning: this.aiCrewEngine.insightCount === 0,
+      error:   false,
+      value:   `${this.aiCrewEngine.insightCount} insights`,
+    });
   },
 
   // ── AI Crew Engine ─────────────────────────────────────────────────────────

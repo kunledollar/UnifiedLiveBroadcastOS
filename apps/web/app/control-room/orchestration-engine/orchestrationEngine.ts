@@ -31,6 +31,7 @@ import type { AudioEngine } from '../audio-engine/audioEngine';
 import type { AutomationEngine, AutomationContext } from '../automation-engine/automationEngine';
 import type { OutputEngine } from '../output-engine/outputEngine';
 import type { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
+import type { HealthEngine } from '../health-engine/healthEngine';
 
 export type OrchestrationEngines = {
   sceneGraph:       SceneGraphEngine;
@@ -40,6 +41,7 @@ export type OrchestrationEngines = {
   automationEngine: AutomationEngine;
   outputEngine:     OutputEngine;
   aiCrewEngine:     AiCrewEngine;
+  healthEngine:     HealthEngine;
   /** Loose context passed to automation (the full workspaceState). */
   automationContext: AutomationContext;
 };
@@ -133,6 +135,17 @@ export class OrchestrationEngine {
       aiCrewEngine.analyzeAudio(audioHealth[0] ?? null);
       aiCrewEngine.analyzeRouting([...routes]);
       aiCrewEngine.analyzeOutput(outputHealth);
+
+      // 8. Health update — continuous safety monitoring
+      const { healthEngine } = this.engines;
+      healthEngine.updateMetric('output',     { warning: (outputHealth.droppedFrames ?? 0) > 1, error: (outputHealth.latency ?? 0) > 30 });
+      healthEngine.updateMetric('audio',      { warning: (audioHealth[0]?.peak ?? 0) > 0.8, error: (audioHealth[0]?.peak ?? 0) > 0.95 });
+      healthEngine.updateMetric('routing',    { warning: routes.length === 0, error: false });
+      healthEngine.updateMetric('replay',     { warning: clips.length > 10, error: false });
+      healthEngine.updateMetric('scene',      { warning: !scene, error: false });
+      healthEngine.updateMetric('automation', { warning: false, error: false });
+      healthEngine.updateMetric('ai',         { warning: aiCrewEngine.insightCount === 0, error: false });
+      healthEngine.updateMetric('graphics',   { warning: graphicsFrames.length === 0, error: false });
 
     } catch (err) {
       console.warn('[OrchestrationEngine] tick error:', err);
