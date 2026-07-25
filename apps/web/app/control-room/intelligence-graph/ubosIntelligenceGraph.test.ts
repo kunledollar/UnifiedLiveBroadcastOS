@@ -44,8 +44,8 @@ test('UIG ingest normalizes events, derives edges, and runs inference', () => {
   assert.ok(edges.some((e) => e.from === 'health:output' && e.type === 'is_degraded_by'));
 
   const insights = graph.getInsights();
-  assert.ok(insights.some((i) => i.kind === 'warning' && i.message.toLowerCase().includes('clip')));
-  assert.ok(insights.some((i) => i.kind === 'warning' && i.message.includes('output')));
+  assert.ok(insights.some((i) => i.kind === 'warning' && i.message === 'Audio clipping risk'));
+  assert.ok(insights.some((i) => i.kind === 'warning' && i.message.toLowerCase().includes('output')));
 
   const snapshot = graph.getSnapshot();
   assert.equal(snapshot.nodeCount, 3);
@@ -79,6 +79,6 @@ test('UIG ingestBatch updates graph once and supports routing warnings', () => {
   assert.equal(graph.getNode('scene:current')?.eventType, 'scene.missing_source');
   assert.equal(graph.getNode('routing:1')?.eventType, 'routing.destination_error');
   const insights = graph.getInsights();
-  assert.ok(insights.some((i) => i.message.toLowerCase().includes('scene')));
-  assert.ok(insights.some((i) => i.message.toLowerCase().includes('broken route')));
+  assert.ok(insights.some((i) => i.message === 'Scene has missing source'));
+  assert.ok(insights.some((i) => i.message === 'Routing path failure'));
 });

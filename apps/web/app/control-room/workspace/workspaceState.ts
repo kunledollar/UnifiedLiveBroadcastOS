@@ -350,8 +350,9 @@ export const workspaceState = {
     const operator = this.multiUserEngine.getUsers()[0];
 
     // UENL context — workspace/operator lineage for every normalized event
+    const workspaceId = 'production';
     this.intelligenceGraph.setContext({
-      workspace: null,
+      workspace: workspaceId,
       operator: operator?.name ?? null,
       system: 'ubos-control-room',
     });
@@ -450,6 +451,26 @@ export const workspaceState = {
         },
         confidence: insight.severity === 'critical' ? 0.95 : insight.severity === 'warning' ? 0.8 : 0.7,
       })),
+      ...(operator
+        ? [{
+            id: `operator:${operator.id}`,
+            type: 'operator.presence' as const,
+            source: 'multi-user',
+            workspace: workspaceId,
+            operator: operator.name,
+            payload: {
+              name: operator.name,
+              role: operator.role,
+              workspace: workspaceId,
+            },
+          }]
+        : [{
+            id: 'operator:local',
+            type: 'operator.presence' as const,
+            source: 'multi-user',
+            workspace: workspaceId,
+            payload: { name: 'local', workspace: workspaceId },
+          }]),
     ];
 
     this.intelligenceGraph.ingestBatch(events);

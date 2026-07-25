@@ -26,6 +26,7 @@ export type CanonicalUigEventType =
   | 'output.frame_drop'
   | 'automation.trigger_fired'
   | 'ai.insight'
+  | 'operator.presence'
   | 'system.degraded'
   | 'system.healthy'
   | 'system.unknown';
@@ -80,6 +81,7 @@ const CANONICAL_TYPES = new Set<string>([
   'output.frame_drop',
   'automation.trigger_fired',
   'ai.insight',
+  'operator.presence',
   'system.degraded',
   'system.healthy',
   'system.unknown',
@@ -265,6 +267,11 @@ export class UIGEventNormalizer {
       return 'ai.insight';
     }
 
+    // Operator
+    if (blob.includes('operator') || t === 'operatornode') {
+      return 'operator.presence';
+    }
+
     // Health / system
     if (blob.includes('health') || blob.includes('system')) {
       const status = String(payload.status ?? '').toLowerCase();
@@ -381,5 +388,6 @@ export function canonicalTypeToNodeType(
   if (type.startsWith('output.')) return 'OutputNode';
   if (type === 'system.degraded' || type === 'system.healthy') return 'HealthNode';
   if (type === 'ai.insight') return 'PredictionNode';
+  if (type.startsWith('operator.')) return 'OperatorNode';
   return 'SystemNode';
 }

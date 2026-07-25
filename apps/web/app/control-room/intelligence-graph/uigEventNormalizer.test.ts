@@ -77,5 +77,6 @@ test('canonicalTypeToNodeType maps event families onto UIG nodes', () => {
   assert.equal(canonicalTypeToNodeType('output.frame_drop'), 'OutputNode');
   assert.equal(canonicalTypeToNodeType('system.degraded'), 'HealthNode');
   assert.equal(canonicalTypeToNodeType('ai.insight'), 'PredictionNode');
+  assert.equal(canonicalTypeToNodeType('operator.presence'), 'OperatorNode');
   assert.equal(canonicalTypeToNodeType('system.unknown'), 'SystemNode');
 });

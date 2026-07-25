@@ -66,6 +66,8 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-[#475569]">{snapshot.edgeCount} edges</span>
         <span className="text-[#64748b]">{snapshot.eventCount} events</span>
         <span className="text-[#334155]">{snapshot.insightCount} insights</span>
+        <span className="text-sky-500/80">{snapshot.highlightCount} highlights</span>
+        <span className="text-amber-500/80">{snapshot.emphasisCount} emphasis</span>
       </div>
 
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Normalized events</p>
@@ -105,7 +107,7 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         )}
       </div>
 
-      <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Insights</p>
+      <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Inference</p>
       <div className="mb-3 flex flex-col gap-1 overflow-y-auto" style={{ maxHeight: '140px' }}>
         {insights.map((insight) => (
           <div key={insight.id} className="rounded border border-[#1e2530] bg-[#0d1117] px-2 py-1.5">
@@ -113,7 +115,10 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
               <span className={`rounded px-1 py-0.5 text-[7px] font-bold uppercase ${kindBadge[insight.kind]}`}>
                 {insight.kind}
               </span>
-              <span className="text-[8px] text-[#334155]">
+              {insight.rule && (
+                <span className="truncate font-mono text-[7px] text-[#334155]">{insight.rule}</span>
+              )}
+              <span className="ml-auto text-[8px] text-[#334155]">
                 {(insight.confidence * 100).toFixed(0)}%
               </span>
             </div>
@@ -127,14 +132,24 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
 
       <p className="mb-1 text-[8px] font-bold uppercase tracking-widest text-[#1e2530]">Recent nodes</p>
       <div className="mb-2 flex flex-col gap-0.5 overflow-y-auto" style={{ maxHeight: '100px' }}>
-        {nodes.map((node) => (
-          <div key={node.id} className="flex items-center gap-2 px-1 py-0.5 text-[9px]">
-            <span className="w-20 shrink-0 truncate font-mono text-[#475569]">
-              {node.eventType ?? node.type.replace('Node', '')}
-            </span>
-            <span className="flex-1 truncate text-[#94a3b8]">{node.id}</span>
-          </div>
-        ))}
+        {nodes.map((node) => {
+          const highlighted = snapshot.highlightedNodeIds.includes(node.id);
+          return (
+            <div
+              key={node.id}
+              className={`flex items-center gap-2 px-1 py-0.5 text-[9px] ${
+                highlighted ? 'rounded bg-sky-500/10' : ''
+              }`}
+            >
+              <span className="w-20 shrink-0 truncate font-mono text-[#475569]">
+                {node.eventType ?? node.type.replace('Node', '')}
+              </span>
+              <span className={`flex-1 truncate ${highlighted ? 'text-sky-300' : 'text-[#94a3b8]'}`}>
+                {node.id}
+              </span>
+            </div>
+          );
+        })}
         {nodes.length === 0 && <p className="text-[10px] text-[#334155]">Empty graph</p>}
       </div>
 

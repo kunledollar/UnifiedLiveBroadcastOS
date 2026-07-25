@@ -1,18 +1,17 @@
 /**
- * UBOS Intelligence Graph (UIG) — Steps 81–82
+ * UBOS Intelligence Graph (UIG) — Steps 81–83
  *
  * Live, in-memory, event-driven knowledge graph that connects every engine,
  * workspace, operator action, and system state into a single semantic model.
  *
- * Step 81: graph foundation (nodes, edges, ingest, inference stubs)
- * Step 82: UIG Event Normalization Layer (UENL) — all raw engine events are
- *          converted to CanonicalUigEvent before node/edge materialization.
+ * Step 81: graph foundation (nodes, edges, ingest)
+ * Step 82: UIG Event Normalization Layer (UENL)
+ * Step 83: UIG Inference Engine (UIE) Phase 1 — rule-based reasoning
  *
  * Later steps expand:
- *   - weighted edge derivation
- *   - inference rule engine
+ *   - deeper inference rules / ML scoring
  *   - prediction engine
- *   - operator guidance
+ *   - operator guidance surfaces
  *   - UI emphasis / workspace intelligence
  */
 
@@ -23,6 +22,11 @@ import {
   type RawUigEvent,
   type UigNormalizerContext,
 } from './uigEventNormalizer.js';
+import {
+  UIGInferenceEngine,
+  type InferenceResult,
+  type InferenceRunResult,
+} from './uigInferenceEngine.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -93,6 +97,8 @@ export type UigInsight = {
   confidence: number;
   relatedNodeIds: string[];
   timestamp: number;
+  rule?: string;
+  emphasis?: 'critical' | 'warning' | 'info' | 'highlight';
 };
 
 export type UigSnapshot = {
@@ -100,23 +106,30 @@ export type UigSnapshot = {
   edgeCount: number;
   insightCount: number;
   eventCount: number;
+  highlightCount: number;
+  emphasisCount: number;
   nodesByType: Partial<Record<UigNodeType, number>>;
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
+  highlightedNodeIds: readonly string[];
 };
 
 export class UBOSIntelligenceGraph {
   readonly nodes = new Map<string, UigNode>();
   readonly edges = new Map<string, UigEdge>();
   readonly normalizer = new UIGEventNormalizer();
+  readonly inferenceEngine = new UIGInferenceEngine(this);
+
+  /** Latest inference results from UIE (Step 83). */
+  lastInsights: InferenceResult[] = [];
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
+  private lastInferenceRun: InferenceRunResult | null = null;
   private readonly MAX_NODES = 200;
   private readonly MAX_EDGES = 400;
   private readonly MAX_INSIGHTS = 40;
   private readonly MAX_EVENTS = 80;
-  private inferenceGeneration = 0;
 
   /** Default workspace / operator / system context for UENL. */
   setContext(context: UigNormalizerContext): void {
@@ -250,6 +263,13 @@ export class UBOSIntelligenceGraph {
               : null;
         link(sceneId ? `scene:${sceneId}` : 'scene:current', 'is_active_in', 0.8);
         link('output:program', 'feeds_into', 0.7);
+        if (typeof attr.conflicts_with === 'string') {
+          link(attr.conflicts_with, 'conflicts_with', 1.0);
+        } else if (Array.isArray(attr.conflicts_with)) {
+          for (const other of attr.conflicts_with) {
+            if (typeof other === 'string') link(other, 'conflicts_with', 1.0);
+          }
+        }
         break;
       }
       case 'AudioNode':
@@ -330,103 +350,22 @@ export class UBOSIntelligenceGraph {
     return edges;
   }
 
-  // ── Inference (foundation — Steps 83–90 expand) ───────────────────────────
+  // ── Inference (Step 83 — UIE Phase 1) ─────────────────────────────────────
 
-  runInference(): void {
-    this.inferenceGeneration += 1;
-    const now = Date.now();
-    const produced: UigInsight[] = [];
+  runInference(): InferenceRunResult {
+    const run = this.inferenceEngine.run();
+    this.lastInsights = run.results;
+    this.lastInferenceRun = run;
 
-    const healthNodes = [...this.nodes.values()].filter((n) => n.type === 'HealthNode');
-    for (const node of healthNodes) {
-      const status = node.attributes.status;
-      const subsystem = String(node.attributes.subsystem ?? 'system');
-      if (status === 'error') {
-        produced.push({
-          id: `insight-health-error-${subsystem}-${this.inferenceGeneration}`,
-          kind: 'warning',
-          message: `${subsystem} reports error — investigate degradation path`,
-          confidence: node.confidence,
-          relatedNodeIds: [node.id],
-          timestamp: now,
-        });
-      } else if (status === 'warning') {
-        produced.push({
-          id: `insight-health-warn-${subsystem}-${this.inferenceGeneration}`,
-          kind: 'recommendation',
-          message: `${subsystem} elevated — monitor before it becomes critical`,
-          confidence: Math.min(node.confidence, 0.85),
-          relatedNodeIds: [node.id],
-          timestamp: now,
-        });
-      }
-    }
-
-    const audioNodes = [...this.nodes.values()].filter((n) => n.type === 'AudioNode');
-    for (const node of audioNodes) {
-      const peak = Number(node.attributes.peak ?? 0);
-      if (peak > 0.95) {
-        produced.push({
-          id: `insight-audio-clip-${node.id}-${this.inferenceGeneration}`,
-          kind: 'warning',
-          message: 'Audio clipping risk — reduce gain on hot channel',
-          confidence: 0.92,
-          relatedNodeIds: [node.id],
-          timestamp: now,
-        });
-      } else if (peak > 0.8) {
-        produced.push({
-          id: `insight-audio-hot-${node.id}-${this.inferenceGeneration}`,
-          kind: 'prediction',
-          message: 'Audio approaching clip threshold',
-          confidence: 0.75,
-          relatedNodeIds: [node.id],
-          timestamp: now,
-        });
-      }
-    }
-
-    const sceneNode = this.nodes.get('scene:current') ?? [...this.nodes.values()].find((n) => n.type === 'SceneNode');
-    if (!sceneNode || sceneNode.attributes.missing === true) {
-      produced.push({
-        id: `insight-scene-missing-${this.inferenceGeneration}`,
-        kind: 'guidance',
-        message: 'No active scene — load or select a program scene',
-        confidence: 0.9,
-        relatedNodeIds: sceneNode ? [sceneNode.id] : [],
-        timestamp: now,
-      });
-    }
-
-    const routeNodes = [...this.nodes.values()].filter((n) => n.type === 'RoutingNode');
-    if (routeNodes.length === 0) {
-      produced.push({
-        id: `insight-routing-empty-${this.inferenceGeneration}`,
-        kind: 'recommendation',
-        message: 'No active routes — signal path may be incomplete',
-        confidence: 0.7,
-        relatedNodeIds: [],
-        timestamp: now,
-      });
-    } else if (routeNodes.some((n) => n.attributes.broken === true)) {
-      produced.push({
-        id: `insight-routing-broken-${this.inferenceGeneration}`,
-        kind: 'warning',
-        message: 'Broken route detected — destination or source unavailable',
-        confidence: 0.88,
-        relatedNodeIds: routeNodes.filter((n) => n.attributes.broken === true).map((n) => n.id),
-        timestamp: now,
-      });
-    }
-
-    // Merge newest insights, keep cap
     const byId = new Map<string, UigInsight>();
-    for (const insight of [...this.insights, ...produced]) {
+    for (const insight of run.insights) {
       byId.set(insight.id, insight);
     }
     this.insights = [...byId.values()]
       .sort((a, b) => b.timestamp - a.timestamp)
       .slice(0, this.MAX_INSIGHTS);
+
+    return run;
   }
 
   // ── Queries ───────────────────────────────────────────────────────────────
@@ -459,19 +398,43 @@ export class UBOSIntelligenceGraph {
     return this.recentEvents;
   }
 
+  getInferenceResults(): readonly InferenceResult[] {
+    return this.lastInsights;
+  }
+
+  getHighlightedNodeIds(): readonly string[] {
+    const ids = new Set<string>();
+    for (const highlight of this.lastInferenceRun?.highlights ?? []) {
+      for (const id of highlight.relatedNodeIds) ids.add(id);
+    }
+    return [...ids];
+  }
+
+  getUiEmphasis(): readonly InferenceResult[] {
+    return this.lastInferenceRun?.emphasis ?? [];
+  }
+
+  getAutomationTriggers(): readonly InferenceResult[] {
+    return this.lastInferenceRun?.automationTriggers ?? [];
+  }
+
   getSnapshot(): UigSnapshot {
     const nodesByType: Partial<Record<UigNodeType, number>> = {};
     for (const node of this.nodes.values()) {
       nodesByType[node.type] = (nodesByType[node.type] ?? 0) + 1;
     }
+    const highlightedNodeIds = this.getHighlightedNodeIds();
     return {
       nodeCount: this.nodes.size,
       edgeCount: this.edges.size,
       insightCount: this.insights.length,
       eventCount: this.recentEvents.length,
+      highlightCount: this.lastInferenceRun?.highlights.length ?? 0,
+      emphasisCount: this.lastInferenceRun?.emphasis.length ?? 0,
       nodesByType,
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
+      highlightedNodeIds,
     };
   }
 
@@ -480,7 +443,8 @@ export class UBOSIntelligenceGraph {
     this.edges.clear();
     this.insights = [];
     this.recentEvents = [];
-    this.inferenceGeneration = 0;
+    this.lastInsights = [];
+    this.lastInferenceRun = null;
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────
