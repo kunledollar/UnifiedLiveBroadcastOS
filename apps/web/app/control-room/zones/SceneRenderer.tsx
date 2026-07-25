@@ -29,11 +29,9 @@ export function SceneRenderer({ scene }: { scene: Scene }) {
       {scene.layers.map((layer) => (
         <div key={layer.id} className="scene-layer absolute inset-0 flex items-center justify-center">
           {layer.type === 'video' && layer.src && (
-            /* eslint-disable-next-line jsx-a11y/media-has-caption */
             <video src={layer.src} autoPlay muted loop className="h-full w-full object-cover" />
           )}
           {layer.type === 'image' && layer.src && (
-            /* eslint-disable-next-line @next/next/no-img-element */
             <img src={layer.src} alt="" className="h-full w-full object-cover" />
           )}
           {layer.type === 'text' && (

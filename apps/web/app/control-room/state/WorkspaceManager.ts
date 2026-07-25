@@ -21,6 +21,7 @@ import {
   type ProductionState,
 } from '@ubos/shared';
 import { WorkspaceShellRegistry } from '../geometry/shells/WorkspaceShellRegistry';
+import type { SceneLayer } from '../scene-graph/sceneGraphEngine';
 import { workspaceState } from '../workspace/workspaceState';
 
 export class WorkspaceManager {
@@ -85,7 +86,7 @@ export class WorkspaceManager {
         this.state.scenes.map((s) => ({
           id:       s.id,
           name:     s.name,
-          ...(s.layers   ? { layers:   s.layers   as import('../scene-graph/sceneGraphEngine').SceneLayer[] } : {}),
+          ...(s.layers   ? { layers:   s.layers   as SceneLayer[] } : {}),
           ...(s.timeline ? { timeline: s.timeline } : {}),
         })),
       );

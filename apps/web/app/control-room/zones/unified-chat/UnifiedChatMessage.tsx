@@ -30,7 +30,6 @@ export function UnifiedChatMessage({ msg }: { msg: ChatMessage }) {
       {/* Avatar */}
       <div className="uc-avatar h-8 w-8 shrink-0 overflow-hidden rounded-full">
         {msg.avatar ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
           <img src={msg.avatar} alt={msg.user} className="h-full w-full object-cover" />
         ) : (
           <div className="flex h-full w-full items-center justify-center rounded-full bg-[#1e2530] text-[9px] font-bold uppercase text-[#475569]">

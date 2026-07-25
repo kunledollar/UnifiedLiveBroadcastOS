@@ -24,7 +24,7 @@
     "media:recording-demo": "pnpm --filter @ubos/media-plane build && node scripts/recording-pipeline-demo.mjs",
     "media:remote-demo": "pnpm --filter @ubos/media-plane build && node scripts/remote-production-demo.mjs",
     "desktop:demo": "pnpm --filter @ubos/desktop desktop:demo",
-    "desktop:build": "pnpm --filter @ubos/desktop build",
+    "desktop:build": "pnpm --filter @ubos/desktop build:native",
     "collaboration:demo": "pnpm --filter @ubos/shared build && node scripts/collaboration-demo.mjs",
     "diagnostics:demo": "pnpm --filter @ubos/media-plane build && node scripts/diagnostics-demo.mjs",
     "ubos:start": "dotenv -- turbo dev --filter=@ubos/web",
