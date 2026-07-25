@@ -1,0 +1,26 @@
+.unified-chat-zone {
+  width: 100%;
+  height: 100%;
+  padding: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #080c12;
+  scrollbar-width: thin;
+}
+
+.uc-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #334155;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+}
+
+.uc-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}

@@ -19,6 +19,7 @@ import { AiCrewOverlay }          from './AiCrewOverlay';
 import { GraphicsComposerZone }   from './graphics-composer/GraphicsComposerZone';
 import { CameraGridZone }         from './camera-grid/CameraGridZone';
 import { MultiFeedGridZone }      from './multi-feed-grid/MultiFeedGridZone';
+import { UnifiedChatZone }        from './unified-chat/UnifiedChatZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -33,6 +34,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'graphics-composer': GraphicsComposerZone,
   'camera-grid':       CameraGridZone,
   'multi-feed-grid':   MultiFeedGridZone,
+  'unified-chat':      UnifiedChatZone,
 };
 
 export function ZoneRenderer({
