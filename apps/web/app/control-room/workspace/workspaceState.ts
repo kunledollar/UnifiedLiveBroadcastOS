@@ -24,6 +24,7 @@ import { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 import { DistributionEngine } from '../distribution-engine/distributionEngine';
 import { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
 import { SecurityEngine } from '../security-engine/securityEngine';
+import { NetworkEngine } from '../network-engine/networkEngine';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -39,6 +40,7 @@ export const workspaceState = {
   distributionEngine:   new DistributionEngine(),
   multiUserEngine:      new MultiUserEngine(),
   securityEngine:       new SecurityEngine(),
+  networkEngine:        new NetworkEngine(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -154,6 +156,35 @@ export const workspaceState = {
 
   switchOperatorWorkspace(id: string, workspace: string): void {
     this.multiUserEngine.setWorkspace(id, workspace);
+  },
+
+  // ── Network Engine ─────────────────────────────────────────────────────────
+
+  connectNetwork(url: string): void {
+    this.networkEngine.connect(url);
+
+    // When remote state arrives, merge into local engines
+    this.networkEngine.onStateUpdate = (remoteState) => {
+      if (remoteState.scenes) {
+        this.sceneGraph.setScenes(remoteState.scenes as Parameters<typeof this.sceneGraph.setScenes>[0]);
+      }
+      if (remoteState.audio) {
+        this.audioEngine.setLayers(remoteState.audio as Parameters<typeof this.audioEngine.setLayers>[0]);
+      }
+    };
+  },
+
+  broadcastState(): void {
+    this.networkEngine.sendState({
+      scenes:  [...this.sceneGraph.getScenes()],
+      routing: [...this.routingEngine.getRoutes()],
+      audio:   [...this.audioEngine.layers],
+      users:   [...this.multiUserEngine.getUsers()],
+    });
+  },
+
+  disconnectNetwork(): void {
+    this.networkEngine.disconnect();
   },
 
   /** Check whether the operator with the given id can perform the action. */

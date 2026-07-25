@@ -31,6 +31,7 @@ import { PersistenceZone }        from './persistence/PersistenceZone';
 import { DistributionZone }       from './distribution/DistributionZone';
 import { MultiUserZone }          from './multi-user/MultiUserZone';
 import { SecurityZone }           from './security-zone/SecurityZone';
+import { NetworkZone }            from './network/NetworkZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -59,6 +60,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'output-health':       DistributionZone,
   'chat-moderation':     MultiUserZone,
   'analytics-panels':    SecurityZone,
+  'network':             NetworkZone,
 };
 
 export function ZoneRenderer({
