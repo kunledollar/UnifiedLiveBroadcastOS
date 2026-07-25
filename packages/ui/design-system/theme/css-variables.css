@@ -189,11 +189,18 @@
   --ubos-elevation-3: 0 4px 8px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.05), 0 0 0 2px var(--ubos-selection-border), 0 0 12px var(--ubos-selection-muted);
   --ubos-elevation-4: 0 6px 12px rgba(0,0,0,0.55), 0 0 0 1px var(--ubos-error-border), 0 0 20px var(--ubos-error-muted);
 
-  /* UBDS Elevation gradients (Step 94) — flat at Level 0/1, increasingly
-   * directional/high-contrast at Level 2-4. */
-  --ubos-elevation-gradient-2: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0) 40%);
-  --ubos-elevation-gradient-3: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 45%);
-  --ubos-elevation-gradient-4: linear-gradient(180deg, rgba(255,255,255,0.09) 0%, rgba(0,0,0,0.4) 100%);
+  /* UBDS Gradient System (Step 95) — three canonical gradient shapes.
+   * See packages/ui/design-system/tokens/gradients.ts for the rationale. */
+  --ubos-gradient-linear: linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0) 40%);
+  --ubos-gradient-radial-highlight: radial-gradient(circle at 50% 0%, rgba(255,255,255,0.09), rgba(255,255,255,0) 60%);
+  --ubos-gradient-critical: linear-gradient(180deg, rgba(0,0,0,0.45) 0%, var(--ubos-error-muted) 100%);
+
+  /* UBDS Elevation gradients (Step 94, gradient shapes formalized Step 95) —
+   * flat at Level 0/1, Linear Depth Gradient at Level 2, Radial Highlight
+   * Gradient at Level 3, Critical Gradient at Level 4. */
+  --ubos-elevation-gradient-2: var(--ubos-gradient-linear);
+  --ubos-elevation-gradient-3: var(--ubos-gradient-radial-highlight);
+  --ubos-elevation-gradient-4: var(--ubos-gradient-critical);
 
   /* UBDS elevation depth shadows (Step 94) — color-neutral soft/medium/
    * strong/hard shadow-only stack (no semantic glow baked in), so a signal's
@@ -391,6 +398,19 @@
 /* UBDS motion primitive — apply to trigger a warning shake once */
 .ubos-shake {
   animation: ubos-shake 400ms ease-in-out;
+}
+
+/* UBDS Gradient System (Step 95) — the three canonical gradient shapes,
+ * usable directly wherever a Tailwind arbitrary-gradient utility would be
+ * unwieldy. See tokens/gradients.ts for the rationale. */
+.ubos-gradient-linear {
+  background-image: var(--ubos-gradient-linear);
+}
+.ubos-gradient-radial-highlight {
+  background-image: var(--ubos-gradient-radial-highlight);
+}
+.ubos-gradient-critical {
+  background-image: var(--ubos-gradient-critical);
 }
 
 /* UBDS elevation levels 0-4 (Step 91, refined Step 94) — background +

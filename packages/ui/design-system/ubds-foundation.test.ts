@@ -7,6 +7,8 @@ import {
   ubosElevation,
   ubosElevationLevels,
   ubosElevationClasses,
+  ubosElevationGradientType,
+  ubosGradients,
   ubosIntelligenceElevationMap,
   ubosMotionSystem,
   ubosRhythm,
@@ -115,14 +117,46 @@ test('UBDS: only Level 4 (Critical Panel) uses a thick 2px border (Step 94)', ()
   }
 });
 
-test('UBDS: Level 0/1 are flat (no gradient), Level 2-4 have an increasingly directional gradient (Step 94)', () => {
+test('UBDS: Level 0/1 are flat (no gradient), Level 2-4 each have a gradient (Step 94)', () => {
   assert.equal(ubosElevation[0].gradient, undefined);
   assert.equal(ubosElevation[1].gradient, undefined);
   for (const level of [2, 3, 4] as const) {
     assert.ok(
-      typeof ubosElevation[level].gradient === 'string' && ubosElevation[level].gradient!.includes('linear-gradient'),
+      typeof ubosElevation[level].gradient === 'string' && ubosElevation[level].gradient!.length > 0,
       `level ${level} should have a gradient`,
     );
+  }
+});
+
+test('UBDS: each elevation level uses its Step 95 canonical gradient shape', () => {
+  assert.deepEqual(ubosElevationGradientType, {
+    0: 'flat',
+    1: 'flat',
+    2: 'linear',
+    3: 'radialHighlight',
+    4: 'critical',
+  });
+  for (const level of ubosElevationLevels) {
+    assert.equal(ubosElevation[level].gradientType, ubosElevationGradientType[level]);
+  }
+  // Level 2 = Linear Depth Gradient (top-down).
+  assert.match(ubosElevation[2].gradient!, /^linear-gradient/);
+  assert.equal(ubosElevation[2].gradient, ubosGradients.linear);
+  // Level 3 = Radial Highlight Gradient, not linear — this is the key Step 95
+  // change from Step 94, where every level used a linear gradient.
+  assert.match(ubosElevation[3].gradient!, /^radial-gradient/);
+  assert.equal(ubosElevation[3].gradient, ubosGradients.radialHighlight);
+  // Level 4 = Critical Gradient, tinted with the shared critical/error tone
+  // (not Program Red — a warning is not the same meaning as a live tally).
+  assert.match(ubosElevation[4].gradient!, /^linear-gradient/);
+  assert.equal(ubosElevation[4].gradient, ubosGradients.critical);
+  assert.ok(ubosElevation[4].gradient!.includes(ubosColors.error.muted));
+});
+
+test('UBDS: the Gradient System exposes exactly the three canonical shapes (Step 95)', () => {
+  assert.deepEqual(Object.keys(ubosGradients).sort(), ['critical', 'linear', 'radialHighlight']);
+  for (const value of Object.values(ubosGradients)) {
+    assert.ok(typeof value === 'string' && value.length > 0);
   }
 });
 
@@ -146,6 +180,6 @@ test('UBDS: elevation + intelligence integration maps all seven WIE signals to t
 });
 
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 94);
+  assert.equal(UBDS_FOUNDATION_STEP, 95);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });

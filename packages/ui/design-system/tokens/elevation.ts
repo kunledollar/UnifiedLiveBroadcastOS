@@ -1,5 +1,5 @@
 /**
- * UBOS Design System (UBDS) — Elevation Tokens (Step 91, refined Step 94)
+ * UBOS Design System (UBDS) — Elevation Tokens (Step 91, refined Step 94/95)
  *
  * Panel elevation model — the visual hierarchy engine of UBDS. Elevation
  * communicates importance: higher elevation = higher priority. Depth over
@@ -17,9 +17,14 @@
  * Level 4 — Critical Panel     (warnings, degraded output, routing
  *                                failures, audio clipping, live program
  *                                danger)
+ *
+ * Step 95 formalized each level's gradient *shape* (see gradients.ts):
+ * Level 2 uses the Linear Depth Gradient, Level 3 the Radial Highlight
+ * Gradient, and Level 4 the Critical Gradient.
  */
 import { ubosColors } from './colors.js';
 import { ubosShadows } from './shadows.js';
+import { ubosGradients, ubosElevationGradientType, type UbosGradientType } from './gradients.js';
 
 export type UbosElevationLevel = 0 | 1 | 2 | 3 | 4;
 
@@ -32,6 +37,8 @@ export interface UbosElevationToken {
   border: string;
   /** Border width in pixels — only Level 4 uses a thick (2px) border. */
   borderWidth: 1 | 2;
+  /** Which of the three canonical gradient shapes this level uses (Step 95). */
+  gradientType: UbosGradientType;
   /** Gradient reinforcing depth. Flat (undefined) at Level 0/1. */
   gradient?: string;
 }
@@ -42,12 +49,14 @@ export const ubosElevation: Record<UbosElevationLevel, UbosElevationToken> = {
     shadow: ubosShadows.none,
     border: 'transparent',
     borderWidth: 1,
+    gradientType: ubosElevationGradientType[0],
   },
   1: {
     background: ubosColors.background.graphite,
     shadow: ubosShadows.soft,
     border: ubosColors.border.subtle,
     borderWidth: 1,
+    gradientType: ubosElevationGradientType[1],
     // Level 1 is flat — no gradient.
   },
   2: {
@@ -55,24 +64,27 @@ export const ubosElevation: Record<UbosElevationLevel, UbosElevationToken> = {
     shadow: ubosShadows.medium,
     border: ubosColors.border.default,
     borderWidth: 1,
-    // Subtle top-light gradient.
-    gradient: 'linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0) 40%)',
+    gradientType: ubosElevationGradientType[2],
+    // Linear Depth Gradient — top-down directional lighting.
+    gradient: ubosGradients.linear,
   },
   3: {
     background: ubosColors.background.midnight,
     shadow: `${ubosShadows.strong}, ${ubosShadows.selectionGlow}`,
     border: ubosColors.selection.border,
     borderWidth: 1,
-    // Directional gradient — light source implied from above.
-    gradient: 'linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0) 45%)',
+    gradientType: ubosElevationGradientType[3],
+    // Radial Highlight Gradient — a highlight blooming from above.
+    gradient: ubosGradients.radialHighlight,
   },
   4: {
     background: ubosColors.background.carbon,
     shadow: `${ubosShadows.hard}, 0 0 0 1px ${ubosColors.error.border}, 0 0 20px ${ubosColors.error.muted}`,
     border: ubosColors.error.border,
     borderWidth: 2,
-    // High-contrast gradient — bright top, near-black bottom.
-    gradient: 'linear-gradient(180deg, rgba(255,255,255,0.09) 0%, rgba(0,0,0,0.4) 100%)',
+    gradientType: ubosElevationGradientType[4],
+    // Critical Gradient — dark-to-critical-red wash.
+    gradient: ubosGradients.critical,
   },
 };
 

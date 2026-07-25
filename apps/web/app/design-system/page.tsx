@@ -17,7 +17,6 @@ import {
   ubosBroadcastHues,
   ubosColorRampStates,
   ubosElevationLevels,
-  ubosElevationClasses,
   ubosIntelligenceElevationMap,
   ubdsTypographyRoles,
   ubosTypographyClasses,
@@ -84,6 +83,14 @@ const elevationLabels: Record<UbosElevationLevel, string> = {
   4: 'Level 4 — Critical Panel',
 };
 
+const gradientTypeLabels: Record<UbosElevationLevel, string> = {
+  0: 'flat',
+  1: 'flat',
+  2: 'linear',
+  3: 'radial highlight',
+  4: 'critical',
+};
+
 const rhythm = [
   { label: 'micro', px: 4, class: 'w-1' },
   { label: 'small', px: 8, class: 'w-2' },
@@ -107,16 +114,17 @@ export default function DesignSystemShowcasePage() {
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Steps 91–94
+          UBOS Design System · Steps 91–95
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
         </h1>
         <p className="mt-1 max-w-2xl text-[0.8125rem] text-ubos-fg-secondary">
           Broadcast color language, the complete typography hierarchy, the elevation model
-          (shadow/gradient/border per level), motion system, and spacing rhythm. This route is a
-          read-only showcase — Control Room surfaces are only updated by the color (Step 92),
-          typography (Step 93), and elevation (Step 94) application work itself, not by this page.
+          (shadow/gradient/border per level), the gradient system, motion system, and spacing
+          rhythm. This route is a read-only showcase — Control Room surfaces are only updated by
+          the color (Step 92), typography (Step 93), elevation (Step 94), and depth/gradient
+          (Step 95) application work itself, not by this page.
         </p>
       </header>
 
@@ -161,11 +169,11 @@ export default function DesignSystemShowcasePage() {
       </section>
 
       <section className="mb-10">
-        <SectionHeading>Typography + Elevation + Intelligence Integration</SectionHeading>
+        <SectionHeading>Typography + Elevation + Depth + Intelligence Integration</SectionHeading>
         <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
           Each UIIL signal class (Step 90) combines a color treatment (Step 92), a text
-          treatment (Step 93), and an elevation level (Step 94) — the same classes applied to
-          live Control Room zone wrappers.
+          treatment (Step 93), an elevation level (Step 94), and a gradient shape (Step 95) —
+          the same classes applied to live Control Room zone wrappers.
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {intelligenceSignalSamples.map(({ signal, className, sample }) => (
@@ -186,15 +194,48 @@ export default function DesignSystemShowcasePage() {
 
       <section className="mb-10">
         <SectionHeading>Elevation System (Levels 0-4)</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          Rendered with the plain CSS <code>.ubos-elevation-N</code> classes (rather than{' '}
+          <code>ubosElevationClasses</code>) so the Step 95 gradient shape per level is visible,
+          not just the shadow/border.
+        </p>
         <div className="grid gap-3 md:grid-cols-5">
           {ubosElevationLevels.map((level) => (
             <div
               key={level}
-              className={`flex h-24 flex-col items-center justify-center rounded-ubos-md p-2 text-center ${ubosElevationClasses[level]}`}
+              className={`ubos-elevation-${level} flex h-24 flex-col items-center justify-center rounded-ubos-md p-2 text-center`}
             >
               <span className="text-[0.625rem] font-medium text-ubos-fg-secondary">{elevationLabels[level]}</span>
+              <span className="mt-1 text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">
+                {gradientTypeLabels[level]}
+              </span>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <SectionHeading>Gradient System</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          Three canonical gradient shapes (Step 95) — directional lighting that gives elevation
+          its cinematic read, always subtle, never neon.
+        </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+            <p className="mb-2 text-xs font-semibold text-ubos-fg-primary">Linear Depth Gradient</p>
+            <div className="ubos-gradient-linear h-16 rounded-ubos-sm bg-ubos-slate" />
+            <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">Elevation, active panels, workspace shells</p>
+          </div>
+          <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+            <p className="mb-2 text-xs font-semibold text-ubos-fg-primary">Radial Highlight Gradient</p>
+            <div className="ubos-gradient-radial-highlight h-16 rounded-ubos-sm bg-ubos-midnight" />
+            <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">Intelligence highlights, predicted transitions</p>
+          </div>
+          <div className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+            <p className="mb-2 text-xs font-semibold text-ubos-fg-primary">Critical Gradient</p>
+            <div className="ubos-gradient-critical h-16 rounded-ubos-sm bg-ubos-carbon" />
+            <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">Warnings, degraded output, routing failures</p>
+          </div>
         </div>
       </section>
 

@@ -55,6 +55,7 @@
     "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.ts",
     "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-typography.test.ts",
-    "app/control-room/intelligence-graph/ui-intelligence-elevation.test.ts"
+    "app/control-room/intelligence-graph/ui-intelligence-elevation.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-gradient.test.ts"
   ]
 }

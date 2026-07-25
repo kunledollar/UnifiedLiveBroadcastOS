@@ -3,6 +3,7 @@
  * UBDS color semantics applied (Step 92).
  * UBDS typography + intelligence integration applied (Step 93).
  * UBDS elevation + intelligence integration applied (Step 94).
+ * UBDS depth + gradient system applied (Step 95).
  *
  * Applied on Control Room zone wrappers and workspace shell.
  * Intentionally subtle so geometry layout stays intact.
@@ -10,35 +11,36 @@
  * Signal → UBDS mapping rationale (see workspaceIntelligenceEngine.ts):
  *   highlight — emitted only for `severity === 'critical'` fused insights and
  *               "Critical Action" guidance → Program Red (danger, irreversible)
- *               + bold text (Step 93) + Level 3 depth, Highlighted Panel
- *               (Step 94: highlight → Level 3).
+ *               + bold text (Step 93) + Level 3 depth, Highlighted Panel,
+ *               Radial Highlight Gradient (Step 94/95: highlight → Level 3).
  *   warn      — general operator-facing warning → Warning Yellow + bold text
- *               + Level 4 depth, Critical Panel, thick outline (Step 94:
- *               warn → Level 4 — this codebase's `warn` covers exactly the
- *               Level 4 use cases: degraded output, audio clipping, routing
- *               failures).
+ *               + Level 4 depth, Critical Panel, thick outline, Critical
+ *               Gradient (Step 94/95: warn → Level 4 — this codebase's
+ *               `warn` covers exactly the Level 4 use cases: degraded
+ *               output, audio clipping, routing failures).
  *   pulse     — emitted only for predicted graphics activation and predicted
  *               audio clipping → Warning Yellow (predicted risk), same hue as
  *               `prepare`; the animated glow (box-shadow AND text-shadow) is
  *               what distinguishes an active prediction from a standing one
- *               (Step 93) + Level 3 depth with animation (Step 94: pulse →
- *               Level 3 with animation). Motion communicates the state
- *               change, color communicates the meaning (UBDS principle 4).
+ *               (Step 93) + Level 3 depth with animation, Radial Highlight
+ *               Gradient (Step 94/95: pulse → Level 3 with animation).
+ *               Motion communicates the state change, color communicates
+ *               the meaning (UBDS principle 4).
  *   prepare   — emitted only for predicted scene transitions and predicted
  *               routing failures → Warning Yellow (predicted risk) + italic
- *               text (Step 93) + Level 2 depth with a subtle gradient
- *               (Step 94: prepare → Level 2 with subtle gradient); the
+ *               text (Step 93) + Level 2 depth, Linear Depth Gradient
+ *               (Step 94/95: prepare → Level 2 with subtle gradient); the
  *               dashed outline is the "not yet confirmed" texture.
  *   elevated  — panels raised for guidance/attention (workspace shell,
  *               guidance panel) → kept on the existing success tone (a
  *               "healthy, actionable" elevation, distinct from Preview
- *               Green and Active Blue) + Level 3 depth (Step 94: elevate →
- *               Level 3).
+ *               Green and Active Blue) + Level 3 depth, Radial Highlight
+ *               Gradient (Step 94/95: elevate → Level 3).
  *   dim       — reduced opacity only (Step 93) + Level 1 depth, Standard
- *               Panel (Step 94: dim → Level 1 — a de-emphasized but still
- *               present panel).
+ *               Panel, flat (Step 94: dim → Level 1 — a de-emphasized but
+ *               still present panel).
  *   suppress  — opacity/desaturation + micro-text sizing (Step 93) +
- *               Level 0 depth, Background Layer (Step 94: suppress →
+ *               Level 0 depth, Background Layer, flat (Step 94: suppress →
  *               Level 0 — recedes to the background, no shadow at all).
  *
  * Text properties (font-weight/font-style/text-shadow) are inheritable, so
@@ -54,6 +56,7 @@
   outline: 1px solid var(--ubos-program-border);
   box-shadow: var(--ubos-depth-3), inset 0 0 0 1px var(--ubos-program-dimmed), 0 0 18px var(--ubos-program-dimmed);
   background-color: var(--ubos-program-dimmed);
+  background-image: var(--ubos-gradient-radial-highlight);
   font-weight: 700;
   z-index: 3;
 }
@@ -62,6 +65,7 @@
   outline: 2px solid var(--ubos-warning-border);
   box-shadow: var(--ubos-depth-4), inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 14px var(--ubos-warning-dimmed);
   background-color: var(--ubos-warning-dimmed);
+  background-image: var(--ubos-gradient-critical);
   font-weight: 700;
   z-index: 4;
 }
@@ -69,6 +73,7 @@
 .ubos-pulse {
   outline: 1px solid var(--ubos-warning-border);
   box-shadow: var(--ubos-depth-3);
+  background-image: var(--ubos-gradient-radial-highlight);
   animation: ubos-ui-pulse 1.4s ease-in-out infinite;
   z-index: 3;
 }
@@ -77,7 +82,7 @@
   outline: 1px dashed var(--ubos-warning-border);
   box-shadow: var(--ubos-depth-2), inset 0 0 0 1px var(--ubos-warning-dimmed);
   background-color: var(--ubos-warning-dimmed);
-  background-image: var(--ubos-elevation-gradient-2);
+  background-image: var(--ubos-gradient-linear);
   font-style: italic;
   z-index: 2;
 }
@@ -85,6 +90,7 @@
 .ubos-elevated {
   outline: 1px solid var(--ubos-success-border);
   box-shadow: var(--ubos-depth-3), 0 0 0 1px var(--ubos-success-muted), 0 8px 24px rgba(0, 0, 0, 0.25);
+  background-image: var(--ubos-gradient-radial-highlight);
   z-index: 3;
 }
 
