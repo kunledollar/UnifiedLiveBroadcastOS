@@ -51,6 +51,8 @@
     "app/control-room/intelligence-graph/operatorGuidanceEngine.ts",
     "app/control-room/intelligence-graph/operatorGuidanceEngine.test.ts",
     "app/control-room/intelligence-graph/workspaceIntelligenceEngine.ts",
-    "app/control-room/intelligence-graph/workspaceIntelligenceEngine.test.ts"
+    "app/control-room/intelligence-graph/workspaceIntelligenceEngine.test.ts",
+    "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.ts",
+    "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.test.ts"
   ]
 }

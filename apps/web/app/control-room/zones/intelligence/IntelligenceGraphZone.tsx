@@ -107,6 +107,7 @@ export function IntelligenceGraphZone({ state: _ }: { state: ProductionState }) 
         <span className="text-emerald-400/80">{snapshot.fusedCount} fused</span>
         <span className="text-lime-400/80">{snapshot.guidanceCount} actions</span>
         <span className="text-orange-400/80">{snapshot.workspaceSignalCount} ui</span>
+        <span className="text-rose-400/80">{snapshot.uiIntelligenceSignalCount} applied</span>
         <span className="text-sky-500/80">{snapshot.highlightCount} highlights</span>
         <span className="text-amber-500/80">{snapshot.emphasisCount} emphasis</span>
         <span className="text-emerald-500/80">

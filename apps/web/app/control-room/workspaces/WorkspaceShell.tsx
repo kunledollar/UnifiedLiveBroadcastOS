@@ -8,6 +8,9 @@ import type { ChromeToolAction } from '../chrome';
 import type { WorkspacePresetId } from '@ubos/shared';
 import { workspaceManager } from '../state/workspace-manager-instance';
 import { ControlRoomCanvas } from '../zones/ControlRoomCanvas';
+import { useUiIntelligence } from '../hooks/useUiIntelligence';
+import { workspaceState } from '../workspace/workspaceState';
+import '../intelligence-graph/ui-intelligence.css';
 import './workspace-shell.css';
 
 const workspaceFromPath = (pathname: string): WorkspaceId => {
@@ -60,6 +63,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const workspace = workspaceById[workspaceFromPath(pathname)];
   const g = workspace.geometry;
   const canvasRef = useRef<HTMLDivElement>(null);
+  // Step 90 — elevate active workspace shell from UIIL
+  useUiIntelligence();
+  const shellElevated = workspaceState.intelligenceGraph.uiIntegration.isWorkspaceElevated();
+  const shellUiClass = workspaceState.intelligenceGraph.getPanelUiClassName('workspaceShell');
 
   const style = {
     '--ubos-program-weight': g.programWeight,
@@ -106,9 +113,16 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div
-      className="ubos-workspace-shell-v2 is-horizontal-split"
+      className={[
+        'ubos-workspace-shell-v2',
+        'is-horizontal-split',
+        shellElevated ? shellUiClass : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
       style={style}
       data-workspace={workspace.id}
+      data-ui-elevated={shellElevated ? 'true' : 'false'}
     >
       {/* ── New top bar ──────────────────────────────────────────────── */}
       <UbosGlobalTopBar
