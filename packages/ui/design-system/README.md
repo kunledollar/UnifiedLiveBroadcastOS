@@ -44,15 +44,15 @@ The existing roles `display`, `section`, `panel`, `caption`, `metadata`, `mono`,
 
 ### Typography + Intelligence Integration
 
-`apps/web/app/control-room/intelligence-graph/ui-intelligence.css` maps each UI Intelligence Integration Layer signal (Step 90) to a color treatment (Step 92), a text treatment (Step 93), an elevation level (Step 94), and a gradient shape (Step 95), since these classes are applied to zone wrapper elements and `font-weight`/`font-style`/`text-shadow` are inheritable:
+`apps/web/app/control-room/intelligence-graph/ui-intelligence.css` maps each UI Intelligence Integration Layer signal (Step 90) to a color treatment (Step 92), a text treatment (Step 93), an elevation level (Step 94), a gradient shape (Step 95), and a motion treatment (Step 96), since these classes are applied to zone wrapper elements and `font-weight`/`font-style`/`text-shadow` are inheritable:
 
-- **highlight** → Program Red + bold text + Level 3 depth + Radial Highlight Gradient (critical severity).
-- **warn** → Warning Yellow + bold text + Level 4 depth with a thick 2px outline + Critical Gradient.
-- **pulse** → Warning Yellow + an animated glow that includes a `text-shadow` pulse, not just the box glow + Level 3 depth + Radial Highlight Gradient.
-- **prepare** → Warning Yellow + italic text + Level 2 depth + Linear Depth Gradient (a standing prediction, not yet confirmed).
-- **elevated** → the existing success tone (no text treatment — elevation is chrome-level, not a text state) + Level 3 depth + Radial Highlight Gradient.
-- **dim** → reduced opacity + Level 1 depth, flat (no gradient).
-- **suppress** → reduced opacity/desaturation plus a size step toward micro-text, per "suppress → micro-text or hidden" + Level 0 (no shadow at all — it recedes to the background), flat (no gradient).
+- **highlight** → Program Red + bold text + Level 3 depth + Radial Highlight Gradient + glow-in transition and a one-shot elevate rise (critical severity).
+- **warn** → Warning Yellow + bold text + Level 4 depth with a thick 2px outline + Critical Gradient + a one-shot shake.
+- **pulse** → Warning Yellow + an animated glow that includes a `text-shadow` pulse, not just the box glow + Level 3 depth + Radial Highlight Gradient, on the elastic timing curve.
+- **prepare** → Warning Yellow + italic text + Level 2 depth + Linear Depth Gradient + a subtle (quicker, less pronounced than highlight's) glow-in transition (a standing prediction, not yet confirmed).
+- **elevated** → the existing success tone (no text treatment — elevation is chrome-level, not a text state) + Level 3 depth + Radial Highlight Gradient + a one-shot elevate rise.
+- **dim** → reduced opacity + Level 1 depth, flat (no gradient), fading in on a linear curve.
+- **suppress** → reduced opacity/desaturation plus a size step toward micro-text, per "suppress → micro-text or hidden" + Level 0 (no shadow at all — it recedes to the background), flat (no gradient), same linear fade-in as `dim`.
 
 An element's own explicit typography class (e.g. `font-semibold` on a heading) still wins over the inherited wrapper value — this is a subtle default, not an override.
 
@@ -90,13 +90,30 @@ Three ready-to-use CSS classes apply these directly: `.ubos-gradient-linear`, `.
 
 ## Motion System
 
-Five motion primitives (`ubosMotionSystem`) communicate state changes, never decoration:
+Six motion primitives (`ubosMotionSystem`) communicate state changes, never decoration:
 
 - **pulse** — predicted activation / recording tally.
-- **glow** — active selection / focus.
-- **slide** — transitions between states.
-- **fade** — dimming / de-emphasis.
-- **shake** — warnings requiring immediate attention.
+- **glow** — active panels, elevated panels, intelligence highlights.
+- **slide** — workspace transitions, panel reveals, inspector sections.
+- **fade** — dimming, suppression, low-priority UI.
+- **shake** — warnings, routing failures, audio clipping.
+- **elevate** — a panel rising into an active/critical/emphasized state (Step 96).
+
+### Motion Timing Curves
+
+Cinematic curves, not web-app defaults (`ubosMotionCurves`) — named by the state they serve, since the same curve *shape* means something different depending on context:
+
+| Curve | Shape | Used for |
+| --- | --- | --- |
+| `highlight` | Fast-in / slow-out (`ubosEasing.out`) | Highlights snap to attention, then settle |
+| `warning` | Slow-in / fast-out (`ubosEasing.in`) | Warnings build urgency, then resolve sharply |
+| `fade` | Linear | Fades/de-emphasis feel mechanical, not eased |
+| `pulse` | Elastic overshoot (`ubosEasing.spring`) | Pulses only |
+| `workspaceTransition` | Ease-in (`ubosEasing.in`) | Workspace transitions accelerate into the new state |
+
+### Motion + Intelligence Integration
+
+`ubosIntelligenceMotionMap` records which primitive(s) each UIIL signal uses, applied in `ui-intelligence.css` alongside the color/text/elevation/gradient treatments above: `highlight` → glow + elevate, `warn` → shake, `pulse` → pulse (on the elastic curve), `prepare` → subtle glow, `dim`/`suppress` → fade (on the linear curve), `elevate` → elevate. The one-shot animations (`elevate`, `shake`) play once when a signal class is newly applied to an element — motion must be subtle, so nothing loops except `pulse`, which represents a standing prediction rather than a one-time event. The workspace shell (`.ubos-workspace-shell-v2.ubos-elevated`) explicitly disables the transform-based elevate rise (it would shift the entire viewport) and keeps only the box-shadow transition.
 
 ## Spacing System
 
@@ -118,4 +135,4 @@ Use CSS variables or design-system utility classes rather than new literal visua
 
 ## Foundation vs. application
 
-Step 91 established the UBDS token foundation (color, elevation, motion, spacing, and the first four typography roles). Step 92 applied the broadcast color language to the Triad, Inspector, Program Output, Graphics, Audio, Routing, Replay, Workspace Shell, and Operator HUD surfaces. Step 93 completed the typography hierarchy (HUD Text, Intelligence Text) and wired the intelligence-signal text treatments above. Step 94 refined the elevation model (soft/medium/strong/hard shadow progression, per-level gradients, a thick Level 4 border) and wired the intelligence-signal elevation treatments above. Step 95 formalized the three canonical gradient shapes and assigned one to each elevation level, giving Level 3 a radial highlight bloom and Level 4 a critical-red wash instead of a generic linear gradient. Applying UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 (the next-generation redesigns) is scoped to later steps — this package intentionally does not re-skin existing Control Room surfaces beyond the color/typography/elevation/gradient semantics already applied.
+Step 91 established the UBDS token foundation (color, elevation, motion, spacing, and the first four typography roles). Step 92 applied the broadcast color language to the Triad, Inspector, Program Output, Graphics, Audio, Routing, Replay, Workspace Shell, and Operator HUD surfaces. Step 93 completed the typography hierarchy (HUD Text, Intelligence Text) and wired the intelligence-signal text treatments above. Step 94 refined the elevation model (soft/medium/strong/hard shadow progression, per-level gradients, a thick Level 4 border) and wired the intelligence-signal elevation treatments above. Step 95 formalized the three canonical gradient shapes and assigned one to each elevation level, giving Level 3 a radial highlight bloom and Level 4 a critical-red wash instead of a generic linear gradient. Step 96 completed the motion system with a sixth primitive (`elevate`), named timing curves, and wired the intelligence-signal motion treatments above — this closes out UBDS's visual physics (color + typography + elevation + depth + motion). Applying UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 (the next-generation redesigns) is scoped to later steps — this package intentionally does not re-skin existing Control Room surfaces beyond the color/typography/elevation/gradient/motion semantics already applied.

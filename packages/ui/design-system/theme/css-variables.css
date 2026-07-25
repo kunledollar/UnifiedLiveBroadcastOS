@@ -303,6 +303,17 @@
   80% { transform: translateX(2px); }
 }
 
+/* UBDS motion primitive (Step 96) — elevate, a panel rising into an
+ * active/critical/emphasized elevation state. */
+@keyframes ubos-elevate {
+  from {
+    transform: translateY(3px) scale(0.985);
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
 /* Base broadcast workstation surface */
 .ubos-workstation {
   background-color: var(--ubos-bg-carbon);
@@ -398,6 +409,12 @@
 /* UBDS motion primitive — apply to trigger a warning shake once */
 .ubos-shake {
   animation: ubos-shake 400ms ease-in-out;
+}
+
+/* UBDS motion primitive (Step 96) — apply when a panel newly becomes
+ * active/critical/emphasized so it visibly rises into place once. */
+.ubos-elevate-in {
+  animation: ubos-elevate 300ms cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 /* UBDS Gradient System (Step 95) — the three canonical gradient shapes,

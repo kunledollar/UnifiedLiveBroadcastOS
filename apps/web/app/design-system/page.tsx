@@ -18,6 +18,7 @@ import {
   ubosColorRampStates,
   ubosElevationLevels,
   ubosIntelligenceElevationMap,
+  ubosMotionCurves,
   ubdsTypographyRoles,
   ubosTypographyClasses,
   type UbosBroadcastHue,
@@ -25,6 +26,7 @@ import {
   type UbosElevationLevel,
   type UbdsTypographyRole,
   type UbosIntelligenceElevationAction,
+  type UbosMotionCurve,
 } from '@ubos/ui';
 
 const hueLabels: Record<UbosBroadcastHue, string> = {
@@ -62,17 +64,25 @@ const typographySamples: Record<UbdsTypographyRole, { sample: string; wrapperCla
   intelligence: { sample: 'Predicted scene transition in ~4s' },
 };
 
-// UIIL signals (Step 90) drive the intelligence-text (Step 93) and
-// elevation (Step 94) treatments below. `elevate` isn't included here
-// since it targets the workspace shell/guidance panel rather than a
-// generic content card.
-const intelligenceSignalSamples: Array<{ signal: UbosIntelligenceElevationAction; className: string; sample: string }> = [
-  { signal: 'highlight', className: 'ubos-highlight', sample: 'Critical: audio dropout on Guest Mic 2' },
-  { signal: 'warn', className: 'ubos-warn', sample: 'Output bitrate trending toward degradation' },
-  { signal: 'pulse', className: 'ubos-pulse', sample: 'Predicted audio clipping in 2s' },
-  { signal: 'prepare', className: 'ubos-prepare', sample: 'Predicted scene transition in ~4s' },
-  { signal: 'dim', className: 'ubos-dim', sample: 'Non-relevant panel for this role' },
-  { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight' },
+// UIIL signals (Step 90) drive the intelligence-text (Step 93), elevation
+// (Step 94), gradient (Step 95), and motion (Step 96) treatments below.
+// `elevate` isn't included here since it targets the workspace shell/
+// guidance panel rather than a generic content card.
+const intelligenceSignalSamples: Array<{ signal: UbosIntelligenceElevationAction; className: string; sample: string; motion: string }> = [
+  { signal: 'highlight', className: 'ubos-highlight', sample: 'Critical: audio dropout on Guest Mic 2', motion: 'glow + elevate' },
+  { signal: 'warn', className: 'ubos-warn', sample: 'Output bitrate trending toward degradation', motion: 'shake' },
+  { signal: 'pulse', className: 'ubos-pulse', sample: 'Predicted audio clipping in 2s', motion: 'pulse (elastic)' },
+  { signal: 'prepare', className: 'ubos-prepare', sample: 'Predicted scene transition in ~4s', motion: 'subtle glow' },
+  { signal: 'dim', className: 'ubos-dim', sample: 'Non-relevant panel for this role', motion: 'fadeOut (linear)' },
+  { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight', motion: 'fadeOut (linear)' },
+];
+
+const motionCurveDemos: Array<{ curve: UbosMotionCurve; label: string; description: string }> = [
+  { curve: 'highlight', label: 'Highlight', description: 'Fast-in / slow-out' },
+  { curve: 'warning', label: 'Warning', description: 'Slow-in / fast-out' },
+  { curve: 'fade', label: 'Fade', description: 'Linear' },
+  { curve: 'pulse', label: 'Pulse', description: 'Elastic' },
+  { curve: 'workspaceTransition', label: 'Workspace transition', description: 'Ease-in' },
 ];
 
 const elevationLabels: Record<UbosElevationLevel, string> = {
@@ -109,22 +119,26 @@ function SectionHeading({ children }: { children: string }) {
 
 export default function DesignSystemShowcasePage() {
   const [shakeKey, setShakeKey] = useState(0);
+  const [elevateKey, setElevateKey] = useState(0);
+  const [signalsActive, setSignalsActive] = useState(false);
+  const [curvesPlaying, setCurvesPlaying] = useState(false);
 
   return (
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Steps 91–95
+          UBOS Design System · Steps 91–96
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
         </h1>
         <p className="mt-1 max-w-2xl text-[0.8125rem] text-ubos-fg-secondary">
           Broadcast color language, the complete typography hierarchy, the elevation model
-          (shadow/gradient/border per level), the gradient system, motion system, and spacing
-          rhythm. This route is a read-only showcase — Control Room surfaces are only updated by
-          the color (Step 92), typography (Step 93), elevation (Step 94), and depth/gradient
-          (Step 95) application work itself, not by this page.
+          (shadow/gradient/border per level), the gradient system, the complete motion system
+          (six primitives + timing curves), and spacing rhythm. This route is a read-only
+          showcase — Control Room surfaces are only updated by the color (Step 92), typography
+          (Step 93), elevation (Step 94), depth/gradient (Step 95), and motion (Step 96)
+          application work itself, not by this page.
         </p>
       </header>
 
@@ -169,22 +183,34 @@ export default function DesignSystemShowcasePage() {
       </section>
 
       <section className="mb-10">
-        <SectionHeading>Typography + Elevation + Depth + Intelligence Integration</SectionHeading>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <SectionHeading>Typography + Elevation + Depth + Motion + Intelligence Integration</SectionHeading>
+          <button
+            type="button"
+            onClick={() => setSignalsActive((current) => !current)}
+            className="rounded-ubos-sm border border-ubos-selection-border bg-ubos-selection-muted px-3 py-1.5 text-[0.625rem] font-bold uppercase tracking-wide text-ubos-selection-text hover:bg-ubos-selection-dimmed"
+          >
+            {signalsActive ? 'Clear signals' : 'Trigger intelligence signals'}
+          </button>
+        </div>
         <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
           Each UIIL signal class (Step 90) combines a color treatment (Step 92), a text
-          treatment (Step 93), an elevation level (Step 94), and a gradient shape (Step 95) —
-          the same classes applied to live Control Room zone wrappers.
+          treatment (Step 93), an elevation level (Step 94), a gradient shape (Step 95), and a
+          motion treatment (Step 96) — the same classes applied to live Control Room zone
+          wrappers. Toggling the button applies/removes the classes on already-mounted cards so
+          the entrance motion (elevate rise, shake, glow-in, linear fade) actually plays, the same
+          way it would when a WIE signal newly appears or clears on a live panel.
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {intelligenceSignalSamples.map(({ signal, className, sample }) => (
+          {intelligenceSignalSamples.map(({ signal, className, sample, motion }) => (
             <div key={signal} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{signal}</span>
                 <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">
-                  Level {ubosIntelligenceElevationMap[signal]}
+                  Level {ubosIntelligenceElevationMap[signal]} · {motion}
                 </span>
               </div>
-              <div className={`rounded-ubos-sm p-2 ${className}`}>
+              <div className={`rounded-ubos-sm p-2 ${signalsActive ? className : ''}`}>
                 <p className={ubosTypographyClasses.intelligence}>{sample}</p>
               </div>
             </div>
@@ -241,7 +267,10 @@ export default function DesignSystemShowcasePage() {
 
       <section className="mb-10">
         <SectionHeading>Motion System</SectionHeading>
-        <div className="grid gap-3 md:grid-cols-5">
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          Six canonical primitives (Step 96 adds <code>elevate</code> to the five from Step 91).
+        </p>
+        <div className="grid gap-3 md:grid-cols-6">
           <div className="flex flex-col items-center gap-2 rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-4">
             <span className="h-4 w-4 animate-ubos-tally-pulse rounded-full bg-ubos-program" />
             <span className="text-[0.625rem] uppercase tracking-wide text-ubos-fg-muted">pulse</span>
@@ -268,6 +297,52 @@ export default function DesignSystemShowcasePage() {
             />
             <span className="text-[0.625rem] uppercase tracking-wide text-ubos-fg-muted">shake (click)</span>
           </div>
+          <div className="flex flex-col items-center gap-2 rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-4">
+            <button
+              type="button"
+              key={elevateKey}
+              onClick={() => setElevateKey((current) => current + 1)}
+              className="ubos-elevate-in h-8 w-8 rounded-ubos-sm border border-ubos-selection-border bg-ubos-selection-muted"
+              aria-label="Replay elevate animation"
+            />
+            <span className="text-[0.625rem] uppercase tracking-wide text-ubos-fg-muted">elevate (click)</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <SectionHeading>Motion Timing Curves</SectionHeading>
+          <button
+            type="button"
+            onClick={() => setCurvesPlaying((current) => !current)}
+            className="rounded-ubos-sm border border-ubos-selection-border bg-ubos-selection-muted px-3 py-1.5 text-[0.625rem] font-bold uppercase tracking-wide text-ubos-selection-text hover:bg-ubos-selection-dimmed"
+          >
+            {curvesPlaying ? 'Reset' : 'Play'}
+          </button>
+        </div>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          Cinematic curves, not web-app defaults (Step 96) — the same shape means something
+          different depending on which state it serves.
+        </p>
+        <div className="space-y-3">
+          {motionCurveDemos.map(({ curve, label, description }) => (
+            <div key={curve} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className={ubosTypographyClasses.body}>{label}</span>
+                <span className="text-[0.625rem] uppercase tracking-wide text-ubos-fg-muted">{description}</span>
+              </div>
+              <div className="relative h-3 rounded-full bg-ubos-midnight">
+                <div
+                  className="absolute top-1/2 h-3 w-3 -translate-y-1/2 rounded-full bg-ubos-selection"
+                  style={{
+                    left: curvesPlaying ? 'calc(100% - 0.75rem)' : '0%',
+                    transition: `left 900ms ${ubosMotionCurves[curve]}`,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </section>
 
