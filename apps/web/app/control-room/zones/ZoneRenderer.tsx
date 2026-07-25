@@ -17,6 +17,7 @@ import { OutputZone }             from './OutputZone';
 import { AiInsightZone }          from './AiInsightZone';
 import { AiCrewOverlay }          from './AiCrewOverlay';
 import { GraphicsComposerZone }   from './graphics-composer/GraphicsComposerZone';
+import { CameraGridZone }         from './camera-grid/CameraGridZone';
 
 type ZoneComponentProps = { state: ProductionState };
 
@@ -29,6 +30,7 @@ const registry: Record<string, ComponentType<ZoneComponentProps>> = {
   'ai-insight':        AiInsightZone,
   'ai-crew-overlay':   AiCrewOverlay,
   'graphics-composer': GraphicsComposerZone,
+  'camera-grid':       CameraGridZone,
 };
 
 export function ZoneRenderer({
