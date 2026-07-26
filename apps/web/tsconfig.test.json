@@ -65,6 +65,8 @@
     "app/control-room/zones/inspector/inspectorIntelligence.ts",
     "app/control-room/zones/inspector/inspectorIntelligence.test.ts",
     "app/control-room/zones/outputIntelligence.ts",
-    "app/control-room/zones/outputIntelligence.test.ts"
+    "app/control-room/zones/outputIntelligence.test.ts",
+    "app/control-room/hud/hudIntelligence.ts",
+    "app/control-room/hud/hudIntelligence.test.ts"
   ]
 }

@@ -688,3 +688,112 @@ Does not close platform v5.12.0 (enterprise GA hardening remains a separate phas
 ### Next eligible work
 
 Step 91 — UBOS Design System (UBDS) Foundation.
+
+## 2026-07-26 — Operator HUD 2.0 (Step 104)
+
+### Objective
+
+Build the global intelligence overlay ("Operator HUD 2.0") that sits above
+Triad 2.0 (Step 100), Inspector 2.0 (Step 101), Program Output 2.0
+(Step 102), and every workspace (Director, Graphics, Audio, Replay,
+Streaming), fusing Predictive Engine (PE), Insight Fusion Engine (IFE),
+Operator Guidance Engine (OGE), and Workspace Intelligence Engine (WIE)
+output into four fixed HUD zones per the Step 104 spec: Primary Insight
+(top-center), Guidance (top-right), Warning (top-left), and Timeline
+(bottom-center).
+
+### Root Cause / Gap
+
+Steps 100-102 made Triad, Inspector, and Program Output individually
+intelligence-aware, and Step 103 added Workspace Intelligence Themes, but
+UBOS had no *workspace-independent* surface aggregating fused insights,
+predictions, guidance, and warnings in one place — an operator switching
+between Director/Graphics/Audio/Replay/Streaming had to check each zone's
+own intelligence bar separately. `TriadOperatorHud` (Step 100) was scoped
+to Triad only.
+
+### Implementation
+
+New `apps/web/app/control-room/hud/` module:
+
+- `hudIntelligence.ts` — pure, framework-free wiring (Step 100-102 pattern):
+  outer zone treatment (`hudZoneAction`/`hudZoneClassName`/
+  `hudZoneCollapsed`) resolves the highest-priority WIE action across each
+  zone's candidate panels (reusing the exact `UI_ACTION_CLASS`/
+  `uiActionClassName` from Step 90 — no new color/motion language); inner
+  zone content (`selectPrimaryInsights`/`selectGuidanceActions`/
+  `selectWarnings`/`selectTimelineEntries`) shapes real engine output
+  (`UigSnapshot.latestPredictions`/`latestOperatorGuidance`/
+  `latestFusedInsights`/`getAutomationTriggers()`) into each zone,
+  distinguishing *predicted* (Primary Insight, from PE) from *realized*
+  critical/warning conditions (Warning, from IFE).
+- `OperatorHUD.tsx` + `HUDPrimaryInsight.tsx` + `HUDGuidance.tsx` +
+  `HUDWarnings.tsx` + `HUDTimeline.tsx` — the four zone components, reusing
+  `ubosTypographyClasses.hud`/`intelligence`/`microText` (Step 93) and
+  `ubosElevationClasses[3]`/`[4]` (Step 94; Warning zone is always Level 4
+  per spec, the rest are Level 3).
+- `operator-hud.css` — fixed-position 3-column/3-row overlay grid (Warning
+  top-left, Primary Insight top-center, Guidance top-right, Timeline
+  bottom-center spanning all columns), `pointer-events: none` on the
+  overlay container so it never blocks canvas interaction, `pointer-events:
+  auto` on the small HUD cards themselves. Implements the one HUD-specific
+  behavior beyond Steps 90-98's existing signal classes: `suppress` →
+  collapse the zone entirely (the component returns `null`, with a
+  defensive CSS fallback), distinct from the generic fade+shrink
+  `.ubos-suppress` used on geometry zones elsewhere (those must keep
+  occupying their geometry rect; a HUD zone has no such constraint).
+- Mounted once in `WorkspaceShell.tsx` (not per-zone like
+  `TriadOperatorHud`), so it renders above `ControlRoomCanvas` for every
+  workspace route.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/hud/hudIntelligence.ts` | New — zone wiring + content selection (Step 104) |
+| `apps/web/app/control-room/hud/hudIntelligence.test.ts` | New — 13 unit tests, `node:test` |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | New — top-level HUD component |
+| `apps/web/app/control-room/hud/HUDPrimaryInsight.tsx` | New — top-center zone |
+| `apps/web/app/control-room/hud/HUDGuidance.tsx` | New — top-right zone |
+| `apps/web/app/control-room/hud/HUDWarnings.tsx` | New — top-left zone |
+| `apps/web/app/control-room/hud/HUDTimeline.tsx` | New — bottom-center zone |
+| `apps/web/app/control-room/hud/operator-hud.css` | New — overlay layout + suppress-collapse fallback |
+| `apps/web/app/control-room/workspaces/WorkspaceShell.tsx` | Mount `<OperatorHUD />` above `ControlRoomCanvas` |
+| `apps/web/tsconfig.test.json` | Register new HUD source/test files |
+| `apps/web/package.json` | Add HUD test file to the `test` script |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 224/224 (13 new HUD tests, all
+  existing tests unaffected).
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `pnpm --filter @ubos/web lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (Next.js production build,
+  43/43 static pages generated).
+
+### Runtime/Browser Evidence
+
+Live dev server (`pnpm dev`) + Playwright/Chromium, real orchestration tick
+loop feeding the intelligence graph (no mocked data):
+
+- `/control-room/director` — all four HUD zones present, zero console
+  errors; Warning zone showed real "Scene has missing source" (81%) and
+  "Temporal drop detected on output:program" (74%); Guidance zone showed
+  role-aware Director actions; Timeline merged guidance + insight entries
+  chronologically.
+- `/control-room/graphics-operator`, `/control-room/audio-engineer`,
+  `/control-room/replay-operator`, `/control-room/streaming-operator` — HUD
+  present with zero console errors on every workspace; Streaming Operator's
+  Primary Insight zone showed a live "Output degradation likely" (69%)
+  prediction.
+- Screenshots saved to `artifacts/operator-hud-step104/` (full-page per
+  workspace + zoomed captures of each zone).
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/operator-hud-2-0-4284`)
+

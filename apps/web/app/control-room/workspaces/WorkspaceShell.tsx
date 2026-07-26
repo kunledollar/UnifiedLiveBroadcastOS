@@ -8,6 +8,7 @@ import type { ChromeToolAction } from '../chrome';
 import type { WorkspacePresetId } from '@ubos/shared';
 import { workspaceManager } from '../state/workspace-manager-instance';
 import { ControlRoomCanvas } from '../zones/ControlRoomCanvas';
+import { OperatorHUD } from '../hud/OperatorHUD';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
 import { workspaceState } from '../workspace/workspaceState';
 import '../intelligence-graph/ui-intelligence.css';
@@ -148,6 +149,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
         >
           <ControlRoomCanvas />
+
+          {/* Operator HUD 2.0 (Step 104) — global intelligence overlay,
+              above the geometry canvas, present across every workspace
+              (Director, Graphics, Audio, Replay, Streaming) and every
+              zone within it (Triad, Inspector, Program Output). */}
+          <OperatorHUD />
 
           {/* Workspace-specific content sits behind the geometry zones
               so existing panels (inspector, workbench, etc.) remain
