@@ -145,7 +145,10 @@ export function UbosWorkspaceSidebar({
   systemHealth = [],
   className,
 }: UbosWorkspaceSidebarProps) {
-  const [specialistExpanded, setSpecialistExpanded] = useState(false);
+  // Workspace switching is a primary control-room action, not a hidden
+  // preference. Start expanded so every role has an immediately visible,
+  // clearly bounded destination in the navigation panel.
+  const [specialistExpanded, setSpecialistExpanded] = useState(true);
   const def = workspaceChromeDefs[activePresetId];
 
   const showSpecialist =
