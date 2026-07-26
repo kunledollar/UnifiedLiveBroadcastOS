@@ -1,0 +1,164 @@
+/**
+ * Operator HUD 2.0 (Step 104) — global intelligence overlay layout.
+ *
+ * Positions the four canonical HUD zones per the Step 104 spec: Primary
+ * Insight top-center, Guidance top-right, Warning top-left, Timeline
+ * bottom-center. Sits above `ControlRoomCanvas` (z-index 5, above geometry
+ * zone wrappers which top out at z-index 4 for `.ubos-warn` in
+ * `ui-intelligence.css`) but never blocks operator interaction with the
+ * canvas beneath it — the overlay itself ignores pointer events and only
+ * the small HUD zone cards (which occupy a fraction of the viewport) accept
+ * them, e.g. for a hover tooltip on a truncated message.
+ *
+ * Reuses the exact `.ubos-highlight` / `.ubos-warn` / `.ubos-pulse` /
+ * `.ubos-prepare` / `.ubos-dim` / `.ubos-elevated` treatments from
+ * `ui-intelligence.css` (Steps 90-98) for highlight/warn/pulse/prepare/dim/
+ * elevate — HUD 2.0 does not invent a second motion/color/elevation
+ * language. The one HUD-specific addition is `suppress`, which the Step 104
+ * spec defines as "collapse HUD zone" rather than the generic fade+shrink
+ * `.ubos-suppress` uses elsewhere (those wrappers still occupy a geometry
+ * rect that must not disappear; a HUD zone has no such constraint) — in
+ * practice `hudZoneCollapsed()` (`hudIntelligence.ts`) already prevents the
+ * zone from rendering at all, so the CSS rule below is a defensive
+ * fallback, not the primary mechanism.
+ */
+
+.operator-hud {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  padding: var(--ubos-padding-standard, 12px);
+  gap: var(--ubos-space-2, 8px);
+  pointer-events: none;
+}
+
+.hud-zone {
+  pointer-events: auto;
+  max-width: 24rem;
+  min-width: 12rem;
+  border-radius: 8px;
+  padding: var(--ubos-padding-standard, 12px);
+  background: var(--ubos-bg-graphite);
+  border: 1px solid var(--ubos-border-subtle);
+  box-shadow: var(--ubos-depth-3);
+  transition:
+    opacity var(--ubos-duration-normal, 180ms) linear,
+    max-height var(--ubos-duration-normal, 180ms) linear,
+    padding var(--ubos-duration-normal, 180ms) linear,
+    margin var(--ubos-duration-normal, 180ms) linear;
+}
+
+.hud-zone-warning {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+}
+
+.hud-zone-primary-insight {
+  grid-column: 2;
+  grid-row: 1;
+  justify-self: center;
+}
+
+.hud-zone-guidance {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+}
+
+.hud-zone-timeline {
+  grid-column: 1 / span 3;
+  grid-row: 3;
+  justify-self: center;
+  align-self: end;
+  width: 100%;
+  max-width: 56rem;
+}
+
+.hud-zone-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ubos-space-2, 8px);
+}
+
+.hud-zone-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 6px;
+  list-style: none;
+  padding: 0;
+}
+
+.hud-zone-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.hud-zone-item > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hud-zone-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.hud-zone-timeline-list {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+
+.hud-zone-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: none;
+  max-width: 16rem;
+  border-radius: 6px;
+  padding: 2px 8px;
+  background: var(--ubos-bg-midnight);
+}
+
+/* Defensive fallback for "suppress → collapse HUD zone" (Step 104). */
+.operator-hud .hud-zone.ubos-suppress {
+  opacity: 0;
+  max-height: 0;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+@media (max-width: 900px) {
+  .operator-hud {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+  }
+  .hud-zone-warning,
+  .hud-zone-primary-insight,
+  .hud-zone-guidance {
+    grid-column: 1;
+    justify-self: stretch;
+    max-width: none;
+  }
+  .hud-zone-timeline {
+    grid-column: 1;
+  }
+}

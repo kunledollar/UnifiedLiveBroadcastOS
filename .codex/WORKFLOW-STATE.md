@@ -71,12 +71,11 @@ v5.12.0 — next platform phase pending authoritative task specification
 
 ## Latest Control Room Milestone
 
-- **Milestone title:** Intelligence Graph Foundation (Steps 81–90)
-- **Release name:** UBOS Intelligence Graph Phase 1
-- **Release label:** UIG-1
-- **Status:** CERTIFIED
-- **Merge head:** d0953f6
-- **Next Control Room step:** Step 91 — UBOS Design System (UBDS) Foundation
+- **Milestone title:** Operator HUD 2.0 (Step 104)
+- **Release name:** UBOS Operator HUD 2.0
+- **Status:** PASS (see `.codex/COMPLETION-REPORT.md`, 2026-07-26 entry)
+- **Prior milestone:** Intelligence Graph Foundation (Steps 81–90), merge head d0953f6; Steps 91–103 (UBDS Foundation, color/typography/elevation/depth/motion/spacing/grid, Triad/Inspector/Program Output 2.0, Workspace Intelligence Themes) merged at d44db76
+- **Next Control Room step:** Step 105 — pending authoritative task specification
 
 ---
 
