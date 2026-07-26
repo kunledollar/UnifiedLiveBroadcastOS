@@ -75,6 +75,8 @@
     "app/control-room/hud/hudIntelligence.ts",
     "app/control-room/hud/hudIntelligence.test.ts",
     "app/control-room/hud/autonomousStudioMode.ts",
-    "app/control-room/hud/autonomousStudioMode.test.ts"
+    "app/control-room/hud/autonomousStudioMode.test.ts",
+    "app/control-room/hud/autonomousSafetyUX.ts",
+    "app/control-room/hud/autonomousSafetyUX.test.ts"
   ]
 }

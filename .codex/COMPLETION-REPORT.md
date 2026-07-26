@@ -1336,3 +1336,117 @@ PASS.
 
 (recorded at commit time — see branch `cursor/autonomous-studio-mode-ux-4284`)
 
+## 2026-07-26 — Autonomous Studio Mode Safety UX (Step 110)
+
+### Objective
+
+Build the visual and behavioral safety layer that activates whenever
+Studio Automation is running: safety overlays, conflict warnings,
+fallback visuals, override prompts, stabilization indicators, and risk
+visualization — ensuring autonomy stays safe, predictable, reversible,
+and operator-controlled. Continues directly from Step 109 (Step 108 does
+not exist in this repository).
+
+### Naming gap, same as Step 109
+
+The spec again names "Studio Automation 2.0" as a power source. This
+repository has never implemented one — built against Studio Automation
+1.0's (Step 107) real `StudioAutomationResult` and Step 109's
+`AutonomousStudioModeResult`, same as Step 109.
+
+### Implementation
+
+New `apps/web/app/control-room/hud/autonomousSafetyUX.ts` — every one of
+the six components is a thin, honest derivation from data Steps 105-109
+already compute, not a new signal source:
+
+1. **Autonomous Safety Overlay** — `resolveSafetyOverlay()`: active
+   whenever autonomy is not `disabled` (Step 109), a stronger vignette
+   while `recovering` than while merely `active`/`idle`.
+2. **Autonomous Conflict Warning Layer** — `buildConflictWarnings()`
+   reads Step 107's own `conflicts` verbatim (no re-resolution);
+   `describeConflictType()` names the three currently-producible pairs
+   from the spec's five (scene-vs-graphics, graphics-vs-audio,
+   routing-vs-output) — `replay-vs-program`/`streaming-vs-routing` are
+   kept in the lookup table for forward compatibility but cannot be
+   produced today, since no prediction category maps to a `replay`/
+   `streaming` `FusionCluster` (the same documented gap since Step 105).
+3. **Autonomous Fallback Visuals** — `resolveFallback()`: true only on
+   the exact tick Step 109 reports a `handedBack` handoff. Not a
+   separate runtime mode; `reason` is necessarily generic since there is
+   only one way automation becomes disabled today.
+4. **Autonomous Override Prompts** — `buildOverridePrompts()`: decisions
+   Step 107 already blocked that are additionally high-severity (reusing
+   Step 107's own `AUTOMATION_SAFETY_THRESHOLDS.maxSeverity`),
+   low-confidence, part of a conflict, or an output-degradation risk —
+   the spec's four named categories, mapped onto Step 107's real blocked
+   decisions rather than a fabricated "awaiting approval" state.
+5. **Autonomous Stabilization Indicators** — `resolveStabilizerIndicators()`
+   reads Studio Intelligence 1.0's real per-dimension health (Step 106);
+   `replay`/`streaming` correctly render no glow (no data source).
+6. **Autonomous Risk Visualization** — `riskVisualization()` composes
+   WIE 2.0's own severity banding (Step 105) with a confidence-driven
+   opacity — reuse, not a parallel scoring system.
+
+`AutonomousSafetyUXController` follows Step 109's exact memoization
+pattern (cached by automation-object identity, not timestamp).
+
+**New components**: `AutonomousSafetyOverlay.tsx` (overlay + stabilizer
+chips), `AutonomousConflictWarning.tsx` (yellow warning bar),
+`AutonomousOverridePrompt.tsx` (near Guidance). `AutonomousModeBanner.tsx`
+(Step 109) extended to also render the fallback reason on the transition
+tick. All wired into `OperatorHUD.tsx`; `operator-hud.css` gains the
+overlay/warning/prompt/fallback layout, reusing existing `ubos-auto-*`
+(Step 109) and `ubos-shake` (Step 90) keyframes — no new motion invented.
+
+### A real bug found and fixed via live browser testing
+
+Initial live verification showed `overridePromptExists: 1` on
+Director/Replay-Operator even with automation completely disabled — the
+first version of `buildOverridePrompts()` only excluded `wouldExecute`/
+`overridden` decisions, so a decision blocked by
+`blockedByOperatorDisabled` that also happened to be high-severity or
+low-confidence still surfaced as an "override prompt", implying urgency
+that did not exist (automation was never even considering the action).
+Fixed: `buildOverridePrompts()` now returns nothing whenever
+`automation.automationEnabled` is `false`, with a regression test added.
+Re-verified live after the fix — zero prompts, zero console errors.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/hud/autonomousSafetyUX.ts` | New — six-component safety decision module |
+| `apps/web/app/control-room/hud/autonomousSafetyUX.test.ts` | New — 17 unit tests |
+| `apps/web/app/control-room/hud/AutonomousSafetyOverlay.tsx` | New — overlay + stabilizer chips |
+| `apps/web/app/control-room/hud/AutonomousConflictWarning.tsx` | New — conflict warning bar |
+| `apps/web/app/control-room/hud/AutonomousOverridePrompt.tsx` | New — override prompt list |
+| `apps/web/app/control-room/hud/AutonomousModeBanner.tsx` | Extended with fallback reason |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | Wire all three new components |
+| `apps/web/app/control-room/hud/operator-hud.css` | Overlay/warning/prompt/fallback layout |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 315/315 (17 new; all 298
+  pre-existing tests unaffected).
+- `pnpm --filter @ubos/web typecheck` / `lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium, real orchestration tick loop (no
+mocks), across all 5 workspace routes — **zero console errors on every
+route**, both before and after the override-prompt bugfix. After the
+fix: overlay/conflict-warning/override-prompt/fallback-reason all
+correctly absent on every route with automation at its safe (disabled)
+default. Screenshot in `artifacts/autonomous-safety-ux-step110/`.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/autonomous-safety-ux-4284`)
+

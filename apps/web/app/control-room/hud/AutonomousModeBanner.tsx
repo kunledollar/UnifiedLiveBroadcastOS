@@ -1,25 +1,30 @@
 'use client';
 
 /**
- * Autonomous Mode Banner (Step 109) — makes Autonomous Studio Mode
- * "felt", per the Step 109 spec: shows which autonomous actions are
- * currently active, how many conflicts were just resolved, and the
- * operator handoff message when autonomy activates, recovers, or hands
- * control back.
+ * Autonomous Mode Banner (Step 109, extended Step 110 component #3) —
+ * makes Autonomous Studio Mode "felt": shows which autonomous actions
+ * are currently active, how many conflicts were just resolved, the
+ * operator handoff message when autonomy activates/recovers/hands
+ * control back, and — Step 110's Autonomous Fallback Visuals — the
+ * fallback reason on the exact tick autonomy steps back to disabled
+ * (see `resolveFallback` in `autonomousSafetyUX.ts`).
  *
  * Renders inside `OperatorHUD` (Step 104), reusing the exact `@ubos/ui`
  * Autonomous Studio Mode UX tokens (Step 109's UBDS addition) for
  * elevation and motion — this component is the one place in the
  * autonomous-mode stack that imports `@ubos/ui` directly; the pure
- * decision logic in `autonomousStudioMode.ts` stays package-free.
+ * decision logic in `autonomousStudioMode.ts`/`autonomousSafetyUX.ts`
+ * stays package-free.
  *
- * Renders nothing while automation is `disabled` (the default, safe
- * state — see `studioAutomation.ts`), matching the same "no operator
- * toggle exists yet, so this stays invisible until Studio Automation is
+ * Renders nothing while automation is `disabled` and *not* in the
+ * fallback transition tick (the default, safe state —
+ * see `studioAutomation.ts`), matching the same "no operator toggle
+ * exists yet, so this stays invisible until Studio Automation is
  * actually enabled" honesty as Step 107's HUD Timeline entries.
  */
 import { ubosTypographyClasses, ubosElevationClasses, autonomousMotionSystem } from '@ubos/ui';
 import type { AutonomousStudioModeResult } from './autonomousStudioMode';
+import type { FallbackVisualState } from './autonomousSafetyUX';
 
 const MODE_LABEL: Record<AutonomousStudioModeResult['mode'], string> = {
   disabled: 'Autonomy Disabled',
@@ -28,18 +33,25 @@ const MODE_LABEL: Record<AutonomousStudioModeResult['mode'], string> = {
   recovering: 'Autonomous Recovery',
 };
 
-export function AutonomousModeBanner({ autonomous }: { autonomous: AutonomousStudioModeResult }) {
-  if (autonomous.mode === 'disabled') return null;
+export function AutonomousModeBanner({
+  autonomous,
+  fallback,
+}: {
+  autonomous: AutonomousStudioModeResult;
+  fallback: FallbackVisualState;
+}) {
+  if (autonomous.mode === 'disabled' && !fallback.inFallback) return null;
 
   const elevation = autonomous.elevation ?? 3;
   const animation = autonomous.motion.map((token) => autonomousMotionSystem[token]).join(', ') || undefined;
 
   return (
     <div
-      className={`autonomous-mode-banner ${ubosElevationClasses[elevation]}`}
+      className={`autonomous-mode-banner ${ubosElevationClasses[elevation]} ${fallback.inFallback ? 'autonomous-mode-banner-fallback' : ''}`}
       style={{ animation }}
       data-testid="autonomous-mode-banner"
       data-ubos-autonomous-mode={autonomous.mode}
+      data-ubos-in-fallback={fallback.inFallback}
     >
       <div className="autonomous-mode-banner-header">
         <span className={ubosTypographyClasses.hud}>{MODE_LABEL[autonomous.mode]}</span>
@@ -49,6 +61,12 @@ export function AutonomousModeBanner({ autonomous }: { autonomous: AutonomousStu
           </span>
         )}
       </div>
+
+      {fallback.inFallback && fallback.reason && (
+        <p className={`${ubosTypographyClasses.intelligence} autonomous-mode-fallback-reason`} data-testid="autonomous-fallback-reason">
+          {fallback.reason}
+        </p>
+      )}
 
       {autonomous.handoffMessage && (
         <p className={`${ubosTypographyClasses.intelligence} autonomous-mode-handoff`}>{autonomous.handoffMessage}</p>
