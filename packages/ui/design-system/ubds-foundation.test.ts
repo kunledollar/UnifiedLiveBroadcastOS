@@ -28,6 +28,9 @@ import {
   ubosIntelligenceGridMap,
   ubosWorkspaceTemplates,
   ubosWorkspaceTemplateNames,
+  ubosThemes,
+  ubosThemeNames,
+  ubosIntelligenceThemeMap,
   UBOS_DESIGN_SYSTEM_VERSION,
   UBDS_FOUNDATION_STEP,
 } from './index.js';
@@ -369,7 +372,47 @@ test('UBDS: Director and Solo Streamer are the only director-mode-density worksp
   assert.deepEqual(standardDensityWorkspaces.sort(), ['audio', 'graphics', 'replay', 'streaming', 'technicalDirector']);
 });
 
+test('UBDS: the theme library defines exactly the six canonical intelligence themes (Step 103)', () => {
+  assert.deepEqual([...ubosThemeNames].sort(), ['audio', 'director', 'graphics', 'replay', 'solo', 'streaming']);
+  assert.deepEqual(Object.keys(ubosThemes).sort(), [...ubosThemeNames].sort());
+});
+
+test('UBDS: each theme reuses its matching Step 99 workspace template accents/density exactly, not a second copy (Step 103)', () => {
+  for (const name of ubosThemeNames) {
+    const theme = ubosThemes[name];
+    const template = ubosWorkspaceTemplates[name];
+    assert.equal(theme.accents, template.accents, `${name}: theme.accents should be the same reference as the workspace template's`);
+    assert.equal(theme.density, template.density, `${name}: theme.density should match the workspace template's`);
+  }
+});
+
+test('UBDS: every theme motion is one of the six canonical motion primitives, every depth is a valid elevation level (Step 103)', () => {
+  for (const name of ubosThemeNames) {
+    const theme = ubosThemes[name];
+    assert.ok(theme.motion in ubosMotionSystem, `${name}: unknown motion primitive ${theme.motion}`);
+    assert.ok([1, 2, 3].includes(theme.depth), `${name}: depth must be elevation level 1, 2, or 3`);
+  }
+  // Director and Streaming carry the most severe stakes (live transitions,
+  // output health) — both get "strong" depth (Level 3).
+  assert.equal(ubosThemes.director.depth, 3);
+  assert.equal(ubosThemes.streaming.depth, 3);
+  // Solo Streamer is explicitly minimal — the lightest depth (Level 1).
+  assert.equal(ubosThemes.solo.depth, 1);
+});
+
+test('UBDS: theme + intelligence integration maps all seven WIE signals to a named theme modifier (Step 103)', () => {
+  assert.deepEqual(ubosIntelligenceThemeMap, {
+    highlight: 'increaseAccentIntensity',
+    warn: 'switchToCriticalVariant',
+    pulse: 'enablePredictiveMotion',
+    prepare: 'enableGradientShift',
+    dim: 'reduceAccentIntensity',
+    suppress: 'collapseOverlays',
+    elevate: 'increaseDepthAndSpacing',
+  });
+});
+
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 99);
+  assert.equal(UBDS_FOUNDATION_STEP, 103);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });
