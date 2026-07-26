@@ -52,6 +52,27 @@ export const ubosTypographyClasses = {
   /** Reserved uppercase labels — use only for LIVE, REC, PROGRAM, PREVIEW */
   broadcastLabel:
     'text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary',
+  /**
+   * UBDS canonical hierarchy (Step 91) — Title, Section Label, Body,
+   * Micro-text. These are named aliases layered on the existing roles above
+   * so consumers can migrate incrementally without breaking call sites.
+   */
+  /** Title — uppercase, medium weight. Panel/workspace-level headings. */
+  title: 'text-[1rem] font-medium uppercase tracking-[0.04em] leading-tight text-ubos-fg-primary',
+  /** Section Label — uppercase, small caps. Groups related controls. */
+  sectionLabel:
+    'text-[0.6875rem] font-semibold uppercase tracking-[0.08em] leading-snug text-ubos-fg-secondary',
+  /** Micro-text — for indicators, timestamps, and inline telemetry. */
+  microText: 'text-[0.625rem] font-normal leading-tight text-ubos-fg-muted',
 } as const;
 
 export type UbosTypographyRole = keyof typeof ubosTypographyClasses;
+
+/** UBDS canonical typography hierarchy — Title, Section Label, Body, Micro-text. */
+export type UbdsTypographyRole = 'title' | 'sectionLabel' | 'body' | 'microText';
+export const ubdsTypographyRoles: readonly UbdsTypographyRole[] = [
+  'title',
+  'sectionLabel',
+  'body',
+  'microText',
+] as const;
