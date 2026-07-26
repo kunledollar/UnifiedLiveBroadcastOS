@@ -1589,3 +1589,234 @@ PASS.
 
 (recorded at commit time — see branch `cursor/autonomy-control-panel-4284`)
 
+## 2026-07-26 — Autonomous Studio Mode Permissions Engine / APE (Step 112)
+
+### Objective
+
+Build the gatekeeper for Studio Automation: decides whether autonomy is
+allowed to act based on role, workspace, action, safety
+(confidence/severity), and system state — matching the Step 112 spec's
+`PermissionsEngine.canPerform(action, context)` code sample. Continues
+from Step 111 (Step 108 does not exist in this repository); same "Studio
+Automation 2.0" naming gap as Steps 109-111, built against Studio
+Automation 1.0.
+
+### Layering, not duplication
+
+Step 111 already added a *flat*, per-category `AutonomyPermissions`
+on/off toggle and configurable `AutonomySafetySettings` inside
+`studioAutomation.ts`. APE adds a *second, finer-grained* dimension —
+which specific role, in which specific workspace, may perform which
+specific action — layered on top of, not replacing, Step 111's coarse
+toggle. `automationEnabled` (global on/off) → `AutonomyPermissions`
+(per-category on/off) → APE (per-role/per-workspace on/off) are three
+strictly increasing levels of granularity.
+
+### Implementation
+
+New `apps/web/app/control-room/intelligence-graph/permissionsEngine.ts`:
+
+- `PermissionWorkspaceKey` — the six named workspaces from the spec
+  (director/production/graphics/replay/distribution/automation), mapped
+  from real workspace context strings via `normalizePermissionWorkspace()`
+  (mirroring `normalizeRole()`'s own string-matching style, Step 88).
+- `defaultRolePermissions()`/`defaultWorkspacePermissions()` — this
+  agent's own considered design (the spec names role/workspace-based
+  permissions as responsibilities without giving matrices): Director and
+  Solo Streamer get every action; specialized roles get only their own
+  domain; Replay workspace honestly permits nothing today (no
+  `AutomationActionType` maps to a replay trigger yet — the same
+  documented gap since Step 105).
+- `defaultActionRules()` — only the two *creative* actions (scene
+  transitions, graphics activation) require stable output; the two
+  *recovery* actions (failover, backup destination) deliberately do not
+  — their entire purpose is acting during instability, which the
+  separate, more severe `outputHealth === 'critical'` hard block still
+  covers regardless.
+- `PermissionsEngine.canPerform()` — the full five-factor gate, matching
+  the spec's own code sample order and comparison operators exactly
+  (`confidence < minConfidence`, `severity > maxSeverity` — a
+  deliberately noted, intentional difference from `evaluateSafety`'s own
+  `<=`/`>=`, Step 107/111, not a silent inconsistency).
+  `isRolePermitted()`/`isWorkspacePermitted()` are exposed separately so
+  `buildAutomationDecisions()` can reuse just the new dimension without
+  double-checking the safety gate it already performs.
+
+**Integration** (`studioAutomation.ts`): `buildAutomationDecisions()`
+gains `workspace`/`permissionsEngine` parameters (both optional,
+defaulting to `null`/a fresh default-config instance — verified fully
+backward compatible by re-running the complete 348-test suite *before*
+adding a single new test), checked first in the gate order (role →
+workspace → Step 111's category toggle → safety), adding two new
+`AutomationDecisionStatus` values (`blockedByRole`/`blockedByWorkspace`).
+`StudioAutomation` owns one `PermissionsEngine` instance
+(`getPermissionsEngine()`), passed through `compute()` automatically
+using the real live role/workspace from Studio Intelligence.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/intelligence-graph/permissionsEngine.ts` | New — APE |
+| `apps/web/app/control-room/intelligence-graph/permissionsEngine.test.ts` | New — 20 unit tests |
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.ts` | Wire APE into `buildAutomationDecisions`/`StudioAutomation` |
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.test.ts` | 7 new integration tests |
+| `apps/web/app/control-room/hud/autonomous*.test.ts` (3 files) | Updated test fixtures for the new `permissionWorkspace` result field |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 376/376 (27 new: 20 in
+  `permissionsEngine.test.ts`, 7 integration tests in
+  `studioAutomation.test.ts`; all 348 pre-existing tests unaffected —
+  backward compatibility verified by running the full suite *before*
+  adding new tests, exactly as done for Step 111's own engine
+  extension).
+- `pnpm --filter @ubos/web typecheck` / `lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium across all 5 workspaces — zero
+console errors on every route. Re-ran Step 111's own "open ASMCP → select
+Fully Autonomous" interaction end to end with APE now wired into the
+decision pipeline — the panel, level selector, and permission checkboxes
+all rendered and behaved identically to before, confirming the new
+role/workspace gate did not regress the previously-verified operator
+flow. Screenshot in `artifacts/permissions-engine-step112/`.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/permissions-engine-4284`)
+
+## 2026-07-26 — Autonomous Confidence Engine / ACE (Step 113)
+
+### Objective
+
+Build the mathematical backbone of Autonomous Studio Mode: confidence
+scoring, decay, fusion, thresholds, visualization, and gating —
+matching the Step 113 spec's `ConfidenceEngine` class code sample
+(`score(signals)`/`decay(confidence, deltaTime)`/`meetsThreshold(confidence)`).
+Continues from Step 112 (Step 108 does not exist in this repository);
+same "Studio Automation 2.0" naming gap as Steps 109-112, built against
+Studio Automation 1.0.
+
+### Not a duplicate of the Confidence Scoring Engine (Step 84)
+
+Before writing any code, re-read `confidenceScoringEngine.ts` (CSE, Step
+84) — a real, comprehensive engine already scoring every raw graph
+event/node/edge from engine reliability, frequency, consistency,
+recency, cross-engine agreement, workspace/operator relevance, and EMA
+smoothing. ACE does **not** re-implement any of that; it operates one
+level higher. CSE answers "how much should I trust this one raw
+signal"; ACE answers "given several already-scored, named signals for
+one candidate *autonomous action*, how fused/decayed/threshold-gated
+should its overall confidence be". ACE reuses CSE's own
+`stabilityScore()` directly as one of its three fusion inputs — a
+worked example of "improve/reuse existing engines" rather than
+duplicating. Named `AutonomousConfidenceEngine` (not the spec sample's
+bare `ConfidenceEngine`) specifically to avoid confusion with CSE.
+
+### Implementation
+
+New `apps/web/app/control-room/intelligence-graph/autonomousConfidenceEngine.ts`:
+
+- `score(signals)` — the spec sample verbatim: weighted-average fusion,
+  clamped to `[0, 1]`.
+- `fuse(signals, strategy)` — generalizes `score()` with four more named
+  strategies from the spec's own bullet list: `max`, `min`,
+  `harmonicMean`, and `safetyAware` (this agent's own design: the
+  weighted average discounted by the weakest signal present — a
+  chain-is-as-strong-as-its-weakest-link adjustment appropriate for
+  safety-critical autonomy gating, where one badly-informed signal
+  should not be hidden behind several confident ones).
+- `decay(confidence, deltaTime)` — the spec sample verbatim (linear
+  reduction, floored at 0), `deltaTime` in seconds. Default rate
+  0.01/s — this agent's own considered default (the spec gives no
+  number): negligible within one ~1s automation tick, fully decays a
+  comfortably-passing 0.85 confidence within ~85 seconds of the
+  decision going unacted-on.
+- `meetsThreshold(confidence, thresholdName)` — the spec sample's single
+  `minConfidence` check, generalized to the spec's own four named
+  purposes (`toAct`/`toPredict`/`toOverride`/`toRecover`), defaulting to
+  `toAct` to reproduce the sample's exact single-threshold behavior.
+  Default values (0.85/0.5/0.6/0.7 respectively) are this agent's own
+  considered design, documented in-file with the reasoning per
+  threshold — the spec names the four purposes without giving numbers.
+
+**Integration** (`studioAutomation.ts`): new exported pure function
+`computeConfidenceBreakdown(decision, fusedInsights, confidenceEngine,
+historicalStability, now?)` fuses (`safetyAware`) each decision's own
+prediction confidence with the matching-cluster fused insight's health
+(when one exists — omitted, never fabricated, when none does) and
+CSE's `stabilityScore()`, then decays the fused result by the
+decision's age. `StudioAutomation.compute()` runs this for every
+decision *before* conflict resolution (so a now-stale decision can
+never win a conflict it is already too stale to execute on its own),
+demoting any still-`wouldExecute` decision whose effective confidence
+now fails the `toAct` threshold to a new status,
+`blockedByConfidenceDecay`. The full breakdown array is exposed on
+`StudioAutomationResult.confidenceBreakdowns` (one per decision, same
+order) for visualization. `StudioAutomation.getConfidenceEngine()`
+exposes ACE for direct configuration, matching `getPermissionsEngine()`'s
+own pattern from Step 112; `reset()` resets it too.
+
+**Visualization** (`autonomyControlPanel.ts`/`AutonomousControlPanel.tsx`):
+the Safety Settings module (Module 3) gained a new "Confidence
+thresholds" subsection with four live sliders, one per named threshold,
+wired directly to `automation.getConfidenceEngine().setThresholds()`.
+The Logs and Timeline modules (Modules 6 & 7) now display each entry's
+confidence percentage, preferring ACE's decay-aware
+`effectiveConfidence` over the raw prediction confidence when a
+matching breakdown exists this tick (`AutonomyEvent.effectiveConfidence`,
+new, optional field) — real, live confidence numbers now visible in
+both modules, not just implicitly carried on the data.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/intelligence-graph/autonomousConfidenceEngine.ts` | New — ACE |
+| `apps/web/app/control-room/intelligence-graph/autonomousConfidenceEngine.test.ts` | New — 18 unit tests |
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.ts` | Wire ACE into `compute()`; new `blockedByConfidenceDecay` status, `confidenceBreakdowns` result field, `computeConfidenceBreakdown()` |
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.test.ts` | 9 new integration tests |
+| `apps/web/app/control-room/hud/autonomyControlPanel.ts` | `confidenceThresholds` on `AutonomySettingsConfig`, `applyConfidenceThresholds()`, `effectiveConfidence` on `AutonomyEvent` |
+| `apps/web/app/control-room/hud/autonomyControlPanel.test.ts` | 6 new tests |
+| `apps/web/app/control-room/hud/AutonomousControlPanel.tsx` | 4 new threshold sliders (Module 3); confidence % in Logs/Timeline (Modules 6/7) |
+| `apps/web/app/control-room/hud/autonomous*.test.ts` (2 files) | Updated test fixtures for the new `confidenceBreakdowns` result field |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 409/409 (33 new: 18 in
+  `autonomousConfidenceEngine.test.ts`, 9 integration tests in
+  `studioAutomation.test.ts`, 6 in `autonomyControlPanel.test.ts`; all
+  376 pre-existing tests unaffected — backward compatibility verified
+  by running the full suite *before* adding a single new test, exactly
+  as done for Steps 111/112's own engine extensions).
+- `pnpm --filter @ubos/web typecheck` / `lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium on `/control-room/director`: the
+ASMCP panel opened via the top bar's Settings button, confirmed all
+four named threshold labels/sliders render ("Minimum confidence to
+act/predict/override/recover" at their 85%/50%/60%/70% defaults) with
+zero console/page errors. Confirmed the Autonomy Logs and Timeline
+modules render a live, real confidence percentage (`47%`, from the
+live graph's own in-flight `output_degradation` prediction) next to a
+real decision entry — genuine wired data, not a placeholder.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/confidence-engine-4284`)
+

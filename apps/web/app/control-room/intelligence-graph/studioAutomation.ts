@@ -68,6 +68,16 @@ import {
   type StudioSubsystem,
   type StudioHealthStatus,
 } from './studioIntelligence.js';
+import {
+  PermissionsEngine,
+  normalizePermissionWorkspace,
+  type PermissionWorkspaceKey,
+} from './permissionsEngine.js';
+import {
+  AutonomousConfidenceEngine,
+  clamp01,
+  type ConfidenceSignals,
+} from './autonomousConfidenceEngine.js';
 
 // ── Predictive automation ───────────────────────────────────────────────────
 
@@ -161,6 +171,9 @@ export type AutomationDecisionStatus =
   | 'blockedByOperatorDisabled'
   | 'blockedByStudioHealth'
   | 'blockedByPermission'
+  | 'blockedByRole'
+  | 'blockedByWorkspace'
+  | 'blockedByConfidenceDecay'
   | 'supersededByConflict'
   | 'overridden';
 
@@ -272,10 +285,19 @@ const ACTION_PERMISSION_KEY: Partial<Record<AutomationActionType, AutonomyPermis
  * safety-gated (before conflict resolution — see `resolveAutomationConflicts`).
  * `settings`/`permissions` default to Step 107's original always-on
  * behavior, so this remains fully backward compatible; Step 111's
- * control panel is the first real caller to vary them. Permission is
- * checked *before* confidence/severity — a category the operator has
- * turned off is blocked regardless of how confident or safe the
- * prediction is.
+ * control panel is the first real caller to vary them.
+ *
+ * `workspace`/`permissionsEngine` are Step 112's addition — the
+ * Permissions Engine's role/workspace gate is checked *first* (the
+ * spec's own order: role, then workspace, then Step 111's category
+ * toggle, then safety), since "is this role, in this workspace, even
+ * allowed to touch this category of action" is a more fundamental gate
+ * than "is this specific prediction confident/safe enough right now".
+ * `workspace` defaults to `null` (normalizes to `production`, the
+ * broadest/most permissive bucket) and `permissionsEngine` defaults to
+ * a fresh instance with its own default (fully permissive for
+ * Director/production/automation) config, so this remains fully
+ * backward compatible with every pre-Step-112 call site.
  */
 export function buildAutomationDecisions(
   predictions: readonly Prediction[],
@@ -284,7 +306,11 @@ export function buildAutomationDecisions(
   input: AutomationSafetyInput,
   settings: AutonomySafetySettings = AUTOMATION_SAFETY_THRESHOLDS,
   permissions: AutonomyPermissions = defaultAutonomyPermissions(),
+  workspace: string | null = null,
+  permissionsEngine: PermissionsEngine = new PermissionsEngine(),
 ): AutomationDecision[] {
+  const permissionWorkspace = normalizePermissionWorkspace(workspace);
+
   return predictions
     .map((prediction) => {
       const action = resolveAction(prediction.category);
@@ -294,10 +320,18 @@ export function buildAutomationDecisions(
       const severityScore = severityScoreForCluster(cluster, fusedInsights);
 
       const permissionKey = ACTION_PERMISSION_KEY[action];
-      const permitted = !permissionKey || permissions[permissionKey];
-      const status = permitted
-        ? evaluateSafety(prediction.confidence, severityScore, input, settings)
-        : 'blockedByPermission';
+      const categoryPermitted = !permissionKey || permissions[permissionKey];
+
+      let status: AutomationDecisionStatus;
+      if (!permissionsEngine.isRolePermitted(action, role)) {
+        status = 'blockedByRole';
+      } else if (!permissionsEngine.isWorkspacePermitted(action, permissionWorkspace)) {
+        status = 'blockedByWorkspace';
+      } else if (!categoryPermitted) {
+        status = 'blockedByPermission';
+      } else {
+        status = evaluateSafety(prediction.confidence, severityScore, input, settings);
+      }
 
       const decision: AutomationDecision = {
         id: `auto-decision-${prediction.id}`,
@@ -643,6 +677,65 @@ export function toHudTimelineEntries(decisions: readonly AutomationDecision[]): 
     }));
 }
 
+// ── Confidence fusion + decay (Step 113 — ACE) ──────────────────────────────
+
+/**
+ * Per-decision output of the Autonomous Confidence Engine — the data
+ * behind Step 113's "confidence visualization" (ASMCP Logs/Timeline,
+ * see `autonomyControlPanel.ts`) and the input to the decay gate below.
+ */
+export type ConfidenceBreakdown = {
+  decisionId: string;
+  /** The prediction's own confidence, unmodified — what every pre-Step-113 caller already sees. */
+  rawConfidence: number;
+  /** `rawConfidence` fused (safety-aware) with this tick's system health and CSE historical stability. */
+  fusedConfidence: number;
+  /** `fusedConfidence` after decay for how long this decision has existed. */
+  effectiveConfidence: number;
+  ageSeconds: number;
+  meetsActThreshold: boolean;
+};
+
+/**
+ * Builds ACE's confidence signals for one decision and fuses/decays them.
+ * Exported standalone (not a private method) so it is directly unit
+ * testable without a live `UBOSIntelligenceGraph`. `historicalStability`
+ * is CSE's own `stabilityScore()` (Step 84, `confidenceScoringEngine.ts`)
+ * — reused directly, not re-derived — passed in rather than computed
+ * here to keep this function graph-free like the rest of the module.
+ */
+export function computeConfidenceBreakdown(
+  decision: AutomationDecision,
+  fusedInsights: readonly FusedInsight[],
+  confidenceEngine: AutonomousConfidenceEngine,
+  historicalStability: number,
+  now: number = Date.now(),
+): ConfidenceBreakdown {
+  const signals: ConfidenceSignals = {
+    prediction: decision.confidence,
+    historicalStability: clamp01(historicalStability),
+  };
+
+  const clusterInsight = fusedInsights.find((insight) => insight.cluster === decision.cluster);
+  if (clusterInsight) {
+    // Healthier subsystem (lower severity) → a stronger corroborating confidence signal.
+    signals.systemHealth = clamp01(1 - fusedInsightSeverityScore(clusterInsight));
+  }
+
+  const fusedConfidence = confidenceEngine.fuse(signals, 'safetyAware');
+  const ageSeconds = Math.max(0, (now - decision.timestamp) / 1000);
+  const effectiveConfidence = confidenceEngine.decay(fusedConfidence, ageSeconds);
+
+  return {
+    decisionId: decision.id,
+    rawConfidence: decision.confidence,
+    fusedConfidence,
+    effectiveConfidence,
+    ageSeconds,
+    meetsActThreshold: confidenceEngine.meetsThreshold(effectiveConfidence, 'toAct'),
+  };
+}
+
 // ── The orchestrator ────────────────────────────────────────────────────────
 
 export type StudioAutomationResult = {
@@ -658,6 +751,10 @@ export type StudioAutomationResult = {
   safetySettings: AutonomySafetySettings;
   permissions: AutonomyPermissions;
   conflictResolutionMode: ConflictResolutionMode;
+  /** Step 112 — the normalized workspace APE's role/workspace gate evaluated this tick against. */
+  permissionWorkspace: PermissionWorkspaceKey;
+  /** Step 113 — one ACE breakdown per decision, same order as `decisions`. */
+  confidenceBreakdowns: ConfidenceBreakdown[];
   timestamp: number;
 };
 
@@ -674,6 +771,8 @@ function emptyResult(): StudioAutomationResult {
     safetySettings: defaultAutonomySafetySettings(),
     permissions: defaultAutonomyPermissions(),
     conflictResolutionMode: defaultConflictResolutionMode(),
+    permissionWorkspace: 'production',
+    confidenceBreakdowns: [],
     timestamp: 0,
   };
 }
@@ -698,9 +797,23 @@ export class StudioAutomation {
   private safetySettings: AutonomySafetySettings = defaultAutonomySafetySettings();
   private permissions: AutonomyPermissions = defaultAutonomyPermissions();
   private conflictResolutionMode: ConflictResolutionMode = defaultConflictResolutionMode();
+  /** Step 112 — the gatekeeper. See `permissionsEngine.ts`. */
+  private readonly permissionsEngine = new PermissionsEngine();
+  /** Step 113 — the mathematical backbone. See `autonomousConfidenceEngine.ts`. */
+  private readonly confidenceEngine = new AutonomousConfidenceEngine();
 
   constructor(graph: UBOSIntelligenceGraph) {
     this.graph = graph;
+  }
+
+  /** Step 112 — exposes the gatekeeper for direct configuration (role/workspace matrices, action rules). */
+  getPermissionsEngine(): PermissionsEngine {
+    return this.permissionsEngine;
+  }
+
+  /** Step 113 — exposes ACE for direct configuration (fusion weights, decay rate, named thresholds). */
+  getConfidenceEngine(): AutonomousConfidenceEngine {
+    return this.confidenceEngine;
   }
 
   setAutomationEnabled(enabled: boolean): void {
@@ -760,6 +873,7 @@ export class StudioAutomation {
       studioHealthStatus: studio.studioHealth.status,
     };
 
+    const permissionWorkspace = normalizePermissionWorkspace(studio.workspace);
     let decisions = buildAutomationDecisions(
       studio.studioPredictions,
       fusedInsights,
@@ -767,12 +881,32 @@ export class StudioAutomation {
       safetyInput,
       this.safetySettings,
       this.permissions,
+      studio.workspace,
+      this.permissionsEngine,
     );
     decisions = decisions.map((decision) =>
       this.overriddenPredictionIds.has(decision.predictionId)
         ? { ...decision, status: 'overridden' as const }
         : decision,
     );
+
+    // Step 113 — ACE fuses each still-eligible decision's confidence with
+    // this tick's system health and CSE's historical stability, then
+    // decays it by how long the decision has existed, demoting any
+    // decision whose *effective* confidence has fallen below the "act"
+    // threshold since it was built. Applied before conflict resolution
+    // so a now-stale decision can never win a conflict it is already too
+    // stale to execute on its own.
+    const historicalStability = this.graph.confidenceEngine.stabilityScore();
+    const confidenceBreakdowns = decisions.map((decision) =>
+      computeConfidenceBreakdown(decision, fusedInsights, this.confidenceEngine, historicalStability),
+    );
+    decisions = decisions.map((decision, index) => {
+      const breakdown = confidenceBreakdowns[index]!;
+      return decision.status === 'wouldExecute' && !breakdown.meetsActThreshold
+        ? { ...decision, status: 'blockedByConfidenceDecay' as const }
+        : decision;
+    });
 
     const { winners, superseded, conflicts } = resolveAutomationConflicts(
       decisions,
@@ -795,6 +929,8 @@ export class StudioAutomation {
       safetySettings: this.safetySettings,
       permissions: this.permissions,
       conflictResolutionMode: this.conflictResolutionMode,
+      permissionWorkspace,
+      confidenceBreakdowns,
       timestamp: Date.now(),
     };
     return this.result;
@@ -807,6 +943,8 @@ export class StudioAutomation {
   reset(): void {
     this.result = emptyResult();
     this.overriddenPredictionIds.clear();
+    this.permissionsEngine.reset();
+    this.confidenceEngine.reset();
     this.safetySettings = defaultAutonomySafetySettings();
     this.permissions = defaultAutonomyPermissions();
     this.conflictResolutionMode = defaultConflictResolutionMode();

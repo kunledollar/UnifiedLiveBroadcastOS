@@ -3,6 +3,7 @@ import test from 'node:test';
 import { UBOSIntelligenceGraph } from '../intelligence-graph/ubosIntelligenceGraph.js';
 import { StudioAutomation, defaultAutonomyPermissions } from '../intelligence-graph/studioAutomation.js';
 import type { StudioAutomationResult, AutomationDecision, AutomationConflict } from '../intelligence-graph/studioAutomation.js';
+import { normalizePermissionWorkspace } from '../intelligence-graph/permissionsEngine.js';
 import type { AutonomousStudioModeResult } from './autonomousStudioMode.js';
 import {
   AUTONOMY_LEVELS,
@@ -14,11 +15,15 @@ import {
   visualizationAllowsOverlay,
   defaultAutonomyVisualizationSettings,
   applyOverrideAction,
+  applyConfidenceThresholds,
+  defaultAutonomySettingsConfig,
   buildAutonomyLogEntries,
   buildAutonomyTimelineEntries,
   deriveAutonomyConfiguration,
   AutonomyVisualizationSettingsStore,
 } from './autonomyControlPanel.js';
+import { defaultConfidenceThresholds } from '../intelligence-graph/autonomousConfidenceEngine.js';
+import type { ConfidenceBreakdown } from '../intelligence-graph/studioAutomation.js';
 
 function decision(partial: Partial<AutomationDecision> & Pick<AutomationDecision, 'action'>): AutomationDecision {
   return {
@@ -42,6 +47,17 @@ function conflict(winner: AutomationDecision, loser: AutomationDecision): Automa
   return { winner, loser, reason: `${loser.action} superseded by ${winner.action}` };
 }
 
+function confidenceBreakdown(decision: AutomationDecision, partial: Partial<ConfidenceBreakdown> = {}): ConfidenceBreakdown {
+  return {
+    decisionId: decision.id,
+    rawConfidence: partial.rawConfidence ?? decision.confidence,
+    fusedConfidence: partial.fusedConfidence ?? decision.confidence,
+    effectiveConfidence: partial.effectiveConfidence ?? decision.confidence,
+    ageSeconds: partial.ageSeconds ?? 0,
+    meetsActThreshold: partial.meetsActThreshold ?? true,
+  };
+}
+
 function automationResult(partial: Partial<StudioAutomationResult> = {}): StudioAutomationResult {
   return {
     role: partial.role ?? 'Director',
@@ -55,6 +71,8 @@ function automationResult(partial: Partial<StudioAutomationResult> = {}): Studio
     safetySettings: partial.safetySettings ?? { minConfidence: 0.85, maxSeverity: 0.4 },
     permissions: partial.permissions ?? defaultAutonomyPermissions(),
     conflictResolutionMode: partial.conflictResolutionMode ?? 'severityFirst',
+    permissionWorkspace: partial.permissionWorkspace ?? normalizePermissionWorkspace(null),
+    confidenceBreakdowns: partial.confidenceBreakdowns ?? [],
     timestamp: partial.timestamp ?? Date.now(),
   };
 }
@@ -282,6 +300,68 @@ test('ASMCP: timeline entries respect the display limit', () => {
   );
   const timeline = buildAutonomyTimelineEntries(automationResult({ decisions }), autonomousResult(), 3);
   assert.equal(timeline.length, 3);
+});
+
+// ── Step 113 — Confidence visualization in Logs/Timeline ────────────────────
+
+test('ASMCP: a log entry carries ACE\'s effectiveConfidence when a matching breakdown exists', () => {
+  const stale = decision({ action: 'activateGraphicsLayer', status: 'wouldExecute', confidence: 0.9 });
+  const breakdown = confidenceBreakdown(stale, { effectiveConfidence: 0.4, meetsActThreshold: false });
+  const automation = automationResult({ decisions: [stale], confidenceBreakdowns: [breakdown] });
+
+  const logs = buildAutonomyLogEntries(automation, autonomousResult());
+  const entry = logs.find((e) => e.id.includes(stale.id))!;
+  assert.equal(entry.confidence, 0.9); // raw confidence untouched
+  assert.equal(entry.effectiveConfidence, 0.4); // ACE's decayed value, surfaced separately
+});
+
+test('ASMCP: a log entry has no effectiveConfidence when no breakdown matches (e.g. no ACE data this tick)', () => {
+  const undecayed = decision({ action: 'activateGraphicsLayer', status: 'wouldExecute' });
+  const automation = automationResult({ decisions: [undecayed], confidenceBreakdowns: [] });
+
+  const logs = buildAutonomyLogEntries(automation, autonomousResult());
+  const entry = logs.find((e) => e.id.includes(undecayed.id))!;
+  assert.equal(entry.effectiveConfidence, undefined);
+});
+
+test('ASMCP: conflict-derived recovery events never carry an effectiveConfidence (no decision id to match)', () => {
+  const winner = decision({ action: 'activateGraphicsLayer' });
+  const loser = decision({ action: 'triggerSceneTransition', status: 'supersededByConflict' });
+  const automation = automationResult({
+    decisions: [winner, loser],
+    conflicts: [conflict(winner, loser)],
+    confidenceBreakdowns: [confidenceBreakdown(winner), confidenceBreakdown(loser)],
+  });
+
+  const logs = buildAutonomyLogEntries(automation, autonomousResult());
+  const conflictEntry = logs.find((e) => e.id === `autonomy-event-conflict-${loser.id}`)!;
+  assert.equal(conflictEntry.effectiveConfidence, undefined);
+});
+
+// ── Step 113 — Confidence thresholds in Safety Settings ─────────────────────
+
+test('ASMCP: defaultAutonomySettingsConfig includes ACE\'s default confidence thresholds', () => {
+  assert.deepEqual(defaultAutonomySettingsConfig().confidenceThresholds, defaultConfidenceThresholds());
+});
+
+test('ASMCP: applyConfidenceThresholds merges a partial update onto the live Confidence Engine', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  applyConfidenceThresholds(automation, { toAct: 0.95 });
+
+  const thresholds = automation.getConfidenceEngine().getConfig().thresholds;
+  assert.equal(thresholds.toAct, 0.95);
+  assert.equal(thresholds.toPredict, defaultConfidenceThresholds().toPredict);
+});
+
+test('ASMCP: deriveAutonomyConfiguration surfaces the live Confidence Engine\'s thresholds', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  applyConfidenceThresholds(automation, { toRecover: 0.55 });
+  automation.compute();
+
+  const config = deriveAutonomyConfiguration(automation, autonomousResult(), defaultAutonomyVisualizationSettings());
+  assert.equal(config.settings.confidenceThresholds.toRecover, 0.55);
 });
 
 // ── The aggregate configuration ──────────────────────────────────────────────

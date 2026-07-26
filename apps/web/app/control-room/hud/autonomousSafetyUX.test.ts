@@ -6,6 +6,7 @@ import {
   defaultAutonomyPermissions,
   defaultConflictResolutionMode,
 } from '../intelligence-graph/studioAutomation.js';
+import { normalizePermissionWorkspace } from '../intelligence-graph/permissionsEngine.js';
 import type { StudioHealth, StudioHealthDimensionResult } from '../intelligence-graph/studioIntelligence.js';
 import type { AutonomousStudioModeResult } from './autonomousStudioMode.js';
 import {
@@ -57,6 +58,8 @@ function automationResult(partial: Partial<StudioAutomationResult> = {}): Studio
     safetySettings: partial.safetySettings ?? defaultAutonomySafetySettings(),
     permissions: partial.permissions ?? defaultAutonomyPermissions(),
     conflictResolutionMode: partial.conflictResolutionMode ?? defaultConflictResolutionMode(),
+    permissionWorkspace: partial.permissionWorkspace ?? normalizePermissionWorkspace(null),
+    confidenceBreakdowns: partial.confidenceBreakdowns ?? [],
     timestamp: partial.timestamp ?? Date.now(),
   };
 }
