@@ -14,6 +14,10 @@ import {
   buildAutomationTimeline,
   toHudTimelineEntries,
   StudioAutomation,
+  AUTONOMY_PERMISSION_KEYS,
+  defaultAutonomyPermissions,
+  defaultAutonomySafetySettings,
+  defaultConflictResolutionMode,
   type AutomationDecision,
   type AutomationSafetyInput,
 } from './studioAutomation.js';
@@ -322,6 +326,139 @@ test('Studio Automation 1.0: overrideDecision marks the matching decision overri
   automation.compute();
   const result = automation.getResult();
   assert.ok(Array.isArray(result.decisions));
+});
+
+// ── Step 111 — Autonomy permissions ─────────────────────────────────────────
+
+test('Studio Automation: exactly the seven named permission categories exist, all enabled by default', () => {
+  assert.deepEqual([...AUTONOMY_PERMISSION_KEYS], [
+    'sceneTransitions',
+    'graphicsActivation',
+    'audioMixing',
+    'routingRecovery',
+    'outputStabilization',
+    'replayTriggers',
+    'streamingRecovery',
+  ]);
+  const defaults = defaultAutonomyPermissions();
+  for (const key of AUTONOMY_PERMISSION_KEYS) {
+    assert.equal(defaults[key], true, `${key} should default to enabled`);
+  }
+});
+
+test('Studio Automation: a disabled permission blocks its category regardless of confidence/severity', () => {
+  const decisions = buildAutomationDecisions(
+    [prediction({ id: 'p1', category: 'graphics_activation', confidence: 0.99 })],
+    [],
+    'Director',
+    ENABLED_STABLE,
+    defaultAutonomySafetySettings(),
+    { ...defaultAutonomyPermissions(), graphicsActivation: false },
+  );
+  assert.equal(decisions[0]!.status, 'blockedByPermission');
+});
+
+test('Studio Automation: disabling one permission category never affects another', () => {
+  const decisions = buildAutomationDecisions(
+    [
+      prediction({ id: 'p1', category: 'graphics_activation', confidence: 0.99 }),
+      prediction({ id: 'p2', category: 'audio_clipping', confidence: 0.99 }),
+    ],
+    [],
+    'Director',
+    ENABLED_STABLE,
+    defaultAutonomySafetySettings(),
+    { ...defaultAutonomyPermissions(), graphicsActivation: false },
+  );
+  assert.equal(decisions.find((d) => d.action === 'activateGraphicsLayer')!.status, 'blockedByPermission');
+  assert.equal(decisions.find((d) => d.action === 'autoAdjustAudio')!.status, 'wouldExecute');
+});
+
+// ── Step 111 — Configurable safety settings ─────────────────────────────────
+
+test('Studio Automation: evaluateSafety honors configured thresholds, not just the Step 107 defaults', () => {
+  const looser = { minConfidence: 0.5, maxSeverity: 0.6 };
+  assert.equal(evaluateSafety(0.6, 0.1, ENABLED_STABLE, looser), 'wouldExecute');
+  assert.equal(evaluateSafety(0.4, 0.1, ENABLED_STABLE, looser), 'blockedByConfidence');
+
+  const stricter = { minConfidence: 0.99, maxSeverity: 0.05 };
+  assert.equal(evaluateSafety(0.9, 0.01, ENABLED_STABLE, stricter), 'blockedByConfidence');
+});
+
+test('Studio Automation: instance-level safety settings apply through compute() and are reported on the result', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.setAutomationEnabled(true);
+  automation.setSafetySettings({ minConfidence: 0.99 });
+
+  const result = automation.compute();
+  assert.equal(result.safetySettings.minConfidence, 0.99);
+  assert.equal(result.safetySettings.maxSeverity, defaultAutonomySafetySettings().maxSeverity);
+});
+
+test('Studio Automation: instance-level permissions apply through compute() and are reported on the result', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.setPermissions({ audioMixing: false });
+
+  const result = automation.compute();
+  assert.equal(result.permissions.audioMixing, false);
+  assert.equal(result.permissions.graphicsActivation, true);
+});
+
+// ── Step 111 — Conflict resolution mode ─────────────────────────────────────
+
+test('Studio Automation: conflictResolutionMode defaults to severityFirst and is reported on the result', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  assert.equal(automation.getConflictResolutionMode(), defaultConflictResolutionMode());
+  assert.equal(automation.compute().conflictResolutionMode, 'severityFirst');
+});
+
+test('Studio Automation: confidenceFirst mode can pick a different winner than severityFirst for the same conflict', () => {
+  const now = Date.now();
+  const riskyButConfident = decision({
+    action: 'triggerSceneTransition', subsystem: 'scenes', cluster: 'scene', nodeId: 'scene:x',
+    severityScore: 0.3, confidence: 0.95, timestamp: now,
+  });
+  const saferButLessConfident = decision({
+    action: 'activateGraphicsLayer', subsystem: 'graphics', cluster: 'graphics', nodeId: 'scene:x',
+    severityScore: 0.05, confidence: 0.86, timestamp: now + 100,
+  });
+
+  const severityFirst = resolveAutomationConflicts([riskyButConfident, saferButLessConfident], 'Director', 'severityFirst');
+  assert.equal(severityFirst.winners[0]!.action, 'activateGraphicsLayer'); // safer wins
+
+  const confidenceFirst = resolveAutomationConflicts([riskyButConfident, saferButLessConfident], 'Director', 'confidenceFirst');
+  assert.equal(confidenceFirst.winners[0]!.action, 'triggerSceneTransition'); // more confident wins
+});
+
+test('Studio Automation: roleFirst mode prioritizes the role-primary subsystem even when it is less confident/safer', () => {
+  const now = Date.now();
+  const graphics = decision({
+    action: 'activateGraphicsLayer', subsystem: 'graphics', cluster: 'graphics', nodeId: 'scene:x',
+    severityScore: 0.05, confidence: 0.95, timestamp: now,
+  });
+  const audio = decision({
+    action: 'autoAdjustAudio', subsystem: 'audio', cluster: 'audio', nodeId: 'scene:x',
+    severityScore: 0.2, confidence: 0.86, timestamp: now + 100,
+  });
+
+  const roleFirst = resolveAutomationConflicts([graphics, audio], 'Audio Engineer', 'roleFirst');
+  assert.equal(roleFirst.winners[0]!.action, 'autoAdjustAudio'); // Audio Engineer's primary subsystem wins despite lower confidence/higher severity
+});
+
+test('Studio Automation: reset() also clears safety settings, permissions, and conflict resolution mode back to defaults', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.setSafetySettings({ minConfidence: 0.99 });
+  automation.setPermissions({ audioMixing: false });
+  automation.setConflictResolutionMode('roleFirst');
+  automation.reset();
+
+  assert.deepEqual(automation.getSafetySettings(), defaultAutonomySafetySettings());
+  assert.deepEqual(automation.getPermissions(), defaultAutonomyPermissions());
+  assert.equal(automation.getConflictResolutionMode(), defaultConflictResolutionMode());
 });
 
 test('Studio Automation 1.0: reset() clears back to an empty, disabled result', () => {

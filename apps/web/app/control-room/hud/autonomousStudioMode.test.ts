@@ -2,6 +2,11 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { StudioAutomationResult, AutomationDecision } from '../intelligence-graph/studioAutomation.js';
 import {
+  defaultAutonomySafetySettings,
+  defaultAutonomyPermissions,
+  defaultConflictResolutionMode,
+} from '../intelligence-graph/studioAutomation.js';
+import {
   resolveAutonomousMode,
   autonomousMotionForMode,
   autonomousElevationForAction,
@@ -39,6 +44,9 @@ function automationResult(partial: Partial<StudioAutomationResult> = {}): Studio
     conflicts: partial.conflicts ?? [],
     syncBatches: partial.syncBatches ?? [],
     timeline: partial.timeline ?? [],
+    safetySettings: partial.safetySettings ?? defaultAutonomySafetySettings(),
+    permissions: partial.permissions ?? defaultAutonomyPermissions(),
+    conflictResolutionMode: partial.conflictResolutionMode ?? defaultConflictResolutionMode(),
     timestamp: partial.timestamp ?? Date.now(),
   };
 }
