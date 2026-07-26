@@ -38,9 +38,16 @@
  * Technical Director, Graphics, Audio, Replay, Streaming, Solo Streamer,
  * Compact), each a named recipe of layout regions + density + accent
  * hues built from the systems above, not a new parallel token category.
- * Application of UBDS (and these templates) to Triad 2.0, Inspector 2.0,
- * Program Output 2.0, and the live workspace runtime happens in later
- * steps — this package only defines the foundation.
+ * Step 103 added six Workspace Intelligence Themes (Director, Graphics,
+ * Audio, Replay, Streaming, Solo), each reusing its matching Step 99
+ * workspace template's accents/density directly (not a second, driftable
+ * copy) plus a new motion + depth pairing, and an intelligence-driven
+ * theme-switching map (highlight/warn/pulse/prepare/dim/suppress/elevate
+ * → a named theme modifier) — this completes UBDS's visual intelligence
+ * layer. Application of UBDS (and these templates/themes) to Triad 2.0,
+ * Inspector 2.0, Program Output 2.0, and the live workspace runtime is
+ * scoped to separate application-labeled steps — this package only
+ * defines the foundation.
  */
 
 export * from './tokens/index.js';
@@ -49,7 +56,7 @@ export * from './primitives/index.js';
 export { cn } from './utils/cn.js';
 
 /** Design system version identifier */
-export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.7' as const;
+export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.8' as const;
 
 /** UBDS foundation milestone identifier — most recent foundation step. */
-export const UBDS_FOUNDATION_STEP = 99 as const;
+export const UBDS_FOUNDATION_STEP = 103 as const;

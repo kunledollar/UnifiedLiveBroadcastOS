@@ -86,3 +86,12 @@ export {
   type UbosWorkspaceAccent,
   type UbosWorkspaceRegion,
 } from './workspaces.js';
+
+export {
+  ubosThemes,
+  ubosThemeNames,
+  ubosIntelligenceThemeMap,
+  type UbosTheme,
+  type UbosThemeName,
+  type UbosThemeIntelligenceAction,
+} from './themes.js';
