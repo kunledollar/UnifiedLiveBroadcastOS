@@ -475,3 +475,95 @@ test('Studio Automation 1.0: reset() clears back to an empty, disabled result', 
   assert.equal(result.syncBatches.length, 0);
   assert.equal(result.timeline.length, 0);
 });
+
+// ── Step 112 — Permissions Engine (APE) integration ─────────────────────────
+
+test('Studio Automation: buildAutomationDecisions blocks by role before checking category permission or safety', () => {
+  const decisions = buildAutomationDecisions(
+    [prediction({ id: 'p1', category: 'scene_transition', confidence: 0.99 })],
+    [],
+    'Audio Engineer', // not role-permitted for scene transitions by default
+    ENABLED_STABLE,
+  );
+  assert.equal(decisions[0]!.status, 'blockedByRole');
+});
+
+test('Studio Automation: buildAutomationDecisions blocks by workspace even for a role-permitted action', () => {
+  const decisions = buildAutomationDecisions(
+    [prediction({ id: 'p1', category: 'graphics_activation', confidence: 0.99 })],
+    [],
+    'Director', // role-permitted everywhere
+    ENABLED_STABLE,
+    defaultAutonomySafetySettings(),
+    defaultAutonomyPermissions(),
+    'replay-operator', // replay workspace permits nothing by default
+  );
+  assert.equal(decisions[0]!.status, 'blockedByWorkspace');
+});
+
+test('Studio Automation: a role- and workspace-permitted action still reaches Step 111\'s category permission gate', () => {
+  const decisions = buildAutomationDecisions(
+    [prediction({ id: 'p1', category: 'graphics_activation', confidence: 0.99 })],
+    [],
+    'Director',
+    ENABLED_STABLE,
+    defaultAutonomySafetySettings(),
+    { ...defaultAutonomyPermissions(), graphicsActivation: false },
+    'director',
+  );
+  assert.equal(decisions[0]!.status, 'blockedByPermission');
+});
+
+test('Studio Automation: role, workspace, category, and safety all passing yields wouldExecute', () => {
+  const decisions = buildAutomationDecisions(
+    [prediction({ id: 'p1', category: 'graphics_activation', confidence: 0.99 })],
+    [],
+    'Director',
+    ENABLED_STABLE,
+    defaultAutonomySafetySettings(),
+    defaultAutonomyPermissions(),
+    'director',
+  );
+  assert.equal(decisions[0]!.status, 'wouldExecute');
+});
+
+test('Studio Automation: compute() reports the normalized permission workspace on the result', () => {
+  const graph = new UBOSIntelligenceGraph();
+  graph.setContext({ workspace: 'graphics-operator', operator: 'graphics', system: 'ubos' });
+  graph.guidanceEngine.setContext('Graphics Operator', 'graphics-operator');
+  // Studio Intelligence's own workspace field is only populated once WIE
+  // 2.0/Studio Intelligence have actually run — trigger that explicitly
+  // rather than relying on their empty (workspace: null) default result.
+  graph.computeGlobalIntelligence('Graphics Operator', 'graphics-operator');
+  const automation = new StudioAutomation(graph);
+
+  const result = automation.compute();
+  assert.equal(result.permissionWorkspace, 'graphics');
+});
+
+test('Studio Automation: getPermissionsEngine() exposes the live gatekeeper for direct configuration', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.getPermissionsEngine().setRolePermission('Audio Engineer', 'triggerSceneTransition', true);
+
+  const decisions = buildAutomationDecisions(
+    [prediction({ id: 'p1', category: 'scene_transition', confidence: 0.99 })],
+    [],
+    'Audio Engineer',
+    ENABLED_STABLE,
+    defaultAutonomySafetySettings(),
+    defaultAutonomyPermissions(),
+    null,
+    automation.getPermissionsEngine(),
+  );
+  assert.equal(decisions[0]!.status, 'wouldExecute');
+});
+
+test('Studio Automation: reset() also resets the Permissions Engine back to its defaults', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.getPermissionsEngine().setRolePermission('Audio Engineer', 'triggerSceneTransition', true);
+  automation.reset();
+
+  assert.equal(automation.getPermissionsEngine().isRolePermitted('triggerSceneTransition', 'Audio Engineer'), false);
+});

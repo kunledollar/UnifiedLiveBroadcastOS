@@ -68,6 +68,11 @@ import {
   type StudioSubsystem,
   type StudioHealthStatus,
 } from './studioIntelligence.js';
+import {
+  PermissionsEngine,
+  normalizePermissionWorkspace,
+  type PermissionWorkspaceKey,
+} from './permissionsEngine.js';
 
 // ── Predictive automation ───────────────────────────────────────────────────
 
@@ -161,6 +166,8 @@ export type AutomationDecisionStatus =
   | 'blockedByOperatorDisabled'
   | 'blockedByStudioHealth'
   | 'blockedByPermission'
+  | 'blockedByRole'
+  | 'blockedByWorkspace'
   | 'supersededByConflict'
   | 'overridden';
 
@@ -272,10 +279,19 @@ const ACTION_PERMISSION_KEY: Partial<Record<AutomationActionType, AutonomyPermis
  * safety-gated (before conflict resolution — see `resolveAutomationConflicts`).
  * `settings`/`permissions` default to Step 107's original always-on
  * behavior, so this remains fully backward compatible; Step 111's
- * control panel is the first real caller to vary them. Permission is
- * checked *before* confidence/severity — a category the operator has
- * turned off is blocked regardless of how confident or safe the
- * prediction is.
+ * control panel is the first real caller to vary them.
+ *
+ * `workspace`/`permissionsEngine` are Step 112's addition — the
+ * Permissions Engine's role/workspace gate is checked *first* (the
+ * spec's own order: role, then workspace, then Step 111's category
+ * toggle, then safety), since "is this role, in this workspace, even
+ * allowed to touch this category of action" is a more fundamental gate
+ * than "is this specific prediction confident/safe enough right now".
+ * `workspace` defaults to `null` (normalizes to `production`, the
+ * broadest/most permissive bucket) and `permissionsEngine` defaults to
+ * a fresh instance with its own default (fully permissive for
+ * Director/production/automation) config, so this remains fully
+ * backward compatible with every pre-Step-112 call site.
  */
 export function buildAutomationDecisions(
   predictions: readonly Prediction[],
@@ -284,7 +300,11 @@ export function buildAutomationDecisions(
   input: AutomationSafetyInput,
   settings: AutonomySafetySettings = AUTOMATION_SAFETY_THRESHOLDS,
   permissions: AutonomyPermissions = defaultAutonomyPermissions(),
+  workspace: string | null = null,
+  permissionsEngine: PermissionsEngine = new PermissionsEngine(),
 ): AutomationDecision[] {
+  const permissionWorkspace = normalizePermissionWorkspace(workspace);
+
   return predictions
     .map((prediction) => {
       const action = resolveAction(prediction.category);
@@ -294,10 +314,18 @@ export function buildAutomationDecisions(
       const severityScore = severityScoreForCluster(cluster, fusedInsights);
 
       const permissionKey = ACTION_PERMISSION_KEY[action];
-      const permitted = !permissionKey || permissions[permissionKey];
-      const status = permitted
-        ? evaluateSafety(prediction.confidence, severityScore, input, settings)
-        : 'blockedByPermission';
+      const categoryPermitted = !permissionKey || permissions[permissionKey];
+
+      let status: AutomationDecisionStatus;
+      if (!permissionsEngine.isRolePermitted(action, role)) {
+        status = 'blockedByRole';
+      } else if (!permissionsEngine.isWorkspacePermitted(action, permissionWorkspace)) {
+        status = 'blockedByWorkspace';
+      } else if (!categoryPermitted) {
+        status = 'blockedByPermission';
+      } else {
+        status = evaluateSafety(prediction.confidence, severityScore, input, settings);
+      }
 
       const decision: AutomationDecision = {
         id: `auto-decision-${prediction.id}`,
@@ -658,6 +686,8 @@ export type StudioAutomationResult = {
   safetySettings: AutonomySafetySettings;
   permissions: AutonomyPermissions;
   conflictResolutionMode: ConflictResolutionMode;
+  /** Step 112 — the normalized workspace APE's role/workspace gate evaluated this tick against. */
+  permissionWorkspace: PermissionWorkspaceKey;
   timestamp: number;
 };
 
@@ -674,6 +704,7 @@ function emptyResult(): StudioAutomationResult {
     safetySettings: defaultAutonomySafetySettings(),
     permissions: defaultAutonomyPermissions(),
     conflictResolutionMode: defaultConflictResolutionMode(),
+    permissionWorkspace: 'production',
     timestamp: 0,
   };
 }
@@ -698,9 +729,16 @@ export class StudioAutomation {
   private safetySettings: AutonomySafetySettings = defaultAutonomySafetySettings();
   private permissions: AutonomyPermissions = defaultAutonomyPermissions();
   private conflictResolutionMode: ConflictResolutionMode = defaultConflictResolutionMode();
+  /** Step 112 — the gatekeeper. See `permissionsEngine.ts`. */
+  private readonly permissionsEngine = new PermissionsEngine();
 
   constructor(graph: UBOSIntelligenceGraph) {
     this.graph = graph;
+  }
+
+  /** Step 112 — exposes the gatekeeper for direct configuration (role/workspace matrices, action rules). */
+  getPermissionsEngine(): PermissionsEngine {
+    return this.permissionsEngine;
   }
 
   setAutomationEnabled(enabled: boolean): void {
@@ -760,6 +798,7 @@ export class StudioAutomation {
       studioHealthStatus: studio.studioHealth.status,
     };
 
+    const permissionWorkspace = normalizePermissionWorkspace(studio.workspace);
     let decisions = buildAutomationDecisions(
       studio.studioPredictions,
       fusedInsights,
@@ -767,6 +806,8 @@ export class StudioAutomation {
       safetyInput,
       this.safetySettings,
       this.permissions,
+      studio.workspace,
+      this.permissionsEngine,
     );
     decisions = decisions.map((decision) =>
       this.overriddenPredictionIds.has(decision.predictionId)
@@ -795,6 +836,7 @@ export class StudioAutomation {
       safetySettings: this.safetySettings,
       permissions: this.permissions,
       conflictResolutionMode: this.conflictResolutionMode,
+      permissionWorkspace,
       timestamp: Date.now(),
     };
     return this.result;
@@ -807,6 +849,7 @@ export class StudioAutomation {
   reset(): void {
     this.result = emptyResult();
     this.overriddenPredictionIds.clear();
+    this.permissionsEngine.reset();
     this.safetySettings = defaultAutonomySafetySettings();
     this.permissions = defaultAutonomyPermissions();
     this.conflictResolutionMode = defaultConflictResolutionMode();

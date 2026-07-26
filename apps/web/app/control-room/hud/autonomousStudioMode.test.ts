@@ -6,6 +6,7 @@ import {
   defaultAutonomyPermissions,
   defaultConflictResolutionMode,
 } from '../intelligence-graph/studioAutomation.js';
+import { normalizePermissionWorkspace } from '../intelligence-graph/permissionsEngine.js';
 import {
   resolveAutonomousMode,
   autonomousMotionForMode,
@@ -47,6 +48,7 @@ function automationResult(partial: Partial<StudioAutomationResult> = {}): Studio
     safetySettings: partial.safetySettings ?? defaultAutonomySafetySettings(),
     permissions: partial.permissions ?? defaultAutonomyPermissions(),
     conflictResolutionMode: partial.conflictResolutionMode ?? defaultConflictResolutionMode(),
+    permissionWorkspace: partial.permissionWorkspace ?? normalizePermissionWorkspace(null),
     timestamp: partial.timestamp ?? Date.now(),
   };
 }

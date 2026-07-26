@@ -60,6 +60,8 @@
     "app/control-room/intelligence-graph/studioIntelligence.test.ts",
     "app/control-room/intelligence-graph/studioAutomation.ts",
     "app/control-room/intelligence-graph/studioAutomation.test.ts",
+    "app/control-room/intelligence-graph/permissionsEngine.ts",
+    "app/control-room/intelligence-graph/permissionsEngine.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-typography.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-elevation.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-gradient.test.ts",

@@ -3,6 +3,7 @@ import test from 'node:test';
 import { UBOSIntelligenceGraph } from '../intelligence-graph/ubosIntelligenceGraph.js';
 import { StudioAutomation, defaultAutonomyPermissions } from '../intelligence-graph/studioAutomation.js';
 import type { StudioAutomationResult, AutomationDecision, AutomationConflict } from '../intelligence-graph/studioAutomation.js';
+import { normalizePermissionWorkspace } from '../intelligence-graph/permissionsEngine.js';
 import type { AutonomousStudioModeResult } from './autonomousStudioMode.js';
 import {
   AUTONOMY_LEVELS,
@@ -55,6 +56,7 @@ function automationResult(partial: Partial<StudioAutomationResult> = {}): Studio
     safetySettings: partial.safetySettings ?? { minConfidence: 0.85, maxSeverity: 0.4 },
     permissions: partial.permissions ?? defaultAutonomyPermissions(),
     conflictResolutionMode: partial.conflictResolutionMode ?? 'severityFirst',
+    permissionWorkspace: partial.permissionWorkspace ?? normalizePermissionWorkspace(null),
     timestamp: partial.timestamp ?? Date.now(),
   };
 }
