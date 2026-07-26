@@ -58,6 +58,8 @@
     "app/control-room/intelligence-graph/workspaceIntelligenceEngine2.test.ts",
     "app/control-room/intelligence-graph/studioIntelligence.ts",
     "app/control-room/intelligence-graph/studioIntelligence.test.ts",
+    "app/control-room/intelligence-graph/studioAutomation.ts",
+    "app/control-room/intelligence-graph/studioAutomation.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-typography.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-elevation.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-gradient.test.ts",

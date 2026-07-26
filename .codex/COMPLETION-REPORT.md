@@ -1050,3 +1050,144 @@ PASS.
 
 (recorded at commit time — see branch `cursor/studio-intelligence-1-0-4284`)
 
+## 2026-07-26 — Studio Automation 1.0 (Step 107)
+
+### Objective
+
+Build Studio Automation 1.0 — UBOS's first autonomous *action* layer,
+sitting above Studio Intelligence 1.0 (Step 106), WIE 2.0 (Step 105),
+Triad 2.0, Inspector 2.0, and Program Output 2.0: predictive automation
+eligibility, cross-workspace automation batching, automation safety
+modeling, automation conflict resolution, an automation timeline, and HUD
+integration. Built on top of Step 106's Studio Intelligence branch (not
+yet merged to `main`), since Studio Automation 1.0 is explicitly "powered
+by" Studio Intelligence 1.0 per the spec.
+
+### Root Cause / Gap
+
+Every engine through Step 106 only *observes and summarizes* — nothing
+decided whether a predicted action was safe enough to execute
+autonomously, resolved conflicts between two simultaneously-eligible
+automations, or modeled which of several eligible automations across
+different subsystems could fire together in sync.
+
+### Investigation before implementation
+
+Before writing any code, a dedicated exploration pass audited every
+existing automation-adjacent system in this codebase to decide whether
+Step 107 should dispatch real commands or model decisions only:
+
+- `automation-engine/automationEngine.ts` (Step 67) — a real,
+  orchestration-tick-evaluated condition/action trigger runtime with real
+  side effects (`routingEngine.addRoute`, `audioEngine.setGain`), but no
+  confidence/severity gating and no global "automation enabled" toggle
+  (only per-trigger `enabled`, defaulting to `true`).
+- `LocalProductionCommandDispatcher`
+  (`packages/shared/src/production-graph.ts`) — the real Production Graph
+  command dispatcher (CUT/TAKE/AUTO), used by session sync, never called
+  by any automation system in this codebase.
+- The v5.10 "Automation Platform" (rundown/macro UI, media-plane
+  automation) — architecture docs are explicit that it logs command
+  *intents* only, with `metadataOnly: true`/`realDeviceControl: false`;
+  it never dispatches to the Production Graph either.
+- `getAutomationTriggers()` — already-existing `InferenceResult`s
+  literally worded "Suggest automation: ..." — recommendations, not
+  dispatch.
+
+**Conclusion:** no existing automation system in this codebase actually
+fires real Production Graph commands autonomously. Wiring Step 107
+directly into `LocalProductionCommandDispatcher` would invent a new,
+unreviewed autonomous-control path for a live broadcast studio — exactly
+what "do not create duplicate command or runtime systems" and "do not
+expose unsupported controls" forbid. Step 107 therefore models automation
+as **decisions**, matching the Step 107 spec's own code sample
+(`resolveAction()` only returns a string label, never calls a
+dispatcher).
+
+### Implementation
+
+New `apps/web/app/control-room/intelligence-graph/studioAutomation.ts`:
+
+- **Predictive automation** — `buildAutomationDecisions()` maps each of
+  Studio Intelligence's resolved predictions to an `AutomationActionType`
+  label (`activateGraphicsLayer`, `triggerSceneTransition`,
+  `autoAdjustAudio`, `switchToBackupDestination`, plus `failoverRoute`
+  for `routing_failure`, named in the spec's own cross-workspace example).
+- **Automation safety modeling** — `evaluateSafety()` implements the
+  exact spec thresholds (confidence > 0.85, severity < 0.4, operator
+  opt-in, studio health stable). "Severity" here is *not* the
+  prediction's own confidence (which would make the two gates redundant)
+  — it is how risky the surrounding subsystem already looks, from real
+  fused insights in the same cluster (`severityScoreForCluster()`, reusing
+  Step 106's `fusedInsightSeverityScore`, now exported). No fused insight
+  in that cluster honestly scores 0 (no known problem), never a
+  fabricated pessimistic default. `automationEnabled` defaults to
+  `false` — autonomous execution is opt-in only; no operator-facing
+  toggle exists yet, so the safe default is off.
+- **Automation conflict resolution** — `resolveAutomationConflicts()`
+  reuses WIE 2.0's own conflict *detection* (`predictionsConflict`) on
+  already individually-eligible decisions, tie-broken by the spec's exact
+  four factors: severity (lower/safer wins), confidence (higher wins),
+  operator role (the role-primary subsystem wins), studio health (a
+  global gate every candidate already passed identically, honestly
+  documented as a non-differentiator at the per-pair tie-break stage
+  rather than included as a no-op factor).
+- **Cross-workspace automation** — `groupIntoSyncBatches()` groups
+  non-conflicting, simultaneously-eligible decisions across *different*
+  subsystems into a batch that would fire together — the spec's own
+  scene+graphics+audio example.
+- **Automation timeline** — `buildAutomationTimeline()`, covering all
+  five named sources (predicted/would-execute/blocked/conflict/
+  overridden).
+- **Automation HUD integration** — `toHudTimelineEntries()` reuses Step
+  104's *existing* `'automation'` HUD timeline kind rather than adding a
+  fifth zone or a new kind; only `wouldExecute`/`supersededByConflict`
+  decisions surface there (routine blocks are diagnostic detail, not HUD
+  content). An `overrideDecision(predictionId)` API is exposed for a
+  future HUD "cancel this automation" control — no button wires to it in
+  this step, per "do not expose unsupported controls".
+
+Wired into `UBOSIntelligenceGraph`'s pipeline and `getSnapshot()`.
+`OperatorHUD.tsx` merges automation entries into the existing Timeline
+zone.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.ts` | New — Studio Automation 1.0 orchestrator |
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.test.ts` | New — 20 unit tests |
+| `apps/web/app/control-room/intelligence-graph/studioIntelligence.ts` | Export `fusedInsightSeverityScore` for reuse |
+| `apps/web/app/control-room/intelligence-graph/ubosIntelligenceGraph.ts` | Wire Studio Automation into pipeline, snapshot, getters, reset |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | Merge automation decisions into the Timeline zone |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 281/281 (20 new Studio
+  Automation tests; all 261 pre-existing tests unaffected).
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `pnpm --filter @ubos/web lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium, real orchestration tick loop (no
+mocks), across all 5 workspace routes — **zero console errors on every
+route**. Confirmed live: with automation left at its safe default
+(disabled), no `wouldExecute`/superseded automation entries appear in the
+HUD Timeline on any route — the safe-by-default behavior holds correctly
+in the running app, not just in unit tests. The enabled/eligible/conflict/
+sync-batch code paths are exercised thoroughly by the 20 unit tests
+(since no operator-facing toggle exists yet to exercise them live without
+adding an unreviewed control). Screenshot in
+`artifacts/studio-automation-step107/`.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/studio-automation-1-0-4284`)
+
