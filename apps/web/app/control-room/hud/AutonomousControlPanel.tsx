@@ -33,6 +33,7 @@ import { autonomousStudioModeController } from './autonomousStudioMode';
 import { autonomyVisualizationSettingsStore } from './autonomyControlPanel';
 import type { StudioAutomation, AutonomyPermissionKey } from '../intelligence-graph/studioAutomation';
 import { AUTONOMY_PERMISSION_KEYS } from '../intelligence-graph/studioAutomation';
+import type { ConfidenceThresholdName } from '../intelligence-graph/autonomousConfidenceEngine';
 import {
   AUTONOMY_LEVELS,
   AUTONOMY_LEVEL_LABELS,
@@ -54,6 +55,15 @@ const PERMISSION_LABEL: Record<AutonomyPermissionKey, string> = {
   replayTriggers: 'Replay Triggers',
   streamingRecovery: 'Streaming Recovery',
 };
+
+const CONFIDENCE_THRESHOLD_LABEL: Record<ConfidenceThresholdName, string> = {
+  toAct: 'Minimum confidence to act',
+  toPredict: 'Minimum confidence to predict',
+  toOverride: 'Minimum confidence to override',
+  toRecover: 'Minimum confidence to recover',
+};
+
+const CONFIDENCE_THRESHOLD_NAMES: readonly ConfidenceThresholdName[] = ['toAct', 'toPredict', 'toOverride', 'toRecover'];
 
 function AutonomyLevelSelector({
   level,
@@ -121,6 +131,7 @@ function AutonomySafetySettingsModule({
 }) {
   const safety = automation.getSafetySettings();
   const conflictMode = automation.getConflictResolutionMode();
+  const thresholds = automation.getConfidenceEngine().getConfig().thresholds;
 
   return (
     <section className="asmcp-module">
@@ -170,6 +181,29 @@ function AutonomySafetySettingsModule({
           <option value="roleFirst">Operator role first</option>
         </select>
       </label>
+
+      <p className={`mt-3 ${ubosTypographyClasses.microText}`}>
+        Confidence thresholds (Step 113 — Autonomous Confidence Engine)
+      </p>
+      {CONFIDENCE_THRESHOLD_NAMES.map((name) => (
+        <label key={name} className="asmcp-field">
+          <span className={ubosTypographyClasses.microText}>
+            {CONFIDENCE_THRESHOLD_LABEL[name]} ({Math.round(thresholds[name] * 100)}%)
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={thresholds[name]}
+            className="h-1 w-full cursor-pointer accent-ubos-selection"
+            onChange={(e) => {
+              automation.getConfidenceEngine().setThresholds({ [name]: Number(e.target.value) });
+              onChanged();
+            }}
+          />
+        </label>
+      ))}
     </section>
   );
 }
@@ -260,7 +294,22 @@ function AutonomyOverrideControlsModule({
   );
 }
 
-function AutonomyLogsModule({ logs }: { logs: readonly { id: string; kind: string; message: string; confidence: number; timestamp: number }[] }) {
+type AsmcpConfidenceEvent = {
+  id: string;
+  kind: string;
+  message: string;
+  confidence: number;
+  /** Step 113 — ACE's fused + decayed confidence, when a matching decision breakdown exists this tick. */
+  effectiveConfidence?: number;
+  timestamp: number;
+};
+
+/** Prefers ACE's decay-aware `effectiveConfidence` over the raw prediction confidence, when available. */
+function displayConfidence(entry: AsmcpConfidenceEvent): number {
+  return entry.effectiveConfidence ?? entry.confidence;
+}
+
+function AutonomyLogsModule({ logs }: { logs: readonly AsmcpConfidenceEvent[] }) {
   return (
     <section className="asmcp-module">
       <h3 className={ubosTypographyClasses.sectionLabel}>6. Autonomy Logs</h3>
@@ -274,6 +323,12 @@ function AutonomyLogsModule({ logs }: { logs: readonly { id: string; kind: strin
               <span className={ubosTypographyClasses.intelligence} title={entry.message}>
                 {entry.message}
               </span>
+              <span
+                className={`shrink-0 ${ubosTypographyClasses.microText}`}
+                title={entry.effectiveConfidence !== undefined ? 'Confidence after ACE decay' : 'Raw prediction confidence'}
+              >
+                {Math.round(displayConfidence(entry) * 100)}%
+              </span>
             </li>
           ))}
         </ul>
@@ -282,7 +337,7 @@ function AutonomyLogsModule({ logs }: { logs: readonly { id: string; kind: strin
   );
 }
 
-function AutonomyTimelineModule({ timeline }: { timeline: readonly { id: string; kind: string; message: string; confidence: number; timestamp: number }[] }) {
+function AutonomyTimelineModule({ timeline }: { timeline: readonly AsmcpConfidenceEvent[] }) {
   return (
     <section className="asmcp-module">
       <h3 className={ubosTypographyClasses.sectionLabel}>7. Autonomy Timeline</h3>
@@ -294,6 +349,7 @@ function AutonomyTimelineModule({ timeline }: { timeline: readonly { id: string;
             <li key={entry.id} className="asmcp-timeline-item" title={entry.message}>
               <span className={`shrink-0 ${ubosTypographyClasses.microText} uppercase`}>{entry.kind}</span>
               <span className={`truncate ${ubosTypographyClasses.intelligence}`}>{entry.message}</span>
+              <span className={`shrink-0 ${ubosTypographyClasses.microText}`}>{Math.round(displayConfidence(entry) * 100)}%</span>
             </li>
           ))}
         </ol>

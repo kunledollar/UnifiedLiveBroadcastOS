@@ -71,14 +71,14 @@ v5.12.0 — next platform phase pending authoritative task specification
 
 ## Latest Control Room Milestone
 
-- **Milestone title:** Autonomous Studio Mode Permissions Engine / APE (Step 112)
-- **Release name:** UBOS APE
+- **Milestone title:** Autonomous Confidence Engine / ACE (Step 113)
+- **Release name:** UBOS ACE
 - **Status:** PASS (see `.codex/COMPLETION-REPORT.md`, 2026-07-26 entry)
-- **Step 108 gap:** Step 108 was never assigned to this agent and does not exist in this repository. Steps 109-112 all continue directly from Step 107; all are built against Studio Automation **1.0** (Step 107), not the "Studio Automation 2.0" their specs name, which has not been implemented here. See the Step 109/110/111/112 completion report entries for the full honesty notes.
-- **Engine-only step:** Step 112's own "Cursor-ready code" sample is a single `.ts` engine class with no accompanying UI — unlike Step 111, no new control panel module was required or added; APE is fully wired into the existing decision pipeline and exposed via `StudioAutomation.getPermissionsEngine()` for direct configuration (e.g. from a future ASMCP module).
-- **Prior milestones:** Autonomous Studio Mode Control Panel / ASMCP (Step 111), branch `cursor/autonomy-control-panel-4284` (PR #416, not yet merged); Autonomous Studio Mode Safety UX (Step 110, PR #415); Autonomous Studio Mode UX (Step 109, PR #414); Studio Automation 1.0 (Step 107, PR #413); Studio Intelligence 1.0 (Step 106, PR #412); WIE 2.0 (Step 105, PR #411); Operator HUD 2.0 (Step 104, PR #410); Steps 91–103 merged at d44db76; Intelligence Graph Foundation (Steps 81–90) merge head d0953f6
-- **Branch note:** Steps 104 → 105 → 106 → 107 → 109 → 110 → 111 → 112 are a stacked branch chain (`cursor/operator-hud-2-0-4284` → `cursor/wie-2-0-4284` → `cursor/studio-intelligence-1-0-4284` → `cursor/studio-automation-1-0-4284` → `cursor/autonomous-studio-mode-ux-4284` → `cursor/autonomous-safety-ux-4284` → `cursor/autonomy-control-panel-4284` → `cursor/permissions-engine-4284`), each PR based on the previous. Merge in that exact order: #410, #411, #412, #413, #414, #415, #416, then the Step 112 PR.
-- **Next Control Room step:** Step 113 — pending authoritative task specification
+- **Step 108 gap:** Step 108 was never assigned to this agent and does not exist in this repository. Steps 109-113 all continue directly from Step 107; all are built against Studio Automation **1.0** (Step 107), not the "Studio Automation 2.0" their specs name, which has not been implemented here. See the Step 109/110/111/112/113 completion report entries for the full honesty notes.
+- **Not a duplicate of CSE (Step 84):** ACE (`autonomousConfidenceEngine.ts`) operates one level above the existing `ConfidenceScoringEngine` (Step 84) — CSE scores individual raw graph events/nodes/edges; ACE fuses/decays/thresholds already-scored, named signals for one candidate autonomous action, reusing CSE's own `stabilityScore()` directly as one input. See the Step 113 completion report entry for the full layering explanation.
+- **Prior milestones:** Autonomous Studio Mode Permissions Engine / APE (Step 112), branch `cursor/permissions-engine-4284` (PR #417, not yet merged); Autonomous Studio Mode Control Panel / ASMCP (Step 111, PR #416, not yet merged); Autonomous Studio Mode Safety UX (Step 110, PR #415); Autonomous Studio Mode UX (Step 109, PR #414); Studio Automation 1.0 (Step 107, PR #413); Studio Intelligence 1.0 (Step 106, PR #412); WIE 2.0 (Step 105, PR #411); Operator HUD 2.0 (Step 104, PR #410); Steps 91–103 merged at d44db76; Intelligence Graph Foundation (Steps 81–90) merge head d0953f6
+- **Branch note:** Steps 104 → 105 → 106 → 107 → 109 → 110 → 111 → 112 → 113 are a stacked branch chain (`cursor/operator-hud-2-0-4284` → `cursor/wie-2-0-4284` → `cursor/studio-intelligence-1-0-4284` → `cursor/studio-automation-1-0-4284` → `cursor/autonomous-studio-mode-ux-4284` → `cursor/autonomous-safety-ux-4284` → `cursor/autonomy-control-panel-4284` → `cursor/permissions-engine-4284` → `cursor/confidence-engine-4284`), each PR based on the previous. Merge in that exact order: #410, #411, #412, #413, #414, #415, #416, #417, then the Step 113 PR.
+- **Next Control Room step:** Step 114 — pending authoritative task specification
 
 ---
 

@@ -73,6 +73,8 @@ import {
   defaultAutonomyPermissions,
   defaultAutonomySafetySettings,
 } from '../intelligence-graph/studioAutomation.js';
+import type { ConfidenceThresholds } from '../intelligence-graph/autonomousConfidenceEngine.js';
+import { defaultConfidenceThresholds } from '../intelligence-graph/autonomousConfidenceEngine.js';
 import type { AutonomousStudioModeResult, AutonomousMotionToken } from './autonomousStudioMode.js';
 
 // ── 1. Autonomy Level Selector ──────────────────────────────────────────────
@@ -204,6 +206,8 @@ export type AutonomySettingsConfig = {
   fallbackBehavior: AutonomyFallbackBehavior;
   /** Stored configuration only — see module doc: one real override mechanism exists today. */
   overrideBehavior: AutonomyOverrideBehavior;
+  /** Step 113 — ACE's four named confidence thresholds, live on `StudioAutomation.getConfidenceEngine()`. */
+  confidenceThresholds: ConfidenceThresholds;
 };
 
 export function defaultAutonomySettingsConfig(): AutonomySettingsConfig {
@@ -212,7 +216,16 @@ export function defaultAutonomySettingsConfig(): AutonomySettingsConfig {
     conflictResolutionMode: 'severityFirst',
     fallbackBehavior: 'pauseAutomation',
     overrideBehavior: 'confirmFirst',
+    confidenceThresholds: defaultConfidenceThresholds(),
   };
+}
+
+/** Step 113 — merges partial threshold updates onto the live Confidence Engine. */
+export function applyConfidenceThresholds(
+  automation: StudioAutomation,
+  partial: Partial<ConfidenceThresholds>,
+): void {
+  automation.getConfidenceEngine().setThresholds(partial);
 }
 
 // ── 4. Autonomy Visualization Settings ──────────────────────────────────────
@@ -306,6 +319,12 @@ export type AutonomyEvent = {
   kind: AutonomyEventKind;
   message: string;
   confidence: number;
+  /**
+   * Step 113 — ACE's fused + time-decayed confidence for the decision
+   * behind this event, when one exists (`undefined` for conflict/fallback
+   * events, which have no matching `ConfidenceBreakdown`).
+   */
+  effectiveConfidence?: number;
   timestamp: number;
 };
 
@@ -322,12 +341,13 @@ function decisionEventKind(decision: AutomationDecision): AutonomyEventKind {
   }
 }
 
-function decisionEvent(decision: AutomationDecision): AutonomyEvent {
+function decisionEvent(decision: AutomationDecision, effectiveConfidence?: number): AutonomyEvent {
   return {
     id: `autonomy-event-${decision.id}`,
     kind: decisionEventKind(decision),
     message: `${decision.action}: ${decision.message}`,
     confidence: decision.confidence,
+    ...(effectiveConfidence !== undefined ? { effectiveConfidence } : {}),
     timestamp: decision.timestamp,
   };
 }
@@ -354,8 +374,13 @@ export function buildAutonomyLogEntries(
   automation: StudioAutomationResult,
   autonomous: AutonomousStudioModeResult,
 ): AutonomyEvent[] {
+  const breakdownByDecisionId = new Map(
+    automation.confidenceBreakdowns.map((breakdown) => [breakdown.decisionId, breakdown]),
+  );
   const events: AutonomyEvent[] = [
-    ...automation.decisions.map(decisionEvent),
+    ...automation.decisions.map((decision) =>
+      decisionEvent(decision, breakdownByDecisionId.get(decision.id)?.effectiveConfidence),
+    ),
     ...automation.conflicts.map(conflictEvent),
   ];
 
@@ -413,6 +438,7 @@ export function deriveAutonomyConfiguration(
       conflictResolutionMode: automation.getConflictResolutionMode(),
       fallbackBehavior: 'pauseAutomation',
       overrideBehavior: 'confirmFirst',
+      confidenceThresholds: automation.getConfidenceEngine().getConfig().thresholds,
     },
     visualization,
     logs: buildAutonomyLogEntries(result, autonomous),
