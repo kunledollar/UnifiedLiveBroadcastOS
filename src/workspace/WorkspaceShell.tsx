@@ -1,12 +1,22 @@
-import { AutonomousShell } from "../autonomous/AutonomousShell";
 import { WorkspaceManager } from "./WorkspaceManager";
+import { AutonomousShell } from "../autonomous/AutonomousShell";
+import { Sidebar } from "./Sidebar";
 
 export function WorkspaceShell() {
+  const manager = WorkspaceManager();
+
   return (
-    <AutonomousShell>
-      <div className="workspace-shell">
-        <WorkspaceManager />
+    <div className="ubos-shell">
+      <Sidebar
+        active={manager.workspace}
+        onSelect={(ws) => manager.setWorkspace(ws)}
+      />
+
+      <div className="ubos-shell__canvas">
+        {manager.renderWorkspace()}
       </div>
-    </AutonomousShell>
+
+      <AutonomousShell />
+    </div>
   );
 }

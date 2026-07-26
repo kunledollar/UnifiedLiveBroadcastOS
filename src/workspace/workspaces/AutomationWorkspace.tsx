@@ -1,20 +1,23 @@
-import type { AutonomousState } from "../../autonomous/AutonomousProvider";
-
-type WorkspaceProps = { autonomy: AutonomousState };
-
-export function AutomationWorkspace({ autonomy }: WorkspaceProps) {
+export function AutomationWorkspace({ autonomy }: { autonomy: any }) {
   return (
-    <section className="workspace Automation-workspace" aria-labelledby="Automation-title">
-      <header>
-        <p>Control Room</p>
-        <h1 id="Automation-title">Automation Workspace</h1>
-      </header>
-      <p>Configure rules, macros, and assisted show control.</p>
-      <dl className="workspace-status">
-        <div><dt>Autonomy level</dt><dd>{autonomy.autonomyLevel}</dd></div>
-        <div><dt>Confidence</dt><dd>{Math.round(autonomy.confidence * 100)}%</dd></div>
-        <div><dt>Output</dt><dd>{autonomy.system.outputHealth}</dd></div>
-      </dl>
-    </section>
+    <div className="workspace workspace--automation">
+      <div className="workspace__row">
+        <div className="panel panel--automation">
+          <h2>AUTOMATION</h2>
+          {/* Automation flows, rules, macros, triggers, and run controls */}
+        </div>
+        <div className="panel panel--production-intel">
+          <h2>PRODUCTION INTELLIGENCE</h2>
+          {/* Flow warnings, confidence, permissions, and intervention guidance */}
+        </div>
+      </div>
+
+      <div className="workspace__row workspace__row--timeline">
+        <div className="panel panel--timeline">
+          <h2>INTELLIGENCE TIMELINE</h2>
+          {/* Automation events, decisions, triggers, and execution history */}
+        </div>
+      </div>
+    </div>
   );
 }

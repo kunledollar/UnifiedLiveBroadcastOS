@@ -1,20 +1,23 @@
-import type { AutonomousState } from "../../autonomous/AutonomousProvider";
-
-type WorkspaceProps = { autonomy: AutonomousState };
-
-export function AnalyticsWorkspace({ autonomy }: WorkspaceProps) {
+export function AnalyticsWorkspace({ autonomy }: { autonomy: any }) {
   return (
-    <section className="workspace Analytics-workspace" aria-labelledby="Analytics-title">
-      <header>
-        <p>Control Room</p>
-        <h1 id="Analytics-title">Analytics Workspace</h1>
-      </header>
-      <p>Track audience, output, and operational performance.</p>
-      <dl className="workspace-status">
-        <div><dt>Autonomy level</dt><dd>{autonomy.autonomyLevel}</dd></div>
-        <div><dt>Confidence</dt><dd>{Math.round(autonomy.confidence * 100)}%</dd></div>
-        <div><dt>Output</dt><dd>{autonomy.system.outputHealth}</dd></div>
-      </dl>
-    </section>
+    <div className="workspace workspace--analytics">
+      <div className="workspace__row">
+        <div className="panel panel--analytics">
+          <h2>ANALYTICS</h2>
+          {/* Analytics dashboards, audience metrics, output, and operational performance */}
+        </div>
+        <div className="panel panel--production-intel">
+          <h2>PRODUCTION INTELLIGENCE</h2>
+          {/* Performance anomalies, trends, forecasts, and recommendations */}
+        </div>
+      </div>
+
+      <div className="workspace__row workspace__row--timeline">
+        <div className="panel panel--timeline">
+          <h2>INTELLIGENCE TIMELINE</h2>
+          {/* Analytics events, detected trends, and insight history */}
+        </div>
+      </div>
+    </div>
   );
 }

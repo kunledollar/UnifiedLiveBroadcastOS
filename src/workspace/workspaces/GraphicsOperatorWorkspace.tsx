@@ -1,20 +1,23 @@
-import type { AutonomousState } from "../../autonomous/AutonomousProvider";
-
-type WorkspaceProps = { autonomy: AutonomousState };
-
-export function GraphicsOperatorWorkspace({ autonomy }: WorkspaceProps) {
+export function GraphicsOperatorWorkspace({ autonomy }: { autonomy: any }) {
   return (
-    <section className="workspace GraphicsOperator-workspace" aria-labelledby="GraphicsOperator-title">
-      <header>
-        <p>Control Room</p>
-        <h1 id="GraphicsOperator-title">Graphics Operator Workspace</h1>
-      </header>
-      <p>Prepare, preview, and take graphics to air.</p>
-      <dl className="workspace-status">
-        <div><dt>Autonomy level</dt><dd>{autonomy.autonomyLevel}</dd></div>
-        <div><dt>Confidence</dt><dd>{Math.round(autonomy.confidence * 100)}%</dd></div>
-        <div><dt>Output</dt><dd>{autonomy.system.outputHealth}</dd></div>
-      </dl>
-    </section>
+    <div className="workspace workspace--graphics">
+      <div className="workspace__row">
+        <div className="panel panel--graphics">
+          <h2>GRAPHICS</h2>
+          {/* Scene graphics, lower thirds, overlays */}
+        </div>
+        <div className="panel panel--production-intel">
+          <h2>PRODUCTION INTELLIGENCE</h2>
+          {/* Graphics-related warnings/insights */}
+        </div>
+      </div>
+
+      <div className="workspace__row workspace__row--timeline">
+        <div className="panel panel--timeline">
+          <h2>INTELLIGENCE TIMELINE</h2>
+          {/* Graphics events, cue history */}
+        </div>
+      </div>
+    </div>
   );
 }

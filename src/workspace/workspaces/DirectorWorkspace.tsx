@@ -1,20 +1,34 @@
-import type { AutonomousState } from "../../autonomous/AutonomousProvider";
-
-type WorkspaceProps = { autonomy: AutonomousState };
-
-export function DirectorWorkspace({ autonomy }: WorkspaceProps) {
+export function DirectorWorkspace({ autonomy }: { autonomy: any }) {
   return (
-    <section className="workspace Director-workspace" aria-labelledby="Director-title">
-      <header>
-        <p>Control Room</p>
-        <h1 id="Director-title">Director Workspace</h1>
-      </header>
-      <p>Coordinate the live show, review guidance, and protect the program output.</p>
-      <dl className="workspace-status">
-        <div><dt>Autonomy level</dt><dd>{autonomy.autonomyLevel}</dd></div>
-        <div><dt>Confidence</dt><dd>{Math.round(autonomy.confidence * 100)}%</dd></div>
-        <div><dt>Output</dt><dd>{autonomy.system.outputHealth}</dd></div>
-      </dl>
-    </section>
+    <div className="workspace workspace--director">
+      <div className="workspace__row">
+        <div className="panel panel--triad">
+          <h2>TRIAD</h2>
+          {/* Scene / Preview / Program triad */}
+        </div>
+        <div className="panel panel--inspector">
+          <h2>INSPECTOR</h2>
+          {/* Inspector body, metadata, health */}
+        </div>
+      </div>
+
+      <div className="workspace__row">
+        <div className="panel panel--program">
+          <h2>PROGRAM</h2>
+          {/* Program health, degraded/healthy, frame composition */}
+        </div>
+        <div className="panel panel--production-intel">
+          <h2>PRODUCTION INTELLIGENCE</h2>
+          {/* Warnings, insights, guidance from autonomy */}
+        </div>
+      </div>
+
+      <div className="workspace__row workspace__row--timeline">
+        <div className="panel panel--timeline">
+          <h2>INTELLIGENCE TIMELINE</h2>
+          {/* Timeline of guidance/insight events */}
+        </div>
+      </div>
+    </div>
   );
 }
