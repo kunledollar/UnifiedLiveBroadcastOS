@@ -36,6 +36,7 @@ import type { PersistenceEngine } from '../persistence-engine/persistenceEngine'
 import type { SecurityEngine } from '../security-engine/securityEngine';
 import type { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
 import type { CloudEngine } from '../cloud-engine/cloudEngine';
+import type { UBOSIntelligenceGraph, UigEvent } from '../intelligence-graph/ubosIntelligenceGraph';
 
 export type OrchestrationEngines = {
   sceneGraph:       SceneGraphEngine;
@@ -50,6 +51,7 @@ export type OrchestrationEngines = {
   securityEngine:      SecurityEngine;
   multiUserEngine:     MultiUserEngine;
   cloudEngine:         CloudEngine;
+  intelligenceGraph:   UBOSIntelligenceGraph;
   /** Loose context passed to automation (the full workspaceState). */
   automationContext: AutomationContext;
 };
@@ -172,6 +174,69 @@ export class OrchestrationEngine {
           health:  healthEngine.getMetrics(),
         });
       }
+
+      // 12. Intelligence Graph — ingest engine signals into the live knowledge model
+      const graphicsLayerIds = graphicsFrames.map((f) => f.id);
+      const uigEvents: UigEvent[] = [
+        {
+          id: 'scene:current',
+          type: 'SceneNode',
+          source: 'scene-graph',
+          payload: {
+            name: scene?.name ?? null,
+            missing: !scene,
+            program: true,
+            layerIds: graphicsLayerIds,
+          },
+        },
+        {
+          id: 'output:program',
+          type: 'OutputNode',
+          source: 'output-engine',
+          payload: {
+            droppedFrames: outputHealth.droppedFrames ?? 0,
+            latency: outputHealth.latency ?? 0,
+          },
+        },
+        ...graphicsFrames.map((frame): UigEvent => ({
+          id: `graphics:${frame.id}`,
+          type: 'GraphicsNode',
+          source: 'scene-graph',
+          payload: { name: frame.name, sceneId: scene?.id, visible: frame.visible },
+        })),
+        ...(audioHealth[0]
+          ? [{
+              id: 'audio:mix',
+              type: 'AudioNode' as const,
+              source: 'audio-engine',
+              payload: { peak: audioHealth[0].peak, rms: audioHealth[0].rms, health: audioHealth[0].health },
+            }]
+          : []),
+        ...[...clips].slice(-4).map((clip): UigEvent => ({
+          id: `replay:${clip.id}`,
+          type: 'ReplayNode',
+          source: 'replay-engine',
+          payload: { cameraId: clip.cameraId, start: clip.start, end: clip.end },
+        })),
+        ...[...routes].slice(0, 8).map((route): UigEvent => ({
+          id: `routing:${route.id}`,
+          type: 'RoutingNode',
+          source: 'routing-engine',
+          payload: {
+            source: route.source,
+            destination: route.destination,
+            active: route.active,
+            broken: route.active === false,
+          },
+        })),
+        ...Object.entries(healthEngine.getHealth()).map(([subsystem, status]): UigEvent => ({
+          id: `health:${subsystem}`,
+          type: 'HealthNode',
+          source: 'health-engine',
+          payload: { subsystem, status },
+        })),
+      ];
+      this.engines.intelligenceGraph.ingestBatch(uigEvents);
 
     } catch (err) {
       console.warn('[OrchestrationEngine] tick error:', err);

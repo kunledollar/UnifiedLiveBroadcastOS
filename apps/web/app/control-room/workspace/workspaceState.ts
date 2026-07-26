@@ -16,19 +16,20 @@ import { ReplayEngine, type ReplayFrame } from '../replay-engine/replayEngine';
 import { RoutingEngine, type RouteSignalType } from '../routing-engine/routingEngine';
 import { AudioEngine, type AudioSource, type AudioLayer } from '../audio-engine/audioEngine';
 import { AutomationEngine, type TriggerRegistration, type AutomationContext } from '../automation-engine/automationEngine';
-import { OutputEngine } from '../output-engine/outputEngine';
+import { OutputEngine, type VideoSource } from '../output-engine/outputEngine';
 import { AiCrewEngine } from '../ai-crew-engine/aiCrewEngine';
 import { OrchestrationEngine } from '../orchestration-engine/orchestrationEngine';
 import { HealthEngine } from '../health-engine/healthEngine';
 import { PersistenceEngine } from '../persistence-engine/persistenceEngine';
 import { DistributionEngine } from '../distribution-engine/distributionEngine';
 import { MultiUserEngine } from '../multi-user-engine/multiUserEngine';
-import { SecurityEngine } from '../security-engine/securityEngine';
+import { SecurityEngine, type Permission } from '../security-engine/securityEngine';
 import { NetworkEngine } from '../network-engine/networkEngine';
 import { CloudEngine } from '../cloud-engine/cloudEngine';
 import { VirtualizationEngine } from '../virtualization-engine/virtualizationEngine';
 import { ContainerEngine } from '../container-engine/containerEngine';
 import { FederationEngine } from '../federation-engine/federationEngine';
+import { UBOSIntelligenceGraph, type UigEvent } from '../intelligence-graph/ubosIntelligenceGraph';
 
 export const workspaceState = {
   sceneGraph:     new SceneGraphEngine(),
@@ -49,6 +50,7 @@ export const workspaceState = {
   virtualizationEngine:    new VirtualizationEngine(),
   containerEngine:         new ContainerEngine(),
   federationEngine:        new FederationEngine(),
+  intelligenceGraph:       new UBOSIntelligenceGraph(),
 
   // ── Scene Graph ────────────────────────────────────────────────────────────
 
@@ -276,7 +278,7 @@ export const workspaceState = {
   },
 
   /** Check whether the operator with the given id can perform the action. */
-  authorize(userId: string, permission: import('../security-engine/securityEngine').Permission | string): boolean {
+  authorize(userId: string, permission: Permission | string): boolean {
     const user = this.multiUserEngine.getUsers().find((u) => u.id === userId);
     if (!user) return false;
     return this.securityEngine.authorize({ name: user.name, role: user.role }, permission);
@@ -319,9 +321,163 @@ export const workspaceState = {
       securityEngine:    this.securityEngine,
       multiUserEngine:   this.multiUserEngine,
       cloudEngine:       this.cloudEngine,
-      automationContext: this as unknown as import('../automation-engine/automationEngine').AutomationContext,
+      intelligenceGraph: this.intelligenceGraph,
+      automationContext: this as unknown as AutomationContext,
     });
     this.orchestrationEngine.start();
+  },
+
+  // ── Intelligence Graph (UIG) ───────────────────────────────────────────────
+
+  /** Push a raw engine signal into the live knowledge graph. */
+  ingestIntelligence(event: UigEvent) {
+    return this.intelligenceGraph.ingest(event);
+  },
+
+  /**
+   * Snapshot all active engines into UIG nodes/edges and run inference.
+   * Called from the orchestration tick and Intelligence Graph zone.
+   */
+  refreshIntelligenceGraph(): void {
+    const scene = this.sceneGraph.getCurrentScene();
+    const routes = this.routingEngine.getActiveRoutes();
+    const clips = this.replayEngine.getClips();
+    const audioHealth = this.audioEngine.monitor();
+    const outputHealth = this.outputEngine.health();
+    const health = this.healthEngine.getHealth();
+    const triggers = this.automationEngine.getTriggers();
+    const graphicsLayers = (scene?.layers ?? []).filter((l) => l.type === 'graphics');
+    const operator = this.multiUserEngine.getUsers()[0];
+
+    // UENL + OGE context — workspace/operator/role lineage for intelligence
+    const workspaceId = operator?.workspace || 'production';
+    this.intelligenceGraph.setContext({
+      workspace: workspaceId,
+      operator: operator?.name ?? null,
+      system: 'ubos-control-room',
+    });
+    this.intelligenceGraph.guidanceEngine.setContext(
+      operator?.role ?? 'director',
+      workspaceId,
+    );
+
+    const dropped = outputHealth.droppedFrames ?? 0;
+    const events: UigEvent[] = [
+      {
+        id: 'scene:current',
+        type: !scene ? 'scene.missing_source' : 'scene.active',
+        source: 'scene-graph',
+        payload: {
+          name: scene?.name ?? null,
+          missing: !scene,
+          program: true,
+          layerIds: (scene?.layers ?? []).map((l) => l.id),
+        },
+      },
+      {
+        id: 'output:program',
+        type: dropped > 0 ? 'output.frame_drop' : 'output.health_update',
+        source: 'output-engine',
+        payload: {
+          droppedFrames: dropped,
+          latency: outputHealth.latency ?? 0,
+        },
+      },
+      ...graphicsLayers.map((layer): UigEvent => ({
+        id: `graphics:${layer.id}`,
+        type: 'graphics.active',
+        source: 'scene-graph',
+        payload: {
+          name: layer.name ?? layer.id,
+          sceneId: scene?.id,
+          visible: true,
+        },
+      })),
+      ...audioHealth.slice(0, 8).map((ch): UigEvent => ({
+        id: `audio:${ch.id}`,
+        type: 'audio.level',
+        source: 'audio-engine',
+        payload: {
+          peak: ch.peak,
+          rms: ch.rms,
+          health: ch.health,
+        },
+      })),
+      ...[...clips].slice(-6).map((clip): UigEvent => ({
+        id: `replay:${clip.id}`,
+        type: 'replay.clip_created',
+        source: 'replay-engine',
+        payload: {
+          cameraId: clip.cameraId,
+          start: clip.start,
+          end: clip.end,
+        },
+      })),
+      ...[...routes].slice(0, 12).map((route): UigEvent => ({
+        id: `routing:${route.id}`,
+        type: route.active === false ? 'routing.destination_error' : 'routing.path_change',
+        source: 'routing-engine',
+        payload: {
+          source: route.source,
+          destination: route.destination,
+          active: route.active,
+          broken: route.active === false,
+        },
+      })),
+      ...triggers.slice(0, 8).map((trigger): UigEvent => ({
+        id: `automation:${trigger.id}`,
+        type: 'automation.trigger_fired',
+        source: 'automation-engine',
+        payload: {
+          name: trigger.name,
+          enabled: trigger.enabled,
+          runCount: trigger.runCount,
+        },
+      })),
+      ...Object.entries(health).map(([subsystem, status]): UigEvent => ({
+        id: `health:${subsystem}`,
+        type:
+          status === 'ok' ? 'system.healthy' :
+          status === 'unknown' ? 'system.unknown' :
+          'system.degraded',
+        source: 'health-engine',
+        payload: { subsystem, status },
+      })),
+      ...this.aiCrewEngine.getInsights().slice(-5).map((insight): UigEvent => ({
+        id: `ai:${insight.id}`,
+        type: 'ai.insight',
+        source: 'ai-crew',
+        payload: {
+          message: insight.message,
+          severity: insight.severity,
+          insight_type: insight.type,
+          suggestion: insight.suggestion,
+        },
+        confidence: insight.severity === 'critical' ? 0.95 : insight.severity === 'warning' ? 0.8 : 0.7,
+      })),
+      ...(operator
+        ? [{
+            id: `operator:${operator.id}`,
+            type: 'operator.presence' as const,
+            source: 'multi-user',
+            workspace: workspaceId,
+            operator: operator.name,
+            payload: {
+              name: operator.name,
+              role: operator.role,
+              workspace: workspaceId,
+            },
+          }]
+        : [{
+            id: 'operator:local',
+            type: 'operator.presence' as const,
+            source: 'multi-user',
+            workspace: workspaceId,
+            payload: { name: 'local', workspace: workspaceId },
+          }]),
+    ];
+
+    this.intelligenceGraph.ingestBatch(events);
   },
 
   stopOrchestration(): void {
@@ -426,7 +582,7 @@ export const workspaceState = {
     const scene = this.sceneGraph.getCurrentScene();
 
     // Video sources from current scene
-    const videoSources: Record<string, import('../output-engine/outputEngine').VideoSource> = {};
+    const videoSources: Record<string, VideoSource> = {};
     if (scene) {
       videoSources[scene.id] = { id: scene.id, name: scene.name, type: 'scene' };
     }

@@ -13,7 +13,6 @@ export function GraphicsPreview({ preview }: { preview: Preview }) {
 
   return (
     <div className="gc-preview relative h-full w-full overflow-hidden rounded-lg border border-[#1e2530] bg-black">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         src={preview.url}
         alt="Graphics Preview"
