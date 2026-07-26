@@ -1,8 +1,10 @@
 'use client';
 
 import type { ProductionState } from '@ubos/shared';
+import { ubosTypographyClasses } from '@ubos/ui';
 import { SceneRenderer } from './SceneRenderer';
 import { AiCrewOverlay } from './AiCrewOverlay';
+import type { TriadLaneId } from './triadIntelligence';
 
 type TriadScene = {
   id: string;
@@ -16,10 +18,14 @@ type TriadScene = {
 };
 
 type TriadCanvasProps = {
-  id: 'scene' | 'preview' | 'program';
+  id: TriadLaneId;
   scene: TriadScene | null | undefined;
   aspect?: string;
   state: ProductionState;
+  /** Step 100: this lane's live UIIL signal class, e.g. `ubos-highlight`/`ubos-warn` — empty when no signal applies. */
+  uiClassName?: string;
+  /** Step 100: the reason behind `uiClassName`, surfaced as a tooltip when a signal is active. */
+  uiReason?: string | null;
 };
 
 // UBDS color semantics (Step 92): Program = Program Red (irreversible/live),
@@ -31,22 +37,33 @@ const borderColor: Record<TriadCanvasProps['id'], string> = {
   program: 'border-t-2 border-ubos-program-border',
 };
 
-const labelColor: Record<TriadCanvasProps['id'], string> = {
-  scene:   'bg-ubos-carbon text-ubos-fg-muted',
-  preview: 'bg-ubos-preview-muted text-ubos-preview-text',
-  program: 'bg-ubos-program-muted text-ubos-program-text',
+// HUD Text (Step 93) is color-semantic aware by design — pair it with each
+// lane's role hue, the same pattern the design system README documents for
+// text rendered over unpredictable live video content.
+const labelBg: Record<TriadCanvasProps['id'], string> = {
+  scene:   'bg-ubos-carbon',
+  preview: 'bg-ubos-preview-muted',
+  program: 'bg-ubos-program-muted',
 };
 
-export function TriadCanvas({ id, scene, aspect, state }: TriadCanvasProps) {
+const labelText: Record<TriadCanvasProps['id'], string> = {
+  scene:   'text-ubos-fg-muted',
+  preview: 'text-ubos-preview-text',
+  program: 'text-ubos-program-text',
+};
+
+export function TriadCanvas({ id, scene, aspect, state, uiClassName, uiReason }: TriadCanvasProps) {
   const label = id.toUpperCase();
+  const laneClassName = `triad-canvas triad-${id} relative flex flex-1 flex-col overflow-hidden ${borderColor[id]} ${uiClassName ?? ''}`;
 
   if (!scene) {
     return (
       <div
-        className={`triad-canvas triad-${id} empty relative flex flex-1 flex-col overflow-hidden ${borderColor[id]}`}
+        className={`${laneClassName} empty`}
         style={{ aspectRatio: aspect ?? '16 / 9' }}
+        title={uiReason ?? undefined}
       >
-        <div className={`px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${labelColor[id]}`}>
+        <div className={`px-2 py-1 ${ubosTypographyClasses.hud} ${labelBg[id]} ${labelText[id]}`}>
           {label}
         </div>
         <div className="flex flex-1 items-center justify-center bg-ubos-carbon text-[10px] font-bold uppercase tracking-widest text-ubos-fg-disabled">
@@ -58,11 +75,12 @@ export function TriadCanvas({ id, scene, aspect, state }: TriadCanvasProps) {
 
   return (
     <div
-      className={`triad-canvas triad-${id} relative flex flex-1 flex-col overflow-hidden ${borderColor[id]}`}
+      className={laneClassName}
       style={{ aspectRatio: aspect ?? '16 / 9' }}
+      title={uiReason ?? undefined}
     >
-      {/* Canvas label */}
-      <div className={`shrink-0 px-2 py-1 text-[8px] font-bold uppercase tracking-widest ${labelColor[id]}`}>
+      {/* Canvas label — HUD Text (Step 93), the role hierarchy that survives on top of unpredictable video content */}
+      <div className={`shrink-0 px-2 py-1 ${ubosTypographyClasses.hud} ${labelBg[id]} ${labelText[id]}`}>
         {label} {scene.name ? `· ${scene.name}` : ''}
       </div>
 
