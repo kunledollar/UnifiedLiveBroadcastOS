@@ -179,6 +179,40 @@
   box-shadow: var(--ubos-depth-4, 0 8px 20px rgba(0, 0, 0, 0.5));
 }
 
+/*
+ * Autonomous Mode Banner (Step 109) — sits between the top zone row and
+ * the Timeline, full-width, so it never competes for space with
+ * Warning/Primary Insight/Guidance. Motion is applied inline via
+ * `style={{ animation }}` (Step 109's `autonomousMotionSystem`), not a
+ * CSS class, since which of the four autonomous motion tokens applies is
+ * a per-render decision, not a fixed style.
+ */
+.autonomous-mode-banner {
+  grid-column: 1 / span 3;
+  grid-row: 2;
+  align-self: start;
+  justify-self: center;
+  width: 100%;
+  max-width: 40rem;
+  margin-top: 2.5rem;
+  pointer-events: auto;
+  border-radius: 8px;
+  padding: var(--ubos-padding-standard, 12px);
+  background: var(--ubos-bg-midnight);
+  border: 1px solid var(--ubos-selection-border);
+}
+
+.autonomous-mode-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ubos-space-2, 8px);
+}
+
+.autonomous-mode-handoff {
+  margin-top: 4px;
+}
+
 @media (max-width: 900px) {
   .operator-hud {
     grid-template-columns: 1fr;

@@ -40,15 +40,26 @@
  * Step 104's existing `'automation'` entries (no new zone, no new kind —
  * see `toHudTimelineEntries` in `studioAutomation.ts`). Decisions merely
  * blocked by a routine gate are diagnostic detail, not HUD content.
+ *
+ * Step 109 — Autonomous Studio Mode UX. `AutonomousModeBanner` renders
+ * whenever Studio Automation is enabled (see `autonomousStudioMode.ts`
+ * for why it stays hidden by default), showing the active mode,
+ * currently-eligible actions, resolved conflicts, and operator handoff
+ * messaging. The outer HUD container also carries
+ * `data-ubos-autonomous-mode`/`data-ubos-autonomous-motion` so
+ * `WorkspaceShell`/`ControlRoomCanvas` can read the *same* computed
+ * result (see `AutonomousStudioModeController`'s per-tick memoization).
  */
 import { workspaceState } from '../workspace/workspaceState';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
 import { routeGlobalIntelligenceToHud } from './hudIntelligence';
 import { toHudTimelineEntries } from '../intelligence-graph/studioAutomation';
+import { autonomousStudioModeController } from './autonomousStudioMode';
 import { HUDPrimaryInsight } from './HUDPrimaryInsight';
 import { HUDGuidance } from './HUDGuidance';
 import { HUDWarnings } from './HUDWarnings';
 import { HUDTimeline } from './HUDTimeline';
+import { AutonomousModeBanner } from './AutonomousModeBanner';
 import './operator-hud.css';
 
 const HUD_TIMELINE_LIMIT = 8;
@@ -73,16 +84,21 @@ export function OperatorHUD() {
     .sort((a, b) => b.timestamp - a.timestamp || b.confidence - a.confidence)
     .slice(0, HUD_TIMELINE_LIMIT);
 
+  const autonomous = autonomousStudioModeController.compute(snapshot.studioAutomation);
+
   return (
     <div
       className="operator-hud"
       data-testid="operator-hud"
       data-ubos-studio-motion={snapshot.studioMotion.join(' ') || undefined}
       data-ubos-studio-severity={snapshot.studioSeverityBand}
+      data-ubos-autonomous-mode={autonomous.mode}
+      data-ubos-autonomous-motion={autonomous.motion.join(' ') || undefined}
     >
       <HUDWarnings intelligence={intelligence.warning} uiIntegration={uiIntegration} />
       <HUDPrimaryInsight intelligence={intelligence.primary} uiIntegration={uiIntegration} />
       <HUDGuidance intelligence={intelligence.guidance} uiIntegration={uiIntegration} />
+      <AutonomousModeBanner autonomous={autonomous} />
       <HUDTimeline intelligence={mergedTimeline} uiIntegration={uiIntegration} />
     </div>
   );

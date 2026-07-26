@@ -10,13 +10,28 @@
  * Step 90: zone wrappers receive UI intelligence classes from UIIL so
  * WIE signals (highlight/dim/warn/pulse/prepare/suppress/elevate) shape
  * the live Control Room without redesigning zone interiors.
+ *
+ * Step 109: while Studio Automation is active, Triad 2.0/Inspector 2.0/
+ * Program Output 2.0's zone wrappers carry a named
+ * `data-ubos-autonomous-workspace-mode` ("Autonomous Triad Mode"/
+ * "Autonomous Diagnostics Mode"/"Autonomous Output Mode") — data-only,
+ * per Steps 105/106's precedent, so this never redesigns the zones
+ * themselves.
  */
 import { useEffect } from 'react';
 import { useGeometry } from '../hooks/useGeometry';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
 import { ZoneRenderer } from './ZoneRenderer';
 import { workspaceState } from '../workspace/workspaceState';
+import { autonomousStudioModeController } from '../hud/autonomousStudioMode';
 import '../intelligence-graph/ui-intelligence.css';
+
+/** Named autonomous workspace modes for the three zones the Step 109 spec calls out by name. */
+const AUTONOMOUS_WORKSPACE_MODE_NAME: Readonly<Record<string, string>> = {
+  triad: 'Autonomous Triad Mode',
+  inspector: 'Autonomous Diagnostics Mode',
+  output: 'Autonomous Output Mode',
+};
 
 export function ControlRoomCanvas() {
   const zones = useGeometry();
@@ -31,6 +46,10 @@ export function ControlRoomCanvas() {
   }, []);
 
   const graph = workspaceState.intelligenceGraph;
+  // Reads the controller's cached result (`OperatorHUD` is the one call
+  // site that advances it each tick — see its module doc).
+  const autonomousMode = autonomousStudioModeController.getResult();
+  const autonomousActive = autonomousMode.mode !== 'disabled';
 
   return (
     <div
@@ -40,11 +59,14 @@ export function ControlRoomCanvas() {
     >
       {Object.values(zones).map((zone) => {
         const uiClass = graph.getZoneUiClassName(zone.id);
+        const autonomousWorkspaceMode =
+          autonomousActive ? AUTONOMOUS_WORKSPACE_MODE_NAME[zone.id] : undefined;
         return (
           <div
             key={zone.id}
             data-zone={zone.id}
             data-ui-action={graph.uiIntegration.actionForZone(zone.id) ?? undefined}
+            data-ubos-autonomous-workspace-mode={autonomousWorkspaceMode}
             className={uiClass || undefined}
             style={{
               position: 'absolute',

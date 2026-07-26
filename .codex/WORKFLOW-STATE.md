@@ -71,13 +71,14 @@ v5.12.0 — next platform phase pending authoritative task specification
 
 ## Latest Control Room Milestone
 
-- **Milestone title:** Studio Automation 1.0 (Step 107)
-- **Release name:** UBOS Studio Automation 1.0
+- **Milestone title:** Autonomous Studio Mode UX (Step 109)
+- **Release name:** UBOS Autonomous Studio Mode UX
 - **Status:** PASS (see `.codex/COMPLETION-REPORT.md`, 2026-07-26 entry)
-- **Prior milestones:** Studio Intelligence 1.0 (Step 106), branch `cursor/studio-intelligence-1-0-4284` (PR #412, not yet merged); WIE 2.0 (Step 105), branch `cursor/wie-2-0-4284` (PR #411, not yet merged); Operator HUD 2.0 (Step 104), branch `cursor/operator-hud-2-0-4284` (PR #410, not yet merged); Steps 91–103 merged at d44db76; Intelligence Graph Foundation (Steps 81–90) merge head d0953f6
-- **Branch note:** Steps 104 → 105 → 106 → 107 are a stacked branch chain (`cursor/operator-hud-2-0-4284` → `cursor/wie-2-0-4284` → `cursor/studio-intelligence-1-0-4284` → `cursor/studio-automation-1-0-4284`), each PR based on the previous. Merge in that exact order: #410, #411, #412, then the Step 107 PR.
-- **Safety note:** Studio Automation 1.0 (Step 107) is decision-only — it does not dispatch real broadcast commands, and its `automationEnabled` flag defaults to `false` with no operator-facing toggle yet. See the Step 107 completion report entry for the full investigation of why.
-- **Next Control Room step:** Step 108 — pending authoritative task specification
+- **Step 108 gap:** Step 108 was never assigned to this agent and does not exist in this repository. Step 109 continues directly from Step 107; it is built against Studio Automation **1.0** (Step 107), not the "Studio Automation 2.0" the Step 109 spec names, which has not been implemented here. See the Step 109 completion report entry for the full honesty note.
+- **Prior milestones:** Studio Automation 1.0 (Step 107), branch `cursor/studio-automation-1-0-4284` (PR #413, not yet merged); Studio Intelligence 1.0 (Step 106), branch `cursor/studio-intelligence-1-0-4284` (PR #412, not yet merged); WIE 2.0 (Step 105), branch `cursor/wie-2-0-4284` (PR #411, not yet merged); Operator HUD 2.0 (Step 104), branch `cursor/operator-hud-2-0-4284` (PR #410, not yet merged); Steps 91–103 merged at d44db76; Intelligence Graph Foundation (Steps 81–90) merge head d0953f6
+- **Branch note:** Steps 104 → 105 → 106 → 107 → 109 are a stacked branch chain (`cursor/operator-hud-2-0-4284` → `cursor/wie-2-0-4284` → `cursor/studio-intelligence-1-0-4284` → `cursor/studio-automation-1-0-4284` → `cursor/autonomous-studio-mode-ux-4284`), each PR based on the previous. Merge in that exact order: #410, #411, #412, #413, then the Step 109 PR.
+- **UBDS foundation:** `UBDS_FOUNDATION_STEP` is now 109 (was 103) — Step 109 added the Autonomous Studio Mode UX tokens to `packages/ui/design-system`.
+- **Next Control Room step:** Step 110 — pending authoritative task specification
 
 ---
 

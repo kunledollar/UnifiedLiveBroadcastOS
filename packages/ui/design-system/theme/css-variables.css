@@ -325,6 +325,61 @@
   }
 }
 
+/*
+ * Autonomous Studio Mode UX (Step 109) — special motion curves for when
+ * Studio Automation is active, distinct from the standard per-signal
+ * primitives above. Named `ubos-auto-*` (this codebase's keyframe
+ * convention) but exposed as `autoPulse`/`autoGlow`/`autoShake`/
+ * `autoFade` at the token layer (`tokens/autonomousMode.ts`), matching
+ * the Step 109 spec's own naming.
+ */
+
+/* autoPulse — predictive autonomous action: a breathing glow tinted
+ * Active Blue (autonomous blue accent), not the generic warning tint
+ * `ubos-ui-pulse` uses. */
+@keyframes ubos-auto-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(59, 130, 246, 0);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 16px var(--ubos-selection-elevated);
+    transform: scale(1.01);
+  }
+}
+
+/* autoGlow — active autonomous action: a one-shot rise tinted
+ * Automation Purple (predictive purple), distinct from `ubos-elevate`'s
+ * neutral rise. */
+@keyframes ubos-auto-glow {
+  from {
+    transform: translateY(2px) scale(0.99);
+    box-shadow: 0 0 0 rgba(168, 85, 247, 0);
+  }
+  to {
+    transform: translateY(0) scale(1);
+    box-shadow: 0 0 18px var(--ubos-automation-elevated);
+  }
+}
+
+/* autoShake — autonomous warning: the same physical shake as
+ * `ubos-shake`, kept as its own named keyframe so autonomous-mode CSS
+ * never has to reference the per-signal keyframe directly. */
+@keyframes ubos-auto-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-3px); }
+  40% { transform: translateX(3px); }
+  60% { transform: translateX(-2px); }
+  80% { transform: translateX(2px); }
+}
+
+/* autoFade — autonomous fallback: a quick, linear (mechanical, not
+ * eased) fade, signaling autonomy has stepped back rather than in. */
+@keyframes ubos-auto-fade {
+  from { opacity: 1; }
+  to { opacity: 0.55; }
+}
+
 /* Base broadcast workstation surface */
 .ubos-workstation {
   background-color: var(--ubos-bg-carbon);

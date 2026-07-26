@@ -1191,3 +1191,148 @@ PASS.
 
 (recorded at commit time — see branch `cursor/studio-automation-1-0-4284`)
 
+## 2026-07-26 — Autonomous Studio Mode UX (Step 109)
+
+### Objective
+
+Build Autonomous Studio Mode UX — how UBOS looks, behaves, and
+communicates while Studio Automation is active: workspace transitions
+(Triad/Inspector/Program Output shifting into named autonomous modes),
+HUD behavior, theme shifts, panel elevation, motion physics, and operator
+handoff. Note: Step 108 was never assigned to this agent and does not
+exist in this repository; this step continues directly from Step 107.
+
+### Naming gap, documented honestly
+
+The Step 109 spec lists "Studio Automation 2.0" as a power source. This
+repository has never implemented a Studio Automation 2.0 — the most
+recent automation engine actually present is Studio Automation 1.0 (Step
+107), which is decision-only. Rather than fabricate a fictitious 2.0 API,
+this step is built against Studio Automation 1.0's real
+`StudioAutomationResult`, and every "already built" capability the spec
+assumes (autonomous fallback/recovery/routing/transitions) is understood
+as Step 107's actual decision model (conflict resolution = "recovery",
+sync batching = "cross-workspace transitions"), not literal dispatched
+actions — Step 107 does not dispatch real commands (see its own
+completion report entry for the full investigation).
+
+### Implementation
+
+**UBDS foundation** (`packages/ui/design-system/tokens/autonomousMode.ts`,
+Step 109's addition to the design system, `UBDS_FOUNDATION_STEP` bumped
+103 → 109):
+
+- **Autonomous Studio Theme** — a *named composition* of existing UBDS
+  accents, not new pigments: autonomous blue = Active Blue (`selection`),
+  critical yellow = Warning Yellow (`warning`), predictive purple =
+  Automation Purple (`automation`, already exactly the right semantic),
+  deep blacks = existing carbon/midnight backgrounds, cinematic lighting
+  = the existing Radial Highlight Gradient (Step 95).
+- **Autonomous panel elevation** — `autonomousElevationMap`, exactly the
+  five categories/levels from the spec (transition/graphics/audio → 3,
+  routing/output → 4).
+- **Autonomous motion physics** — four new, distinctly-named
+  `ubos-auto-*` keyframes (`autoPulse`/`autoGlow`/`autoShake`/`autoFade`,
+  added to `theme/css-variables.css`) with the exact durations/curves the
+  spec's code sample gives, visually related to but distinct from the
+  Step 91/96 primitives — an operator can tell "this is because autonomy
+  is active" apart from a regular per-panel signal.
+- **Autonomous HUD mode defaults** — matches the spec's code sample
+  exactly.
+- 7 new tests in `ubds-foundation.test.ts` (package total 35 → 42),
+  including a golden-file check that every referenced `ubos-auto-*`
+  keyframe is actually defined in `css-variables.css`.
+
+**Application layer** (`apps/web/app/control-room/hud/autonomousStudioMode.ts`):
+
+- `resolveAutonomousMode()` — four data-grounded states derived straight
+  from `StudioAutomationResult`: `disabled` (not opted in), `recovering`
+  (a conflict just resolved), `active` (≥1 eligible decision),
+  `idle` (enabled, nothing eligible/conflicting). Deliberately no
+  "awaiting operator approval" state — Step 107 has no concept of a
+  decision that pauses for confirmation, so this module does not invent
+  one.
+- `autonomousMotionForMode()` / `autonomousElevationForAction()` — mirror
+  the UBDS tokens locally (same "small local duplication for
+  decoupling" convention as every other pure `intelligence-graph`/`hud`
+  module in this codebase) so this stays framework/package-free and
+  runnable under plain `node:test`; only the new `.tsx` component
+  (`AutonomousModeBanner.tsx`) imports `@ubos/ui` directly for real CSS
+  values.
+- `detectHandoff()` — the four handoff events named in the spec
+  (activated/handed back/entered recovery/exited recovery), with
+  recovery transitions checked ahead of the generic active/handed-back
+  pair so a transition through `recovering` is never misclassified.
+- `AutonomousStudioModeController` — stateful across ticks, memoized by
+  object identity (not timestamp, which can collide within the same
+  millisecond) so multiple components reading the same tick's automation
+  snapshot never double-count or miss a handoff depending on render
+  order.
+- `AutonomousModeBanner.tsx` — renders inside `OperatorHUD` (mode label,
+  active actions, resolved-conflict count, handoff message); renders
+  nothing while `disabled` (the default — no operator toggle exists yet).
+- `WorkspaceShell.tsx` gains `data-ubos-autonomous-mode`;
+  `ControlRoomCanvas.tsx`'s Triad/Inspector/Output zone wrappers gain a
+  named `data-ubos-autonomous-workspace-mode` ("Autonomous Triad Mode"/
+  "Autonomous Diagnostics Mode"/"Autonomous Output Mode") while active —
+  data-only, preserving the approved Control Room.
+
+### A real bug found and fixed along the way
+
+While wiring the first `.ts` file in this codebase to import `@ubos/ui`
+from a plain `node:test`-run file (every prior engine avoided this),
+discovered that `@ubos/ui`'s `package.json` `exports`/`main` point to
+`dist/index.js`, which does not exist — the actual build output is
+`dist/ui/src/index.js` (a pre-existing rootDir-inference artifact of
+`packages/ui/tsconfig.json`'s `include` spanning both `src/**` and
+`design-system/**`). This has never surfaced before because Next.js's own
+bundler resolves `@ubos/ui` via TypeScript path aliases directly against
+source, bypassing `package.json` entirely. Fixed by keeping
+`autonomousStudioMode.ts` `@ubos/ui`-free (per the module's own
+documented rationale) rather than patching the package's build
+configuration — a smaller, safer fix that also does not touch
+`packages/ui`'s public build contract.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `packages/ui/design-system/tokens/autonomousMode.ts` | New — Autonomous Studio Mode UX tokens |
+| `packages/ui/design-system/tokens/index.ts` | Export the new tokens |
+| `packages/ui/design-system/theme/css-variables.css` | 4 new `ubos-auto-*` keyframes |
+| `packages/ui/design-system/index.ts` | `UBDS_FOUNDATION_STEP` 103 → 109, doc comment |
+| `packages/ui/design-system/ubds-foundation.test.ts` | 7 new tests |
+| `apps/web/app/control-room/hud/autonomousStudioMode.ts` | New — application-layer decision module |
+| `apps/web/app/control-room/hud/autonomousStudioMode.test.ts` | New — 20 unit tests |
+| `apps/web/app/control-room/hud/AutonomousModeBanner.tsx` | New — HUD banner component |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | Mount the banner, autonomous-mode data attributes |
+| `apps/web/app/control-room/hud/operator-hud.css` | Banner layout |
+| `apps/web/app/control-room/workspaces/WorkspaceShell.tsx` | `data-ubos-autonomous-mode` attribute |
+| `apps/web/app/control-room/zones/ControlRoomCanvas.tsx` | Named autonomous workspace mode on Triad/Inspector/Output |
+
+### Test Results
+
+- `pnpm --filter @ubos/ui test` — PASS, 42/42 (7 new; package build via `tsc` clean).
+- `pnpm --filter @ubos/web test` — PASS, 298/298 (20 new; all 278 pre-existing tests unaffected).
+- `pnpm --filter @ubos/ui typecheck` / `lint`, `pnpm --filter @ubos/web typecheck` / `lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium, real orchestration tick loop (no
+mocks), across all 5 workspace routes — **zero console errors on every
+route**. Confirmed live: `data-ubos-autonomous-mode="disabled"` and
+`data-ubos-autonomous-motion="autoFade"` on the HUD, `data-ubos-autonomous-mode="disabled"`
+on the workspace shell, and the Autonomous Mode Banner correctly absent
+(0 elements) on every route — the safe-by-default behavior holds in the
+running app, matching Step 107's own precedent. Screenshot in
+`artifacts/autonomous-ux-step109/`.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/autonomous-studio-mode-ux-4284`)
+

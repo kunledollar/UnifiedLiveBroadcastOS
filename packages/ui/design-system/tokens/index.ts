@@ -95,3 +95,17 @@ export {
   type UbosThemeName,
   type UbosThemeIntelligenceAction,
 } from './themes.js';
+
+export {
+  AUTONOMOUS_UX_STEP,
+  autonomousStudioTheme,
+  autonomousElevationMap,
+  autonomousMotionTokens,
+  autonomousMotionSystem,
+  autonomousMotionMeaning,
+  autonomousHudModeDefaults,
+  type AutonomousStudioTheme,
+  type AutonomousActionCategory,
+  type AutonomousMotionToken,
+  type AutonomousHudModeConfig,
+} from './autonomousMode.js';
