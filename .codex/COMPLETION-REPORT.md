@@ -629,3 +629,62 @@ The local media restoration effect re-entered indefinitely because `patchCapture
 ### Browser Validation
 
 PENDING — no browser executable/automation runtime is available in this container, so manual verification of Control Room stability, scene switching, media import, screen capture, recording panel visibility, and repeated update absence remains required on a browser-capable host.
+
+## 2026-07-25 — Intelligence Graph Foundation (Steps 81–90)
+
+### Milestone
+
+- **Milestone title:** Intelligence Graph Foundation (Steps 81–90)
+- **Release name:** UBOS Intelligence Graph Phase 1
+- **Release label:** UIG-1
+- **Recommended git tag (not created):** `uig-1.0`
+- **Merge head:** `d0953f6` (includes Steps 81–90 + CI gate fix #395)
+
+### Scope completed
+
+| Step | Subsystem | Acronym |
+|---|---|---|
+| 81 | UBOS Intelligence Graph foundation | UIG |
+| 82 | UIG Event Normalization Layer | UENL |
+| 83 | UIG Inference Engine | UIE |
+| 84 | Confidence Scoring Engine | CSE |
+| 85 | Temporal Pattern Engine | TPE |
+| 86 | Predictive Engine | PE |
+| 87 | Insight Fusion Engine | IFE |
+| 88 | Operator Guidance Engine | OGE |
+| 89 | Workspace Intelligence Engine | WIE |
+| 90 | UI Intelligence Integration Layer | UIIL |
+
+### Pipeline
+
+```text
+Raw engine events
+  → UENL → CSE → TPE → materialize
+  → UIE + PE → CSE refine
+  → IFE → OGE → WIE → UIIL (live Control Room UI)
+```
+
+### Related PRs
+
+- #391 Steps 81–87 — merged
+- #392 Step 88 — merged
+- #393 Step 89 — merged
+- #394 Step 90 — merged
+- #395 CI gate fix (lint / typecheck / build) — merged
+
+### Validation
+
+- PASS: intelligence-graph unit tests (32/32)
+- PASS: `pnpm lint` (13/13)
+- PASS: `pnpm typecheck` (13/13)
+- PASS: `pnpm build` (13/13)
+- PASS: GitHub Actions CI on #395
+
+### Status
+
+CERTIFIED for Control Room Intelligence Graph Phase 1 (Steps 81–90).  
+Does not close platform v5.12.0 (enterprise GA hardening remains a separate phase).
+
+### Next eligible work
+
+Step 91 — UBOS Design System (UBDS) Foundation.

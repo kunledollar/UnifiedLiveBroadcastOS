@@ -89,4 +89,24 @@ v5.12 — Operator Experience, Deployment, and Product Hardening
 
 ---
 
+## Control Room Milestone Registry
+
+Named Control Room delivery milestones (distinct from full platform releases).
+
+| Milestone | Release Name | Label | Steps | Status | Merge Head | Recommended Tag |
+|---|---|---|---|---|---|---|
+| Intelligence Graph Foundation (Steps 81–90) | UBOS Intelligence Graph Phase 1 | UIG-1 | 81–90 | CERTIFIED | d0953f6 | `uig-1.0` (not created) |
+
+### Intelligence Graph Foundation (Steps 81–90)
+
+- **Milestone title:** Intelligence Graph Foundation (Steps 81–90)
+- **Release name:** UBOS Intelligence Graph Phase 1
+- **Release label:** UIG-1
+- **Shipped:** 2026-07-25
+- **Includes:** UIG → UENL → UIE → CSE → TPE → PE → IFE → OGE → WIE → UIIL
+- **PRs:** #391, #392, #393, #394, #395
+- **Note:** Tag publication deferred; create `uig-1.0` only with explicit authorization.
+
+---
+
 This file is the authoritative registry of official UBOS platform releases.

@@ -69,6 +69,17 @@ v5.12.0 — next platform phase pending authoritative task specification
 
 ---
 
+## Latest Control Room Milestone
+
+- **Milestone title:** Intelligence Graph Foundation (Steps 81–90)
+- **Release name:** UBOS Intelligence Graph Phase 1
+- **Release label:** UIG-1
+- **Status:** CERTIFIED
+- **Merge head:** d0953f6
+- **Next Control Room step:** Step 91 — UBOS Design System (UBDS) Foundation
+
+---
+
 ## Platform Progress
 
 | Platform | Status |
