@@ -44,7 +44,7 @@ test('UBDS: prepare renders at Level 2 depth with a subtle gradient (Step 94)', 
   const prepare = ruleBody('.ubos-prepare');
   assert.match(prepare, /var\(--ubos-depth-2\)/);
   assert.match(prepare, /z-index:\s*2/);
-  assert.match(prepare, /background-image:\s*var\(--ubos-elevation-gradient-2\)/);
+  assert.match(prepare, /background-image:\s*var\(--ubos-gradient-linear\)/);
 });
 
 test('UBDS: dim renders at Level 1 depth, suppress recedes to Level 0 with no shadow (Step 94)', () => {

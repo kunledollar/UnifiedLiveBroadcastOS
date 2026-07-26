@@ -33,6 +33,12 @@ export { ubosRadii, ubosRadiusClasses, type UbosRadiusToken } from './radii.js';
 export { ubosShadows, type UbosShadowToken } from './shadows.js';
 
 export {
+  ubosGradients,
+  ubosElevationGradientType,
+  type UbosGradientType,
+} from './gradients.js';
+
+export {
   ubosElevation,
   ubosElevationClasses,
   ubosElevationLevels,
