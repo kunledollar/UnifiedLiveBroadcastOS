@@ -182,7 +182,13 @@ const SEVERITY_BASE_WEIGHT: Record<FusedInsight['severity'], number> = {
   info: 0.15,
 };
 
-function fusedInsightSeverityScore(insight: FusedInsight): number {
+/**
+ * Exported so Studio Automation 1.0 (Step 107) can reuse the exact same
+ * per-insight severity scoring when gating automation eligibility by
+ * "how risky is this subsystem right now" — one canonical implementation,
+ * not a third duplicate.
+ */
+export function fusedInsightSeverityScore(insight: FusedInsight): number {
   return SEVERITY_BASE_WEIGHT[insight.severity] * insight.confidence;
 }
 

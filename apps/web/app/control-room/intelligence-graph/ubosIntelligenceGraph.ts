@@ -24,6 +24,13 @@
  *   predictions, studio health modeling, studio-wide guidance, studio-level
  *   themes, and cinematic studio-wide motion. Sits above WIE 2.0 the same
  *   way WIE 2.0 sits above WIE 1.0.
+ * Step 107: Studio Automation 1.0 — UBOS's first autonomous *action* layer.
+ *   Computes automation eligibility decisions (safety-gated by confidence,
+ *   severity, operator opt-in, and studio health), resolves conflicts
+ *   between simultaneously-eligible decisions, groups non-conflicting ones
+ *   into cross-workspace sync batches, and maintains an automation
+ *   timeline. Decision-only: does not dispatch real broadcast commands
+ *   (see `studioAutomation.ts` module doc for why).
  *
  * Later steps expand:
  *   - UBOS Design System / Triad 2.0 theming
@@ -75,6 +82,10 @@ import {
   StudioIntelligence,
   type StudioIntelligenceResult,
 } from './studioIntelligence.js';
+import {
+  StudioAutomation,
+  type StudioAutomationResult,
+} from './studioAutomation.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -210,6 +221,12 @@ export type UigSnapshot = {
   studioSeverityBand: StudioIntelligenceResult['studioSeverityBand'];
   studioTheme: StudioIntelligenceResult['studioTheme'];
   studioMotion: StudioIntelligenceResult['studioMotion'];
+  /** Studio Automation 1.0 (Step 107) — automation eligibility decisions. */
+  studioAutomation: StudioAutomationResult;
+  automationEnabled: boolean;
+  automationWouldExecuteCount: number;
+  automationConflictCount: number;
+  latestAutomationTimeline: StudioAutomationResult['timeline'];
 };
 
 export class UBOSIntelligenceGraph {
@@ -226,6 +243,7 @@ export class UBOSIntelligenceGraph {
   readonly uiIntegration = new UIIntegrationLayer();
   readonly workspaceIntelligence2 = new WorkspaceIntelligenceEngine2(this);
   readonly studioIntelligenceEngine = new StudioIntelligence(this);
+  readonly studioAutomationEngine = new StudioAutomation(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -241,6 +259,8 @@ export class UBOSIntelligenceGraph {
   globalIntelligence: WieGlobalResult = this.workspaceIntelligence2.getResult();
   /** Latest studio-level result from Studio Intelligence 1.0 (Step 106). */
   studioIntelligence: StudioIntelligenceResult = this.studioIntelligenceEngine.getResult();
+  /** Latest automation decisions from Studio Automation 1.0 (Step 107). */
+  studioAutomation: StudioAutomationResult = this.studioAutomationEngine.getResult();
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
@@ -556,6 +576,9 @@ export class UBOSIntelligenceGraph {
     // Studio Intelligence 1.0 — top-level studio-wide summary
     this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
 
+    // Studio Automation 1.0 — automation eligibility decisions
+    this.studioAutomation = this.studioAutomationEngine.compute();
+
     return refinedRun;
   }
 
@@ -633,6 +656,7 @@ export class UBOSIntelligenceGraph {
     this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
     this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
     this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
+    this.studioAutomation = this.studioAutomationEngine.compute();
     return this.operatorGuidance;
   }
 
@@ -650,6 +674,7 @@ export class UBOSIntelligenceGraph {
     this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
     this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
     this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
+    this.studioAutomation = this.studioAutomationEngine.compute();
     return this.workspaceSignals;
   }
 
@@ -679,6 +704,17 @@ export class UBOSIntelligenceGraph {
   computeStudioIntelligence(): StudioIntelligenceResult {
     this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
     return this.studioIntelligence;
+  }
+
+  /** Latest automation decisions from Studio Automation 1.0 (Step 107). */
+  getStudioAutomation(): StudioAutomationResult {
+    return this.studioAutomation;
+  }
+
+  /** Recompute Studio Automation 1.0's decisions on demand (Step 107). */
+  computeStudioAutomation(): StudioAutomationResult {
+    this.studioAutomation = this.studioAutomationEngine.compute();
+    return this.studioAutomation;
   }
 
   getWorkspaceSignals(): readonly WorkspaceUiSignal[] {
@@ -753,6 +789,11 @@ export class UBOSIntelligenceGraph {
       studioSeverityBand: this.studioIntelligence.studioSeverityBand,
       studioTheme: this.studioIntelligence.studioTheme,
       studioMotion: this.studioIntelligence.studioMotion,
+      studioAutomation: this.studioAutomation,
+      automationEnabled: this.studioAutomation.automationEnabled,
+      automationWouldExecuteCount: this.studioAutomation.winners.length,
+      automationConflictCount: this.studioAutomation.conflicts.length,
+      latestAutomationTimeline: this.studioAutomation.timeline,
     };
   }
 
@@ -778,6 +819,8 @@ export class UBOSIntelligenceGraph {
     this.globalIntelligence = this.workspaceIntelligence2.getResult();
     this.studioIntelligenceEngine.reset();
     this.studioIntelligence = this.studioIntelligenceEngine.getResult();
+    this.studioAutomationEngine.reset();
+    this.studioAutomation = this.studioAutomationEngine.getResult();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────
