@@ -68,6 +68,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   useUiIntelligence();
   const shellElevated = workspaceState.intelligenceGraph.uiIntegration.isWorkspaceElevated();
   const shellUiClass = workspaceState.intelligenceGraph.getPanelUiClassName('workspaceShell');
+  // Step 105 — WIE 2.0's global severity band / theme-switching decision,
+  // exposed as data attributes for observability and future theme-CSS
+  // hooks. Deliberately data-only: this step does not reskin the approved
+  // Control Room, it makes the *decision* available where the shell root
+  // already lives.
+  const globalIntelligence = workspaceState.intelligenceGraph.getGlobalIntelligence();
 
   const style = {
     '--ubos-program-weight': g.programWeight,
@@ -124,6 +130,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       style={style}
       data-workspace={workspace.id}
       data-ui-elevated={shellElevated ? 'true' : 'false'}
+      data-ubos-severity-band={globalIntelligence.globalSeverityBand}
+      data-ubos-theme-modifier={globalIntelligence.theme.modifier ?? 'none'}
     >
       {/* ── New top bar ──────────────────────────────────────────────── */}
       <UbosGlobalTopBar

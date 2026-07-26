@@ -22,15 +22,16 @@
  * `workspaceState.intelligenceGraph.getSnapshot()` plus
  * `graph.uiIntegration` for the highlight/warn/pulse/prepare/dim/suppress/
  * elevate treatment (`hudIntelligence.ts`) — no new data plumbing.
+ *
+ * Step 105 — HUD content is now routed through Workspace Intelligence
+ * Engine 2.0's global intelligence result (`routeGlobalIntelligenceToHud`)
+ * rather than the raw snapshot fields directly: Primary Insight reads
+ * WIE 2.0's conflict-resolved predictions, and Timeline reads WIE 2.0's
+ * studio-wide timeline (which also carries output-health-change entries).
  */
 import { workspaceState } from '../workspace/workspaceState';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
-import {
-  selectPrimaryInsights,
-  selectGuidanceActions,
-  selectWarnings,
-  selectTimelineEntries,
-} from './hudIntelligence';
+import { routeGlobalIntelligenceToHud } from './hudIntelligence';
 import { HUDPrimaryInsight } from './HUDPrimaryInsight';
 import { HUDGuidance } from './HUDGuidance';
 import { HUDWarnings } from './HUDWarnings';
@@ -45,21 +46,15 @@ export function OperatorHUD() {
   const snapshot = graph.getSnapshot();
   const uiIntegration = graph.uiIntegration;
 
-  const intelligence = {
-    primary: selectPrimaryInsights(snapshot.latestPredictions),
-    guidance: selectGuidanceActions(snapshot.latestOperatorGuidance),
-    warnings: selectWarnings(snapshot.latestFusedInsights),
-    timeline: selectTimelineEntries(
-      snapshot.latestPredictions,
-      snapshot.latestOperatorGuidance,
-      snapshot.latestFusedInsights,
-      graph.getAutomationTriggers(),
-    ),
-  };
+  const intelligence = routeGlobalIntelligenceToHud(
+    snapshot.globalIntelligence,
+    snapshot.latestOperatorGuidance,
+    snapshot.latestFusedInsights,
+  );
 
   return (
     <div className="operator-hud" data-testid="operator-hud">
-      <HUDWarnings intelligence={intelligence.warnings} uiIntegration={uiIntegration} />
+      <HUDWarnings intelligence={intelligence.warning} uiIntegration={uiIntegration} />
       <HUDPrimaryInsight intelligence={intelligence.primary} uiIntegration={uiIntegration} />
       <HUDGuidance intelligence={intelligence.guidance} uiIntegration={uiIntegration} />
       <HUDTimeline intelligence={intelligence.timeline} uiIntegration={uiIntegration} />

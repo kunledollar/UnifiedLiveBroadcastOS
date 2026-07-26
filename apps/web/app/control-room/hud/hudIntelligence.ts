@@ -197,7 +197,7 @@ export function selectWarnings(
     .slice(0, limit);
 }
 
-export type HudTimelineEntryKind = 'prediction' | 'guidance' | 'insight' | 'automation';
+export type HudTimelineEntryKind = 'prediction' | 'guidance' | 'insight' | 'automation' | 'output_health';
 
 export type HudTimelineEntry = {
   id: string;
@@ -254,4 +254,64 @@ export function selectTimelineEntries(
   return entries
     .sort((a, b) => b.timestamp - a.timestamp || b.confidence - a.confidence)
     .slice(0, limit);
+}
+
+// ── WIE 2.0 routing (Step 105) ──────────────────────────────────────────────
+
+export type HudRouting = {
+  primary: Prediction[];
+  guidance: GuidanceAction[];
+  warning: FusedInsight[];
+  timeline: HudTimelineEntry[];
+};
+
+/**
+ * Minimal surface this function needs from WIE 2.0's `WieGlobalResult`
+ * (`../intelligence-graph/workspaceIntelligenceEngine2.ts`) — a type-only
+ * dependency, not a runtime import, so HUD 2.0 (application layer) reads
+ * from WIE 2.0 (intelligence-graph/engine layer) the same direction it
+ * already reads from every other Step 86-90 engine, never the reverse.
+ */
+export type GlobalIntelligenceForHud = {
+  resolvedPredictions: readonly Prediction[];
+  timeline: ReadonlyArray<{
+    id: string;
+    kind: HudTimelineEntryKind;
+    message: string;
+    confidence: number;
+    timestamp: number;
+  }>;
+};
+
+/**
+ * "HUD 2.0 intelligence routing" (Step 105) — WIE 2.0 decides what appears
+ * in each HUD zone: Primary Insight now reads WIE 2.0's *conflict-resolved*
+ * predictions instead of the raw Predictive Engine feed (so a predicted
+ * graphics activation that WIE 2.0 resolved as superseded by a predicted
+ * scene transition no longer double-surfaces), and Timeline reads WIE 2.0's
+ * studio-wide timeline (which additionally carries "output health change"
+ * entries Step 104's own `selectTimelineEntries` never sourced). Guidance
+ * and Warning are unchanged from Step 104 — WIE 2.0 does not resolve
+ * conflicts or add sources for either of those today.
+ */
+export function routeGlobalIntelligenceToHud(
+  globalIntelligence: GlobalIntelligenceForHud,
+  guidance: readonly GuidanceAction[],
+  fusedInsights: readonly FusedInsight[],
+  limits: { primary?: number; guidance?: number; warning?: number; timeline?: number } = {},
+): HudRouting {
+  return {
+    primary: selectPrimaryInsights(globalIntelligence.resolvedPredictions, limits.primary),
+    guidance: selectGuidanceActions(guidance, limits.guidance),
+    warning: selectWarnings(fusedInsights, limits.warning),
+    timeline: globalIntelligence.timeline
+      .map((entry) => ({
+        id: entry.id,
+        kind: entry.kind,
+        message: entry.message,
+        confidence: entry.confidence,
+        timestamp: entry.timestamp,
+      }))
+      .slice(0, limits.timeline ?? 8),
+  };
 }

@@ -71,11 +71,12 @@ v5.12.0 — next platform phase pending authoritative task specification
 
 ## Latest Control Room Milestone
 
-- **Milestone title:** Operator HUD 2.0 (Step 104)
-- **Release name:** UBOS Operator HUD 2.0
+- **Milestone title:** Workspace Intelligence Engine 2.0 (Step 105)
+- **Release name:** UBOS WIE 2.0
 - **Status:** PASS (see `.codex/COMPLETION-REPORT.md`, 2026-07-26 entry)
-- **Prior milestone:** Intelligence Graph Foundation (Steps 81–90), merge head d0953f6; Steps 91–103 (UBDS Foundation, color/typography/elevation/depth/motion/spacing/grid, Triad/Inspector/Program Output 2.0, Workspace Intelligence Themes) merged at d44db76
-- **Next Control Room step:** Step 105 — pending authoritative task specification
+- **Prior milestone:** Operator HUD 2.0 (Step 104), branch `cursor/operator-hud-2-0-4284` (PR #410, not yet merged to `main`); Steps 91–103 merged at d44db76; Intelligence Graph Foundation (Steps 81–90) merge head d0953f6
+- **Branch note:** Step 105 (branch `cursor/wie-2-0-4284`) was built on top of the unmerged Step 104 branch, since "HUD 2.0 intelligence routing" is one of WIE 2.0's explicit responsibilities. Merge Step 104 before Step 105, in that order.
+- **Next Control Room step:** Step 106 — pending authoritative task specification
 
 ---
 
