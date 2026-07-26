@@ -49,17 +49,29 @@
  * `data-ubos-autonomous-mode`/`data-ubos-autonomous-motion` so
  * `WorkspaceShell`/`ControlRoomCanvas` can read the *same* computed
  * result (see `AutonomousStudioModeController`'s per-tick memoization).
+ *
+ * Step 110 — Autonomous Studio Mode Safety UX. `AutonomousSafetyOverlay`
+ * (safety overlay + stabilization indicators), `AutonomousConflictWarning`
+ * (conflict warnings), and `AutonomousOverridePrompt` (override prompts)
+ * all read `autonomousSafetyUXController`'s single computed result for
+ * this tick — see `autonomousSafetyUX.ts` for how each is derived
+ * honestly from Step 107/109's real data. `AutonomousModeBanner` also
+ * now receives `safety.fallback` for the fallback-reason message.
  */
 import { workspaceState } from '../workspace/workspaceState';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
 import { routeGlobalIntelligenceToHud } from './hudIntelligence';
 import { toHudTimelineEntries } from '../intelligence-graph/studioAutomation';
 import { autonomousStudioModeController } from './autonomousStudioMode';
+import { autonomousSafetyUXController } from './autonomousSafetyUX';
 import { HUDPrimaryInsight } from './HUDPrimaryInsight';
 import { HUDGuidance } from './HUDGuidance';
 import { HUDWarnings } from './HUDWarnings';
 import { HUDTimeline } from './HUDTimeline';
 import { AutonomousModeBanner } from './AutonomousModeBanner';
+import { AutonomousSafetyOverlay } from './AutonomousSafetyOverlay';
+import { AutonomousConflictWarning } from './AutonomousConflictWarning';
+import { AutonomousOverridePrompt } from './AutonomousOverridePrompt';
 import './operator-hud.css';
 
 const HUD_TIMELINE_LIMIT = 8;
@@ -85,6 +97,11 @@ export function OperatorHUD() {
     .slice(0, HUD_TIMELINE_LIMIT);
 
   const autonomous = autonomousStudioModeController.compute(snapshot.studioAutomation);
+  const safety = autonomousSafetyUXController.compute(
+    snapshot.studioAutomation,
+    autonomous,
+    snapshot.studioIntelligence.studioHealth,
+  );
 
   return (
     <div
@@ -95,10 +112,13 @@ export function OperatorHUD() {
       data-ubos-autonomous-mode={autonomous.mode}
       data-ubos-autonomous-motion={autonomous.motion.join(' ') || undefined}
     >
+      <AutonomousSafetyOverlay safety={safety} />
       <HUDWarnings intelligence={intelligence.warning} uiIntegration={uiIntegration} />
       <HUDPrimaryInsight intelligence={intelligence.primary} uiIntegration={uiIntegration} />
       <HUDGuidance intelligence={intelligence.guidance} uiIntegration={uiIntegration} />
-      <AutonomousModeBanner autonomous={autonomous} />
+      <AutonomousConflictWarning conflicts={safety.conflictWarnings} />
+      <AutonomousOverridePrompt prompts={safety.overridePrompts} />
+      <AutonomousModeBanner autonomous={autonomous} fallback={safety.fallback} />
       <HUDTimeline intelligence={mergedTimeline} uiIntegration={uiIntegration} />
     </div>
   );

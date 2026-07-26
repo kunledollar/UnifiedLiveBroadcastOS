@@ -213,6 +213,110 @@
   margin-top: 4px;
 }
 
+/* Step 110 — Autonomous Fallback Visuals: the banner fades toward the
+ * fallback gradient rather than the standing selection-blue border while
+ * reporting a fallback tick. */
+.autonomous-mode-banner-fallback {
+  border-color: var(--ubos-warning-border);
+  background-image: var(--ubos-gradient-linear);
+}
+
+.autonomous-mode-fallback-reason {
+  margin-top: 4px;
+  color: var(--ubos-warning-text);
+}
+
+/*
+ * Autonomous Safety Overlay (Step 110, component #1) — a full-bleed
+ * vignette + stabilizer chip row sitting *behind* the HUD zone cards
+ * (they render later in DOM order and are not `position: absolute`, so
+ * normal stacking already puts them above this). Communicates "autonomy
+ * is active, the system is monitoring safety" ambiently, without
+ * competing with any zone's own content.
+ */
+.autonomous-safety-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 4px;
+}
+
+.autonomous-safety-overlay[data-ubos-vignette="subtle"] {
+  background: radial-gradient(circle at 50% 0%, var(--ubos-selection-dimmed) 0%, transparent 55%),
+    radial-gradient(circle at 50% 100%, rgba(0, 0, 0, 0.35) 0%, transparent 60%);
+}
+
+.autonomous-safety-overlay[data-ubos-vignette="strong"] {
+  background: radial-gradient(circle at 50% 0%, var(--ubos-warning-dimmed) 0%, transparent 55%),
+    radial-gradient(circle at 50% 100%, rgba(0, 0, 0, 0.55) 0%, transparent 65%);
+}
+
+.autonomous-stabilizer-row {
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.autonomous-stabilizer-chip {
+  display: flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--ubos-bg-midnight);
+}
+
+/*
+ * Autonomous Conflict Warning Layer (Step 110, component #2) — a yellow
+ * warning bar, distinct from the HUD Warning zone (which surfaces
+ * realized fused-insight warnings, Step 104), specifically for
+ * conflicts Studio Automation's own conflict resolution produced.
+ */
+.autonomous-conflict-warning {
+  grid-column: 1 / span 3;
+  grid-row: 1;
+  justify-self: center;
+  align-self: end;
+  width: 100%;
+  max-width: 40rem;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  pointer-events: auto;
+}
+
+.autonomous-conflict-warning-item {
+  border-radius: 8px;
+  padding: var(--ubos-padding-tight, 8px);
+  background: var(--ubos-warning-dimmed);
+  border: 2px solid var(--ubos-warning-border);
+}
+
+/*
+ * Autonomous Override Prompts (Step 110, component #4) — sits near
+ * Guidance, top-right, since it is the same "what should the operator
+ * do" register as the Guidance zone, just for automation-blocked
+ * decisions rather than OGE guidance.
+ */
+.autonomous-override-prompt {
+  grid-column: 3;
+  grid-row: 1;
+  justify-self: end;
+  align-self: end;
+  margin-top: 8.5rem;
+  width: 100%;
+  max-width: 20rem;
+  border-radius: 8px;
+  padding: var(--ubos-padding-standard, 12px);
+  background: var(--ubos-bg-graphite);
+  border: 1px solid var(--ubos-warning-border);
+  pointer-events: auto;
+}
+
 @media (max-width: 900px) {
   .operator-hud {
     grid-template-columns: 1fr;
