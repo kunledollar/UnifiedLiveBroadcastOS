@@ -19,6 +19,61 @@
   overflow: hidden;
 }
 
+/* Main rendering surface: every region participates in layout. The previous
+ * full-canvas HUD was absolute and obscured unrelated controls at common
+ * browser zoom levels. This column gives the canvas and intelligence dock
+ * explicit, non-overlapping ownership boundaries. */
+.ubos-workspace-main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  overflow: hidden;
+  background: #060a0f;
+}
+
+.ubos-workspace-canvas-viewport {
+  position: relative;
+  min-width: 0;
+  min-height: 320px;
+  flex: 1;
+  overflow: hidden;
+  border: 1px solid var(--ubos-border-subtle);
+  border-radius: 8px;
+  background: var(--ubos-bg-carbon);
+}
+
+.ubos-intelligence-dock {
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--ubos-border-subtle);
+  border-radius: 8px;
+  background: #0a0f16;
+}
+
+.ubos-intelligence-dock-toggle {
+  display: flex;
+  width: 100%;
+  height: 32px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 10px;
+  border: 0;
+  border-bottom: 1px solid var(--ubos-border-subtle);
+  background: #101721;
+  color: var(--ubos-fg-secondary);
+  text-align: left;
+  cursor: pointer;
+}
+.ubos-intelligence-dock.is-collapsed .ubos-intelligence-dock-toggle { border-bottom: 0; }
+.ubos-intelligence-dock-toggle span { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; }
+.ubos-intelligence-dock-toggle span i { display: inline-block; width: 6px; height: 6px; margin-right: 7px; border-radius: 50%; background: #7c6af7; box-shadow: 0 0 8px #7c6af780; }
+.ubos-intelligence-dock-toggle small { color: var(--ubos-fg-muted); font-size: 10px; }
+.ubos-intelligence-dock-toggle b { margin-left: auto; color: var(--ubos-fg-muted); }
+
 /* Content column: grid with 3 rows — monitors / main / workbench */
 .ubos-workspace-content-area {
   display: grid;
@@ -167,6 +222,9 @@
 
 /* ── Responsive ─────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
+  .ubos-workspace-main { padding: 4px; }
+  .ubos-workspace-canvas-viewport { min-height: 260px; }
+  .ubos-intelligence-dock-toggle small { display: none; }
   .is-horizontal-split .ubos-monitor-host {
     grid-template-columns: 1fr;
     grid-template-rows:

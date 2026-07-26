@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import { workspaceById, workspaceCatalog, type WorkspaceId } from './workspace-catalog';
@@ -65,6 +65,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const workspace = workspaceById[workspaceFromPath(pathname)];
   const g = workspace.geometry;
   const canvasRef = useRef<HTMLDivElement>(null);
+  const [intelligenceOpen, setIntelligenceOpen] = useState(true);
   const { state: autonomy } = useAutonomous();
   // Step 90 — elevate active workspace shell from UIIL
   useUiIntelligence();
@@ -153,26 +154,40 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           onAddWorkspace={() => router.push('/control-room/director')}
         />
 
-        {/* Geometry-driven canvas — fills all remaining space */}
-        <div
-          ref={canvasRef}
-          className="relative min-h-0 min-w-0 flex-1 overflow-hidden"
-        >
-          <ControlRoomCanvas />
+        {/* The workspace canvas and intelligence surfaces are separate layout
+            regions. Keeping both in normal flow guarantees that guidance can
+            never cover Program, Preview, an inspector, or an operator control. */}
+        <main className="ubos-workspace-main">
+          <div
+            ref={canvasRef}
+            className="ubos-workspace-canvas-viewport"
+          >
+            <ControlRoomCanvas />
 
-          {/* Operator HUD 2.0 (Step 104) — global intelligence overlay,
-              above the geometry canvas, present across every workspace
-              (Director, Graphics, Audio, Replay, Streaming) and every
-              zone within it (Triad, Inspector, Program Output). */}
-          <OperatorHUD />
-
-          {/* Workspace-specific content sits behind the geometry zones
-              so existing panels (inspector, workbench, etc.) remain
-              accessible until geometry zones fully supersede them.    */}
-          <div className="ubos-workspace-content-area is-horizontal-split pointer-events-none absolute inset-0 opacity-0">
-            {children}
+            {/* Workspace-specific content remains available to the geometry
+                migration without creating a second interactive surface. */}
+            <div className="ubos-workspace-content-area is-horizontal-split pointer-events-none absolute inset-0 opacity-0">
+              {children}
+            </div>
           </div>
-        </div>
+
+          <section
+            className={`ubos-intelligence-dock ${intelligenceOpen ? 'is-open' : 'is-collapsed'}`}
+            aria-label="Production intelligence"
+          >
+            <button
+              type="button"
+              className="ubos-intelligence-dock-toggle"
+              aria-expanded={intelligenceOpen}
+              onClick={() => setIntelligenceOpen((open) => !open)}
+            >
+              <span><i aria-hidden="true" /> Production intelligence</span>
+              <small>{intelligenceOpen ? 'Collapse panel' : 'Show warnings, insight, guidance, and timeline'}</small>
+              <b aria-hidden="true">{intelligenceOpen ? '⌄' : '⌃'}</b>
+            </button>
+            {intelligenceOpen && <OperatorHUD />}
+          </section>
+        </main>
       </div>
     </div>
   );

@@ -24,23 +24,22 @@
  */
 
 .operator-hud {
-  position: absolute;
-  inset: 0;
-  z-index: 5;
+  position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
-  grid-template-rows: auto 1fr auto;
-  padding: var(--ubos-padding-standard, 12px);
-  gap: var(--ubos-space-2, 8px);
-  pointer-events: none;
+  grid-template-columns: 1.25fr .9fr 1.35fr;
+  grid-template-rows: minmax(82px, auto) minmax(48px, auto);
+  gap: 6px;
+  max-height: 190px;
+  padding: 6px;
+  overflow: auto;
 }
 
 .hud-zone {
-  pointer-events: auto;
-  max-width: 24rem;
-  min-width: 12rem;
-  border-radius: 8px;
-  padding: var(--ubos-padding-standard, 12px);
+  max-width: none;
+  min-width: 0;
+  overflow: hidden;
+  border-radius: 6px;
+  padding: 8px;
   background: var(--ubos-bg-graphite);
   border: 1px solid var(--ubos-border-subtle);
   box-shadow: var(--ubos-depth-3);
@@ -71,11 +70,11 @@
 
 .hud-zone-timeline {
   grid-column: 1 / span 3;
-  grid-row: 3;
+  grid-row: 2;
   justify-self: center;
   align-self: end;
   width: 100%;
-  max-width: 56rem;
+  max-width: none;
 }
 
 .hud-zone-header {
@@ -148,17 +147,19 @@
 
 @media (max-width: 900px) {
   .operator-hud {
-    grid-template-columns: 1fr;
-    grid-template-rows: auto auto auto auto;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto;
+    max-height: 180px;
   }
   .hud-zone-warning,
-  .hud-zone-primary-insight,
-  .hud-zone-guidance {
-    grid-column: 1;
+  .hud-zone-primary-insight {
+    grid-column: auto;
     justify-self: stretch;
     max-width: none;
   }
+  .hud-zone-guidance { display: none; }
   .hud-zone-timeline {
-    grid-column: 1;
+    grid-column: 1 / span 2;
+    grid-row: 2;
   }
 }
