@@ -11,6 +11,9 @@ import {
   ubosGradients,
   ubosIntelligenceElevationMap,
   ubosMotionSystem,
+  ubosMotionCurves,
+  ubosIntelligenceMotionMap,
+  ubosEasing,
   ubosRhythm,
   ubosShadows,
   ubosTypographyClasses,
@@ -64,13 +67,52 @@ test('UBDS: elevation increases in visual weight from level 0 to level 4', () =>
   assert.ok(ubosElevation[4].shadow.length > ubosElevation[1].shadow.length);
 });
 
-test('UBDS: motion system defines the five canonical primitives', () => {
-  const primitives = ['pulse', 'glow', 'slide', 'fade', 'shake'] as const;
+test('UBDS: motion system defines the six canonical primitives (Step 96 adds elevate)', () => {
+  const primitives = ['pulse', 'glow', 'slide', 'fade', 'shake', 'elevate'] as const;
   for (const primitive of primitives) {
     assert.ok(
       typeof ubosMotionSystem[primitive] === 'string' && ubosMotionSystem[primitive].length > 0,
       `motion primitive missing: ${primitive}`,
     );
+  }
+});
+
+test('UBDS: motion timing curves are named by the state they serve, not just their shape (Step 96)', () => {
+  assert.deepEqual(Object.keys(ubosMotionCurves).sort(), [
+    'fade',
+    'highlight',
+    'pulse',
+    'warning',
+    'workspaceTransition',
+  ]);
+  // Fast-in / slow-out for highlights = ease-out.
+  assert.equal(ubosMotionCurves.highlight, ubosEasing.out);
+  // Slow-in / fast-out for warnings = ease-in.
+  assert.equal(ubosMotionCurves.warning, ubosEasing.in);
+  // Linear for fades.
+  assert.equal(ubosMotionCurves.fade, 'linear');
+  // Elastic overshoot for pulses.
+  assert.equal(ubosMotionCurves.pulse, ubosEasing.spring);
+  assert.match(ubosEasing.spring, /cubic-bezier/);
+  // Ease-in for workspace transitions.
+  assert.equal(ubosMotionCurves.workspaceTransition, ubosEasing.in);
+});
+
+test('UBDS: motion + intelligence integration maps all seven WIE signals to their spec-defined primitive(s) (Step 96)', () => {
+  assert.deepEqual(ubosIntelligenceMotionMap, {
+    highlight: ['glow', 'elevate'],
+    warn: ['shake'],
+    pulse: ['pulse'],
+    prepare: ['glow'],
+    dim: ['fade'],
+    suppress: ['fade'],
+    elevate: ['elevate'],
+  });
+  // Every referenced primitive must actually exist in the motion system.
+  for (const primitives of Object.values(ubosIntelligenceMotionMap)) {
+    for (const primitive of primitives) {
+      assert.ok(primitive in ubosMotionSystem, `unknown motion primitive: ${primitive}`);
+    }
   }
 });
 
@@ -180,6 +222,6 @@ test('UBDS: elevation + intelligence integration maps all seven WIE signals to t
 });
 
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 95);
+  assert.equal(UBDS_FOUNDATION_STEP, 96);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });

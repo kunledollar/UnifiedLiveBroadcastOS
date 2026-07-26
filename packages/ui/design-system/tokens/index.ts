@@ -54,7 +54,10 @@ export {
   ubosTransition,
   ubosAnimations,
   ubosMotionSystem,
+  ubosMotionCurves,
+  ubosIntelligenceMotionMap,
   type UbosDurationToken,
   type UbosAnimationToken,
   type UbosMotionPrimitive,
+  type UbosMotionCurve,
 } from './motion.js';

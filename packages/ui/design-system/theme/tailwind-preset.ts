@@ -180,6 +180,8 @@ const ubosPreset = {
         'ubos-in': ubosEasing.in,
         'ubos-out': ubosEasing.out,
         'ubos-in-out': ubosEasing.inOut,
+        // UBDS motion timing curves (Step 96)
+        'ubos-spring': ubosEasing.spring,
       },
       animation: {
         'ubos-broadcast-scan': 'ubos-broadcast-scan 4s ease-in-out infinite',
@@ -193,6 +195,8 @@ const ubosPreset = {
         'ubos-chip-pop': 'ubos-chip-pop 220ms cubic-bezier(0.34,1.56,0.64,1) forwards',
         // UBDS motion system (Step 91)
         'ubos-shake': 'ubos-shake 400ms ease-in-out',
+        // UBDS motion system, elevate primitive (Step 96)
+        'ubos-elevate-in': 'ubos-elevate 300ms cubic-bezier(0.4,0,0.2,1) forwards',
       },
       keyframes: {
         'ubos-broadcast-scan': {
@@ -242,6 +246,11 @@ const ubosPreset = {
           '40%': { transform: 'translateX(3px)' },
           '60%': { transform: 'translateX(-2px)' },
           '80%': { transform: 'translateX(2px)' },
+        },
+        // UBDS motion system, elevate primitive (Step 96)
+        'ubos-elevate': {
+          from: { transform: 'translateY(3px) scale(0.985)' },
+          to: { transform: 'translateY(0) scale(1)' },
         },
       },
     },
