@@ -11,6 +11,7 @@ import { ControlRoomCanvas } from '../zones/ControlRoomCanvas';
 import { OperatorHUD } from '../hud/OperatorHUD';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
 import { workspaceState } from '../workspace/workspaceState';
+import { useAutonomous } from '../../../autonomous/AutonomousProvider';
 import '../intelligence-graph/ui-intelligence.css';
 import './workspace-shell.css';
 
@@ -64,6 +65,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const workspace = workspaceById[workspaceFromPath(pathname)];
   const g = workspace.geometry;
   const canvasRef = useRef<HTMLDivElement>(null);
+  const { state: autonomy } = useAutonomous();
   // Step 90 — elevate active workspace shell from UIIL
   useUiIntelligence();
   const shellElevated = workspaceState.intelligenceGraph.uiIntegration.isWorkspaceElevated();
@@ -88,6 +90,14 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     workspaceManager.setWorkspace(activePresetId);
   }, [activePresetId]);
+
+  // Keep the geometry/runtime manager aligned with the global AI Crew controls.
+  useEffect(() => {
+    workspaceManager.setAiCrewActive(autonomy.autonomyLevel > 0);
+    workspaceManager.setAiAlertLevel(
+      autonomy.severity >= 0.7 ? 'high' : autonomy.autonomyLevel > 0 ? 'normal' : 'idle',
+    );
+  }, [autonomy.autonomyLevel, autonomy.severity]);
 
   // Sync WorkspaceManager viewport whenever the content area resizes
   useEffect(() => {
