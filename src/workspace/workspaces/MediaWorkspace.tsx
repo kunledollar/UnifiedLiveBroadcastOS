@@ -1,20 +1,23 @@
-import type { AutonomousState } from "../../autonomous/AutonomousProvider";
-
-type WorkspaceProps = { autonomy: AutonomousState };
-
-export function MediaWorkspace({ autonomy }: WorkspaceProps) {
+export function MediaWorkspace({ autonomy }: { autonomy: any }) {
   return (
-    <section className="workspace Media-workspace" aria-labelledby="Media-title">
-      <header>
-        <p>Control Room</p>
-        <h1 id="Media-title">Media Workspace</h1>
-      </header>
-      <p>Ingest, organize, and prepare media assets.</p>
-      <dl className="workspace-status">
-        <div><dt>Autonomy level</dt><dd>{autonomy.autonomyLevel}</dd></div>
-        <div><dt>Confidence</dt><dd>{Math.round(autonomy.confidence * 100)}%</dd></div>
-        <div><dt>Output</dt><dd>{autonomy.system.outputHealth}</dd></div>
-      </dl>
-    </section>
+    <div className="workspace workspace--media">
+      <div className="workspace__row">
+        <div className="panel panel--media">
+          <h2>MEDIA</h2>
+          {/* Media library, ingest, search, organization, and asset preparation */}
+        </div>
+        <div className="panel panel--production-intel">
+          <h2>PRODUCTION INTELLIGENCE</h2>
+          {/* Asset health, missing media, ingest warnings, and readiness guidance */}
+        </div>
+      </div>
+
+      <div className="workspace__row workspace__row--timeline">
+        <div className="panel panel--timeline">
+          <h2>INTELLIGENCE TIMELINE</h2>
+          {/* Media ingest events, asset changes, and cue history */}
+        </div>
+      </div>
+    </div>
   );
 }

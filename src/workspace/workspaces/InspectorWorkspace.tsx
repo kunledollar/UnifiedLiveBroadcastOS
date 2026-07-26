@@ -1,20 +1,23 @@
-import type { AutonomousState } from "../../autonomous/AutonomousProvider";
-
-type WorkspaceProps = { autonomy: AutonomousState };
-
-export function InspectorWorkspace({ autonomy }: WorkspaceProps) {
+export function InspectorWorkspace({ autonomy }: { autonomy: any }) {
   return (
-    <section className="workspace Inspector-workspace" aria-labelledby="Inspector-title">
-      <header>
-        <p>Control Room</p>
-        <h1 id="Inspector-title">Inspector Workspace</h1>
-      </header>
-      <p>Inspect the selected resource and its runtime metadata.</p>
-      <dl className="workspace-status">
-        <div><dt>Autonomy level</dt><dd>{autonomy.autonomyLevel}</dd></div>
-        <div><dt>Confidence</dt><dd>{Math.round(autonomy.confidence * 100)}%</dd></div>
-        <div><dt>Output</dt><dd>{autonomy.system.outputHealth}</dd></div>
-      </dl>
-    </section>
+    <div className="workspace workspace--inspector">
+      <div className="workspace__row">
+        <div className="panel panel--inspector">
+          <h2>INSPECTOR</h2>
+          {/* Detailed object/scene inspection */}
+        </div>
+        <div className="panel panel--metadata">
+          <h2>METADATA</h2>
+          {/* Confidence, stability, fused signals, forecasts */}
+        </div>
+      </div>
+
+      <div className="workspace__row workspace__row--timeline">
+        <div className="panel panel--timeline">
+          <h2>INTELLIGENCE TIMELINE</h2>
+          {/* Inspector-focused event history */}
+        </div>
+      </div>
+    </div>
   );
 }
