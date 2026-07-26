@@ -62,17 +62,46 @@ export const ubosTypographyClasses = {
   /** Section Label — uppercase, small caps. Groups related controls. */
   sectionLabel:
     'text-[0.6875rem] font-semibold uppercase tracking-[0.08em] leading-snug text-ubos-fg-secondary',
-  /** Micro-text — for indicators, timestamps, and inline telemetry. */
-  microText: 'text-[0.625rem] font-normal leading-tight text-ubos-fg-muted',
+  /** Micro-text — for indicators, timestamps, and inline telemetry. Minimal
+   * weight distinguishes it from body/section text at a glance. */
+  microText: 'text-[0.625rem] font-light leading-tight text-ubos-fg-muted',
+  /**
+   * HUD Text (Step 93) — operator HUD overlays rendered on top of live
+   * video, where content behind the text is unpredictable. Bold weight and
+   * a subtle drop shadow keep it legible on both bright and dark footage.
+   * Deliberately has no baked-in color so callers compose it with the
+   * relevant semantic color class (color-semantic aware, e.g.
+   * `text-ubos-program-text` for a live tally).
+   */
+  hud: 'text-[0.8125rem] font-bold uppercase tracking-[0.08em] leading-tight [text-shadow:0_0_4px_rgba(0,0,0,0.6)]',
+  /**
+   * Intelligence Text (Step 93) — fused insights, operator guidance, and
+   * predictive hints. Medium weight, slightly smaller than body. Combine
+   * with a UIIL signal class (see ui-intelligence.css) for the
+   * warning-is-bold / prediction-is-italic treatments described in the
+   * Step 93 spec, rather than baking a single fixed style here.
+   */
+  intelligence: 'text-[0.8125rem] font-medium leading-normal text-ubos-fg-secondary',
 } as const;
 
 export type UbosTypographyRole = keyof typeof ubosTypographyClasses;
 
-/** UBDS canonical typography hierarchy — Title, Section Label, Body, Micro-text. */
-export type UbdsTypographyRole = 'title' | 'sectionLabel' | 'body' | 'microText';
+/**
+ * UBDS canonical typography hierarchy (Step 93) — Title, Section Label,
+ * Body, Micro-text, HUD Text, Intelligence Text.
+ */
+export type UbdsTypographyRole =
+  | 'title'
+  | 'sectionLabel'
+  | 'body'
+  | 'microText'
+  | 'hud'
+  | 'intelligence';
 export const ubdsTypographyRoles: readonly UbdsTypographyRole[] = [
   'title',
   'sectionLabel',
   'body',
   'microText',
+  'hud',
+  'intelligence',
 ] as const;

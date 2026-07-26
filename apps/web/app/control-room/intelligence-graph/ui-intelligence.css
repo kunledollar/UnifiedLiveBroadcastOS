@@ -1,35 +1,48 @@
 /**
  * UI Intelligence Integration Layer — visual signal styles (Step 90)
  * UBDS color semantics applied (Step 92).
+ * UBDS typography + intelligence integration applied (Step 93).
  *
  * Applied on Control Room zone wrappers and workspace shell.
  * Intentionally subtle so geometry layout stays intact.
  *
  * Signal → UBDS mapping rationale (see workspaceIntelligenceEngine.ts):
  *   highlight — emitted only for `severity === 'critical'` fused insights and
- *               "Critical Action" guidance → Program Red (danger, irreversible).
- *   warn      — general operator-facing warning → Warning Yellow.
+ *               "Critical Action" guidance → Program Red (danger, irreversible)
+ *               + bold text (Step 93: highlight → bold + color shift).
+ *   warn      — general operator-facing warning → Warning Yellow + bold text
+ *               (Step 93: warn → yellow + bold).
  *   pulse     — emitted only for predicted graphics activation and predicted
  *               audio clipping → Warning Yellow (predicted risk), same hue as
- *               `prepare`; the animated glow (not color) is what distinguishes
- *               an active prediction from a standing one. Motion communicates
+ *               `prepare`; the animated glow (box-shadow AND text-shadow) is
+ *               what distinguishes an active prediction from a standing one
+ *               (Step 93: pulse → slight animated glow). Motion communicates
  *               the state change, color communicates the meaning (UBDS core
  *               principle 4 — Motion as intelligence).
  *   prepare   — emitted only for predicted scene transitions and predicted
- *               routing failures → Warning Yellow (predicted risk); the
+ *               routing failures → Warning Yellow (predicted risk) + italic
+ *               text (Step 93: prepare → italic + subtle color shift); the
  *               dashed outline is the "not yet confirmed" texture.
  *   elevated  — panels raised for guidance/attention (workspace shell,
  *               guidance panel) → kept on the existing success tone already
  *               used for a "healthy, actionable" elevation, distinct from
  *               Preview Green (reversible output state) and Active Blue
  *               (operator selection).
- *   dim / suppress — de-emphasis only; no hue, opacity/desaturation alone.
+ *   dim       — reduced opacity only (Step 93: dim → reduced opacity).
+ *   suppress  — opacity/desaturation plus a size step down toward
+ *               micro-text, per Step 93 ("suppress → micro-text or hidden").
+ *
+ * Text properties (font-weight/font-style/text-shadow) are inheritable, so
+ * they cascade to child text automatically. An element's own explicit
+ * typography class (e.g. `font-semibold`) still wins over the inherited
+ * wrapper value — this is a subtle default, not an override.
  */
 
 .ubos-highlight {
   outline: 1px solid var(--ubos-program-border);
   box-shadow: inset 0 0 0 1px var(--ubos-program-dimmed), 0 0 18px var(--ubos-program-dimmed);
   background-color: var(--ubos-program-dimmed);
+  font-weight: 700;
   z-index: 3;
 }
 
@@ -37,6 +50,7 @@
   outline: 1px solid var(--ubos-warning-border);
   box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 14px var(--ubos-warning-dimmed);
   background-color: var(--ubos-warning-dimmed);
+  font-weight: 700;
   z-index: 2;
 }
 
@@ -50,6 +64,7 @@
   outline: 1px dashed var(--ubos-warning-border);
   box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed);
   background-color: var(--ubos-warning-dimmed);
+  font-style: italic;
 }
 
 .ubos-elevated {
@@ -66,15 +81,18 @@
 .ubos-suppress {
   opacity: 0.22;
   filter: grayscale(0.35) saturate(0.5);
+  font-size: 0.85em;
 }
 
 @keyframes ubos-ui-pulse {
   0%,
   100% {
     box-shadow: inset 0 0 0 1px var(--ubos-warning-dimmed), 0 0 0 rgba(0, 0, 0, 0);
+    text-shadow: none;
   }
   50% {
     box-shadow: inset 0 0 0 1px var(--ubos-warning-elevated), 0 0 16px var(--ubos-warning-elevated);
+    text-shadow: 0 0 6px var(--ubos-warning-elevated);
   }
 }
 

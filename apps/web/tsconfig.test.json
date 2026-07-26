@@ -53,6 +53,7 @@
     "app/control-room/intelligence-graph/workspaceIntelligenceEngine.ts",
     "app/control-room/intelligence-graph/workspaceIntelligenceEngine.test.ts",
     "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.ts",
-    "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.test.ts"
+    "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-typography.test.ts"
   ]
 }
