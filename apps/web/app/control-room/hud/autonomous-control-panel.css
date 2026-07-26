@@ -1,0 +1,146 @@
+/**
+ * Autonomous Studio Mode Control Panel (Step 111) — a modal overlay,
+ * above HUD 2.0 and the geometry canvas, opened from the top bar's
+ * Settings button. Deliberately a modal rather than a docked panel so
+ * it never competes for space with the always-visible HUD/canvas.
+ */
+.asmcp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 12, 16, 0.72);
+}
+
+.asmcp-panel {
+  width: min(720px, calc(100vw - 48px));
+  max-height: min(820px, calc(100vh - 48px));
+  overflow-y: auto;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.asmcp-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--ubos-padding-standard, 12px) var(--ubos-padding-spacious, 16px);
+  border-bottom: 1px solid var(--ubos-border-subtle);
+  position: sticky;
+  top: 0;
+  background: inherit;
+}
+
+.asmcp-close-button {
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--ubos-fg-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.asmcp-close-button:hover {
+  color: var(--ubos-fg-primary);
+}
+
+.asmcp-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ubos-space-4, 16px);
+  padding: var(--ubos-padding-spacious, 16px);
+}
+
+.asmcp-module {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-bottom: var(--ubos-space-3, 12px);
+  border-bottom: 1px solid var(--ubos-border-subtle);
+}
+
+.asmcp-module:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.asmcp-level-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.asmcp-level-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+  padding: 8px 4px;
+  background: var(--ubos-bg-midnight);
+  border: 1px solid var(--ubos-border-subtle);
+  cursor: pointer;
+}
+
+.asmcp-level-button-active {
+  border-color: var(--ubos-selection-border);
+  background: var(--ubos-selection-dimmed);
+}
+
+.asmcp-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.asmcp-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.asmcp-override-row {
+  display: flex;
+  gap: 8px;
+}
+
+.asmcp-override-button {
+  border-radius: 8px;
+  padding: 6px 14px;
+  background: var(--ubos-bg-midnight);
+  border: 1px solid var(--ubos-border-default);
+  color: var(--ubos-fg-primary);
+  cursor: pointer;
+}
+
+.asmcp-override-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.asmcp-log-list,
+.asmcp-timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 10rem;
+  overflow-y: auto;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.asmcp-log-item,
+.asmcp-timeline-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: var(--ubos-bg-midnight);
+}

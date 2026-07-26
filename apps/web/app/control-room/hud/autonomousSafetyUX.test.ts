@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import type { StudioAutomationResult, AutomationDecision, AutomationConflict } from '../intelligence-graph/studioAutomation.js';
+import {
+  defaultAutonomySafetySettings,
+  defaultAutonomyPermissions,
+  defaultConflictResolutionMode,
+} from '../intelligence-graph/studioAutomation.js';
 import type { StudioHealth, StudioHealthDimensionResult } from '../intelligence-graph/studioIntelligence.js';
 import type { AutonomousStudioModeResult } from './autonomousStudioMode.js';
 import {
@@ -49,6 +54,9 @@ function automationResult(partial: Partial<StudioAutomationResult> = {}): Studio
     conflicts: partial.conflicts ?? [],
     syncBatches: partial.syncBatches ?? [],
     timeline: partial.timeline ?? [],
+    safetySettings: partial.safetySettings ?? defaultAutonomySafetySettings(),
+    permissions: partial.permissions ?? defaultAutonomyPermissions(),
+    conflictResolutionMode: partial.conflictResolutionMode ?? defaultConflictResolutionMode(),
     timestamp: partial.timestamp ?? Date.now(),
   };
 }

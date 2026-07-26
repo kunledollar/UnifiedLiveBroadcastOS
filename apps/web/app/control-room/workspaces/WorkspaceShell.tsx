@@ -1,5 +1,5 @@
 'use client';
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import type { CSSProperties } from 'react';
 import { workspaceById, workspaceCatalog, type WorkspaceId } from './workspace-catalog';
@@ -9,6 +9,7 @@ import type { WorkspacePresetId } from '@ubos/shared';
 import { workspaceManager } from '../state/workspace-manager-instance';
 import { ControlRoomCanvas } from '../zones/ControlRoomCanvas';
 import { OperatorHUD } from '../hud/OperatorHUD';
+import { AutonomousControlPanel } from '../hud/AutonomousControlPanel';
 import { autonomousStudioModeController } from '../hud/autonomousStudioMode';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
 import { workspaceState } from '../workspace/workspaceState';
@@ -65,6 +66,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const workspace = workspaceById[workspaceFromPath(pathname)];
   const g = workspace.geometry;
   const canvasRef = useRef<HTMLDivElement>(null);
+  // Step 111 — Autonomous Studio Mode Control Panel, opened from the top
+  // bar's Settings button (previously unwired — see UbosGlobalTopBar).
+  const [autonomyPanelOpen, setAutonomyPanelOpen] = useState(false);
   // Step 90 — elevate active workspace shell from UIIL
   useUiIntelligence();
   const shellElevated = workspaceState.intelligenceGraph.uiIntegration.isWorkspaceElevated();
@@ -152,7 +156,12 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         resolution="1080p60"
         userName="Operator"
         userRole={workspace.name}
+        onOpenSettings={() => setAutonomyPanelOpen(true)}
       />
+
+      {/* Autonomous Studio Mode Control Panel (Step 111) — modal overlay,
+          above everything, closed by default. */}
+      <AutonomousControlPanel open={autonomyPanelOpen} onClose={() => setAutonomyPanelOpen(false)} />
 
       {/* ── Body: sidebar + geometry canvas ─────────────────────────── */}
       <div className="ubos-workspace-body">

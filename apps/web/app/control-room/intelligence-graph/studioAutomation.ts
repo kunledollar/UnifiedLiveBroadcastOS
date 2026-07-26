@@ -134,11 +134,25 @@ export function severityScoreForCluster(cluster: FusionCluster, fusedInsights: r
 
 // ── Automation safety modeling ──────────────────────────────────────────────
 
-/** Exact thresholds named in the Step 107 spec's Automation Safety Modeling section. */
+/**
+ * Exact thresholds named in the Step 107 spec's Automation Safety
+ * Modeling section — also the *default* `AutonomySafetySettings` (Step
+ * 111 makes these operator-configurable; nothing here changes behavior
+ * for a caller that never configures anything).
+ */
 export const AUTOMATION_SAFETY_THRESHOLDS = {
   minConfidence: 0.85,
   maxSeverity: 0.4,
 } as const;
+
+export type AutonomySafetySettings = {
+  minConfidence: number;
+  maxSeverity: number;
+};
+
+export function defaultAutonomySafetySettings(): AutonomySafetySettings {
+  return { ...AUTOMATION_SAFETY_THRESHOLDS };
+}
 
 export type AutomationDecisionStatus =
   | 'wouldExecute'
@@ -146,6 +160,7 @@ export type AutomationDecisionStatus =
   | 'blockedBySeverity'
   | 'blockedByOperatorDisabled'
   | 'blockedByStudioHealth'
+  | 'blockedByPermission'
   | 'supersededByConflict'
   | 'overridden';
 
@@ -175,15 +190,18 @@ export type AutomationSafetyInput = {
  * resolution. Order matches the spec's own bullet order (confidence,
  * severity, operator opt-in, no-conflicts / studio-health) — the first
  * gate that fails determines the block reason, since a decision can only
- * carry one status.
+ * carry one status. `settings` defaults to the Step 107 hardcoded
+ * thresholds so every existing call site keeps its exact prior behavior;
+ * Step 111 is what actually varies it.
  */
 export function evaluateSafety(
   confidence: number,
   severityScore: number,
   input: AutomationSafetyInput,
+  settings: AutonomySafetySettings = AUTOMATION_SAFETY_THRESHOLDS,
 ): AutomationDecisionStatus {
-  if (confidence <= AUTOMATION_SAFETY_THRESHOLDS.minConfidence) return 'blockedByConfidence';
-  if (severityScore >= AUTOMATION_SAFETY_THRESHOLDS.maxSeverity) return 'blockedBySeverity';
+  if (confidence <= settings.minConfidence) return 'blockedByConfidence';
+  if (severityScore >= settings.maxSeverity) return 'blockedBySeverity';
   if (!input.automationEnabled) return 'blockedByOperatorDisabled';
   if (input.studioHealthStatus !== 'stable') return 'blockedByStudioHealth';
   return 'wouldExecute';
@@ -197,15 +215,75 @@ const SUBSYSTEM_BY_CLUSTER: Partial<Record<FusionCluster, StudioSubsystem>> = {
   output: 'outputHealth',
 };
 
+// ── Automation permissions (Step 111) ───────────────────────────────────────
+
+/**
+ * The seven named permission categories from the Step 111 spec. Every
+ * one gets a real slot even though `replayTriggers`/`streamingRecovery`
+ * can never actually gate anything today — no `AutomationActionType`
+ * maps to either (no `replay`/`streaming` prediction category exists,
+ * the same documented gap since Step 105) — kept for forward
+ * compatibility and so the control panel can show all seven, not five.
+ */
+export type AutonomyPermissionKey =
+  | 'sceneTransitions'
+  | 'graphicsActivation'
+  | 'audioMixing'
+  | 'routingRecovery'
+  | 'outputStabilization'
+  | 'replayTriggers'
+  | 'streamingRecovery';
+
+export const AUTONOMY_PERMISSION_KEYS: readonly AutonomyPermissionKey[] = [
+  'sceneTransitions',
+  'graphicsActivation',
+  'audioMixing',
+  'routingRecovery',
+  'outputStabilization',
+  'replayTriggers',
+  'streamingRecovery',
+];
+
+export type AutonomyPermissions = Record<AutonomyPermissionKey, boolean>;
+
+export function defaultAutonomyPermissions(): AutonomyPermissions {
+  return {
+    sceneTransitions: true,
+    graphicsActivation: true,
+    audioMixing: true,
+    routingRecovery: true,
+    outputStabilization: true,
+    replayTriggers: true,
+    streamingRecovery: true,
+  };
+}
+
+/** Which permission category gates each real action. `none` has no permission (nothing to gate). */
+const ACTION_PERMISSION_KEY: Partial<Record<AutomationActionType, AutonomyPermissionKey>> = {
+  triggerSceneTransition: 'sceneTransitions',
+  activateGraphicsLayer: 'graphicsActivation',
+  autoAdjustAudio: 'audioMixing',
+  failoverRoute: 'routingRecovery',
+  switchToBackupDestination: 'outputStabilization',
+};
+
 /**
  * Builds one `AutomationDecision` per candidate prediction, individually
  * safety-gated (before conflict resolution — see `resolveAutomationConflicts`).
+ * `settings`/`permissions` default to Step 107's original always-on
+ * behavior, so this remains fully backward compatible; Step 111's
+ * control panel is the first real caller to vary them. Permission is
+ * checked *before* confidence/severity — a category the operator has
+ * turned off is blocked regardless of how confident or safe the
+ * prediction is.
  */
 export function buildAutomationDecisions(
   predictions: readonly Prediction[],
   fusedInsights: readonly FusedInsight[],
   role: GuidanceRole,
   input: AutomationSafetyInput,
+  settings: AutonomySafetySettings = AUTOMATION_SAFETY_THRESHOLDS,
+  permissions: AutonomyPermissions = defaultAutonomyPermissions(),
 ): AutomationDecision[] {
   return predictions
     .map((prediction) => {
@@ -214,7 +292,12 @@ export function buildAutomationDecisions(
 
       const cluster = CATEGORY_CLUSTER[prediction.category];
       const severityScore = severityScoreForCluster(cluster, fusedInsights);
-      const status = evaluateSafety(prediction.confidence, severityScore, input);
+
+      const permissionKey = ACTION_PERMISSION_KEY[action];
+      const permitted = !permissionKey || permissions[permissionKey];
+      const status = permitted
+        ? evaluateSafety(prediction.confidence, severityScore, input, settings)
+        : 'blockedByPermission';
 
       const decision: AutomationDecision = {
         id: `auto-decision-${prediction.id}`,
@@ -308,6 +391,20 @@ export type AutomationConflict = {
 };
 
 /**
+ * Which factor `pickAutomationWinner` checks *first* — Step 111's
+ * "conflict resolution mode" safety setting. `severityFirst` is Step
+ * 107's original, default order (severity, confidence, role, timestamp);
+ * `confidenceFirst` and `roleFirst` promote that factor ahead of
+ * severity while keeping the same remaining fallback chain. Studio
+ * health is never a factor here regardless of mode — see the note below.
+ */
+export type ConflictResolutionMode = 'severityFirst' | 'confidenceFirst' | 'roleFirst';
+
+export function defaultConflictResolutionMode(): ConflictResolutionMode {
+  return 'severityFirst';
+}
+
+/**
  * Resolves conflicts among *already individually eligible*
  * (`wouldExecute`) decisions, per the spec's four-factor priority order:
  * severity (lower/safer wins), confidence (higher wins), operator role
@@ -316,10 +413,13 @@ export type AutomationConflict = {
  * conflict resolution already passed the same global
  * `blockedByStudioHealth` gate — so it is honestly omitted from the
  * per-pair comparison below rather than included as a no-op factor.
+ * `mode` defaults to `severityFirst`, Step 107's original order, so
+ * every existing call site keeps its exact prior behavior.
  */
 export function resolveAutomationConflicts(
   decisions: readonly AutomationDecision[],
   role: GuidanceRole,
+  mode: ConflictResolutionMode = 'severityFirst',
 ): { winners: AutomationDecision[]; superseded: AutomationDecision[]; conflicts: AutomationConflict[] } {
   const eligible = decisions.filter((d) => d.status === 'wouldExecute');
   const supersededIds = new Set<string>();
@@ -332,7 +432,7 @@ export function resolveAutomationConflicts(
       if (supersededIds.has(a.id) && supersededIds.has(b.id)) continue;
       if (!predictionsConflict(asConflictCandidate(a), asConflictCandidate(b))) continue;
 
-      const winner = pickAutomationWinner(a, b, role);
+      const winner = pickAutomationWinner(a, b, role, mode);
       const loser = winner === a ? b : a;
       if (supersededIds.has(loser.id)) continue;
 
@@ -358,16 +458,38 @@ export function resolveAutomationConflicts(
   return { winners, superseded, conflicts };
 }
 
-function pickAutomationWinner(a: AutomationDecision, b: AutomationDecision, role: GuidanceRole): AutomationDecision {
-  // 1. Lower severity score wins — the safer action.
-  if (a.severityScore !== b.severityScore) return a.severityScore < b.severityScore ? a : b;
-  // 2. Higher confidence wins.
-  if (a.confidence !== b.confidence) return a.confidence > b.confidence ? a : b;
-  // 3. Operator role — the role-primary subsystem wins.
+function severityRank(a: AutomationDecision, b: AutomationDecision): AutomationDecision | null {
+  return a.severityScore === b.severityScore ? null : a.severityScore < b.severityScore ? a : b;
+}
+
+function confidenceRank(a: AutomationDecision, b: AutomationDecision): AutomationDecision | null {
+  return a.confidence === b.confidence ? null : a.confidence > b.confidence ? a : b;
+}
+
+function roleRank(a: AutomationDecision, b: AutomationDecision, role: GuidanceRole): AutomationDecision | null {
   const aPrimary = isRolePrimary(role, a.subsystem);
   const bPrimary = isRolePrimary(role, b.subsystem);
-  if (aPrimary !== bPrimary) return aPrimary ? a : b;
-  // 4. Deterministic tie-break — earlier timestamp wins.
+  return aPrimary === bPrimary ? null : aPrimary ? a : b;
+}
+
+function pickAutomationWinner(
+  a: AutomationDecision,
+  b: AutomationDecision,
+  role: GuidanceRole,
+  mode: ConflictResolutionMode,
+): AutomationDecision {
+  const chain =
+    mode === 'confidenceFirst'
+      ? [confidenceRank, severityRank, (x: AutomationDecision, y: AutomationDecision) => roleRank(x, y, role)]
+      : mode === 'roleFirst'
+        ? [(x: AutomationDecision, y: AutomationDecision) => roleRank(x, y, role), severityRank, confidenceRank]
+        : [severityRank, confidenceRank, (x: AutomationDecision, y: AutomationDecision) => roleRank(x, y, role)];
+
+  for (const rank of chain) {
+    const winner = rank(a, b);
+    if (winner) return winner;
+  }
+  // Deterministic tie-break — earlier timestamp wins.
   return a.timestamp <= b.timestamp ? a : b;
 }
 
@@ -532,6 +654,10 @@ export type StudioAutomationResult = {
   conflicts: AutomationConflict[];
   syncBatches: AutomationSyncBatch[];
   timeline: AutomationTimelineEntry[];
+  /** Step 111 — the exact configuration this tick's decisions were computed under. */
+  safetySettings: AutonomySafetySettings;
+  permissions: AutonomyPermissions;
+  conflictResolutionMode: ConflictResolutionMode;
   timestamp: number;
 };
 
@@ -545,6 +671,9 @@ function emptyResult(): StudioAutomationResult {
     conflicts: [],
     syncBatches: [],
     timeline: [],
+    safetySettings: defaultAutonomySafetySettings(),
+    permissions: defaultAutonomyPermissions(),
+    conflictResolutionMode: defaultConflictResolutionMode(),
     timestamp: 0,
   };
 }
@@ -566,6 +695,9 @@ export class StudioAutomation {
   private result: StudioAutomationResult = emptyResult();
   private automationEnabled = false;
   private readonly overriddenPredictionIds = new Set<string>();
+  private safetySettings: AutonomySafetySettings = defaultAutonomySafetySettings();
+  private permissions: AutonomyPermissions = defaultAutonomyPermissions();
+  private conflictResolutionMode: ConflictResolutionMode = defaultConflictResolutionMode();
 
   constructor(graph: UBOSIntelligenceGraph) {
     this.graph = graph;
@@ -577,6 +709,32 @@ export class StudioAutomation {
 
   isAutomationEnabled(): boolean {
     return this.automationEnabled;
+  }
+
+  /** Step 111 — operator-configurable confidence/severity thresholds, merged over the current settings. */
+  setSafetySettings(partial: Partial<AutonomySafetySettings>): void {
+    this.safetySettings = { ...this.safetySettings, ...partial };
+  }
+
+  getSafetySettings(): AutonomySafetySettings {
+    return this.safetySettings;
+  }
+
+  /** Step 111 — per-category autonomy permissions, merged over the current permissions. */
+  setPermissions(partial: Partial<AutonomyPermissions>): void {
+    this.permissions = { ...this.permissions, ...partial };
+  }
+
+  getPermissions(): AutonomyPermissions {
+    return this.permissions;
+  }
+
+  setConflictResolutionMode(mode: ConflictResolutionMode): void {
+    this.conflictResolutionMode = mode;
+  }
+
+  getConflictResolutionMode(): ConflictResolutionMode {
+    return this.conflictResolutionMode;
   }
 
   /**
@@ -602,14 +760,25 @@ export class StudioAutomation {
       studioHealthStatus: studio.studioHealth.status,
     };
 
-    let decisions = buildAutomationDecisions(studio.studioPredictions, fusedInsights, studio.role, safetyInput);
+    let decisions = buildAutomationDecisions(
+      studio.studioPredictions,
+      fusedInsights,
+      studio.role,
+      safetyInput,
+      this.safetySettings,
+      this.permissions,
+    );
     decisions = decisions.map((decision) =>
       this.overriddenPredictionIds.has(decision.predictionId)
         ? { ...decision, status: 'overridden' as const }
         : decision,
     );
 
-    const { winners, superseded, conflicts } = resolveAutomationConflicts(decisions, studio.role);
+    const { winners, superseded, conflicts } = resolveAutomationConflicts(
+      decisions,
+      studio.role,
+      this.conflictResolutionMode,
+    );
     const decisionsWithSupersession = decisions.map(
       (decision) => superseded.find((s) => s.id === decision.id) ?? decision,
     );
@@ -623,6 +792,9 @@ export class StudioAutomation {
       conflicts,
       syncBatches: groupIntoSyncBatches(winners),
       timeline: buildAutomationTimeline(decisionsWithSupersession, conflicts),
+      safetySettings: this.safetySettings,
+      permissions: this.permissions,
+      conflictResolutionMode: this.conflictResolutionMode,
       timestamp: Date.now(),
     };
     return this.result;
@@ -635,5 +807,8 @@ export class StudioAutomation {
   reset(): void {
     this.result = emptyResult();
     this.overriddenPredictionIds.clear();
+    this.safetySettings = defaultAutonomySafetySettings();
+    this.permissions = defaultAutonomyPermissions();
+    this.conflictResolutionMode = defaultConflictResolutionMode();
   }
 }

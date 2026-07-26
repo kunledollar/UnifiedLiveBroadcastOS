@@ -1450,3 +1450,142 @@ PASS.
 
 (recorded at commit time — see branch `cursor/autonomous-safety-ux-4284`)
 
+## 2026-07-26 — Autonomous Studio Mode Control Panel / ASMCP (Step 111)
+
+### Objective
+
+Build the operator cockpit for Studio Automation: the first step where
+autonomy becomes configurable, permission-based, role-aware,
+safety-controlled, and override-capable — an actual reachable,
+interactive UI, not more decision logic behind the scenes. Continues
+from Step 110 (Step 108 does not exist in this repository); same
+"Studio Automation 2.0" naming gap as Steps 109-110, built against Studio
+Automation 1.0.
+
+### Investigation before implementation
+
+Explored the Control Room's routing/shell structure first to find a
+genuinely reachable mount point without colliding with anything
+existing: `/control-room/automation` already hosts the legacy v5.10
+rundown/macro UI (do not touch); every other Control Room route's
+`children` render behind a permanent `opacity-0 pointer-events-none`
+layer under `WorkspaceShell` (`ubos-workspace-content-area`), so adding a
+new standalone page would **not** actually be operator-reachable without
+a larger, unrelated shell change. `UbosGlobalTopBar`'s Settings button
+already had an `onOpenSettings` prop that was simply never wired.
+
+**Decision:** mount ASMCP as a modal overlay opened from that Settings
+button, matching the same HUD-centric architecture Steps 104-110 already
+established, rather than inventing a new route.
+
+### Implementation
+
+**Engine extension** (`apps/web/app/control-room/intelligence-graph/studioAutomation.ts`,
+Step 107's file — the "smallest complete fix" is making its existing
+hardcoded thresholds and always-on behavior into real, backward-compatible
+instance configuration):
+
+- `AutonomyPermissionKey` (7 named categories) / `AutonomyPermissions` /
+  `defaultAutonomyPermissions()`, gating each real `AutomationActionType`
+  before confidence/severity are even checked (`blockedByPermission`, a
+  new status). `replayTriggers`/`streamingRecovery` exist as real
+  permission slots but can never gate anything today (no action maps to
+  them) — same documented gap as always.
+- `AutonomySafetySettings` — `evaluateSafety()`/`buildAutomationDecisions()`
+  now accept an optional `settings` parameter, **defaulting to the exact
+  Step 107 hardcoded thresholds**, so every existing call site (Steps
+  107-110, 40+ tests) keeps its exact prior behavior unchanged — verified
+  by re-running the full suite before adding a single new test.
+- `ConflictResolutionMode` (`severityFirst`/`confidenceFirst`/`roleFirst`)
+  — `resolveAutomationConflicts()` now takes an optional `mode`,
+  defaulting to `severityFirst` (Step 107's original tie-break order).
+- `StudioAutomation` gained `setSafetySettings`/`getSafetySettings`,
+  `setPermissions`/`getPermissions`, `setConflictResolutionMode`/
+  `getConflictResolutionMode`; `compute()` passes them through and
+  `StudioAutomationResult` now reports them for transparency.
+
+**New `apps/web/app/control-room/hud/autonomyControlPanel.ts`** — the
+seven modules:
+
+1. **Autonomy Level Selector** — `AUTONOMY_LEVEL_PRESETS` (0-4).
+   The spec names the five levels and says each changes "allowed
+   actions/confidence/severity/fallback" without giving numbers; this
+   module's specific per-level values (documented in-file) are this
+   agent's own considered design, not spec-mandated — Level 0/1 disabled
+   with tightening-not-loosening thresholds, Level 2 predictive-only
+   (all permissions ready, nothing fires), Level 3 enables only the four
+   lower-risk categories, Level 4 enables everything with more
+   permissive thresholds. `deriveAutonomyLevel()` reports `'custom'`
+   honestly when the live configuration doesn't exactly match any preset
+   (verified live — see below) rather than guessing the nearest one.
+2. **Autonomy Permissions** — reuses Step 111's own engine addition
+   directly.
+3. **Autonomy Safety Settings** — reuses `AutonomySafetySettings`/
+   `ConflictResolutionMode` directly. `fallbackBehavior`/
+   `overrideBehavior` are exposed as stored configuration only — honestly
+   documented as not yet branching more than one real runtime behavior
+   each.
+4. **Autonomy Visualization Settings** — a new `AutonomyVisualizationSettingsStore`
+   singleton (no engine backing exists for these); `applyVisualizationToMotion()`
+   really filters Step 109/110's computed motion tokens by intensity,
+   `visualizationAllowsOverlay()` really gates Step 110's overlay.
+5. **Autonomy Override Controls** — `applyOverrideAction()` maps
+   pause/resume to `setAutomationEnabled`, override/reject to
+   `overrideDecision`, approve to `clearOverride` — the honest reading of
+   "approve" in a decision-only system.
+6. **Autonomy Logs** / 7. **Autonomy Timeline** — `buildAutonomyLogEntries()`/
+   `buildAutonomyTimelineEntries()`, the six named kinds
+   (predicted/executed/canceled/fallback/override/recovery) derived from
+   Step 107's real decisions/conflicts and Step 109's real handoff
+   events — the same underlying event set, framed for a log vs. a
+   chronological timeline.
+
+**New `AutonomousControlPanel.tsx`** — all seven modules in one modal,
+using existing form-control conventions found during the exploration
+(checkbox/select/range patterns already used by `StreamingRuntimePanel`/
+`AudioMixerZone`). Opened via `WorkspaceShell.tsx`'s newly-wired
+`onOpenSettings`.
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 348/348 (33 new: 10 in
+  `studioAutomation.test.ts` for the engine extension, 23 in
+  `autonomyControlPanel.test.ts`; all 315 pre-existing tests unaffected —
+  confirming the engine extension is genuinely backward compatible, not
+  just claimed to be).
+- `pnpm --filter @ubos/web typecheck` / `lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium — **the panel was actually opened
+and interacted with**, not just checked for absence like prior steps:
+
+1. Panel absent before opening (0), the Settings button opens it (1),
+   closing it removes it (0).
+2. All seven numbered module headings present.
+3. Clicking "Fully Autonomous" (Level 4) correctly set **every**
+   permission checkbox to checked and moved the safety sliders to
+   75%/50%.
+4. Toggling the "Scene Transitions" checkbox off correctly unchecked it
+   *and* flipped the level indicator to "Current configuration is custom
+   (does not match a named level)" — `deriveAutonomyLevel()`'s honesty
+   claim, verified live, not just in a unit test.
+5. Clicking "Pause Autonomy" then "Resume Autonomy" correctly toggled
+   button enabled/disabled state each time.
+6. The HUD's own Intelligence Timeline (Steps 104/107) picked up a live
+   `AUTOMATION` entry once Level 4 was applied — confirming the panel's
+   mutations genuinely reach the shared `StudioAutomation` singleton the
+   rest of the HUD already reads from, not a disconnected copy.
+7. Zero console errors throughout the entire interaction sequence.
+
+Screenshots in `artifacts/asmcp-step111/`.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/autonomy-control-panel-4284`)
+
