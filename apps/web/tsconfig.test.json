@@ -58,6 +58,7 @@
     "app/control-room/intelligence-graph/ui-intelligence-elevation.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-gradient.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-motion.test.ts",
-    "app/control-room/intelligence-graph/ui-intelligence-spacing.test.ts"
+    "app/control-room/intelligence-graph/ui-intelligence-spacing.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-grid.test.ts"
   ]
 }

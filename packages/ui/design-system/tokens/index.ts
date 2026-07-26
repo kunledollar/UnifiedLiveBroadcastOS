@@ -68,3 +68,12 @@ export {
   type UbosMotionPrimitive,
   type UbosMotionCurve,
 } from './motion.js';
+
+export {
+  ubosGrid,
+  ubosApplyGridDensity,
+  ubosWorkspaceGridTemplates,
+  ubosIntelligenceGridMap,
+  type UbosWorkspaceGridTemplateName,
+  type UbosGridAction,
+} from './grid.js';

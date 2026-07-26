@@ -22,6 +22,10 @@ import {
   ubosShadows,
   ubosTypographyClasses,
   ubdsTypographyRoles,
+  ubosGrid,
+  ubosApplyGridDensity,
+  ubosWorkspaceGridTemplates,
+  ubosIntelligenceGridMap,
   UBOS_DESIGN_SYSTEM_VERSION,
   UBDS_FOUNDATION_STEP,
 } from './index.js';
@@ -262,7 +266,45 @@ test('UBDS: elevation + intelligence integration maps all seven WIE signals to t
   });
 });
 
+test('UBDS: the broadcast rhythm grid is a 12-column grid built from existing rhythm tokens, not a duplicate scale (Step 98)', () => {
+  assert.equal(ubosGrid.columns, 12);
+  // rhythm/gutter/margin must literally equal the existing named tokens —
+  // Step 98 must not introduce a second, drifting set of magic numbers.
+  assert.equal(ubosGrid.rhythm, ubosRhythm.micro); // 4px
+  assert.equal(ubosGrid.gutter, ubosRhythm.xlarge); // 24px
+  assert.equal(ubosGrid.margin, ubosRhythm.xxlarge); // 32px
+});
+
+test('UBDS: grid density reuses the Step 97 density multipliers via ubosApplyGridDensity (Step 98)', () => {
+  assert.equal(ubosApplyGridDensity(ubosGrid.margin, 'compact'), ubosScaleSpacing(ubosGrid.margin, 'compact'));
+  assert.equal(ubosApplyGridDensity(ubosGrid.margin, 'director'), '2.4rem'); // 32px * 1.2 = 38.4px
+  assert.equal(ubosApplyGridDensity(ubosGrid.margin, 'compact'), '1.5rem'); // 32px * 0.75 = 24px
+});
+
+test('UBDS: the three canonical workspace grid templates each define left/center/right/bottom regions (Step 98)', () => {
+  assert.deepEqual(Object.keys(ubosWorkspaceGridTemplates).sort(), ['inspector', 'programOutput', 'triad']);
+  for (const template of Object.values(ubosWorkspaceGridTemplates)) {
+    for (const region of ['left', 'center', 'right', 'bottom'] as const) {
+      assert.ok(typeof template[region] === 'string' && template[region].length > 0, `missing region: ${region}`);
+    }
+  }
+  assert.equal(ubosWorkspaceGridTemplates.triad.center, 'graphics');
+  assert.equal(ubosWorkspaceGridTemplates.programOutput.center, 'program');
+});
+
+test('UBDS: grid + intelligence integration maps all seven WIE signals to their spec-defined grid action (Step 98)', () => {
+  assert.deepEqual(ubosIntelligenceGridMap, {
+    highlight: 'expandColumn',
+    warn: 'increaseGutter',
+    pulse: 'rhythmicShift',
+    prepare: 'alignmentNudge',
+    dim: 'reduceColumn',
+    suppress: 'collapseRegion',
+    elevate: 'increaseMargin',
+  });
+});
+
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 97);
+  assert.equal(UBDS_FOUNDATION_STEP, 98);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });

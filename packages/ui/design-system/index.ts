@@ -27,10 +27,15 @@
  * system: a sixth spacing level (xxlarge/32px), a four-tier padding
  * hierarchy (tight/standard/spacious/cinematic), three density-mode
  * multipliers (compact/standard/director), and intelligence-signal
- * spacing treatments in the same layer — closing out UBDS's visual
- * physics (color + typography + elevation + depth + motion + spacing).
- * Application of UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0
- * happens in later steps — this package only defines the foundation.
+ * spacing treatments in the same layer. Step 98 added the broadcast
+ * rhythm grid: a 12-column adaptive grid built from the existing rhythm/
+ * density tokens (not a duplicate scale), the three canonical workspace
+ * grid templates (Triad, Inspector, Program Output — named regions for
+ * their future 2.0 builds), and intelligence-signal grid treatments in
+ * the same layer — this completes UBDS's structural physics (color +
+ * typography + elevation + depth + motion + spacing + grid). Application
+ * of UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 happens in
+ * later steps — this package only defines the foundation.
  */
 
 export * from './tokens/index.js';
@@ -39,7 +44,7 @@ export * from './primitives/index.js';
 export { cn } from './utils/cn.js';
 
 /** Design system version identifier */
-export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.5' as const;
+export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.6' as const;
 
 /** UBDS foundation milestone identifier — most recent foundation step. */
-export const UBDS_FOUNDATION_STEP = 97 as const;
+export const UBDS_FOUNDATION_STEP = 98 as const;

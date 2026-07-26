@@ -19,11 +19,14 @@ import {
   ubosElevationLevels,
   ubosIntelligenceElevationMap,
   ubosIntelligenceSpacingMap,
+  ubosIntelligenceGridMap,
   ubosMotionCurves,
   ubosPadding,
   ubosDensity,
   ubosScaleSpacing,
   ubosRhythm,
+  ubosGrid,
+  ubosWorkspaceGridTemplates,
   ubdsTypographyRoles,
   ubosTypographyClasses,
   type UbosBroadcastHue,
@@ -34,6 +37,7 @@ import {
   type UbosMotionCurve,
   type UbosPaddingLevel,
   type UbosDensityMode,
+  type UbosWorkspaceGridTemplateName,
 } from '@ubos/ui';
 
 const hueLabels: Record<UbosBroadcastHue, string> = {
@@ -91,6 +95,12 @@ const intelligenceSignalSamples: Array<{
   { signal: 'dim', className: 'ubos-dim', sample: 'Non-relevant panel for this role', motion: 'fadeOut (linear)', spacing: `small (${remToPx(ubosIntelligenceSpacingMap.dim)})` },
   { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight', motion: 'fadeOut (linear)', spacing: `micro (${remToPx(ubosIntelligenceSpacingMap.suppress)})` },
 ];
+
+const workspaceGridLabels: Record<UbosWorkspaceGridTemplateName, string> = {
+  triad: 'Triad 2.0 Grid',
+  inspector: 'Inspector 2.0 Grid',
+  programOutput: 'Program Output 2.0 Grid',
+};
 
 const motionCurveDemos: Array<{ curve: UbosMotionCurve; label: string; description: string }> = [
   { curve: 'highlight', label: 'Highlight', description: 'Fast-in / slow-out' },
@@ -156,7 +166,7 @@ export default function DesignSystemShowcasePage() {
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Steps 91–97
+          UBOS Design System · Steps 91–98
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
@@ -164,11 +174,12 @@ export default function DesignSystemShowcasePage() {
         <p className="mt-1 max-w-2xl text-[0.8125rem] text-ubos-fg-secondary">
           Broadcast color language, the complete typography hierarchy, the elevation model
           (shadow/gradient/border per level), the gradient system, the complete motion system
-          (six primitives + timing curves), and the complete spacing system (six-level scale,
-          padding hierarchy, density modes). This route is a read-only showcase — Control Room
-          surfaces are only updated by the color (Step 92), typography (Step 93), elevation
-          (Step 94), depth/gradient (Step 95), motion (Step 96), and spacing (Step 97)
-          application work itself, not by this page.
+          (six primitives + timing curves), the complete spacing system (six-level scale, padding
+          hierarchy, density modes), and the broadcast rhythm grid (12-column grid, workspace grid
+          templates). This route is a read-only showcase — Control Room surfaces are only updated
+          by the color (Step 92), typography (Step 93), elevation (Step 94), depth/gradient
+          (Step 95), motion (Step 96), spacing (Step 97), and grid (Step 98) application work
+          itself, not by this page.
         </p>
       </header>
 
@@ -214,7 +225,7 @@ export default function DesignSystemShowcasePage() {
 
       <section className="mb-10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <SectionHeading>Typography + Elevation + Depth + Motion + Spacing + Intelligence Integration</SectionHeading>
+          <SectionHeading>Typography + Elevation + Depth + Motion + Spacing + Grid + Intelligence Integration</SectionHeading>
           <button
             type="button"
             onClick={() => setSignalsActive((current) => !current)}
@@ -226,10 +237,11 @@ export default function DesignSystemShowcasePage() {
         <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
           Each UIIL signal class (Step 90) combines a color treatment (Step 92), a text
           treatment (Step 93), an elevation level (Step 94), a gradient shape (Step 95), a
-          motion treatment (Step 96), and a padding tier (Step 97) — the same classes applied to
-          live Control Room zone wrappers. Toggling the button applies/removes the classes on
-          already-mounted cards so the entrance motion (elevate rise, shake, glow-in, linear
-          fade) and the padding shift both actually play, the same way they would when a WIE
+          motion treatment (Step 96), a padding tier (Step 97), and a grid action (Step 98) —
+          the same classes applied to live Control Room zone wrappers. Toggling the button
+          applies/removes the classes on already-mounted cards so the entrance motion (elevate
+          rise, shake, glow-in, linear fade), the padding shift, and the grid shift (outline
+          offset / scale / lateral nudge) all actually play, the same way they would when a WIE
           signal newly appears or clears on a live panel.
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -244,7 +256,12 @@ export default function DesignSystemShowcasePage() {
               <div className={signalsActive ? `rounded-ubos-sm ${className}` : 'rounded-ubos-sm p-2'}>
                 <p className={ubosTypographyClasses.intelligence}>{sample}</p>
               </div>
-              <p className="mt-2 text-[0.5625rem] uppercase tracking-wide text-ubos-fg-muted">padding: {spacing}</p>
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-muted">padding: {spacing}</span>
+                <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-muted">
+                  grid: {ubosIntelligenceGridMap[signal]}
+                </span>
+              </div>
             </div>
           ))}
         </div>
@@ -414,7 +431,7 @@ export default function DesignSystemShowcasePage() {
         </div>
       </section>
 
-      <section>
+      <section className="mb-10">
         <SectionHeading>Density Modes</SectionHeading>
         <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
           The same spacing scale, scaled by a multiplier for the operator&apos;s context (Step 97)
@@ -437,6 +454,64 @@ export default function DesignSystemShowcasePage() {
               <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">{usage}</p>
             </div>
           ))}
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <SectionHeading>Broadcast Rhythm Grid</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          A {ubosGrid.columns}-column adaptive grid (Step 98) built entirely from existing rhythm
+          tokens — {remToPx(ubosGrid.rhythm)} base rhythm, {remToPx(ubosGrid.gutter)} gutters
+          between columns, {remToPx(ubosGrid.margin)} outer margin. Broadcast UI uses
+          proportional geometry, not a rigid web grid.
+        </p>
+        <div
+          className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-carbon"
+          style={{ padding: ubosGrid.margin }}
+        >
+          <div className="grid grid-cols-12" style={{ gap: ubosGrid.gutter }}>
+            {Array.from({ length: ubosGrid.columns }, (_, index) => (
+              <div key={index} className="flex h-12 items-center justify-center rounded-ubos-sm bg-ubos-graphite">
+                <span className="text-[0.5625rem] text-ubos-fg-disabled">{index + 1}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading>Workspace Grid Templates</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          The three canonical region layouts (Step 98) that Triad 2.0, Inspector 2.0, and
+          Program Output 2.0 apply the rhythm grid to. Regions here are named vocabulary, not
+          literal CSS Grid areas — the live geometry engine positions zones with computed pixel
+          rects, not a declarative CSS grid.
+        </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          {(Object.keys(ubosWorkspaceGridTemplates) as UbosWorkspaceGridTemplateName[]).map((name) => {
+            const template = ubosWorkspaceGridTemplates[name];
+            return (
+              <div key={name} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+                <p className="mb-2 text-xs font-semibold text-ubos-fg-primary">{workspaceGridLabels[name]}</p>
+                <div
+                  className="grid h-32 gap-1"
+                  style={{ gridTemplateAreas: '"left center right" "bottom bottom bottom"', gridTemplateColumns: '1fr 2fr 1fr', gridTemplateRows: '1fr 28px' }}
+                >
+                  {(['left', 'center', 'right', 'bottom'] as const).map((region) => (
+                    <div
+                      key={region}
+                      className="flex items-center justify-center rounded-ubos-sm border border-dashed border-ubos-selection-border bg-ubos-selection-muted text-center"
+                      style={{ gridArea: region }}
+                    >
+                      <span className="px-1 text-[0.5625rem] uppercase tracking-wide text-ubos-selection-text">
+                        {template[region]}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
     </main>
