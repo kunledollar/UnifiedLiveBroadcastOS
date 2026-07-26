@@ -1,0 +1,36 @@
+.autonomous-ui {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 20px;
+  background: var(--ubds-surface-autonomous);
+}
+
+.autonomous-control-panel {
+  border-radius: 12px;
+  padding: 16px;
+  background: var(--ubds-panel-autonomous);
+  box-shadow: var(--ubds-elevation-level-2);
+  backdrop-filter: blur(12px);
+}
+
+.autonomous-hud {
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--ubds-hud-autonomous);
+  box-shadow: var(--ubds-elevation-level-1);
+}
+
+.autonomous-timeline {
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--ubds-timeline-autonomous);
+  box-shadow: var(--ubds-elevation-level-1);
+}
+
+.autonomous-logs {
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--ubds-logs-autonomous);
+  box-shadow: var(--ubds-elevation-level-1);
+}
