@@ -17,6 +17,7 @@ import {
   selectGuidanceActions,
   selectWarnings,
   selectTimelineEntries,
+  routeGlobalIntelligenceToHud,
 } from './hudIntelligence.js';
 
 function signal(
@@ -241,6 +242,48 @@ test('Operator HUD 2.0: Timeline respects the display limit (Step 104)', () => {
   const entries = selectTimelineEntries(predictions, [], [], [], 2);
   assert.equal(entries.length, 2);
   assert.deepEqual(entries.map((e) => e.id), ['pred-p1', 'pred-p2']);
+});
+
+// ── WIE 2.0 routing (Step 105) ───────────────────────────────────────────────
+
+test('Operator HUD 2.0: routeGlobalIntelligenceToHud reads Primary Insight from WIE 2.0 resolved predictions, not the raw feed (Step 105)', () => {
+  const now = Date.now();
+  const global = {
+    resolvedPredictions: [prediction({ id: 'p1', category: 'scene_transition', timestamp: now })],
+    timeline: [
+      { id: 'auto-a1', kind: 'automation' as const, message: 'Automation fired', confidence: 0.8, timestamp: now },
+      { id: 'output-health-1', kind: 'output_health' as const, message: 'Output health spike', confidence: 0.7, timestamp: now - 500 },
+    ],
+  };
+  const guidance = [guidanceAction({ id: 'g1' })];
+  const insights = [fusedInsight({ id: 'i1', severity: 'critical' })];
+
+  const routing = routeGlobalIntelligenceToHud(global, guidance, insights);
+
+  assert.deepEqual(routing.primary.map((p) => p.id), ['p1']);
+  assert.deepEqual(routing.guidance.map((g) => g.id), ['g1']);
+  assert.deepEqual(routing.warning.map((i) => i.id), ['i1']);
+  assert.deepEqual(routing.timeline.map((e) => e.id), ['auto-a1', 'output-health-1']);
+  assert.deepEqual(routing.timeline.map((e) => e.kind), ['automation', 'output_health']);
+});
+
+test('Operator HUD 2.0: routeGlobalIntelligenceToHud respects custom per-zone limits (Step 105)', () => {
+  const now = Date.now();
+  const global = {
+    resolvedPredictions: [
+      prediction({ id: 'p1', category: 'scene_transition', timestamp: now }),
+      prediction({ id: 'p2', category: 'graphics_activation', timestamp: now - 1 }),
+    ],
+    timeline: [
+      { id: 't1', kind: 'insight' as const, message: 'a', confidence: 0.8, timestamp: now },
+      { id: 't2', kind: 'insight' as const, message: 'b', confidence: 0.7, timestamp: now - 1 },
+      { id: 't3', kind: 'insight' as const, message: 'c', confidence: 0.6, timestamp: now - 2 },
+    ],
+  };
+
+  const routing = routeGlobalIntelligenceToHud(global, [], [], { primary: 1, timeline: 2 });
+  assert.equal(routing.primary.length, 1);
+  assert.equal(routing.timeline.length, 2);
 });
 
 // ── End-to-end through the real graph ───────────────────────────────────────

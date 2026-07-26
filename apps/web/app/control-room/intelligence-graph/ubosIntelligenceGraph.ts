@@ -14,6 +14,11 @@
  * Step 88: Operator Guidance Engine (OGE) — role-aware actionable instructions
  * Step 89: Workspace Intelligence Engine (WIE) — UI highlight/dim/warn signals
  * Step 90: UI Intelligence Integration Layer (UIIL) — apply signals to real UI
+ * Step 105: Workspace Intelligence Engine 2.0 (WIE 2.0) — global intelligence
+ *   orchestrator: cross-workspace prediction conflict resolution, global
+ *   severity scoring, role/workspace-aware focus, theme-switching decisions,
+ *   and the studio-wide intelligence timeline. Sits above (consumes, does
+ *   not replace) every engine listed above.
  *
  * Later steps expand:
  *   - UBOS Design System / Triad 2.0 theming
@@ -56,6 +61,11 @@ import {
   UIIntegrationLayer,
   type UiIntelligenceState,
 } from './uiIntelligenceIntegrationLayer.js';
+import {
+  WorkspaceIntelligenceEngine2,
+  type WieGlobalResult,
+  type WorkspaceIntelligenceZone,
+} from './workspaceIntelligenceEngine2.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -174,6 +184,16 @@ export type UigSnapshot = {
   latestInsights: readonly UigInsight[];
   latestEvents: readonly CanonicalUigEvent[];
   highlightedNodeIds: readonly string[];
+  /** WIE 2.0 (Step 105) — global intelligence orchestration. */
+  globalIntelligence: WieGlobalResult;
+  resolvedPredictionCount: number;
+  latestResolvedPredictions: readonly Prediction[];
+  predictionConflictCount: number;
+  globalSeverityScore: number;
+  globalSeverityBand: WieGlobalResult['globalSeverityBand'];
+  globalThemeModifier: WieGlobalResult['theme']['modifier'];
+  latestStudioTimeline: WieGlobalResult['timeline'];
+  latestRoleFocusedInsights: readonly FusedInsight[];
 };
 
 export class UBOSIntelligenceGraph {
@@ -188,6 +208,7 @@ export class UBOSIntelligenceGraph {
   readonly guidanceEngine = new OperatorGuidanceEngine(this);
   readonly workspaceIntelligence = new WorkspaceIntelligenceEngine(this);
   readonly uiIntegration = new UIIntegrationLayer();
+  readonly workspaceIntelligence2 = new WorkspaceIntelligenceEngine2(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -199,6 +220,8 @@ export class UBOSIntelligenceGraph {
   workspaceSignals: WorkspaceUiSignal[] = [];
   /** Latest applied panel UI state from UIIL (Step 90). */
   uiIntelligence: UiIntelligenceState = this.uiIntegration.getState();
+  /** Latest global intelligence result from WIE 2.0 (Step 105). */
+  globalIntelligence: WieGlobalResult = this.workspaceIntelligence2.getResult();
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
@@ -508,6 +531,9 @@ export class UBOSIntelligenceGraph {
     // UI Intelligence Integration Layer — apply signals to panel UI state
     this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
 
+    // Workspace Intelligence Engine 2.0 — global cross-workspace orchestration
+    this.globalIntelligence = this.workspaceIntelligence2.compute();
+
     return refinedRun;
   }
 
@@ -583,6 +609,7 @@ export class UBOSIntelligenceGraph {
     this.operatorGuidance = this.guidanceEngine.generate(role, workspace);
     this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
     this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
+    this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
     return this.operatorGuidance;
   }
 
@@ -598,7 +625,24 @@ export class UBOSIntelligenceGraph {
   computeWorkspaceSignals(role?: string | null, workspace?: string | null): WorkspaceUiSignal[] {
     this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
     this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
+    this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
     return this.workspaceSignals;
+  }
+
+  /** Latest global intelligence result from WIE 2.0 (Step 105). */
+  getGlobalIntelligence(): WieGlobalResult {
+    return this.globalIntelligence;
+  }
+
+  /** Recompute WIE 2.0's global intelligence result on demand (Step 105). */
+  computeGlobalIntelligence(role?: string | null, workspace?: string | null): WieGlobalResult {
+    this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
+    return this.globalIntelligence;
+  }
+
+  /** Workspace-aware intelligence focus for one of the five canonical zones (Step 105). */
+  getWorkspaceIntelligenceFocus(zone: WorkspaceIntelligenceZone, limit?: number) {
+    return this.workspaceIntelligence2.workspaceFocus(zone, limit);
   }
 
   getWorkspaceSignals(): readonly WorkspaceUiSignal[] {
@@ -658,6 +702,15 @@ export class UBOSIntelligenceGraph {
       latestInsights: this.insights.slice(0, 8),
       latestEvents: this.recentEvents.slice(0, 10),
       highlightedNodeIds,
+      globalIntelligence: this.globalIntelligence,
+      resolvedPredictionCount: this.globalIntelligence.resolvedPredictions.length,
+      latestResolvedPredictions: this.globalIntelligence.resolvedPredictions.slice(0, 8),
+      predictionConflictCount: this.globalIntelligence.conflicts.length,
+      globalSeverityScore: this.globalIntelligence.globalSeverityScore,
+      globalSeverityBand: this.globalIntelligence.globalSeverityBand,
+      globalThemeModifier: this.globalIntelligence.theme.modifier,
+      latestStudioTimeline: this.globalIntelligence.timeline.slice(0, 10),
+      latestRoleFocusedInsights: this.globalIntelligence.roleFocusedInsights,
     };
   }
 
@@ -679,6 +732,8 @@ export class UBOSIntelligenceGraph {
     this.workspaceIntelligence.reset();
     this.uiIntegration.reset();
     this.uiIntelligence = this.uiIntegration.getState();
+    this.workspaceIntelligence2.reset();
+    this.globalIntelligence = this.workspaceIntelligence2.getResult();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────

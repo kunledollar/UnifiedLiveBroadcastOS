@@ -797,3 +797,129 @@ PASS.
 
 (recorded at commit time — see branch `cursor/operator-hud-2-0-4284`)
 
+## 2026-07-26 — Workspace Intelligence Engine 2.0 (Step 105)
+
+### Objective
+
+Build WIE 2.0 — the global intelligence orchestrator that fuses Triad 2.0,
+Inspector 2.0, Program Output 2.0, and every workspace (Director, Graphics,
+Audio, Replay, Streaming) into: cross-workspace prediction conflict
+resolution, global severity scoring, role-aware and workspace-aware
+intelligence, theme-switching decisions, HUD 2.0 intelligence routing, and
+a studio-wide intelligence timeline. Built on top of Step 104's Operator
+HUD 2.0 branch (not yet merged to `main`), since "HUD 2.0 intelligence
+routing" is one of WIE 2.0's explicit responsibilities.
+
+### Root Cause / Gap
+
+Every prior engine (Predictive Engine 86, Insight Fusion Engine 87,
+Operator Guidance Engine 88, WIE 1.0 89, UIIL 90) reasons about a single
+signal or a single panel at a time. Nothing resolved *conflicts* between
+simultaneous predictions (e.g. a predicted graphics activation and a
+predicted scene transition both targeting the same on-air scene), nothing
+produced one *global* severity score across the whole studio, and HUD 2.0
+(Step 104) read raw engine output directly rather than through a
+decision-making orchestrator.
+
+### Implementation
+
+New `apps/web/app/control-room/intelligence-graph/workspaceIntelligenceEngine2.ts`
+(WIE 2.0), fully self-contained (no dependency on `hud/` or `@ubos/ui`,
+matching every other engine's layering):
+
+- **Global severity scoring** — `scoreSeverityBand()` implements the exact
+  Step 105 thresholds (0.0-0.2 informational … 0.8-1.0 critical) plus a
+  `SEVERITY_IMPLICATIONS` table mapping each band to an elevation level,
+  motion intensity, HUD emphasis flag, panel-highlight flag, and theme
+  modifier.
+- **Cross-workspace prediction conflict resolution** —
+  `predictionsConflict()`/`resolvePredictionConflicts()` detect when two
+  differently-categorized predictions target the same node within a 4s
+  window (the spec's own example: predicted graphics activation vs.
+  predicted scene transition on the same scene) and keep only the
+  higher-confidence one, exposing the losing side as a `PredictionConflict`
+  for diagnostics.
+- **Role-aware intelligence** — `roleFocusedInsights()` delegates to WIE
+  1.0's existing `isRelevantToRole()` (Step 89) rather than re-deriving
+  relevance.
+- **Workspace-aware intelligence** — `workspaceFocusedInsights()`/
+  `workspaceFocusedPredictions()` implement the five named zones (Triad →
+  scene/graphics/audio, Inspector → all clusters, Program Output → output,
+  Streaming → routing+output, Replay → chronological rather than
+  cluster-filtered, since Step 87 has no dedicated "replay" `FusionCluster`
+  and adding one would ripple through IFE/OGE/WIE 1.0's cluster tables —
+  out of scope for this step).
+- **Theme-switching decision** — `decideThemeModifier()`, a *global*
+  severity-driven complement to Step 103's per-signal
+  `ubosIntelligenceThemeMap`.
+- **Studio-wide intelligence timeline** — `buildStudioTimeline()` extends
+  Step 104's HUD timeline with a fifth source, "output health changes",
+  read directly from the Temporal Pattern Engine's (Step 85) existing
+  `spike`/`drop`/`anomaly` node fields.
+- `WorkspaceIntelligenceEngine2.compute()` ties it together into one
+  `WieGlobalResult`, wired into `UBOSIntelligenceGraph.runInference()` /
+  `generateOperatorGuidance()` / `computeWorkspaceSignals()` / `clear()`
+  and exposed on `getSnapshot()` alongside every other engine's output.
+
+HUD 2.0 routing (Step 104 → 105 integration):
+`hud/hudIntelligence.ts` gained `routeGlobalIntelligenceToHud()`, which
+feeds HUD's Primary Insight zone from WIE 2.0's conflict-resolved
+predictions and HUD's Timeline zone from WIE 2.0's studio-wide timeline
+(now including `output_health` entries — `HudTimelineEntryKind` extended
+accordingly, `HUDTimeline.tsx` given a dot/label for the new kind).
+`OperatorHUD.tsx` now calls this instead of the raw Step 104 selectors
+directly. `WorkspaceShell.tsx` exposes WIE 2.0's severity band and theme
+modifier as `data-ubos-severity-band`/`data-ubos-theme-modifier`
+attributes on the shell root — data-only, no visual reskin, preserving the
+approved Control Room.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/intelligence-graph/workspaceIntelligenceEngine2.ts` | New — WIE 2.0 orchestrator |
+| `apps/web/app/control-room/intelligence-graph/workspaceIntelligenceEngine2.test.ts` | New — 21 unit tests |
+| `apps/web/app/control-room/intelligence-graph/ubosIntelligenceGraph.ts` | Wire WIE 2.0 into pipeline, snapshot, getters, reset |
+| `apps/web/app/control-room/hud/hudIntelligence.ts` | Add `routeGlobalIntelligenceToHud`, extend `HudTimelineEntryKind` |
+| `apps/web/app/control-room/hud/hudIntelligence.test.ts` | 2 new routing tests |
+| `apps/web/app/control-room/hud/HUDTimeline.tsx` | Dot/label for `output_health` kind |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | Route through WIE 2.0 instead of raw selectors |
+| `apps/web/app/control-room/workspaces/WorkspaceShell.tsx` | `data-ubos-severity-band`/`data-ubos-theme-modifier` attributes |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 247/247 (23 new tests: 21 WIE 2.0
+  + 2 HUD routing; all 224 pre-existing tests unaffected).
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `pnpm --filter @ubos/web lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium, real orchestration tick loop (no
+mocks), across `/control-room/director`, `/graphics-operator`,
+`/audio-engineer`, `/replay-operator`, `/streaming-operator` — zero
+console errors on every workspace. Confirmed live:
+
+- `data-ubos-severity-band="critical"` / `data-ubos-theme-modifier=
+  "switchToCriticalVariant"` present on the workspace shell root,
+  correctly escalated by a real "Scene has missing source" critical
+  insight.
+- Audio Engineer's Primary Insight zone showed the WIE 2.0-resolved
+  prediction "Output degradation likely" (69%).
+- Streaming Operator's Intelligence Timeline showed a live
+  **`OUTPUT HEALTH · Output health spike detected on output:program`**
+  entry — the new Step 105 timeline source, absent from Step 104, now
+  populated from real Temporal Pattern Engine state.
+
+Screenshots saved to `artifacts/wie2-step105/`.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/wie-2-0-4284`)
+

@@ -16,6 +16,7 @@ const kindDot: Record<HudTimelineEntryKind, string> = {
   guidance: 'bg-ubos-program',
   insight: 'bg-ubos-warning',
   automation: 'bg-ubos-automation',
+  output_health: 'bg-ubos-error',
 };
 
 const kindLabel: Record<HudTimelineEntryKind, string> = {
@@ -23,6 +24,7 @@ const kindLabel: Record<HudTimelineEntryKind, string> = {
   guidance: 'Guidance',
   insight: 'Insight',
   automation: 'Automation',
+  output_health: 'Output Health',
 };
 
 export function HUDTimeline({
