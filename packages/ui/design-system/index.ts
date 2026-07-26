@@ -32,10 +32,15 @@
  * density tokens (not a duplicate scale), the three canonical workspace
  * grid templates (Triad, Inspector, Program Output — named regions for
  * their future 2.0 builds), and intelligence-signal grid treatments in
- * the same layer — this completes UBDS's structural physics (color +
- * typography + elevation + depth + motion + spacing + grid). Application
- * of UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 happens in
- * later steps — this package only defines the foundation.
+ * the same layer — completing UBDS's structural physics (color +
+ * typography + elevation + depth + motion + spacing + grid). Step 99 is
+ * the assembly step: eight canonical workspace templates (Director,
+ * Technical Director, Graphics, Audio, Replay, Streaming, Solo Streamer,
+ * Compact), each a named recipe of layout regions + density + accent
+ * hues built from the systems above, not a new parallel token category.
+ * Application of UBDS (and these templates) to Triad 2.0, Inspector 2.0,
+ * Program Output 2.0, and the live workspace runtime happens in later
+ * steps — this package only defines the foundation.
  */
 
 export * from './tokens/index.js';
@@ -44,7 +49,7 @@ export * from './primitives/index.js';
 export { cn } from './utils/cn.js';
 
 /** Design system version identifier */
-export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.6' as const;
+export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.7' as const;
 
 /** UBDS foundation milestone identifier — most recent foundation step. */
-export const UBDS_FOUNDATION_STEP = 98 as const;
+export const UBDS_FOUNDATION_STEP = 99 as const;

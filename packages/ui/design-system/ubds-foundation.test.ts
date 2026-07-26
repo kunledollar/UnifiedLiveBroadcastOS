@@ -26,6 +26,8 @@ import {
   ubosApplyGridDensity,
   ubosWorkspaceGridTemplates,
   ubosIntelligenceGridMap,
+  ubosWorkspaceTemplates,
+  ubosWorkspaceTemplateNames,
   UBOS_DESIGN_SYSTEM_VERSION,
   UBDS_FOUNDATION_STEP,
 } from './index.js';
@@ -304,7 +306,70 @@ test('UBDS: grid + intelligence integration maps all seven WIE signals to their 
   });
 });
 
+test('UBDS: the workspace template library defines exactly the eight canonical workspaces (Step 99)', () => {
+  assert.deepEqual([...ubosWorkspaceTemplateNames].sort(), [
+    'audio',
+    'compact',
+    'director',
+    'graphics',
+    'replay',
+    'solo',
+    'streaming',
+    'technicalDirector',
+  ]);
+  assert.deepEqual(Object.keys(ubosWorkspaceTemplates).sort(), [...ubosWorkspaceTemplateNames].sort());
+});
+
+test('UBDS: every workspace template declares a valid density mode and non-empty accents (Step 99)', () => {
+  const validDensity = Object.keys(ubosDensity);
+  const validAccent = [...ubosBroadcastHues, 'neutral'];
+  for (const name of ubosWorkspaceTemplateNames) {
+    const template = ubosWorkspaceTemplates[name];
+    assert.ok(validDensity.includes(template.density), `${name}: invalid density ${template.density}`);
+    assert.ok(template.accents.length > 0, `${name}: accents must not be empty`);
+    for (const accent of template.accents) {
+      assert.ok(validAccent.includes(accent), `${name}: unknown accent ${accent}`);
+    }
+    assert.ok(Object.keys(template.layout).length > 0, `${name}: layout must define at least one region`);
+  }
+});
+
+test('UBDS: workspace templates reuse the Step 98 grid region vocabulary, not literal CSS Grid areas (Step 99)', () => {
+  // Director's center explicitly hosts the canonical Triad template, and
+  // several workspaces' right region hosts the canonical Program Output
+  // template — these values must match real ubosWorkspaceGridTemplates keys.
+  const canonicalPanelNames = Object.keys(ubosWorkspaceGridTemplates);
+  assert.ok(canonicalPanelNames.includes(ubosWorkspaceTemplates.director.layout.center!));
+  assert.equal(ubosWorkspaceTemplates.director.layout.center, 'triad');
+  for (const name of ['director', 'technicalDirector', 'replay', 'streaming'] as const) {
+    assert.equal(ubosWorkspaceTemplates[name].layout.right, 'programOutput');
+    assert.ok(canonicalPanelNames.includes(ubosWorkspaceTemplates[name].layout.right!));
+  }
+});
+
+test('UBDS: only Compact collapses panels and floats its intelligence HUD (Step 99)', () => {
+  for (const name of ubosWorkspaceTemplateNames) {
+    const template = ubosWorkspaceTemplates[name];
+    if (name === 'compact') {
+      assert.equal(template.collapsiblePanels, true);
+      assert.equal(template.floatingHud, true);
+    } else {
+      assert.ok(!template.collapsiblePanels, `${name} should not collapse panels`);
+      assert.ok(!template.floatingHud, `${name} should not float its HUD`);
+    }
+  }
+});
+
+test('UBDS: Director and Solo Streamer are the only director-mode-density workspaces reserved for cinematic control (Step 99)', () => {
+  assert.equal(ubosWorkspaceTemplates.director.density, 'director');
+  assert.equal(ubosWorkspaceTemplates.solo.density, 'compact');
+  const standardDensityWorkspaces = ubosWorkspaceTemplateNames.filter(
+    (name) => ubosWorkspaceTemplates[name].density === 'standard',
+  );
+  assert.deepEqual(standardDensityWorkspaces.sort(), ['audio', 'graphics', 'replay', 'streaming', 'technicalDirector']);
+});
+
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 98);
+  assert.equal(UBDS_FOUNDATION_STEP, 99);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
 });
