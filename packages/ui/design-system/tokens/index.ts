@@ -24,8 +24,15 @@ export {
   ubosSpacing,
   ubosLayoutSpacing,
   ubosRhythm,
+  ubosPadding,
+  ubosDensity,
+  ubosScaleSpacing,
+  ubosIntelligenceSpacingMap,
   type UbosSpacingToken,
   type UbosRhythmToken,
+  type UbosPaddingLevel,
+  type UbosDensityMode,
+  type UbosIntelligenceSpacingAction,
 } from './spacing.js';
 
 export { ubosRadii, ubosRadiusClasses, type UbosRadiusToken } from './radii.js';
@@ -33,11 +40,19 @@ export { ubosRadii, ubosRadiusClasses, type UbosRadiusToken } from './radii.js';
 export { ubosShadows, type UbosShadowToken } from './shadows.js';
 
 export {
+  ubosGradients,
+  ubosElevationGradientType,
+  type UbosGradientType,
+} from './gradients.js';
+
+export {
   ubosElevation,
   ubosElevationClasses,
   ubosElevationLevels,
+  ubosIntelligenceElevationMap,
   type UbosElevationLevel,
   type UbosElevationToken,
+  type UbosIntelligenceElevationAction,
 } from './elevation.js';
 
 export {
@@ -46,7 +61,37 @@ export {
   ubosTransition,
   ubosAnimations,
   ubosMotionSystem,
+  ubosMotionCurves,
+  ubosIntelligenceMotionMap,
   type UbosDurationToken,
   type UbosAnimationToken,
   type UbosMotionPrimitive,
+  type UbosMotionCurve,
 } from './motion.js';
+
+export {
+  ubosGrid,
+  ubosApplyGridDensity,
+  ubosWorkspaceGridTemplates,
+  ubosIntelligenceGridMap,
+  type UbosWorkspaceGridTemplateName,
+  type UbosGridAction,
+} from './grid.js';
+
+export {
+  ubosWorkspaceTemplates,
+  ubosWorkspaceTemplateNames,
+  type UbosWorkspaceTemplate,
+  type UbosWorkspaceTemplateName,
+  type UbosWorkspaceAccent,
+  type UbosWorkspaceRegion,
+} from './workspaces.js';
+
+export {
+  ubosThemes,
+  ubosThemeNames,
+  ubosIntelligenceThemeMap,
+  type UbosTheme,
+  type UbosThemeName,
+  type UbosThemeIntelligenceAction,
+} from './themes.js';

@@ -53,6 +53,18 @@
     "app/control-room/intelligence-graph/workspaceIntelligenceEngine.ts",
     "app/control-room/intelligence-graph/workspaceIntelligenceEngine.test.ts",
     "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.ts",
-    "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.test.ts"
+    "app/control-room/intelligence-graph/uiIntelligenceIntegrationLayer.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-typography.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-elevation.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-gradient.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-motion.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-spacing.test.ts",
+    "app/control-room/intelligence-graph/ui-intelligence-grid.test.ts",
+    "app/control-room/zones/triadIntelligence.ts",
+    "app/control-room/zones/triadIntelligence.test.ts",
+    "app/control-room/zones/inspector/inspectorIntelligence.ts",
+    "app/control-room/zones/inspector/inspectorIntelligence.test.ts",
+    "app/control-room/zones/outputIntelligence.ts",
+    "app/control-room/zones/outputIntelligence.test.ts"
   ]
 }

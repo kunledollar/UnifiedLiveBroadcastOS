@@ -66,6 +66,39 @@ test('UIIL maps zone ids to CSS classes and prefers higher-priority actions', ()
   assert.ok(ZONE_TO_PANELS['audio-mixer']?.includes('audioPanel'));
 });
 
+test('UIIL: inspector (Step 101) maps to every diagnosed domain plus operator/guidance', () => {
+  const inspectorPanels = ZONE_TO_PANELS.inspector;
+  assert.ok(inspectorPanels);
+  assert.deepEqual([...inspectorPanels].sort(), [
+    'audioPanel',
+    'guidancePanel',
+    'graphicsPanel',
+    'operatorPanel',
+    'programOutputPanel',
+    'routingPanel',
+    'scenePanel',
+  ].sort());
+
+  const layer = new UIIntegrationLayer([signal({ action: 'warn', panel: 'audioPanel' })]);
+  layer.apply();
+  assert.equal(layer.classNameForZone('inspector'), UI_ACTION_CLASS.warn);
+});
+
+test('UIIL: output (Step 102) maps to program output, scene (preview), routing, and guidance', () => {
+  const outputPanels = ZONE_TO_PANELS.output;
+  assert.ok(outputPanels);
+  assert.deepEqual([...outputPanels].sort(), [
+    'guidancePanel',
+    'programOutputPanel',
+    'routingPanel',
+    'scenePanel',
+  ].sort());
+
+  const layer = new UIIntegrationLayer([signal({ action: 'prepare', panel: 'scenePanel' })]);
+  layer.apply();
+  assert.equal(layer.classNameForZone('output'), UI_ACTION_CLASS.prepare);
+});
+
 test('UIIL class helpers and stale-state reset', () => {
   const layer = new UIIntegrationLayer();
   layer.apply([signal({ action: 'highlight', panel: 'audioPanel' })]);
