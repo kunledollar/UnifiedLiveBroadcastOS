@@ -61,6 +61,10 @@
     "app/control-room/intelligence-graph/ui-intelligence-spacing.test.ts",
     "app/control-room/intelligence-graph/ui-intelligence-grid.test.ts",
     "app/control-room/zones/triadIntelligence.ts",
-    "app/control-room/zones/triadIntelligence.test.ts"
+    "app/control-room/zones/triadIntelligence.test.ts",
+    "app/control-room/zones/inspector/inspectorIntelligence.ts",
+    "app/control-room/zones/inspector/inspectorIntelligence.test.ts",
+    "app/control-room/zones/outputIntelligence.ts",
+    "app/control-room/zones/outputIntelligence.test.ts"
   ]
 }

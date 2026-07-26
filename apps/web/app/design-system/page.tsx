@@ -29,6 +29,9 @@ import {
   ubosWorkspaceGridTemplates,
   ubosWorkspaceTemplates,
   ubosWorkspaceTemplateNames,
+  ubosThemes,
+  ubosThemeNames,
+  ubosIntelligenceThemeMap,
   ubdsTypographyRoles,
   ubosTypographyClasses,
   type UbosBroadcastHue,
@@ -41,6 +44,7 @@ import {
   type UbosDensityMode,
   type UbosWorkspaceGridTemplateName,
   type UbosWorkspaceAccent,
+  type UbosThemeName,
 } from '@ubos/ui';
 
 const hueLabels: Record<UbosBroadcastHue, string> = {
@@ -98,6 +102,25 @@ const intelligenceSignalSamples: Array<{
   { signal: 'dim', className: 'ubos-dim', sample: 'Non-relevant panel for this role', motion: 'fadeOut (linear)', spacing: `small (${remToPx(ubosIntelligenceSpacingMap.dim)})` },
   { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight', motion: 'fadeOut (linear)', spacing: `micro (${remToPx(ubosIntelligenceSpacingMap.suppress)})` },
 ];
+
+const themeLabels: Record<UbosThemeName, string> = {
+  director: 'Director Mode',
+  graphics: 'Graphics Mode',
+  audio: 'Audio Mode',
+  replay: 'Replay Mode',
+  streaming: 'Streaming Mode',
+  solo: 'Solo Streamer',
+};
+
+const themeIntelligenceLabels: Record<keyof typeof ubosIntelligenceThemeMap, string> = {
+  highlight: 'increase accent intensity',
+  warn: 'switch to critical variant',
+  pulse: 'enable predictive motion',
+  prepare: 'enable gradient shift',
+  dim: 'reduce accent intensity',
+  suppress: 'collapse overlays',
+  elevate: 'increase depth + spacing',
+};
 
 const workspaceGridLabels: Record<UbosWorkspaceGridTemplateName, string> = {
   triad: 'Triad 2.0 Grid',
@@ -182,7 +205,7 @@ export default function DesignSystemShowcasePage() {
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Steps 91–99
+          UBOS Design System · Steps 91–99, 103
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
@@ -192,11 +215,11 @@ export default function DesignSystemShowcasePage() {
           (shadow/gradient/border per level), the gradient system, the complete motion system
           (six primitives + timing curves), the complete spacing system (six-level scale, padding
           hierarchy, density modes), the broadcast rhythm grid (12-column grid, workspace grid
-          templates), and the eight canonical workspace templates that assemble all of the above.
-          This route is a read-only showcase — Control Room surfaces are only updated by the color
-          (Step 92), typography (Step 93), elevation (Step 94), depth/gradient (Step 95), motion
-          (Step 96), spacing (Step 97), grid (Step 98), and workspace template (Step 99)
-          application work itself, not by this page.
+          templates), the eight canonical workspace templates, and the six dynamic Workspace
+          Intelligence Themes that assemble all of the above into a cohesive visual identity per
+          workspace. This route is a read-only showcase — Control Room surfaces are only updated
+          by the color (Step 92) and Triad/Inspector/Program Output (Steps 100-102) application
+          work itself, not by this page.
         </p>
       </header>
 
@@ -573,6 +596,57 @@ export default function DesignSystemShowcasePage() {
               </div>
             );
           })}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <SectionHeading>Workspace Intelligence Themes</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          The six canonical intelligence themes (Step 103) — dynamic visual modes that shift a
+          workspace&apos;s color accents, depth, and motion all at once. Each theme&apos;s accents and
+          density are the exact same values as the matching Step 99 workspace template (not a
+          second, driftable copy) — only <code>motion</code> and <code>depth</code> are new
+          per-theme decisions.
+        </p>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          {ubosThemeNames.map((name) => {
+            const theme = ubosThemes[name];
+            return (
+              <div key={name} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+                <div className="mb-1 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-ubos-fg-primary">{themeLabels[name]}</p>
+                  <div className="flex gap-1">
+                    {theme.accents.map((accent) => (
+                      <span key={accent} className={`h-2.5 w-2.5 rounded-full ${accentSwatchClass[accent]}`} title={accent} />
+                    ))}
+                  </div>
+                </div>
+                <div className="flex items-center justify-between text-[0.5625rem] uppercase tracking-wide text-ubos-fg-muted">
+                  <span>density: {theme.density}</span>
+                  <span>motion: {theme.motion}</span>
+                  <span>depth: level {theme.depth}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="mt-10">
+        <SectionHeading>Theme + Intelligence Integration</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          Each UIIL signal (Step 90) modulates whichever theme is active — these are modifiers
+          applied on top of a theme, not a second copy of all six themes. <code>warn</code>, for
+          instance, means "escalate to the existing Level 4 / Critical Gradient treatment"
+          (Step 94/95), which already exists — not a bespoke critical palette per theme.
+        </p>
+        <div className="grid gap-2 md:grid-cols-2">
+          {(Object.keys(ubosIntelligenceThemeMap) as Array<keyof typeof ubosIntelligenceThemeMap>).map((signal) => (
+            <div key={signal} className="flex items-center justify-between rounded-ubos-sm border border-ubos-border-subtle bg-ubos-graphite px-3 py-2">
+              <span className="text-[0.625rem] uppercase tracking-wide text-ubos-fg-disabled">{signal}</span>
+              <span className="text-[0.6875rem] text-ubos-fg-secondary">{themeIntelligenceLabels[signal]}</span>
+            </div>
+          ))}
         </div>
       </section>
     </main>
