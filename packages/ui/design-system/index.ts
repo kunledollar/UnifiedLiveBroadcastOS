@@ -23,9 +23,14 @@
  * sixth primitive (elevate), named timing curves (fast-in/slow-out for
  * highlights, slow-in/fast-out for warnings, linear for fades, elastic for
  * pulses, ease-in for workspace transitions), and wired intelligence-signal
- * motion treatments into the same layer. Application of UBDS to Triad 2.0,
- * Inspector 2.0, and Program Output 2.0 happens in later steps — this
- * package only defines the foundation.
+ * motion treatments into the same layer. Step 97 completed the spacing
+ * system: a sixth spacing level (xxlarge/32px), a four-tier padding
+ * hierarchy (tight/standard/spacious/cinematic), three density-mode
+ * multipliers (compact/standard/director), and intelligence-signal
+ * spacing treatments in the same layer — closing out UBDS's visual
+ * physics (color + typography + elevation + depth + motion + spacing).
+ * Application of UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0
+ * happens in later steps — this package only defines the foundation.
  */
 
 export * from './tokens/index.js';
@@ -34,7 +39,7 @@ export * from './primitives/index.js';
 export { cn } from './utils/cn.js';
 
 /** Design system version identifier */
-export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.4' as const;
+export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.5' as const;
 
 /** UBDS foundation milestone identifier — most recent foundation step. */
-export const UBDS_FOUNDATION_STEP = 96 as const;
+export const UBDS_FOUNDATION_STEP = 97 as const;

@@ -143,6 +143,17 @@
   --ubos-icon-lg: 1.25rem;
   --ubos-overlay-opacity: 0.78;
 
+  /* UBDS Padding Hierarchy (Step 97) — padding communicates importance. */
+  --ubos-padding-tight: var(--ubos-space-2); /* 8px */
+  --ubos-padding-standard: var(--ubos-space-3); /* 12px */
+  --ubos-padding-spacious: var(--ubos-space-4); /* 16px */
+  --ubos-padding-cinematic: var(--ubos-space-6); /* 24px */
+
+  /* UBDS Density Modes (Step 97) — multipliers, not a second spacing scale. */
+  --ubos-density-compact: 0.75;
+  --ubos-density-standard: 1;
+  --ubos-density-director: 1.2;
+
   /* Layout */
   --ubos-status-bar-height: 2rem;
   --ubos-nav-width: 13.5rem;

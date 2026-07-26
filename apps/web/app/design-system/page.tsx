@@ -18,7 +18,12 @@ import {
   ubosColorRampStates,
   ubosElevationLevels,
   ubosIntelligenceElevationMap,
+  ubosIntelligenceSpacingMap,
   ubosMotionCurves,
+  ubosPadding,
+  ubosDensity,
+  ubosScaleSpacing,
+  ubosRhythm,
   ubdsTypographyRoles,
   ubosTypographyClasses,
   type UbosBroadcastHue,
@@ -27,6 +32,8 @@ import {
   type UbdsTypographyRole,
   type UbosIntelligenceElevationAction,
   type UbosMotionCurve,
+  type UbosPaddingLevel,
+  type UbosDensityMode,
 } from '@ubos/ui';
 
 const hueLabels: Record<UbosBroadcastHue, string> = {
@@ -65,16 +72,24 @@ const typographySamples: Record<UbdsTypographyRole, { sample: string; wrapperCla
 };
 
 // UIIL signals (Step 90) drive the intelligence-text (Step 93), elevation
-// (Step 94), gradient (Step 95), and motion (Step 96) treatments below.
-// `elevate` isn't included here since it targets the workspace shell/
-// guidance panel rather than a generic content card.
-const intelligenceSignalSamples: Array<{ signal: UbosIntelligenceElevationAction; className: string; sample: string; motion: string }> = [
-  { signal: 'highlight', className: 'ubos-highlight', sample: 'Critical: audio dropout on Guest Mic 2', motion: 'glow + elevate' },
-  { signal: 'warn', className: 'ubos-warn', sample: 'Output bitrate trending toward degradation', motion: 'shake' },
-  { signal: 'pulse', className: 'ubos-pulse', sample: 'Predicted audio clipping in 2s', motion: 'pulse (elastic)' },
-  { signal: 'prepare', className: 'ubos-prepare', sample: 'Predicted scene transition in ~4s', motion: 'subtle glow' },
-  { signal: 'dim', className: 'ubos-dim', sample: 'Non-relevant panel for this role', motion: 'fadeOut (linear)' },
-  { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight', motion: 'fadeOut (linear)' },
+// (Step 94), gradient (Step 95), motion (Step 96), and spacing (Step 97)
+// treatments below. `elevate` isn't included here since it targets the
+// workspace shell/guidance panel rather than a generic content card.
+const remToPx = (rem: string) => `${parseFloat(rem) * 16}px`;
+
+const intelligenceSignalSamples: Array<{
+  signal: UbosIntelligenceElevationAction;
+  className: string;
+  sample: string;
+  motion: string;
+  spacing: string;
+}> = [
+  { signal: 'highlight', className: 'ubos-highlight', sample: 'Critical: audio dropout on Guest Mic 2', motion: 'glow + elevate', spacing: `spacious (${remToPx(ubosIntelligenceSpacingMap.highlight)})` },
+  { signal: 'warn', className: 'ubos-warn', sample: 'Output bitrate trending toward degradation', motion: 'shake', spacing: `cinematic (${remToPx(ubosIntelligenceSpacingMap.warn)})` },
+  { signal: 'pulse', className: 'ubos-pulse', sample: 'Predicted audio clipping in 2s', motion: 'pulse (elastic)', spacing: 'breathing 12↔14px' },
+  { signal: 'prepare', className: 'ubos-prepare', sample: 'Predicted scene transition in ~4s', motion: 'subtle glow', spacing: `medium (${remToPx(ubosIntelligenceSpacingMap.prepare)})` },
+  { signal: 'dim', className: 'ubos-dim', sample: 'Non-relevant panel for this role', motion: 'fadeOut (linear)', spacing: `small (${remToPx(ubosIntelligenceSpacingMap.dim)})` },
+  { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight', motion: 'fadeOut (linear)', spacing: `micro (${remToPx(ubosIntelligenceSpacingMap.suppress)})` },
 ];
 
 const motionCurveDemos: Array<{ curve: UbosMotionCurve; label: string; description: string }> = [
@@ -107,6 +122,20 @@ const rhythm = [
   { label: 'medium', px: 12, class: 'w-3' },
   { label: 'large', px: 16, class: 'w-4' },
   { label: 'xlarge', px: 24, class: 'w-6' },
+  { label: 'xxlarge', px: 32, class: 'w-8' },
+];
+
+const paddingTiers: Array<{ level: UbosPaddingLevel; usage: string }> = [
+  { level: 'tight', usage: 'Metadata, micro-text, indicators' },
+  { level: 'standard', usage: 'Normal panels, inspector sections' },
+  { level: 'spacious', usage: 'Active panels, highlighted panels' },
+  { level: 'cinematic', usage: 'Director workspace, program output, replay workspace' },
+];
+
+const densityModes: Array<{ mode: UbosDensityMode; usage: string }> = [
+  { mode: 'compact', usage: 'Solo streamers, laptop setups, small monitors' },
+  { mode: 'standard', usage: 'Most operators, standard control rooms' },
+  { mode: 'director', usage: 'Large monitors, multi-monitor setups, high-clarity workflows' },
 ];
 
 function SectionHeading({ children }: { children: string }) {
@@ -127,7 +156,7 @@ export default function DesignSystemShowcasePage() {
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Steps 91–96
+          UBOS Design System · Steps 91–97
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
@@ -135,9 +164,10 @@ export default function DesignSystemShowcasePage() {
         <p className="mt-1 max-w-2xl text-[0.8125rem] text-ubos-fg-secondary">
           Broadcast color language, the complete typography hierarchy, the elevation model
           (shadow/gradient/border per level), the gradient system, the complete motion system
-          (six primitives + timing curves), and spacing rhythm. This route is a read-only
-          showcase — Control Room surfaces are only updated by the color (Step 92), typography
-          (Step 93), elevation (Step 94), depth/gradient (Step 95), and motion (Step 96)
+          (six primitives + timing curves), and the complete spacing system (six-level scale,
+          padding hierarchy, density modes). This route is a read-only showcase — Control Room
+          surfaces are only updated by the color (Step 92), typography (Step 93), elevation
+          (Step 94), depth/gradient (Step 95), motion (Step 96), and spacing (Step 97)
           application work itself, not by this page.
         </p>
       </header>
@@ -184,7 +214,7 @@ export default function DesignSystemShowcasePage() {
 
       <section className="mb-10">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <SectionHeading>Typography + Elevation + Depth + Motion + Intelligence Integration</SectionHeading>
+          <SectionHeading>Typography + Elevation + Depth + Motion + Spacing + Intelligence Integration</SectionHeading>
           <button
             type="button"
             onClick={() => setSignalsActive((current) => !current)}
@@ -195,14 +225,15 @@ export default function DesignSystemShowcasePage() {
         </div>
         <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
           Each UIIL signal class (Step 90) combines a color treatment (Step 92), a text
-          treatment (Step 93), an elevation level (Step 94), a gradient shape (Step 95), and a
-          motion treatment (Step 96) — the same classes applied to live Control Room zone
-          wrappers. Toggling the button applies/removes the classes on already-mounted cards so
-          the entrance motion (elevate rise, shake, glow-in, linear fade) actually plays, the same
-          way it would when a WIE signal newly appears or clears on a live panel.
+          treatment (Step 93), an elevation level (Step 94), a gradient shape (Step 95), a
+          motion treatment (Step 96), and a padding tier (Step 97) — the same classes applied to
+          live Control Room zone wrappers. Toggling the button applies/removes the classes on
+          already-mounted cards so the entrance motion (elevate rise, shake, glow-in, linear
+          fade) and the padding shift both actually play, the same way they would when a WIE
+          signal newly appears or clears on a live panel.
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {intelligenceSignalSamples.map(({ signal, className, sample, motion }) => (
+          {intelligenceSignalSamples.map(({ signal, className, sample, motion, spacing }) => (
             <div key={signal} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{signal}</span>
@@ -210,9 +241,10 @@ export default function DesignSystemShowcasePage() {
                   Level {ubosIntelligenceElevationMap[signal]} · {motion}
                 </span>
               </div>
-              <div className={`rounded-ubos-sm p-2 ${signalsActive ? className : ''}`}>
+              <div className={signalsActive ? `rounded-ubos-sm ${className}` : 'rounded-ubos-sm p-2'}>
                 <p className={ubosTypographyClasses.intelligence}>{sample}</p>
               </div>
+              <p className="mt-2 text-[0.5625rem] uppercase tracking-wide text-ubos-fg-muted">padding: {spacing}</p>
             </div>
           ))}
         </div>
@@ -346,15 +378,63 @@ export default function DesignSystemShowcasePage() {
         </div>
       </section>
 
-      <section>
-        <SectionHeading>Spacing Rhythm</SectionHeading>
-        <div className="flex items-end gap-4 rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-4">
+      <section className="mb-10">
+        <SectionHeading>Spacing Scale</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          A six-level 4px rhythm grid (Step 97 adds <code>xxlarge</code>/32px to the five from Step 91).
+        </p>
+        <div className="flex flex-wrap items-end gap-4 rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-4">
           {rhythm.map((step) => (
             <div key={step.label} className="flex flex-col items-center gap-2">
               <div className={`${step.class} h-10 rounded-ubos-sm bg-ubos-selection`} />
               <span className="text-[0.625rem] uppercase tracking-wide text-ubos-fg-muted">
                 {step.label} · {step.px}px
               </span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="mb-10">
+        <SectionHeading>Padding Hierarchy</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          Padding communicates importance — more important panels get more breathing room (Step 97).
+        </p>
+        <div className="grid gap-3 md:grid-cols-4">
+          {paddingTiers.map(({ level, usage }) => (
+            <div key={level} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-2">
+              <div className="rounded-ubos-sm bg-ubos-midnight" style={{ padding: ubosPadding[level] }}>
+                <div className="rounded-ubos-sm border border-dashed border-ubos-selection-border bg-ubos-selection-muted py-2 text-center text-[0.5625rem] uppercase tracking-wide text-ubos-selection-text">
+                  {level}
+                </div>
+              </div>
+              <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">{usage}</p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section>
+        <SectionHeading>Density Modes</SectionHeading>
+        <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
+          The same spacing scale, scaled by a multiplier for the operator&apos;s context (Step 97)
+          — not a second parallel scale. Each swatch below shows <code>large</code> (16px)
+          scaled by that mode&apos;s multiplier.
+        </p>
+        <div className="grid gap-3 md:grid-cols-3">
+          {densityModes.map(({ mode, usage }) => (
+            <div key={mode} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className={ubosTypographyClasses.body}>{mode}</span>
+                <span className="text-[0.625rem] uppercase tracking-wide text-ubos-fg-muted">
+                  ×{ubosDensity[mode]}
+                </span>
+              </div>
+              <div
+                className="rounded-ubos-sm bg-ubos-selection"
+                style={{ height: ubosScaleSpacing(ubosRhythm.large, mode), width: '100%' }}
+              />
+              <p className="mt-2 text-[0.625rem] text-ubos-fg-muted">{usage}</p>
             </div>
           ))}
         </div>
