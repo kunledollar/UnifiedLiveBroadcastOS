@@ -33,7 +33,16 @@ import {
   ubosIntelligenceThemeMap,
   UBOS_DESIGN_SYSTEM_VERSION,
   UBDS_FOUNDATION_STEP,
+  AUTONOMOUS_UX_STEP,
+  autonomousStudioTheme,
+  autonomousElevationMap,
+  autonomousMotionTokens,
+  autonomousMotionSystem,
+  autonomousMotionMeaning,
+  autonomousHudModeDefaults,
 } from './index.js';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 
 test('UBDS: every broadcast hue exposes the full base/hover/active/elevated/dimmed ramp', () => {
   for (const hue of ubosBroadcastHues) {
@@ -413,6 +422,74 @@ test('UBDS: theme + intelligence integration maps all seven WIE signals to a nam
 });
 
 test('UBDS: foundation version markers are exposed', () => {
-  assert.equal(UBDS_FOUNDATION_STEP, 103);
+  assert.equal(UBDS_FOUNDATION_STEP, 109);
   assert.equal(typeof UBOS_DESIGN_SYSTEM_VERSION, 'string');
+});
+
+// ── Autonomous Studio Mode UX (Step 109) ────────────────────────────────────
+
+test('UBDS: Autonomous Studio Mode UX step marker is exposed', () => {
+  assert.equal(AUTONOMOUS_UX_STEP, 109);
+});
+
+test('UBDS: the Autonomous Studio Theme reuses existing accents, not new pigments (Step 109)', () => {
+  assert.equal(autonomousStudioTheme.name, 'autonomousStudio');
+  assert.equal(autonomousStudioTheme.background.deep, ubosColors.background.carbon);
+  assert.equal(autonomousStudioTheme.background.surface, ubosColors.background.midnight);
+  assert.equal(autonomousStudioTheme.accent.autonomousBlue, ubosColors.selection.DEFAULT);
+  assert.equal(autonomousStudioTheme.accent.criticalYellow, ubosColors.warning.DEFAULT);
+  assert.equal(autonomousStudioTheme.accent.predictivePurple, ubosColors.automation.DEFAULT);
+  assert.equal(autonomousStudioTheme.gradient, ubosGradients.radialHighlight);
+});
+
+test('UBDS: autonomous panel elevation matches the Step 109 spec exactly (Step 109)', () => {
+  assert.deepEqual(autonomousElevationMap, {
+    transition: 3,
+    graphics: 3,
+    audio: 3,
+    routing: 4,
+    output: 4,
+  });
+  for (const level of Object.values(autonomousElevationMap)) {
+    assert.ok(ubosElevationLevels.includes(level), `unexpected elevation level ${level}`);
+  }
+});
+
+test('UBDS: exactly the four named autonomous motion tokens exist, each with a distinct ubos-auto-* keyframe (Step 109)', () => {
+  assert.deepEqual([...autonomousMotionTokens], ['autoPulse', 'autoGlow', 'autoShake', 'autoFade']);
+  assert.match(autonomousMotionSystem.autoPulse, /ubos-auto-pulse/);
+  assert.match(autonomousMotionSystem.autoGlow, /ubos-auto-glow/);
+  assert.match(autonomousMotionSystem.autoShake, /ubos-auto-shake/);
+  assert.match(autonomousMotionSystem.autoFade, /ubos-auto-fade/);
+  // Durations/curves match the Step 109 code sample exactly.
+  assert.match(autonomousMotionSystem.autoPulse, /1\.2s ease-in-out infinite/);
+  assert.match(autonomousMotionSystem.autoGlow, /0\.8s ease-in-out forwards/);
+  assert.match(autonomousMotionSystem.autoShake, /0\.4s ease-in-out/);
+  assert.match(autonomousMotionSystem.autoFade, /0\.2s linear forwards/);
+});
+
+test('UBDS: every autonomous motion token has a named meaning, matching the spec wording (Step 109)', () => {
+  assert.deepEqual(autonomousMotionMeaning, {
+    autoPulse: 'predictive autonomous action',
+    autoGlow: 'active autonomous action',
+    autoShake: 'autonomous warning',
+    autoFade: 'autonomous fallback',
+  });
+});
+
+test('UBDS: autonomous HUD mode defaults match the Step 109 code sample (Step 109)', () => {
+  assert.deepEqual(autonomousHudModeDefaults, {
+    mode: 'autonomous',
+    showActions: true,
+    showWarnings: true,
+    showTimeline: true,
+  });
+});
+
+test('UBDS: every ubos-auto-* keyframe referenced by autonomousMotionSystem is actually defined in css-variables.css (Step 109)', () => {
+  const cssPath = path.join(process.cwd(), 'design-system/theme/css-variables.css');
+  const css = readFileSync(cssPath, 'utf8');
+  for (const keyframeName of ['ubos-auto-pulse', 'ubos-auto-glow', 'ubos-auto-shake', 'ubos-auto-fade']) {
+    assert.match(css, new RegExp(`@keyframes ${keyframeName}\\s*\\{`), `missing @keyframes ${keyframeName}`);
+  }
 });

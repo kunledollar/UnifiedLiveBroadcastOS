@@ -73,6 +73,8 @@
     "app/control-room/zones/outputIntelligence.ts",
     "app/control-room/zones/outputIntelligence.test.ts",
     "app/control-room/hud/hudIntelligence.ts",
-    "app/control-room/hud/hudIntelligence.test.ts"
+    "app/control-room/hud/hudIntelligence.test.ts",
+    "app/control-room/hud/autonomousStudioMode.ts",
+    "app/control-room/hud/autonomousStudioMode.test.ts"
   ]
 }

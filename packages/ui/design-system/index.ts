@@ -47,7 +47,15 @@
  * layer. Application of UBDS (and these templates/themes) to Triad 2.0,
  * Inspector 2.0, Program Output 2.0, and the live workspace runtime is
  * scoped to separate application-labeled steps — this package only
- * defines the foundation.
+ * defines the foundation. Step 109 added the Autonomous Studio Mode UX
+ * tokens: the Autonomous Studio Theme (a named composition of existing
+ * Active Blue / Warning Yellow / Automation Purple accents plus the
+ * existing deep backgrounds and Radial Highlight Gradient — no new
+ * pigments), autonomous panel elevation (five action categories mapped
+ * onto the existing 0-4 elevation scale), and four autonomous-mode-only
+ * motion tokens (autoPulse/autoGlow/autoShake/autoFade) with their own
+ * `ubos-auto-*` keyframes, distinct from but visually related to the
+ * Step 91/96 primitives.
  */
 
 export * from './tokens/index.js';
@@ -59,4 +67,4 @@ export { cn } from './utils/cn.js';
 export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.8' as const;
 
 /** UBDS foundation milestone identifier — most recent foundation step. */
-export const UBDS_FOUNDATION_STEP = 103 as const;
+export const UBDS_FOUNDATION_STEP = 109 as const;

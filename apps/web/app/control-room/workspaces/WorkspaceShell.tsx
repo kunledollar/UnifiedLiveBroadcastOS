@@ -9,6 +9,7 @@ import type { WorkspacePresetId } from '@ubos/shared';
 import { workspaceManager } from '../state/workspace-manager-instance';
 import { ControlRoomCanvas } from '../zones/ControlRoomCanvas';
 import { OperatorHUD } from '../hud/OperatorHUD';
+import { autonomousStudioModeController } from '../hud/autonomousStudioMode';
 import { useUiIntelligence } from '../hooks/useUiIntelligence';
 import { workspaceState } from '../workspace/workspaceState';
 import '../intelligence-graph/ui-intelligence.css';
@@ -77,6 +78,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   // Step 106 — Studio Intelligence 1.0's studio-level theme/health summary,
   // same data-only treatment as Step 105's severity band/theme modifier.
   const studioIntelligence = workspaceState.intelligenceGraph.getStudioIntelligence();
+  // Step 109 — Autonomous Studio Mode UX. Reads the controller's cached
+  // result (computed by `OperatorHUD` each tick) rather than calling
+  // `.compute()` itself — see `AutonomousModeBanner`'s module doc for why
+  // only one call site per tick should ever advance the controller.
+  const autonomousMode = autonomousStudioModeController.getResult();
 
   const style = {
     '--ubos-program-weight': g.programWeight,
@@ -137,6 +143,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       data-ubos-theme-modifier={globalIntelligence.theme.modifier ?? 'none'}
       data-ubos-studio-mode={studioIntelligence.studioTheme.mode}
       data-ubos-studio-health={studioIntelligence.studioHealth.status}
+      data-ubos-autonomous-mode={autonomousMode.mode}
     >
       {/* ── New top bar ──────────────────────────────────────────────── */}
       <UbosGlobalTopBar
