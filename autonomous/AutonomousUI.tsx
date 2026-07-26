@@ -1,9 +1,10 @@
-import { useContext } from "react";
-import { AutonomousContext } from "./AutonomousProvider";
-import { AutonomousHUD } from "./hud/AutonomousHUD";
-import { AutonomousControlPanel } from "./AutonomousControlPanel";
-import { AutonomousTimeline } from "./timeline/AutonomousTimeline";
-import { AutonomousLogs } from "./logs/AutonomousLogs";
+import { useContext } from 'react';
+import { AutonomousContext } from './AutonomousProvider';
+import { AutonomousHUD } from './hud/AutonomousHUD';
+import { AutonomousControlPanel } from './AutonomousControlPanel';
+import { AutonomousTimeline } from './timeline/AutonomousTimeline';
+import { AutonomousLogs } from './logs/AutonomousLogs';
+import './theme/AutonomousTheme.css';
 
 export function AutonomousUI() {
   const ctx = useContext(AutonomousContext);
@@ -13,10 +14,18 @@ export function AutonomousUI() {
 
   return (
     <div className="autonomous-ui">
-      <AutonomousHUD state={state} />
-      <AutonomousControlPanel autonomyState={state} onUpdate={setState} />
-      <AutonomousTimeline timeline={state.timeline} />
-      <AutonomousLogs logs={state.logs} />
+      <div className="autonomous-hud">
+        <AutonomousHUD state={state} />
+      </div>
+      <div className="autonomous-control-panel">
+        <AutonomousControlPanel autonomyState={state} onUpdate={setState} />
+      </div>
+      <div className="autonomous-timeline">
+        <AutonomousTimeline timeline={state.timeline} />
+      </div>
+      <div className="autonomous-logs">
+        <AutonomousLogs logs={state.logs} />
+      </div>
     </div>
   );
 }
