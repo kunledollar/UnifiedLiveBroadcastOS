@@ -13,6 +13,7 @@ import {
   groupIntoSyncBatches,
   buildAutomationTimeline,
   toHudTimelineEntries,
+  computeConfidenceBreakdown,
   StudioAutomation,
   AUTONOMY_PERMISSION_KEYS,
   defaultAutonomyPermissions,
@@ -21,6 +22,7 @@ import {
   type AutomationDecision,
   type AutomationSafetyInput,
 } from './studioAutomation.js';
+import { AutonomousConfidenceEngine, defaultConfidenceThresholds } from './autonomousConfidenceEngine.js';
 
 function prediction(partial: Partial<Prediction> & Pick<Prediction, 'category'>): Prediction {
   return {
@@ -566,4 +568,113 @@ test('Studio Automation: reset() also resets the Permissions Engine back to its 
   automation.reset();
 
   assert.equal(automation.getPermissionsEngine().isRolePermitted('triggerSceneTransition', 'Audio Engineer'), false);
+});
+
+// ── Step 113 — Autonomous Confidence Engine (ACE) integration ───────────────
+
+test('Studio Automation: computeConfidenceBreakdown fuses the prediction, historical stability, and matching cluster health', () => {
+  const ace = new AutonomousConfidenceEngine();
+  const now = Date.now();
+  const fresh = decision({ action: 'activateGraphicsLayer', subsystem: 'graphics', cluster: 'graphics', confidence: 0.95, timestamp: now });
+  const healthyCluster = fusedInsight({ severity: 'info', cluster: 'graphics' });
+
+  const breakdown = computeConfidenceBreakdown(fresh, [healthyCluster], ace, /* historicalStability */ 0.95, now);
+
+  assert.equal(breakdown.decisionId, fresh.id);
+  assert.equal(breakdown.rawConfidence, 0.95);
+  assert.equal(breakdown.ageSeconds, 0);
+  // A fresh, high-confidence decision backed by a healthy cluster and
+  // decent historical stability should clear the default `toAct` bar.
+  assert.ok(breakdown.fusedConfidence > 0, breakdown.fusedConfidence.toString());
+  assert.equal(breakdown.effectiveConfidence, breakdown.fusedConfidence); // zero age → no decay yet
+  assert.equal(breakdown.meetsActThreshold, true);
+});
+
+test('Studio Automation: computeConfidenceBreakdown omits the systemHealth signal when no fused insight matches the decision\'s cluster', () => {
+  const ace = new AutonomousConfidenceEngine();
+  const now = Date.now();
+  const fresh = decision({ action: 'activateGraphicsLayer', subsystem: 'graphics', cluster: 'graphics', confidence: 0.9, timestamp: now });
+
+  // No fused insights at all — nothing to fabricate a systemHealth signal from.
+  const breakdown = computeConfidenceBreakdown(fresh, [], ace, 0.8, now);
+  const expected = ace.fuse({ prediction: 0.9, historicalStability: 0.8 }, 'safetyAware');
+  assert.equal(breakdown.fusedConfidence, expected);
+});
+
+test('Studio Automation: computeConfidenceBreakdown discounts confidence for a cluster with unhealthy fused insights', () => {
+  const ace = new AutonomousConfidenceEngine();
+  const now = Date.now();
+  const graphicsDecision = decision({ action: 'activateGraphicsLayer', subsystem: 'graphics', cluster: 'graphics', confidence: 0.9, timestamp: now });
+
+  const healthy = computeConfidenceBreakdown(graphicsDecision, [fusedInsight({ severity: 'info', cluster: 'graphics' })], ace, 0.8, now);
+  const unhealthy = computeConfidenceBreakdown(graphicsDecision, [fusedInsight({ severity: 'critical', cluster: 'graphics' })], ace, 0.8, now);
+
+  assert.ok(unhealthy.fusedConfidence < healthy.fusedConfidence);
+});
+
+test('Studio Automation: computeConfidenceBreakdown decays effectiveConfidence as the decision ages, never below zero', () => {
+  const ace = new AutonomousConfidenceEngine();
+  ace.setDecayRate(0.02);
+  const now = Date.now();
+  const staleDecision = decision({ action: 'activateGraphicsLayer', subsystem: 'graphics', cluster: 'graphics', confidence: 0.95, timestamp: now - 100_000 });
+
+  const breakdown = computeConfidenceBreakdown(staleDecision, [], ace, 0.9, now);
+  assert.equal(breakdown.ageSeconds, 100);
+  assert.equal(breakdown.effectiveConfidence, 0); // 100s * 0.02/s = 2.0 of decay, far past zero
+  assert.ok(breakdown.effectiveConfidence < breakdown.fusedConfidence);
+  assert.equal(breakdown.meetsActThreshold, false);
+});
+
+test('Studio Automation: an extreme decay rate fails the toAct threshold immediately for an otherwise-wouldExecute decision', () => {
+  // Seed a directly-testable wouldExecute decision via the pure builder,
+  // mirroring how override plumbing above is verified — reproducing a
+  // real end-to-end wouldExecute via graph ingestion is both fragile and,
+  // per Step 107-112's own tests, never attempted for any other gate.
+  const decisions = buildAutomationDecisions(
+    [prediction({ id: 'p1', category: 'graphics_activation', confidence: 0.95 })],
+    [],
+    'Director',
+    ENABLED_STABLE,
+  );
+  assert.equal(decisions[0]!.status, 'wouldExecute');
+
+  const ace = new AutonomousConfidenceEngine();
+  ace.setDecayRate(1000); // any nonzero age fully decays instantly
+  const breakdown = computeConfidenceBreakdown(decisions[0]!, [], ace, 0.8, decisions[0]!.timestamp + 1);
+  assert.equal(breakdown.meetsActThreshold, false);
+});
+
+test('Studio Automation: compute() carries exactly one confidenceBreakdown per decision, same order', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.setAutomationEnabled(true);
+  const result = automation.compute();
+  assert.equal(result.confidenceBreakdowns.length, result.decisions.length);
+  result.confidenceBreakdowns.forEach((breakdown, index) => {
+    assert.equal(breakdown.decisionId, result.decisions[index]!.id);
+  });
+});
+
+test('Studio Automation: compute() reports an empty confidenceBreakdowns array when there are no decisions', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  const result = automation.compute();
+  assert.deepEqual(result.confidenceBreakdowns, []);
+});
+
+test('Studio Automation: getConfidenceEngine() exposes ACE for direct configuration', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.getConfidenceEngine().setThresholds({ toAct: 0.99 });
+  assert.equal(automation.getConfidenceEngine().getConfig().thresholds.toAct, 0.99);
+});
+
+test('Studio Automation: reset() also resets the Confidence Engine back to its default configuration', () => {
+  const graph = new UBOSIntelligenceGraph();
+  const automation = new StudioAutomation(graph);
+  automation.getConfidenceEngine().setThresholds({ toAct: 0.1 });
+  automation.getConfidenceEngine().setDecayRate(99);
+  automation.reset();
+
+  assert.deepEqual(automation.getConfidenceEngine().getConfig().thresholds, defaultConfidenceThresholds());
 });

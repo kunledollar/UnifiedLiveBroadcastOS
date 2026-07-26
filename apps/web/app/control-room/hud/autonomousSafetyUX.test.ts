@@ -59,6 +59,7 @@ function automationResult(partial: Partial<StudioAutomationResult> = {}): Studio
     permissions: partial.permissions ?? defaultAutonomyPermissions(),
     conflictResolutionMode: partial.conflictResolutionMode ?? defaultConflictResolutionMode(),
     permissionWorkspace: partial.permissionWorkspace ?? normalizePermissionWorkspace(null),
+    confidenceBreakdowns: partial.confidenceBreakdowns ?? [],
     timestamp: partial.timestamp ?? Date.now(),
   };
 }
