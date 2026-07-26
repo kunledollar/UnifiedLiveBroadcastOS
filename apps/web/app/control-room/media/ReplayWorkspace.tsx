@@ -221,12 +221,13 @@ export function ReplayWorkspace({
             <div className="relative mt-ubos-2 h-20 overflow-hidden rounded-ubos-sm bg-ubos-graphite" style={{ transform: `scaleX(${timelineZoom})`, transformOrigin: 'left center' }}>
               <div className="absolute inset-x-0 top-5 h-2 bg-ubos-border-subtle" />
               <div className="absolute top-5 h-2 bg-ubos-accent/40" style={{ left: '0%', width: `${bufferPercent}%` }} />
+              {/* UBDS color semantics (Step 92): replay clips and markers use Replay Orange. */}
               {replayClips.map((clip, index) => (
-                <button key={clip.id} className="absolute top-10 h-6 rounded bg-ubos-accent px-1 text-[10px] text-black" style={{ left: `${(index * 18) % 82}%`, width: `${clamp((clip.durationMs / Math.max(bufferLengthMs, 1)) * 100, 8, 20)}%` }} onClick={() => onSelectReplayClip?.(clip.id)}>
+                <button key={clip.id} className="absolute top-10 h-6 rounded bg-ubos-replay px-1 text-[10px] text-black" style={{ left: `${(index * 18) % 82}%`, width: `${clamp((clip.durationMs / Math.max(bufferLengthMs, 1)) * 100, 8, 20)}%` }} onClick={() => onSelectReplayClip?.(clip.id)}>
                   {clip.name}
                 </button>
               ))}
-              {selectedClip?.markers.map((marker) => <span key={marker.id} className="absolute top-1 h-16 w-px bg-yellow-300" style={{ left: `${clamp((marker.timeMs / selectedDuration) * 100, 0, 100)}%` }} title={marker.label} />)}
+              {selectedClip?.markers.map((marker) => <span key={marker.id} className="absolute top-1 h-16 w-px bg-ubos-replay" style={{ left: `${clamp((marker.timeMs / selectedDuration) * 100, 0, 100)}%` }} title={marker.label} />)}
               <span className="absolute top-0 h-full w-1 bg-white" style={{ left: `${playheadPercent}%` }} />
             </div>
             <div className="mt-ubos-2 flex flex-wrap gap-ubos-2">

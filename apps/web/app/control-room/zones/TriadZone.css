@@ -1,9 +1,16 @@
+/*
+ * UBDS color semantics (Step 92): the Triad shows the Scene graph, the
+ * Preview lane, and the Program (on-air) lane side by side. Program uses
+ * Program Red (irreversible/live), Preview uses Preview Green
+ * (reversible/staged), and Scene uses Active Blue (operator focus — the
+ * scene currently staged for editing, not yet on Preview or Program).
+ */
 .triad-zone {
   display: flex;
   flex-direction: column;
   width: 100%;
   height: 100%;
-  background: #000;
+  background: var(--ubos-bg-carbon);
   overflow: hidden;
 }
 
@@ -17,9 +24,9 @@
 .triad-canvas {
   flex: 1;
   position: relative;
-  background: #000;
+  background: var(--ubos-bg-carbon);
   overflow: hidden;
-  border-right: 1px solid #222;
+  border-right: 1px solid var(--ubos-border-subtle);
 }
 
 .triad-canvas:last-child {
@@ -30,16 +37,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #334155;
+  color: var(--ubos-fg-disabled);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.15em;
   text-transform: uppercase;
 }
 
-.triad-scene   { border-top: 2px solid #1e3a5f; }
-.triad-preview { border-top: 2px solid #34d399; }
-.triad-program { border-top: 2px solid #f87171; }
+.triad-scene   { border-top: 2px solid var(--ubos-selection-border); }
+.triad-preview { border-top: 2px solid var(--ubos-preview-border); }
+.triad-program { border-top: 2px solid var(--ubos-program-border); }
 
 .scene-renderer {
   position: relative;
@@ -64,7 +71,7 @@
 }
 
 .scene-layer span {
-  color: #e2e8f0;
+  color: var(--ubos-fg-primary);
   font-size: clamp(12px, 2vw, 24px);
   font-weight: 700;
 }

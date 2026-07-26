@@ -34,7 +34,7 @@ export function ControlRoomCanvas() {
 
   return (
     <div
-      className="relative h-full w-full overflow-hidden bg-[#080c12]"
+      className="relative h-full w-full overflow-hidden bg-ubos-carbon"
       data-testid="control-room-canvas"
       data-ui-intelligence="canvas"
     >

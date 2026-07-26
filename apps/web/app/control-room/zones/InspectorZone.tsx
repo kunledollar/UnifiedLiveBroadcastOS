@@ -13,7 +13,7 @@ export function InspectorZone({ state }: { state: ProductionState }) {
 
   return (
     <div className="inspector-zone">
-      <h3 className="text-[9px] font-black uppercase tracking-[0.18em] text-[#334155]">Inspector</h3>
+      <h3 className="text-[9px] font-black uppercase tracking-[0.18em] text-ubos-fg-muted">Inspector</h3>
 
       {/* Scene Inspector */}
       <SceneInspector scene={activeScene} />

@@ -100,18 +100,20 @@ function OverlayChip({
   );
 }
 
+// UBDS color semantics (Step 92): mirrors the audio meter convention used
+// elsewhere (clipping escalates to Program Red, elevated levels warn
+// Warning Yellow, nominal level is healthy/success).
 function MiniAudioBar({ level, className }: { level: number; className?: string }) {
   const clamped = Math.max(0, Math.min(100, level));
+  const barColor =
+    clamped > 85 ? 'bg-ubos-program' : clamped > 65 ? 'bg-ubos-warning' : 'bg-ubos-success';
   return (
     <span
       className={cn('inline-flex h-1 w-10 overflow-hidden rounded-full bg-white/15', className)}
       role="img"
       aria-label={`Audio level ${Math.round(clamped)}%`}
     >
-      <span
-        className={cn('h-full rounded-full', clamped > 85 ? 'bg-red-400' : 'bg-emerald-400')}
-        style={{ width: `${clamped}%` }}
-      />
+      <span className={cn('h-full rounded-full', barColor)} style={{ width: `${clamped}%` }} />
     </span>
   );
 }

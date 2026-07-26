@@ -1,3 +1,5 @@
+/* UBDS color semantics (Step 92): the Graphics Panel's accent is Graphics
+ * Cyan — visual layers, overlays, and templates. See child components. */
 .graphics-composer-zone {
   display: flex;
   height: 100%;
@@ -5,7 +7,7 @@
   gap: 8px;
   padding: 8px;
   overflow: hidden;
-  background: #080c12;
+  background: var(--ubos-bg-carbon);
 }
 
 .gc-left {
