@@ -19,6 +19,18 @@
  *   severity scoring, role/workspace-aware focus, theme-switching decisions,
  *   and the studio-wide intelligence timeline. Sits above (consumes, does
  *   not replace) every engine listed above.
+ * Step 106: Studio Intelligence 1.0 — the top-level intelligence layer.
+ *   Summarizes WIE 2.0's global result into whole-studio subsystem
+ *   predictions, studio health modeling, studio-wide guidance, studio-level
+ *   themes, and cinematic studio-wide motion. Sits above WIE 2.0 the same
+ *   way WIE 2.0 sits above WIE 1.0.
+ * Step 107: Studio Automation 1.0 — UBOS's first autonomous *action* layer.
+ *   Computes automation eligibility decisions (safety-gated by confidence,
+ *   severity, operator opt-in, and studio health), resolves conflicts
+ *   between simultaneously-eligible decisions, groups non-conflicting ones
+ *   into cross-workspace sync batches, and maintains an automation
+ *   timeline. Decision-only: does not dispatch real broadcast commands
+ *   (see `studioAutomation.ts` module doc for why).
  *
  * Later steps expand:
  *   - UBOS Design System / Triad 2.0 theming
@@ -66,6 +78,14 @@ import {
   type WieGlobalResult,
   type WorkspaceIntelligenceZone,
 } from './workspaceIntelligenceEngine2.js';
+import {
+  StudioIntelligence,
+  type StudioIntelligenceResult,
+} from './studioIntelligence.js';
+import {
+  StudioAutomation,
+  type StudioAutomationResult,
+} from './studioAutomation.js';
 
 export type UigNodeType =
   | 'SceneNode'
@@ -194,6 +214,19 @@ export type UigSnapshot = {
   globalThemeModifier: WieGlobalResult['theme']['modifier'];
   latestStudioTimeline: WieGlobalResult['timeline'];
   latestRoleFocusedInsights: readonly FusedInsight[];
+  /** Studio Intelligence 1.0 (Step 106) — top-level studio-wide summary. */
+  studioIntelligence: StudioIntelligenceResult;
+  studioHealthScore: number;
+  studioHealthStatus: StudioIntelligenceResult['studioHealth']['status'];
+  studioSeverityBand: StudioIntelligenceResult['studioSeverityBand'];
+  studioTheme: StudioIntelligenceResult['studioTheme'];
+  studioMotion: StudioIntelligenceResult['studioMotion'];
+  /** Studio Automation 1.0 (Step 107) — automation eligibility decisions. */
+  studioAutomation: StudioAutomationResult;
+  automationEnabled: boolean;
+  automationWouldExecuteCount: number;
+  automationConflictCount: number;
+  latestAutomationTimeline: StudioAutomationResult['timeline'];
 };
 
 export class UBOSIntelligenceGraph {
@@ -209,6 +242,8 @@ export class UBOSIntelligenceGraph {
   readonly workspaceIntelligence = new WorkspaceIntelligenceEngine(this);
   readonly uiIntegration = new UIIntegrationLayer();
   readonly workspaceIntelligence2 = new WorkspaceIntelligenceEngine2(this);
+  readonly studioIntelligenceEngine = new StudioIntelligence(this);
+  readonly studioAutomationEngine = new StudioAutomation(this);
 
   /** Latest inference results from UIE (Step 83). */
   lastInsights: InferenceResult[] = [];
@@ -222,6 +257,10 @@ export class UBOSIntelligenceGraph {
   uiIntelligence: UiIntelligenceState = this.uiIntegration.getState();
   /** Latest global intelligence result from WIE 2.0 (Step 105). */
   globalIntelligence: WieGlobalResult = this.workspaceIntelligence2.getResult();
+  /** Latest studio-level result from Studio Intelligence 1.0 (Step 106). */
+  studioIntelligence: StudioIntelligenceResult = this.studioIntelligenceEngine.getResult();
+  /** Latest automation decisions from Studio Automation 1.0 (Step 107). */
+  studioAutomation: StudioAutomationResult = this.studioAutomationEngine.getResult();
 
   private insights: UigInsight[] = [];
   private recentEvents: CanonicalUigEvent[] = [];
@@ -534,6 +573,12 @@ export class UBOSIntelligenceGraph {
     // Workspace Intelligence Engine 2.0 — global cross-workspace orchestration
     this.globalIntelligence = this.workspaceIntelligence2.compute();
 
+    // Studio Intelligence 1.0 — top-level studio-wide summary
+    this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
+
+    // Studio Automation 1.0 — automation eligibility decisions
+    this.studioAutomation = this.studioAutomationEngine.compute();
+
     return refinedRun;
   }
 
@@ -610,6 +655,8 @@ export class UBOSIntelligenceGraph {
     this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
     this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
     this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
+    this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
+    this.studioAutomation = this.studioAutomationEngine.compute();
     return this.operatorGuidance;
   }
 
@@ -626,6 +673,8 @@ export class UBOSIntelligenceGraph {
     this.workspaceSignals = this.workspaceIntelligence.compute(role, workspace);
     this.uiIntelligence = this.uiIntegration.apply(this.workspaceSignals);
     this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
+    this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
+    this.studioAutomation = this.studioAutomationEngine.compute();
     return this.workspaceSignals;
   }
 
@@ -637,12 +686,35 @@ export class UBOSIntelligenceGraph {
   /** Recompute WIE 2.0's global intelligence result on demand (Step 105). */
   computeGlobalIntelligence(role?: string | null, workspace?: string | null): WieGlobalResult {
     this.globalIntelligence = this.workspaceIntelligence2.compute(role, workspace);
+    this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
     return this.globalIntelligence;
   }
 
   /** Workspace-aware intelligence focus for one of the five canonical zones (Step 105). */
   getWorkspaceIntelligenceFocus(zone: WorkspaceIntelligenceZone, limit?: number) {
     return this.workspaceIntelligence2.workspaceFocus(zone, limit);
+  }
+
+  /** Latest studio-level result from Studio Intelligence 1.0 (Step 106). */
+  getStudioIntelligence(): StudioIntelligenceResult {
+    return this.studioIntelligence;
+  }
+
+  /** Recompute Studio Intelligence 1.0's summary on demand (Step 106). */
+  computeStudioIntelligence(): StudioIntelligenceResult {
+    this.studioIntelligence = this.studioIntelligenceEngine.compute(this.globalIntelligence);
+    return this.studioIntelligence;
+  }
+
+  /** Latest automation decisions from Studio Automation 1.0 (Step 107). */
+  getStudioAutomation(): StudioAutomationResult {
+    return this.studioAutomation;
+  }
+
+  /** Recompute Studio Automation 1.0's decisions on demand (Step 107). */
+  computeStudioAutomation(): StudioAutomationResult {
+    this.studioAutomation = this.studioAutomationEngine.compute();
+    return this.studioAutomation;
   }
 
   getWorkspaceSignals(): readonly WorkspaceUiSignal[] {
@@ -711,6 +783,17 @@ export class UBOSIntelligenceGraph {
       globalThemeModifier: this.globalIntelligence.theme.modifier,
       latestStudioTimeline: this.globalIntelligence.timeline.slice(0, 10),
       latestRoleFocusedInsights: this.globalIntelligence.roleFocusedInsights,
+      studioIntelligence: this.studioIntelligence,
+      studioHealthScore: this.studioIntelligence.studioHealth.score,
+      studioHealthStatus: this.studioIntelligence.studioHealth.status,
+      studioSeverityBand: this.studioIntelligence.studioSeverityBand,
+      studioTheme: this.studioIntelligence.studioTheme,
+      studioMotion: this.studioIntelligence.studioMotion,
+      studioAutomation: this.studioAutomation,
+      automationEnabled: this.studioAutomation.automationEnabled,
+      automationWouldExecuteCount: this.studioAutomation.winners.length,
+      automationConflictCount: this.studioAutomation.conflicts.length,
+      latestAutomationTimeline: this.studioAutomation.timeline,
     };
   }
 
@@ -734,6 +817,10 @@ export class UBOSIntelligenceGraph {
     this.uiIntelligence = this.uiIntegration.getState();
     this.workspaceIntelligence2.reset();
     this.globalIntelligence = this.workspaceIntelligence2.getResult();
+    this.studioIntelligenceEngine.reset();
+    this.studioIntelligence = this.studioIntelligenceEngine.getResult();
+    this.studioAutomationEngine.reset();
+    this.studioAutomation = this.studioAutomationEngine.getResult();
   }
 
   // ── Pruning ───────────────────────────────────────────────────────────────

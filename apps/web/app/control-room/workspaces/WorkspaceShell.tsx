@@ -74,6 +74,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   // Control Room, it makes the *decision* available where the shell root
   // already lives.
   const globalIntelligence = workspaceState.intelligenceGraph.getGlobalIntelligence();
+  // Step 106 — Studio Intelligence 1.0's studio-level theme/health summary,
+  // same data-only treatment as Step 105's severity band/theme modifier.
+  const studioIntelligence = workspaceState.intelligenceGraph.getStudioIntelligence();
 
   const style = {
     '--ubos-program-weight': g.programWeight,
@@ -132,6 +135,8 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       data-ui-elevated={shellElevated ? 'true' : 'false'}
       data-ubos-severity-band={globalIntelligence.globalSeverityBand}
       data-ubos-theme-modifier={globalIntelligence.theme.modifier ?? 'none'}
+      data-ubos-studio-mode={studioIntelligence.studioTheme.mode}
+      data-ubos-studio-health={studioIntelligence.studioHealth.status}
     >
       {/* ── New top bar ──────────────────────────────────────────────── */}
       <UbosGlobalTopBar

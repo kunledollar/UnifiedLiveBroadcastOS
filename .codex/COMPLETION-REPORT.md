@@ -923,3 +923,271 @@ PASS.
 
 (recorded at commit time — see branch `cursor/wie-2-0-4284`)
 
+## 2026-07-26 — Studio Intelligence 1.0 (Step 106)
+
+### Objective
+
+Build Studio Intelligence 1.0 — the top-level intelligence layer sitting
+above WIE 2.0, Triad 2.0, Inspector 2.0, Program Output 2.0, and every
+workspace: whole-studio prediction fusion, studio-level severity scoring,
+studio health modeling, studio-wide guidance, studio-level intelligence
+themes, cinematic studio-wide motion, and the studio-wide intelligence
+timeline. Built on top of Step 105's WIE 2.0 branch (not yet merged to
+`main`), since Studio Intelligence 1.0 is explicitly "powered by" WIE 2.0
+per the spec.
+
+### Root Cause / Gap
+
+WIE 2.0 (Step 105) already fuses signals globally and resolves prediction
+conflicts, but nothing above it: (a) grouped predictions into the seven
+named studio subsystems for reporting, (b) modeled per-subsystem
+*stability* (as opposed to per-signal severity), (c) decided which of the
+six named studio modes should be active, or (d) decided which concrete
+cinematic motion primitives (glow/pulse/shake/fade/elevate) should play
+studio-wide rather than per-panel.
+
+### Implementation
+
+New `apps/web/app/control-room/intelligence-graph/studioIntelligence.ts`
+(Studio Intelligence 1.0). Unlike WIE 2.0 (which stayed decoupled from
+`hud/`), this module *does* import WIE 2.0's severity model directly
+(`scoreSeverityBand`, `SEVERITY_IMPLICATIONS`, `decideThemeModifier`) since
+WIE 2.0 is an explicit, intended dependency here — every responsibility is
+a thin, honest composition over an existing engine, not a parallel system:
+
+- **Whole-studio prediction fusion** — `groupPredictionsBySubsystem()`
+  groups WIE 2.0's already conflict-resolved predictions into the seven
+  named subsystems (scenes/graphics/audio/routing/replay/streaming/
+  output health). No new conflict resolution: the spec's own three-way
+  example (predicted scene transition vs. graphics activation vs. audio
+  peak) is already resolved to one winner by WIE 2.0 before it reaches
+  this function — proven by a dedicated unit test.
+- **Studio-level severity scoring** — reuses WIE 2.0's exact 5-band model
+  (imported, not duplicated, since both explicitly share one model).
+- **Studio health modeling** — `computeStudioHealth()` models
+  output/routing/graphics/audio/replay/streaming stability. Only
+  `output`/`routing`/`graphics`/`audio` have a real `FusionCluster` source
+  today (Step 87 has no "replay"/"streaming" cluster, the same gap WIE
+  2.0's Step 105 comments already document for its own workspace focus);
+  `replay`/`streaming` honestly report `status: 'unknown'` rather than a
+  fabricated score. Overall status thresholds match the Step 106 code
+  sample verbatim (avg severity > 0.8 critical, > 0.6 unstable, > 0.4
+  warning, else stable).
+- **Studio-wide guidance** — `buildStudioGuidance()` annotates OGE's
+  existing, already role-aware, already-ranked guidance with a severity
+  band; does not regenerate guidance.
+- **Studio-level intelligence themes** — `selectStudioTheme()` maps the
+  active operator role onto one of the six named studio modes (Director/
+  Graphics/Audio/Replay/Streaming/Solo — Technical Director folds into
+  Director, Compact Operator into Solo, per Step 103's own precedent),
+  then reuses WIE 2.0's `decideThemeModifier` for the severity-driven
+  modifier.
+- **Cinematic studio intelligence transitions** — `studioMotionForSeverity()`
+  maps WIE 2.0's severity-implied motion intensity onto concrete UBDS
+  motion primitives (glow/pulse/shake/fade/elevate).
+- **Studio-wide intelligence timeline** — reuses WIE 2.0's `timeline`
+  verbatim (it already merges predictions/guidance/insights/automation
+  triggers/output health changes across the graph).
+
+Wired into `UBOSIntelligenceGraph`'s pipeline (`runInference`/
+`generateOperatorGuidance`/`computeWorkspaceSignals`/`clear`), exposed on
+`getSnapshot()`, and applied at the application layer:
+`OperatorHUD.tsx`'s outer container now carries a `data-ubos-studio-motion`
+token list, with new CSS rules in `operator-hud.css` that *reuse* the
+exact same `ubos-elevate`/`ubos-shake`/`ubos-ui-pulse` keyframes Steps
+90-96 already define — no new motion was invented, only a new studio-wide
+application point. `WorkspaceShell.tsx` gains `data-ubos-studio-mode`/
+`data-ubos-studio-health` attributes, data-only, preserving the approved
+Control Room.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/intelligence-graph/studioIntelligence.ts` | New — Studio Intelligence 1.0 orchestrator |
+| `apps/web/app/control-room/intelligence-graph/studioIntelligence.test.ts` | New — 14 unit tests |
+| `apps/web/app/control-room/intelligence-graph/ubosIntelligenceGraph.ts` | Wire Studio Intelligence into pipeline, snapshot, getters, reset |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | `data-ubos-studio-motion`/`data-ubos-studio-severity` on outer container |
+| `apps/web/app/control-room/hud/operator-hud.css` | Cinematic motion CSS reusing existing keyframes |
+| `apps/web/app/control-room/workspaces/WorkspaceShell.tsx` | `data-ubos-studio-mode`/`data-ubos-studio-health` attributes |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 261/261 (14 new Studio
+  Intelligence tests; all 247 pre-existing tests unaffected).
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `pnpm --filter @ubos/web lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium, real orchestration tick loop (no
+mocks), across all 5 workspace routes — zero console errors on every
+route. Confirmed live: `data-ubos-studio-mode="director"`,
+`data-ubos-studio-health` varying by route ("stable" on Director/Graphics/
+Audio/Streaming, "warning" on Replay — a genuinely different signal from
+the severity band, since health averages across mapped dimensions while
+severity takes the single worst signal), and
+`data-ubos-studio-motion="shake elevate"` on the HUD overlay, correctly
+matching `studioMotionForSeverity('critical')`. Screenshot in
+`artifacts/studio-intelligence-step106/`.
+
+**Known pre-existing limitation (not introduced by this step):** the demo
+`multiUserEngine` seeds no session user, so `operator?.role` always falls
+back to the literal `'director'` regardless of which workspace route is
+open — `studioMode` therefore reads `"director"` on every route in this
+environment today, even though `selectStudioTheme()` itself is proven
+correct for all eight roles via a dedicated unit test. Wiring operator
+role to the active Next.js route is a separate, cross-cutting concern
+outside Studio Intelligence 1.0's scope.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/studio-intelligence-1-0-4284`)
+
+## 2026-07-26 — Studio Automation 1.0 (Step 107)
+
+### Objective
+
+Build Studio Automation 1.0 — UBOS's first autonomous *action* layer,
+sitting above Studio Intelligence 1.0 (Step 106), WIE 2.0 (Step 105),
+Triad 2.0, Inspector 2.0, and Program Output 2.0: predictive automation
+eligibility, cross-workspace automation batching, automation safety
+modeling, automation conflict resolution, an automation timeline, and HUD
+integration. Built on top of Step 106's Studio Intelligence branch (not
+yet merged to `main`), since Studio Automation 1.0 is explicitly "powered
+by" Studio Intelligence 1.0 per the spec.
+
+### Root Cause / Gap
+
+Every engine through Step 106 only *observes and summarizes* — nothing
+decided whether a predicted action was safe enough to execute
+autonomously, resolved conflicts between two simultaneously-eligible
+automations, or modeled which of several eligible automations across
+different subsystems could fire together in sync.
+
+### Investigation before implementation
+
+Before writing any code, a dedicated exploration pass audited every
+existing automation-adjacent system in this codebase to decide whether
+Step 107 should dispatch real commands or model decisions only:
+
+- `automation-engine/automationEngine.ts` (Step 67) — a real,
+  orchestration-tick-evaluated condition/action trigger runtime with real
+  side effects (`routingEngine.addRoute`, `audioEngine.setGain`), but no
+  confidence/severity gating and no global "automation enabled" toggle
+  (only per-trigger `enabled`, defaulting to `true`).
+- `LocalProductionCommandDispatcher`
+  (`packages/shared/src/production-graph.ts`) — the real Production Graph
+  command dispatcher (CUT/TAKE/AUTO), used by session sync, never called
+  by any automation system in this codebase.
+- The v5.10 "Automation Platform" (rundown/macro UI, media-plane
+  automation) — architecture docs are explicit that it logs command
+  *intents* only, with `metadataOnly: true`/`realDeviceControl: false`;
+  it never dispatches to the Production Graph either.
+- `getAutomationTriggers()` — already-existing `InferenceResult`s
+  literally worded "Suggest automation: ..." — recommendations, not
+  dispatch.
+
+**Conclusion:** no existing automation system in this codebase actually
+fires real Production Graph commands autonomously. Wiring Step 107
+directly into `LocalProductionCommandDispatcher` would invent a new,
+unreviewed autonomous-control path for a live broadcast studio — exactly
+what "do not create duplicate command or runtime systems" and "do not
+expose unsupported controls" forbid. Step 107 therefore models automation
+as **decisions**, matching the Step 107 spec's own code sample
+(`resolveAction()` only returns a string label, never calls a
+dispatcher).
+
+### Implementation
+
+New `apps/web/app/control-room/intelligence-graph/studioAutomation.ts`:
+
+- **Predictive automation** — `buildAutomationDecisions()` maps each of
+  Studio Intelligence's resolved predictions to an `AutomationActionType`
+  label (`activateGraphicsLayer`, `triggerSceneTransition`,
+  `autoAdjustAudio`, `switchToBackupDestination`, plus `failoverRoute`
+  for `routing_failure`, named in the spec's own cross-workspace example).
+- **Automation safety modeling** — `evaluateSafety()` implements the
+  exact spec thresholds (confidence > 0.85, severity < 0.4, operator
+  opt-in, studio health stable). "Severity" here is *not* the
+  prediction's own confidence (which would make the two gates redundant)
+  — it is how risky the surrounding subsystem already looks, from real
+  fused insights in the same cluster (`severityScoreForCluster()`, reusing
+  Step 106's `fusedInsightSeverityScore`, now exported). No fused insight
+  in that cluster honestly scores 0 (no known problem), never a
+  fabricated pessimistic default. `automationEnabled` defaults to
+  `false` — autonomous execution is opt-in only; no operator-facing
+  toggle exists yet, so the safe default is off.
+- **Automation conflict resolution** — `resolveAutomationConflicts()`
+  reuses WIE 2.0's own conflict *detection* (`predictionsConflict`) on
+  already individually-eligible decisions, tie-broken by the spec's exact
+  four factors: severity (lower/safer wins), confidence (higher wins),
+  operator role (the role-primary subsystem wins), studio health (a
+  global gate every candidate already passed identically, honestly
+  documented as a non-differentiator at the per-pair tie-break stage
+  rather than included as a no-op factor).
+- **Cross-workspace automation** — `groupIntoSyncBatches()` groups
+  non-conflicting, simultaneously-eligible decisions across *different*
+  subsystems into a batch that would fire together — the spec's own
+  scene+graphics+audio example.
+- **Automation timeline** — `buildAutomationTimeline()`, covering all
+  five named sources (predicted/would-execute/blocked/conflict/
+  overridden).
+- **Automation HUD integration** — `toHudTimelineEntries()` reuses Step
+  104's *existing* `'automation'` HUD timeline kind rather than adding a
+  fifth zone or a new kind; only `wouldExecute`/`supersededByConflict`
+  decisions surface there (routine blocks are diagnostic detail, not HUD
+  content). An `overrideDecision(predictionId)` API is exposed for a
+  future HUD "cancel this automation" control — no button wires to it in
+  this step, per "do not expose unsupported controls".
+
+Wired into `UBOSIntelligenceGraph`'s pipeline and `getSnapshot()`.
+`OperatorHUD.tsx` merges automation entries into the existing Timeline
+zone.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.ts` | New — Studio Automation 1.0 orchestrator |
+| `apps/web/app/control-room/intelligence-graph/studioAutomation.test.ts` | New — 20 unit tests |
+| `apps/web/app/control-room/intelligence-graph/studioIntelligence.ts` | Export `fusedInsightSeverityScore` for reuse |
+| `apps/web/app/control-room/intelligence-graph/ubosIntelligenceGraph.ts` | Wire Studio Automation into pipeline, snapshot, getters, reset |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | Merge automation decisions into the Timeline zone |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 281/281 (20 new Studio
+  Automation tests; all 261 pre-existing tests unaffected).
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `pnpm --filter @ubos/web lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium, real orchestration tick loop (no
+mocks), across all 5 workspace routes — **zero console errors on every
+route**. Confirmed live: with automation left at its safe default
+(disabled), no `wouldExecute`/superseded automation entries appear in the
+HUD Timeline on any route — the safe-by-default behavior holds correctly
+in the running app, not just in unit tests. The enabled/eligible/conflict/
+sync-batch code paths are exercised thoroughly by the 20 unit tests
+(since no operator-facing toggle exists yet to exercise them live without
+adding an unreviewed control). Screenshot in
+`artifacts/studio-automation-step107/`.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/studio-automation-1-0-4284`)
+

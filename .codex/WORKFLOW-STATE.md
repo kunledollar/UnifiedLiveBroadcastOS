@@ -71,12 +71,13 @@ v5.12.0 — next platform phase pending authoritative task specification
 
 ## Latest Control Room Milestone
 
-- **Milestone title:** Workspace Intelligence Engine 2.0 (Step 105)
-- **Release name:** UBOS WIE 2.0
+- **Milestone title:** Studio Automation 1.0 (Step 107)
+- **Release name:** UBOS Studio Automation 1.0
 - **Status:** PASS (see `.codex/COMPLETION-REPORT.md`, 2026-07-26 entry)
-- **Prior milestone:** Operator HUD 2.0 (Step 104), branch `cursor/operator-hud-2-0-4284` (PR #410, not yet merged to `main`); Steps 91–103 merged at d44db76; Intelligence Graph Foundation (Steps 81–90) merge head d0953f6
-- **Branch note:** Step 105 (branch `cursor/wie-2-0-4284`) was built on top of the unmerged Step 104 branch, since "HUD 2.0 intelligence routing" is one of WIE 2.0's explicit responsibilities. Merge Step 104 before Step 105, in that order.
-- **Next Control Room step:** Step 106 — pending authoritative task specification
+- **Prior milestones:** Studio Intelligence 1.0 (Step 106), branch `cursor/studio-intelligence-1-0-4284` (PR #412, not yet merged); WIE 2.0 (Step 105), branch `cursor/wie-2-0-4284` (PR #411, not yet merged); Operator HUD 2.0 (Step 104), branch `cursor/operator-hud-2-0-4284` (PR #410, not yet merged); Steps 91–103 merged at d44db76; Intelligence Graph Foundation (Steps 81–90) merge head d0953f6
+- **Branch note:** Steps 104 → 105 → 106 → 107 are a stacked branch chain (`cursor/operator-hud-2-0-4284` → `cursor/wie-2-0-4284` → `cursor/studio-intelligence-1-0-4284` → `cursor/studio-automation-1-0-4284`), each PR based on the previous. Merge in that exact order: #410, #411, #412, then the Step 107 PR.
+- **Safety note:** Studio Automation 1.0 (Step 107) is decision-only — it does not dispatch real broadcast commands, and its `automationEnabled` flag defaults to `false` with no operator-facing toggle yet. See the Step 107 completion report entry for the full investigation of why.
+- **Next Control Room step:** Step 108 — pending authoritative task specification
 
 ---
 
