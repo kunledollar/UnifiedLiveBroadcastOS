@@ -923,3 +923,130 @@ PASS.
 
 (recorded at commit time — see branch `cursor/wie-2-0-4284`)
 
+## 2026-07-26 — Studio Intelligence 1.0 (Step 106)
+
+### Objective
+
+Build Studio Intelligence 1.0 — the top-level intelligence layer sitting
+above WIE 2.0, Triad 2.0, Inspector 2.0, Program Output 2.0, and every
+workspace: whole-studio prediction fusion, studio-level severity scoring,
+studio health modeling, studio-wide guidance, studio-level intelligence
+themes, cinematic studio-wide motion, and the studio-wide intelligence
+timeline. Built on top of Step 105's WIE 2.0 branch (not yet merged to
+`main`), since Studio Intelligence 1.0 is explicitly "powered by" WIE 2.0
+per the spec.
+
+### Root Cause / Gap
+
+WIE 2.0 (Step 105) already fuses signals globally and resolves prediction
+conflicts, but nothing above it: (a) grouped predictions into the seven
+named studio subsystems for reporting, (b) modeled per-subsystem
+*stability* (as opposed to per-signal severity), (c) decided which of the
+six named studio modes should be active, or (d) decided which concrete
+cinematic motion primitives (glow/pulse/shake/fade/elevate) should play
+studio-wide rather than per-panel.
+
+### Implementation
+
+New `apps/web/app/control-room/intelligence-graph/studioIntelligence.ts`
+(Studio Intelligence 1.0). Unlike WIE 2.0 (which stayed decoupled from
+`hud/`), this module *does* import WIE 2.0's severity model directly
+(`scoreSeverityBand`, `SEVERITY_IMPLICATIONS`, `decideThemeModifier`) since
+WIE 2.0 is an explicit, intended dependency here — every responsibility is
+a thin, honest composition over an existing engine, not a parallel system:
+
+- **Whole-studio prediction fusion** — `groupPredictionsBySubsystem()`
+  groups WIE 2.0's already conflict-resolved predictions into the seven
+  named subsystems (scenes/graphics/audio/routing/replay/streaming/
+  output health). No new conflict resolution: the spec's own three-way
+  example (predicted scene transition vs. graphics activation vs. audio
+  peak) is already resolved to one winner by WIE 2.0 before it reaches
+  this function — proven by a dedicated unit test.
+- **Studio-level severity scoring** — reuses WIE 2.0's exact 5-band model
+  (imported, not duplicated, since both explicitly share one model).
+- **Studio health modeling** — `computeStudioHealth()` models
+  output/routing/graphics/audio/replay/streaming stability. Only
+  `output`/`routing`/`graphics`/`audio` have a real `FusionCluster` source
+  today (Step 87 has no "replay"/"streaming" cluster, the same gap WIE
+  2.0's Step 105 comments already document for its own workspace focus);
+  `replay`/`streaming` honestly report `status: 'unknown'` rather than a
+  fabricated score. Overall status thresholds match the Step 106 code
+  sample verbatim (avg severity > 0.8 critical, > 0.6 unstable, > 0.4
+  warning, else stable).
+- **Studio-wide guidance** — `buildStudioGuidance()` annotates OGE's
+  existing, already role-aware, already-ranked guidance with a severity
+  band; does not regenerate guidance.
+- **Studio-level intelligence themes** — `selectStudioTheme()` maps the
+  active operator role onto one of the six named studio modes (Director/
+  Graphics/Audio/Replay/Streaming/Solo — Technical Director folds into
+  Director, Compact Operator into Solo, per Step 103's own precedent),
+  then reuses WIE 2.0's `decideThemeModifier` for the severity-driven
+  modifier.
+- **Cinematic studio intelligence transitions** — `studioMotionForSeverity()`
+  maps WIE 2.0's severity-implied motion intensity onto concrete UBDS
+  motion primitives (glow/pulse/shake/fade/elevate).
+- **Studio-wide intelligence timeline** — reuses WIE 2.0's `timeline`
+  verbatim (it already merges predictions/guidance/insights/automation
+  triggers/output health changes across the graph).
+
+Wired into `UBOSIntelligenceGraph`'s pipeline (`runInference`/
+`generateOperatorGuidance`/`computeWorkspaceSignals`/`clear`), exposed on
+`getSnapshot()`, and applied at the application layer:
+`OperatorHUD.tsx`'s outer container now carries a `data-ubos-studio-motion`
+token list, with new CSS rules in `operator-hud.css` that *reuse* the
+exact same `ubos-elevate`/`ubos-shake`/`ubos-ui-pulse` keyframes Steps
+90-96 already define — no new motion was invented, only a new studio-wide
+application point. `WorkspaceShell.tsx` gains `data-ubos-studio-mode`/
+`data-ubos-studio-health` attributes, data-only, preserving the approved
+Control Room.
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `apps/web/app/control-room/intelligence-graph/studioIntelligence.ts` | New — Studio Intelligence 1.0 orchestrator |
+| `apps/web/app/control-room/intelligence-graph/studioIntelligence.test.ts` | New — 14 unit tests |
+| `apps/web/app/control-room/intelligence-graph/ubosIntelligenceGraph.ts` | Wire Studio Intelligence into pipeline, snapshot, getters, reset |
+| `apps/web/app/control-room/hud/OperatorHUD.tsx` | `data-ubos-studio-motion`/`data-ubos-studio-severity` on outer container |
+| `apps/web/app/control-room/hud/operator-hud.css` | Cinematic motion CSS reusing existing keyframes |
+| `apps/web/app/control-room/workspaces/WorkspaceShell.tsx` | `data-ubos-studio-mode`/`data-ubos-studio-health` attributes |
+| `apps/web/tsconfig.test.json`, `apps/web/package.json` | Register new engine/test files |
+
+### Test Results
+
+- `pnpm --filter @ubos/web test` — PASS, 261/261 (14 new Studio
+  Intelligence tests; all 247 pre-existing tests unaffected).
+- `pnpm --filter @ubos/web typecheck` — PASS.
+- `pnpm --filter @ubos/web lint` — PASS.
+- `pnpm --filter @ubos/web build` — PASS (43/43 static pages).
+
+### Runtime/Browser Evidence
+
+Live dev server + Playwright/Chromium, real orchestration tick loop (no
+mocks), across all 5 workspace routes — zero console errors on every
+route. Confirmed live: `data-ubos-studio-mode="director"`,
+`data-ubos-studio-health` varying by route ("stable" on Director/Graphics/
+Audio/Streaming, "warning" on Replay — a genuinely different signal from
+the severity band, since health averages across mapped dimensions while
+severity takes the single worst signal), and
+`data-ubos-studio-motion="shake elevate"` on the HUD overlay, correctly
+matching `studioMotionForSeverity('critical')`. Screenshot in
+`artifacts/studio-intelligence-step106/`.
+
+**Known pre-existing limitation (not introduced by this step):** the demo
+`multiUserEngine` seeds no session user, so `operator?.role` always falls
+back to the literal `'director'` regardless of which workspace route is
+open — `studioMode` therefore reads `"director"` on every route in this
+environment today, even though `selectStudioTheme()` itself is proven
+correct for all eight roles via a dedicated unit test. Wiring operator
+role to the active Next.js route is a separate, cross-cutting concern
+outside Studio Intelligence 1.0's scope.
+
+### Status
+
+PASS.
+
+### Commit Hash
+
+(recorded at commit time — see branch `cursor/studio-intelligence-1-0-4284`)
+
