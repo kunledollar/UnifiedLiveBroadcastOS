@@ -36,8 +36,10 @@ export {
   ubosElevation,
   ubosElevationClasses,
   ubosElevationLevels,
+  ubosIntelligenceElevationMap,
   type UbosElevationLevel,
   type UbosElevationToken,
+  type UbosIntelligenceElevationAction,
 } from './elevation.js';
 
 export {

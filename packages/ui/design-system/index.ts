@@ -12,9 +12,12 @@
  * Audio, Routing, Replay, Workspace Shell, and Operator HUD surfaces. Step
  * 93 completed the typography hierarchy (Title, Section Label, Body,
  * Micro-text, HUD Text, Intelligence Text) and wired intelligence-signal
- * text treatments into the UI Intelligence Integration Layer. Application
- * of UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 happens in
- * later steps — this package only defines the foundation.
+ * text treatments into the UI Intelligence Integration Layer. Step 94
+ * refined the elevation model (soft/medium/strong/hard shadows, per-level
+ * gradients, a thick Level 4 border) and wired intelligence-signal
+ * elevation treatments into the same layer. Application of UBDS to Triad
+ * 2.0, Inspector 2.0, and Program Output 2.0 happens in later steps — this
+ * package only defines the foundation.
  */
 
 export * from './tokens/index.js';
@@ -23,7 +26,7 @@ export * from './primitives/index.js';
 export { cn } from './utils/cn.js';
 
 /** Design system version identifier */
-export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.1' as const;
+export const UBOS_DESIGN_SYSTEM_VERSION = '5.16.2' as const;
 
 /** UBDS foundation milestone identifier — most recent foundation step. */
-export const UBDS_FOUNDATION_STEP = 93 as const;
+export const UBDS_FOUNDATION_STEP = 94 as const;

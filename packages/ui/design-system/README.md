@@ -44,27 +44,35 @@ The existing roles `display`, `section`, `panel`, `caption`, `metadata`, `mono`,
 
 ### Typography + Intelligence Integration
 
-`apps/web/app/control-room/intelligence-graph/ui-intelligence.css` maps each UI Intelligence Integration Layer signal (Step 90) to both a color treatment (Step 92) and a text treatment (Step 93), since these classes are applied to zone wrapper elements and `font-weight`/`font-style`/`text-shadow` are inheritable:
+`apps/web/app/control-room/intelligence-graph/ui-intelligence.css` maps each UI Intelligence Integration Layer signal (Step 90) to a color treatment (Step 92), a text treatment (Step 93), and an elevation level (Step 94), since these classes are applied to zone wrapper elements and `font-weight`/`font-style`/`text-shadow` are inheritable:
 
-- **highlight** → Program Red + bold text (critical severity).
-- **warn** → Warning Yellow + bold text.
-- **pulse** → Warning Yellow + an animated glow that includes a `text-shadow` pulse, not just the box glow.
-- **prepare** → Warning Yellow + italic text (a standing prediction, not yet confirmed).
-- **elevated** → the existing success tone (no text treatment — elevation is chrome-level, not a text state).
-- **dim** → reduced opacity only.
-- **suppress** → reduced opacity/desaturation plus a size step toward micro-text, per "suppress → micro-text or hidden".
+- **highlight** → Program Red + bold text + Level 3 depth (critical severity).
+- **warn** → Warning Yellow + bold text + Level 4 depth with a thick 2px outline.
+- **pulse** → Warning Yellow + an animated glow that includes a `text-shadow` pulse, not just the box glow + Level 3 depth.
+- **prepare** → Warning Yellow + italic text + Level 2 depth with a subtle gradient (a standing prediction, not yet confirmed).
+- **elevated** → the existing success tone (no text treatment — elevation is chrome-level, not a text state) + Level 3 depth.
+- **dim** → reduced opacity + Level 1 depth.
+- **suppress** → reduced opacity/desaturation plus a size step toward micro-text, per "suppress → micro-text or hidden" + Level 0 (no shadow at all — it recedes to the background).
 
 An element's own explicit typography class (e.g. `font-semibold` on a heading) still wins over the inherited wrapper value — this is a subtle default, not an override.
 
 ## Elevation System
 
-Panels are placed on one of five levels (`ubosElevation`, `ubosElevationClasses`), each combining background, shadow, border, and — from level 2 up — a subtle top-light gradient:
+Panels are placed on one of five levels (`ubosElevation`, `ubosElevationClasses`, `ubosElevationLevels`), each combining a background depth color, a shadow, a border (color + width), and — from Level 2 up — a gradient:
 
-- **Level 0** — background (the app surface itself; nothing floats).
-- **Level 1** — standard panel (default resting panel).
-- **Level 2** — active panel (focus or an in-progress operation).
-- **Level 3** — highlighted panel (operator-selected / emphasized panel).
-- **Level 4** — critical panel (failure, blocking alert, or on-air panel).
+| Level | Name | Shadow | Gradient | Border | Used for |
+| --- | --- | --- | --- | --- | --- |
+| 0 | Background Layer | none | flat | none | Workspace shell, neutral / non-interactive zones |
+| 1 | Standard Panel | soft | flat | thin neutral | Normal panels, inactive sections |
+| 2 | Active Panel | medium | subtle | thin neutral | Selected panel, operator focus, active workspace |
+| 3 | Highlighted Panel | strong | directional | colored (semantic) | Intelligence-highlighted zones, predicted transitions/activations |
+| 4 | Critical Panel | hard | high-contrast | thick (2px), critical | Warnings, degraded output, routing failures, audio clipping, live program danger |
+
+The `borderWidth` field on `UbosElevationToken` is `1` for every level except Level 4, which is `2` (the only "thick" border) — this matches `ubosElevationClasses[4]` using `border-2` while every other level uses `border`. Shadow strength follows a `soft → medium → strong → hard` progression (`ubosShadows.soft/medium/strong/hard`) so Level 1 through Level 4 are always visually distinguishable at a glance, independent of hue.
+
+### Elevation + Intelligence Integration
+
+The same `ubos-*` classes described above under Typography + Intelligence Integration also carry an elevation depth (`ubosIntelligenceElevationMap`): `highlight`/`pulse`/`elevate` → Level 3, `warn` → Level 4, `prepare` → Level 2, `dim` → Level 1, `suppress` → Level 0. The depth contribution is a color-neutral shadow (`--ubos-depth-1/2/3/4`, mirroring `ubosShadows.soft/medium/strong/hard`) layered underneath the signal's own colored glow, so elevation and color semantics never fight each other — a warning stays Warning Yellow at Level 4 depth, not "critical red" just because Level 4 is nominally the most severe level.
 
 ## Motion System
 
@@ -96,4 +104,4 @@ Use CSS variables or design-system utility classes rather than new literal visua
 
 ## Foundation vs. application
 
-Step 91 established the UBDS token foundation (color, elevation, motion, spacing, and the first four typography roles). Step 92 applied the broadcast color language to the Triad, Inspector, Program Output, Graphics, Audio, Routing, Replay, Workspace Shell, and Operator HUD surfaces. Step 93 completed the typography hierarchy (HUD Text, Intelligence Text) and wired the intelligence-signal text treatments above. Applying UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 (the next-generation redesigns) is scoped to later steps — this package intentionally does not re-skin existing Control Room surfaces beyond the color/typography semantics already applied.
+Step 91 established the UBDS token foundation (color, elevation, motion, spacing, and the first four typography roles). Step 92 applied the broadcast color language to the Triad, Inspector, Program Output, Graphics, Audio, Routing, Replay, Workspace Shell, and Operator HUD surfaces. Step 93 completed the typography hierarchy (HUD Text, Intelligence Text) and wired the intelligence-signal text treatments above. Step 94 refined the elevation model (soft/medium/strong/hard shadow progression, per-level gradients, a thick Level 4 border) and wired the intelligence-signal elevation treatments above. Applying UBDS to Triad 2.0, Inspector 2.0, and Program Output 2.0 (the next-generation redesigns) is scoped to later steps — this package intentionally does not re-skin existing Control Room surfaces beyond the color/typography/elevation semantics already applied.

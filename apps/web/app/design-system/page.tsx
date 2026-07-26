@@ -17,12 +17,15 @@ import {
   ubosBroadcastHues,
   ubosColorRampStates,
   ubosElevationLevels,
+  ubosElevationClasses,
+  ubosIntelligenceElevationMap,
   ubdsTypographyRoles,
   ubosTypographyClasses,
   type UbosBroadcastHue,
   type UbosColorRampState,
   type UbosElevationLevel,
   type UbdsTypographyRole,
+  type UbosIntelligenceElevationAction,
 } from '@ubos/ui';
 
 const hueLabels: Record<UbosBroadcastHue, string> = {
@@ -60,9 +63,11 @@ const typographySamples: Record<UbdsTypographyRole, { sample: string; wrapperCla
   intelligence: { sample: 'Predicted scene transition in ~4s' },
 };
 
-// UIIL signals (Step 90) drive the intelligence-text treatments described
-// in Step 93: highlight/warn are bold, prepare is italic, pulse glows.
-const intelligenceSignalSamples: Array<{ signal: string; className: string; sample: string }> = [
+// UIIL signals (Step 90) drive the intelligence-text (Step 93) and
+// elevation (Step 94) treatments below. `elevate` isn't included here
+// since it targets the workspace shell/guidance panel rather than a
+// generic content card.
+const intelligenceSignalSamples: Array<{ signal: UbosIntelligenceElevationAction; className: string; sample: string }> = [
   { signal: 'highlight', className: 'ubos-highlight', sample: 'Critical: audio dropout on Guest Mic 2' },
   { signal: 'warn', className: 'ubos-warn', sample: 'Output bitrate trending toward degradation' },
   { signal: 'pulse', className: 'ubos-pulse', sample: 'Predicted audio clipping in 2s' },
@@ -71,16 +76,8 @@ const intelligenceSignalSamples: Array<{ signal: string; className: string; samp
   { signal: 'suppress', className: 'ubos-suppress', sample: 'Suppressed low-priority insight' },
 ];
 
-const elevationSwatchClass: Record<UbosElevationLevel, string> = {
-  0: 'bg-ubos-carbon border-transparent',
-  1: 'bg-ubos-graphite border-ubos-border-subtle shadow-ubos-elevation-1',
-  2: 'bg-ubos-slate border-ubos-border shadow-ubos-elevation-2',
-  3: 'bg-ubos-midnight border-ubos-selection-border shadow-ubos-elevation-3',
-  4: 'bg-ubos-midnight border-ubos-error-border shadow-ubos-elevation-4',
-};
-
 const elevationLabels: Record<UbosElevationLevel, string> = {
-  0: 'Level 0 — Background',
+  0: 'Level 0 — Background Layer',
   1: 'Level 1 — Standard Panel',
   2: 'Level 2 — Active Panel',
   3: 'Level 3 — Highlighted Panel',
@@ -110,16 +107,16 @@ export default function DesignSystemShowcasePage() {
     <main className="min-h-screen bg-ubos-carbon p-8 text-ubos-fg-primary">
       <header className="mb-8">
         <p className="text-[0.625rem] font-bold uppercase tracking-[0.12em] text-ubos-fg-secondary">
-          UBOS Design System · Steps 91–93
+          UBOS Design System · Steps 91–94
         </p>
         <h1 className="text-[1.375rem] font-semibold leading-tight tracking-tight text-ubos-fg-primary">
           UBDS Foundation Showcase
         </h1>
         <p className="mt-1 max-w-2xl text-[0.8125rem] text-ubos-fg-secondary">
-          Broadcast color language, the complete typography hierarchy, elevation model, motion
-          system, and spacing rhythm. This route is a read-only showcase — Control Room surfaces
-          are only updated by the color (Step 92) and typography (Step 93) application work
-          itself, not by this page.
+          Broadcast color language, the complete typography hierarchy, the elevation model
+          (shadow/gradient/border per level), motion system, and spacing rhythm. This route is a
+          read-only showcase — Control Room surfaces are only updated by the color (Step 92),
+          typography (Step 93), and elevation (Step 94) application work itself, not by this page.
         </p>
       </header>
 
@@ -164,15 +161,21 @@ export default function DesignSystemShowcasePage() {
       </section>
 
       <section className="mb-10">
-        <SectionHeading>Typography + Intelligence Integration</SectionHeading>
+        <SectionHeading>Typography + Elevation + Intelligence Integration</SectionHeading>
         <p className="mb-3 max-w-2xl text-[0.75rem] text-ubos-fg-secondary">
-          Intelligence Text combined with each UIIL signal class (Step 90) — the same
-          classes applied to live Control Room zone wrappers in Step 92/93.
+          Each UIIL signal class (Step 90) combines a color treatment (Step 92), a text
+          treatment (Step 93), and an elevation level (Step 94) — the same classes applied to
+          live Control Room zone wrappers.
         </p>
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {intelligenceSignalSamples.map(({ signal, className, sample }) => (
             <div key={signal} className="rounded-ubos-md border border-ubos-border-subtle bg-ubos-graphite p-3">
-              <span className="mb-2 block text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{signal}</span>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">{signal}</span>
+                <span className="text-[0.5625rem] uppercase tracking-wide text-ubos-fg-disabled">
+                  Level {ubosIntelligenceElevationMap[signal]}
+                </span>
+              </div>
               <div className={`rounded-ubos-sm p-2 ${className}`}>
                 <p className={ubosTypographyClasses.intelligence}>{sample}</p>
               </div>
@@ -187,7 +190,7 @@ export default function DesignSystemShowcasePage() {
           {ubosElevationLevels.map((level) => (
             <div
               key={level}
-              className={`flex h-24 flex-col items-center justify-center rounded-ubos-md border p-2 text-center ${elevationSwatchClass[level]}`}
+              className={`flex h-24 flex-col items-center justify-center rounded-ubos-md p-2 text-center ${ubosElevationClasses[level]}`}
             >
               <span className="text-[0.625rem] font-medium text-ubos-fg-secondary">{elevationLabels[level]}</span>
             </div>
