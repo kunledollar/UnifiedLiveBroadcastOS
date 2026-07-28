@@ -21,3 +21,5 @@ export function DistributionWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default DistributionWorkspace;

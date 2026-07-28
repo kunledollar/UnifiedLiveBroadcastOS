@@ -21,3 +21,5 @@ export function GraphicsOperatorWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default GraphicsOperatorWorkspace;

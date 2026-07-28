@@ -21,3 +21,5 @@ export function ReplayWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default ReplayWorkspace;

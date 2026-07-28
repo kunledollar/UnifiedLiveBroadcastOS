@@ -32,3 +32,5 @@ export function DirectorWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default DirectorWorkspace;
