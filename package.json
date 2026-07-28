@@ -3,6 +3,10 @@
   "private": true,
   "version": "1.0.0-rc.1",
   "packageManager": "pnpm@10.28.1",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "dev": "dotenv -- turbo dev",
     "build": "turbo build",
@@ -31,7 +35,7 @@
     "ubos:update": "git pull origin main && pnpm install && pnpm db:generate && pnpm db:push",
     "ubos:clean": "node scripts/clean.mjs",
     "ubos:doctor": "pnpm lint && pnpm typecheck && pnpm test",
-    "ubos:browser": "dotenv -- pnpm --filter @ubos/web dev",
+    "ubos:browser": "dotenv -- pnpm --filter @ubos/control-room-spa dev",
     "validate:v512-wiring": "node scripts/validate-v512-capability-wiring.mjs",
     "validate:v512-step3": "node scripts/validate-v512-step3.mjs",
     "validate:v512-native-adapters": "pnpm --filter @ubos/media-plane build && node scripts/validate-v512-native-adapters.mjs",
