@@ -758,7 +758,7 @@ New `apps/web/app/control-room/hud/` module:
 | `apps/web/app/control-room/hud/HUDWarnings.tsx` | New — top-left zone |
 | `apps/web/app/control-room/hud/HUDTimeline.tsx` | New — bottom-center zone |
 | `apps/web/app/control-room/hud/operator-hud.css` | New — overlay layout + suppress-collapse fallback |
-| `apps/web/app/control-room/workspaces/WorkspaceShell.tsx` | Mount `<OperatorHUD />` above `ControlRoomCanvas` |
+| `apps/web/app/control-room/workspaces/` | Mount `<OperatorHUD />` above `ControlRoomCanvas` |
 | `apps/web/tsconfig.test.json` | Register new HUD source/test files |
 | `apps/web/package.json` | Add HUD test file to the `test` script |
 
