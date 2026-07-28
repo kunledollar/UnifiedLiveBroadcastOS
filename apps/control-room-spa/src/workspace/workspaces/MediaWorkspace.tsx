@@ -21,3 +21,5 @@ export function MediaWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default MediaWorkspace;

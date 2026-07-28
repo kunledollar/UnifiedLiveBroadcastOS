@@ -21,3 +21,5 @@ export function ProductionWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default ProductionWorkspace;

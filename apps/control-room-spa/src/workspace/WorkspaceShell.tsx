@@ -1,9 +1,16 @@
+import { useEffect } from "react";
 import { WorkspaceManager } from "./WorkspaceManager";
 import { AutonomousShell } from "./autonomous/AutonomousShell";
+import { AutonomousProvider } from "./autonomous/AutonomousProvider";
 import { Sidebar } from "./Sidebar";
 
-export default function WorkspaceShell() {
+function WorkspaceContent() {
   const manager = WorkspaceManager();
+
+  useEffect(() => {
+    console.log("[WorkspaceShell] mounted");
+    return () => console.log("[WorkspaceShell] unmounted");
+  }, []);
 
   return (
     <div className="ubos-shell">
@@ -18,5 +25,13 @@ export default function WorkspaceShell() {
 
       <AutonomousShell />
     </div>
+  );
+}
+
+export default function WorkspaceShell() {
+  return (
+    <AutonomousProvider>
+      <WorkspaceContent />
+    </AutonomousProvider>
   );
 }

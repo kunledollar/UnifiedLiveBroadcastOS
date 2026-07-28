@@ -1,20 +1,37 @@
-import { useState, useContext } from "react";
-import { AutonomousContext } from "./autonomous/AutonomousProvider";
-import { DirectorWorkspace } from "./workspaces/DirectorWorkspace";
-import { ProductionWorkspace } from "./workspaces/ProductionWorkspace";
-import { GraphicsOperatorWorkspace } from "./workspaces/GraphicsOperatorWorkspace";
-import { ReplayWorkspace } from "./workspaces/ReplayWorkspace";
-import { DistributionWorkspace } from "./workspaces/DistributionWorkspace";
-import { AutomationWorkspace } from "./workspaces/AutomationWorkspace";
-import { AnalyticsWorkspace } from "./workspaces/AnalyticsWorkspace";
-import { MediaWorkspace } from "./workspaces/MediaWorkspace";
-import { InspectorWorkspace } from "./workspaces/InspectorWorkspace";
+import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useAutonomous } from "./autonomous/AutonomousProvider";
+import DirectorWorkspace from "./workspaces/DirectorWorkspace";
+import ProductionWorkspace from "./workspaces/ProductionWorkspace";
+import GraphicsOperatorWorkspace from "./workspaces/GraphicsOperatorWorkspace";
+import ReplayWorkspace from "./workspaces/ReplayWorkspace";
+import DistributionWorkspace from "./workspaces/DistributionWorkspace";
+import AutomationWorkspace from "./workspaces/AutomationWorkspace";
+import AnalyticsWorkspace from "./workspaces/AnalyticsWorkspace";
+import MediaWorkspace from "./workspaces/MediaWorkspace";
+import InspectorWorkspace from "./workspaces/InspectorWorkspace";
 
 export function WorkspaceManager() {
   const [workspace, setWorkspace] = useState("director");
-  const ctx = useContext(AutonomousContext);
+  const ctx = useAutonomous();
 
-  const workspaces: Record<string, JSX.Element> = {
+  useEffect(() => {
+    console.log("[WorkspaceManager] mounted", { workspace, state: ctx.state });
+    return () => console.log("[WorkspaceManager] unmounted");
+  }, []);
+
+  useEffect(() => {
+    console.log("[WorkspaceManager] active workspace", workspace);
+  }, [workspace]);
+
+  const selectWorkspace = useCallback((nextWorkspace: string) => {
+    console.log("[WorkspaceManager] workspace transition", {
+      from: workspace,
+      to: nextWorkspace,
+    });
+    setWorkspace(nextWorkspace);
+  }, [workspace]);
+
+  const workspaces: Record<string, ReactElement> = {
     director: <DirectorWorkspace autonomy={ctx.state} />,
     production: <ProductionWorkspace autonomy={ctx.state} />,
     graphics: <GraphicsOperatorWorkspace autonomy={ctx.state} />,
@@ -28,7 +45,7 @@ export function WorkspaceManager() {
 
   return {
     workspace,
-    setWorkspace,
+    setWorkspace: selectWorkspace,
     renderWorkspace: () => workspaces[workspace] || null
   };
 }

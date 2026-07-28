@@ -1,9 +1,21 @@
+import { useEffect } from "react";
+
 type SidebarProps = {
   active: string;
   onSelect: (workspace: string) => void;
 };
 
 export function Sidebar({ active, onSelect }: SidebarProps) {
+  useEffect(() => {
+    console.log("[Sidebar] mounted", { active });
+    return () => console.log("[Sidebar] unmounted");
+  }, []);
+
+  useEffect(() => {
+    console.log("[Sidebar] active workspace", active);
+    if (!active) console.warn("[Sidebar] active workspace is null or undefined", active);
+  }, [active]);
+
   const items = [
     { id: "director", label: "Director" },
     { id: "production", label: "Production" },

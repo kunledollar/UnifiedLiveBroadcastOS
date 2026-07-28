@@ -21,3 +21,5 @@ export function AnalyticsWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default AnalyticsWorkspace;

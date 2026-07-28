@@ -21,3 +21,5 @@ export function InspectorWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default InspectorWorkspace;

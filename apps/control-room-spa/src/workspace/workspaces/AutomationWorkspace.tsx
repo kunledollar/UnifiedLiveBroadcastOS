@@ -21,3 +21,5 @@ export function AutomationWorkspace({ autonomy }: { autonomy: any }) {
     </div>
   );
 }
+
+export default AutomationWorkspace;
