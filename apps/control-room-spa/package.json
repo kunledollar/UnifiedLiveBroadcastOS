@@ -3,7 +3,10 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
+    "check:source": "node scripts/check-source.mjs",
+    "predev": "pnpm check:source",
     "dev": "vite",
+    "prebuild": "pnpm check:source",
     "build": "vite build",
     "preview": "vite preview"
   },
