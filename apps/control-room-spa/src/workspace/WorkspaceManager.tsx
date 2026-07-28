@@ -1,5 +1,7 @@
-import { useCallback, useEffect, useState, type ReactElement } from "react";
+import { useEffect, type ReactElement } from "react";
+
 import { useAutonomous } from "./autonomous/AutonomousProvider";
+
 import DirectorWorkspace from "./workspaces/DirectorWorkspace";
 import ProductionWorkspace from "./workspaces/ProductionWorkspace";
 import GraphicsOperatorWorkspace from "./workspaces/GraphicsOperatorWorkspace";
@@ -10,26 +12,17 @@ import AnalyticsWorkspace from "./workspaces/AnalyticsWorkspace";
 import MediaWorkspace from "./workspaces/MediaWorkspace";
 import InspectorWorkspace from "./workspaces/InspectorWorkspace";
 
-export function WorkspaceManager() {
-  const [workspace, setWorkspace] = useState("director");
+type Props = {
+  active: string;
+};
+
+export function WorkspaceManager({ active }: Props) {
   const ctx = useAutonomous();
 
   useEffect(() => {
-    console.log("[WorkspaceManager] mounted", { workspace, state: ctx.state });
+    console.log("[WorkspaceManager] mounted");
     return () => console.log("[WorkspaceManager] unmounted");
   }, []);
-
-  useEffect(() => {
-    console.log("[WorkspaceManager] active workspace", workspace);
-  }, [workspace]);
-
-  const selectWorkspace = useCallback((nextWorkspace: string) => {
-    console.log("[WorkspaceManager] workspace transition", {
-      from: workspace,
-      to: nextWorkspace,
-    });
-    setWorkspace(nextWorkspace);
-  }, [workspace]);
 
   const workspaces: Record<string, ReactElement> = {
     director: <DirectorWorkspace autonomy={ctx.state} />,
@@ -40,12 +33,8 @@ export function WorkspaceManager() {
     automation: <AutomationWorkspace autonomy={ctx.state} />,
     analytics: <AnalyticsWorkspace autonomy={ctx.state} />,
     media: <MediaWorkspace autonomy={ctx.state} />,
-    inspector: <InspectorWorkspace autonomy={ctx.state} />
+    inspector: <InspectorWorkspace autonomy={ctx.state} />,
   };
 
-  return {
-    workspace,
-    setWorkspace: selectWorkspace,
-    renderWorkspace: () => workspaces[workspace] || null
-  };
+  return workspaces[active] ?? null;
 }
