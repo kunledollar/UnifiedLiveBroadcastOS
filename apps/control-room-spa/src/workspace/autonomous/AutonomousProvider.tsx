@@ -55,11 +55,7 @@ export function AutonomousProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AutonomousState>(initialState);
   const value = useMemo(() => ({ state, setState }), [state]);
 
-  return (
-    <AutonomousContext.Provider value={value}>
-      {children}
-    </AutonomousContext.Provider>
-  );
+  return <AutonomousContext.Provider value={value}>{children}</AutonomousContext.Provider>;
 }
 
 export function useAutonomous() {

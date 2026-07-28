@@ -1,6 +1,8 @@
-export function GraphicsOperatorWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function GraphicsOperatorWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--graphics">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--graphics">
       <div className="workspace__row">
         <div className="panel panel--graphics">
           <h2>GRAPHICS</h2>

@@ -1,6 +1,8 @@
-export function DistributionWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function DistributionWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--distribution">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--distribution">
       <div className="workspace__row">
         <div className="panel panel--distribution">
           <h2>DISTRIBUTION</h2>

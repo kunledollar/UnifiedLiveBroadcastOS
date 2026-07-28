@@ -1,6 +1,8 @@
-export function AutomationWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function AutomationWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--automation">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--automation">
       <div className="workspace__row">
         <div className="panel panel--automation">
           <h2>AUTOMATION</h2>

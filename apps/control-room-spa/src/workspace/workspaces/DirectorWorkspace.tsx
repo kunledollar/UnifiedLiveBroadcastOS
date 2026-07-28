@@ -1,6 +1,8 @@
-export function DirectorWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function DirectorWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--director">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--director">
       <div className="workspace__row">
         <div className="panel panel--triad">
           <h2>TRIAD</h2>

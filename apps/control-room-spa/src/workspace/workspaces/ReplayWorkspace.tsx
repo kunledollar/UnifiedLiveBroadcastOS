@@ -1,6 +1,8 @@
-export function ReplayWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function ReplayWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--replay">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--replay">
       <div className="workspace__row">
         <div className="panel panel--replay">
           <h2>REPLAY</h2>
