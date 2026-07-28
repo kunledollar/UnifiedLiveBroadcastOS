@@ -1,6 +1,8 @@
-export function ProductionWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function ProductionWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--production">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--production">
       <div className="workspace__row">
         <div className="panel panel--program">
           <h2>PROGRAM</h2>

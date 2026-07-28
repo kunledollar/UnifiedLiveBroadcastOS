@@ -1,6 +1,8 @@
-export function AnalyticsWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function AnalyticsWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--analytics">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--analytics">
       <div className="workspace__row">
         <div className="panel panel--analytics">
           <h2>ANALYTICS</h2>

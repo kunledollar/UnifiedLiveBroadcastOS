@@ -1,31 +1,32 @@
-import { useEffect } from "react";
+import { useEffect } from 'react';
+import type { WorkspaceId } from './WorkspaceManager';
 
 type SidebarProps = {
-  active: string;
-  onSelect: (workspace: string) => void;
+  active: WorkspaceId;
+  onSelect: (workspace: WorkspaceId) => void;
 };
 
 export function Sidebar({ active, onSelect }: SidebarProps) {
   useEffect(() => {
-    console.log("[Sidebar] mounted", { active });
-    return () => console.log("[Sidebar] unmounted");
+    console.log('[Sidebar] mounted', { active });
+    return () => console.log('[Sidebar] unmounted');
   }, []);
 
   useEffect(() => {
-    console.log("[Sidebar] active workspace", active);
-    if (!active) console.warn("[Sidebar] active workspace is null or undefined", active);
+    console.log('[Sidebar] active workspace', active);
+    if (!active) console.warn('[Sidebar] active workspace is null or undefined', active);
   }, [active]);
 
-  const items = [
-    { id: "director", label: "Director" },
-    { id: "production", label: "Production" },
-    { id: "graphics", label: "Graphics" },
-    { id: "replay", label: "Replay" },
-    { id: "distribution", label: "Distribution" },
-    { id: "automation", label: "Automation" },
-    { id: "analytics", label: "Analytics" },
-    { id: "media", label: "Media" },
-    { id: "inspector", label: "Inspector" }
+  const items: ReadonlyArray<{ id: WorkspaceId; label: string }> = [
+    { id: 'director', label: 'Director' },
+    { id: 'production', label: 'Production' },
+    { id: 'graphics', label: 'Graphics' },
+    { id: 'replay', label: 'Replay' },
+    { id: 'distribution', label: 'Distribution' },
+    { id: 'automation', label: 'Automation' },
+    { id: 'analytics', label: 'Analytics' },
+    { id: 'media', label: 'Media' },
+    { id: 'inspector', label: 'Inspector' },
   ];
 
   return (
@@ -35,10 +36,11 @@ export function Sidebar({ active, onSelect }: SidebarProps) {
           key={item.id}
           className={
             item.id === active
-              ? "ubos-sidebar__item ubos-sidebar__item--active"
-              : "ubos-sidebar__item"
+              ? 'ubos-sidebar__item ubos-sidebar__item--active'
+              : 'ubos-sidebar__item'
           }
           onClick={() => onSelect(item.id)}
+          type="button"
         >
           {item.label}
         </button>

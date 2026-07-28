@@ -1,6 +1,8 @@
-export function MediaWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function MediaWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--media">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--media">
       <div className="workspace__row">
         <div className="panel panel--media">
           <h2>MEDIA</h2>

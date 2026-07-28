@@ -10,19 +10,12 @@ export function AutonomousUI({ onClose }: { onClose: () => void }) {
       ...current,
       autonomyLevel,
       permissions: { allowed: autonomyLevel > 0 },
-      timeline: [
-        `Autonomy changed to level ${autonomyLevel}`,
-        ...current.timeline,
-      ].slice(0, 4),
+      timeline: [`Autonomy changed to level ${autonomyLevel}`, ...current.timeline].slice(0, 4),
     }));
   };
 
   return (
-    <aside
-      aria-label="Autonomous control panel"
-      className="autonomous-ui"
-      id="autonomous-panel"
-    >
+    <aside aria-label="Autonomous control panel" className="autonomous-ui" id="autonomous-panel">
       <header className="autonomous-ui__header">
         <div>
           <span>AI CREW</span>
@@ -34,9 +27,18 @@ export function AutonomousUI({ onClose }: { onClose: () => void }) {
       </header>
 
       <section className="autonomous-hud" aria-label="Autonomous status">
-        <div><span>Level</span><strong>{state.autonomyLevel}</strong></div>
-        <div><span>Confidence</span><strong>{Math.round(state.confidence * 100)}%</strong></div>
-        <div><span>Severity</span><strong>{Math.round(state.severity * 100)}%</strong></div>
+        <div>
+          <span>Level</span>
+          <strong>{state.autonomyLevel}</strong>
+        </div>
+        <div>
+          <span>Confidence</span>
+          <strong>{Math.round(state.confidence * 100)}%</strong>
+        </div>
+        <div>
+          <span>Severity</span>
+          <strong>{Math.round(state.severity * 100)}%</strong>
+        </div>
       </section>
 
       <section className="autonomous-control-panel">
@@ -62,15 +64,30 @@ export function AutonomousUI({ onClose }: { onClose: () => void }) {
       <section className="autonomous-timeline">
         <h2>Timeline</h2>
         {state.timeline.length > 0 ? (
-          <ul>{state.timeline.map((event, index) => <li key={`${event}-${index}`}>{event}</li>)}</ul>
-        ) : <p>No autonomous actions in this session.</p>}
+          <ul>
+            {state.timeline.map((event, index) => (
+              <li key={`${event}-${index}`}>{event}</li>
+            ))}
+          </ul>
+        ) : (
+          <p>No autonomous actions in this session.</p>
+        )}
       </section>
 
       <section className="autonomous-logs">
         <h2>System health</h2>
-        <p><span className="autonomous-status-dot" />Output {state.system.outputHealth}</p>
-        <p><span className="autonomous-status-dot" />Routing {state.system.routingHealth}</p>
-        <p><span className="autonomous-status-dot" />Streaming {state.system.streamingHealth}</p>
+        <p>
+          <span className="autonomous-status-dot" />
+          Output {state.system.outputHealth}
+        </p>
+        <p>
+          <span className="autonomous-status-dot" />
+          Routing {state.system.routingHealth}
+        </p>
+        <p>
+          <span className="autonomous-status-dot" />
+          Streaming {state.system.streamingHealth}
+        </p>
       </section>
     </aside>
   );

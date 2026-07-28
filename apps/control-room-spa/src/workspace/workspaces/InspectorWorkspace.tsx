@@ -1,6 +1,8 @@
-export function InspectorWorkspace({ autonomy }: { autonomy: any }) {
+import type { WorkspaceProps } from './types';
+
+export function InspectorWorkspace({ autonomy }: WorkspaceProps) {
   return (
-    <div className="workspace workspace--inspector">
+    <div data-autonomy-level={autonomy.autonomyLevel} className="workspace workspace--inspector">
       <div className="workspace__row">
         <div className="panel panel--inspector">
           <h2>INSPECTOR</h2>
